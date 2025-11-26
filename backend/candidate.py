@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from db import db_get, db_run, db_all
-from utils import authenticate_token, require_candidate
+from utils import authenticate_token, require_candidate, require_hr
+from matching import calculate_matching_percentage
 
 candidate_bp = Blueprint('candidate', __name__)
 
@@ -297,6 +298,30 @@ def save_profile():
                 ''',
                 (candidate_id, company, role, start_date, end_date, present)
             )
+        
+        # Recalculate matching percentage for all existing applications
+        # This ensures that when a candidate updates their profile/resume, 
+        # the matching scores are updated based on the latest profile data
+        try:
+            existing_applications = db_all(
+                'SELECT DISTINCT job_id FROM applications WHERE candidate_id = ?',
+                (candidate_id,)
+            )
+            for app in existing_applications:
+                job_id = app.get('job_id')
+                if job_id:
+                    new_matching_percentage = calculate_matching_percentage(candidate_id, job_id)
+                    db_run(
+                        'UPDATE applications SET matching_percentage = ? WHERE candidate_id = ? AND job_id = ?',
+                        (new_matching_percentage, candidate_id, job_id)
+                    )
+            print(f"DEBUG: Recalculated matching percentage for {len(existing_applications)} applications")
+        except Exception as e:
+            # Don't fail the profile save if recalculation fails
+            print(f"WARNING: Failed to recalculate matching percentages: {e}")
+            import traceback
+            traceback.print_exc()
+        
         return jsonify({'message': 'Profile saved successfully'})
     except Exception as e:
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
@@ -321,8 +346,8 @@ def get_resume():
             return jsonify({'error': 'Resume not found'}), 404
         
         from flask import Response
-        resume_data = profile.get('resume')
-        if isinstance(resume_data, bytes):
+        resume_data = _resume_bytes(profile.get('resume'))
+        if resume_data:
             return Response(
                 resume_data,
                 mimetype='application/pdf',
@@ -411,3 +436,44 @@ def parse_profile(profile: dict) -> dict:
         'experiences': formatted_experiences,
         'completed': bool(profile.get('completed')),
     }
+
+
+@candidate_bp.get('/profile/<string:candidate_id>')
+@authenticate_token
+@require_hr
+def get_profile_admin(candidate_id: str):
+    """Allow HR/admins to view any candidate profile with full details."""
+    try:
+        profile = db_get(
+            '''
+            SELECT candidate_id, full_name, email, phone,
+                   experience_level, serving_notice, notice_period, last_working_day,
+                   linkedin_url, portfolio_url, current_location, preferred_location,
+                   completed, updated_at,
+                   CASE WHEN resume IS NOT NULL THEN 1 ELSE 0 END as has_resume
+            FROM candidate_profiles
+            WHERE candidate_id = ?
+            ''',
+            (candidate_id,)
+        )
+        if not profile:
+            return jsonify({'error': 'Profile not found'}), 404
+        return jsonify(parse_profile(profile))
+    except Exception as e:
+        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
+
+
+def _resume_bytes(data):
+    """Convert resume blobs (bytes, bytearray, memoryview, etc.) into raw bytes."""
+    if data is None:
+        return None
+    if isinstance(data, bytes):
+        return data
+    if isinstance(data, memoryview):
+        return data.tobytes()
+    if isinstance(data, bytearray):
+        return bytes(data)
+    try:
+        return bytes(data)
+    except (TypeError, ValueError):
+        return None

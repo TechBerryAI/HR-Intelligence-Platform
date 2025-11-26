@@ -1,5 +1,6 @@
 import random
 import re
+from datetime import datetime
 from typing import Optional
 
 from flask import current_app
@@ -8,6 +9,8 @@ from flask_mail import Message
 from extensions import mail
 
 GMAIL_REGEX = re.compile(r'^[A-Za-z0-9._%+-]+@gmail\.com$', re.IGNORECASE)
+# General email regex: accepts any email with @ symbol and valid domain
+EMAIL_REGEX = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$', re.IGNORECASE)
 INDIAN_PHONE_REGEX = re.compile(r'^[6-9]\d{9}$')
 
 
@@ -15,7 +18,23 @@ def generate_otp() -> str:
     return f"{random.randint(100000, 999999):06d}"
 
 
+def is_valid_email(email: Optional[str]) -> bool:
+    """
+    Validate any email address (institute, corporate, or personal).
+    Checks for @ symbol and valid email format.
+    """
+    if not email:
+        return False
+    email = email.strip()
+    # Basic check: must contain @ symbol
+    if '@' not in email:
+        return False
+    # Validate email format using regex
+    return bool(EMAIL_REGEX.match(email))
+
+
 def is_valid_gmail(email: Optional[str]) -> bool:
+    """Legacy function - kept for backward compatibility"""
     if not email:
         return False
     return bool(GMAIL_REGEX.match(email.strip()))
@@ -87,4 +106,43 @@ def send_sms_otp(phone: str, otp: str) -> bool:
         else:
             print(f"Failed to send SMS OTP: {exc}")
         return False
+
+
+def parse_otp_expiry(raw_expiry) -> Optional[datetime]:
+    """
+    Normalize OTP expiry values coming from SQLAlchemy/pyodbc into datetime.
+    """
+    if not raw_expiry:
+        return None
+    if isinstance(raw_expiry, datetime):
+        return raw_expiry
+    if isinstance(raw_expiry, str):
+        candidate = raw_expiry.strip().replace('Z', '')
+        candidate = candidate.replace('T', ' ')
+        if '.' in candidate:
+            candidate = candidate.split('.')[0]
+        try:
+            return datetime.fromisoformat(candidate)
+        except ValueError:
+            try:
+                from dateutil import parser  # type: ignore
+                return parser.parse(raw_expiry)
+            except Exception:
+                return None
+    if hasattr(raw_expiry, 'year'):
+        try:
+            return datetime(
+                raw_expiry.year,
+                raw_expiry.month,
+                raw_expiry.day,
+                getattr(raw_expiry, 'hour', 0),
+                getattr(raw_expiry, 'minute', 0),
+                getattr(raw_expiry, 'second', 0),
+            )
+        except Exception:
+            return None
+    try:
+        return datetime.fromisoformat(str(raw_expiry))
+    except Exception:
+        return None
 

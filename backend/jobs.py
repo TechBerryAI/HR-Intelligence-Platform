@@ -6,6 +6,21 @@ from utils import authenticate_token, require_hr
 jobs_bp = Blueprint('jobs', __name__)
 
 
+def _resume_bytes(data):
+    if data is None:
+        return None
+    if isinstance(data, bytes):
+        return data
+    if isinstance(data, memoryview):
+        return data.tobytes()
+    if isinstance(data, bytearray):
+        return bytes(data)
+    try:
+        return bytes(data)
+    except (TypeError, ValueError):
+        return None
+
+
 def generate_jdid_from_title(title):
     """
     Generate jdid from job title.
@@ -328,15 +343,18 @@ def get_candidate_resume(job_id: str, candidate_id: str):
             return jsonify({'error': 'Resume not found'}), 404
         
         from flask import Response
-        resume_data = profile.get('resume')
-        if isinstance(resume_data, bytes):
+        resume_data = _resume_bytes(profile.get('resume'))
+        if resume_data:
             return Response(
                 resume_data,
                 mimetype='application/pdf',
                 headers={
                     'Content-Disposition': f'inline; filename=resume_{candidate_id}.pdf',
                     'Content-Type': 'application/pdf',
-                    'X-Content-Type-Options': 'nosniff'
+                    'X-Content-Type-Options': 'nosniff',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
                 }
             )
         else:

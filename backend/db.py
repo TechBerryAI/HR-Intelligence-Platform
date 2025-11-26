@@ -2,7 +2,7 @@ import os
 import pyodbc
 from contextlib import contextmanager
 
-MSSQL_SERVER = os.getenv('MSSQL_SERVER', 'DESKTOP-GC3KL6I')
+MSSQL_SERVER = os.getenv('MSSQL_SERVER', 'localhost')
 MSSQL_DATABASE = os.getenv('MSSQL_DATABASE', 'JobPortal')
 MSSQL_USER = os.getenv('MSSQL_USER', 'Test')
 MSSQL_PASSWORD = os.getenv('MSSQL_PASSWORD', 'Root@123')

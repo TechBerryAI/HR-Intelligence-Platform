@@ -9,11 +9,13 @@ from sqlalchemy import or_
 
 from candidate import parse_profile
 from db import db_get, db_run
+from helpers.email_utils import send_notification_email
 from helpers.otp_utils import (
     generate_otp,
-    is_valid_gmail,
+    is_valid_email,
     is_valid_indian_phone,
     normalize_phone,
+    parse_otp_expiry,
     send_email_otp,
     send_sms_otp,
 )
@@ -146,11 +148,11 @@ def candidate_signup():
     if len(password) < 6:
         return jsonify({'error': 'Password must be at least 6 characters.'}), 400
 
-    email_valid = is_valid_gmail(email_input)
+    email_valid = is_valid_email(email_input) if email_input else False
     email = email_input or None
     phone_valid = is_valid_indian_phone(phone)
     if not (email_valid or phone_valid):
-        return jsonify({'error': 'Provide a valid Gmail address or 10-digit Indian phone number.'}), 400
+        return jsonify({'error': 'Provide a valid email address or 10-digit Indian phone number.'}), 400
 
     password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
     otp = generate_otp()
@@ -359,6 +361,18 @@ def verify_candidate_otp():
             }), 500
 
         print(f"Successfully created candidate with cid={cid}")
+
+        if candidate_data.get('email'):
+            send_notification_email(
+                candidate_data['email'],
+                "Welcome to Job Portal",
+                (
+                    f"Hi {candidate_data['name']},\n\n"
+                    "Your applicant account has been verified successfully. You can now sign in and start applying for jobs.\n\n"
+                    "If you did not sign up, please reset your password or contact support immediately."
+                )
+            )
+
         return jsonify({
             'message': 'OTP verified successfully. Account created.',
             'cid': cid
@@ -403,10 +417,10 @@ def resend_candidate_otp():
         if not email_input and not phone:
             return jsonify({'error': 'Email or phone is required.'}), 400
 
-        email_valid = is_valid_gmail(email_input) if email_input else False
+        email_valid = is_valid_email(email_input) if email_input else False
         phone_valid = is_valid_indian_phone(phone) if phone else False
         if not (email_valid or phone_valid):
-            return jsonify({'error': 'Provide a valid Gmail address or 10-digit Indian phone number.'}), 400
+            return jsonify({'error': 'Provide a valid email address or 10-digit Indian phone number.'}), 400
 
         email = email_input or None
 
@@ -452,13 +466,15 @@ def candidate_login():
     phone = normalize_phone(data.get('phone'))
     password = data.get('password') or ''
     identifier = email_input or phone
+    ip_address = request.remote_addr
+    user_agent = request.headers.get('User-Agent')
 
     if not identifier or not password:
         return jsonify({'error': 'Email/phone and password are required.'}), 400
 
     failed_attempts = get_recent_failed_attempts(identifier, 'candidate', 15)
     if failed_attempts >= 5:
-        record_login_attempt(identifier, 'candidate', 'failed', request.remote_addr, request.headers.get('User-Agent'),
+        record_login_attempt(identifier, 'candidate', 'failed', ip_address, user_agent,
                              'Too many failed attempts')
         return jsonify({'error': 'Too many failed login attempts. Please try again later.'}), 429
 
@@ -467,18 +483,18 @@ def candidate_login():
         if not candidate and email_input:
             candidate = _bootstrap_legacy_candidate(session, email_input)
         if not candidate:
-            record_login_attempt(identifier, 'candidate', 'failed', request.remote_addr, request.headers.get('User-Agent'),
+            record_login_attempt(identifier, 'candidate', 'failed', ip_address, user_agent,
                                  'User not found')
             return jsonify({'error': 'Invalid credentials'}), 401
 
         if not candidate.is_verified:
-            record_login_attempt(identifier, 'candidate', 'failed', request.remote_addr, request.headers.get('User-Agent'),
+            record_login_attempt(identifier, 'candidate', 'failed', ip_address, user_agent,
                                  'OTP not verified')
             return jsonify({'error': 'Please verify your OTP to login.'}), 403
 
         stored_hash = candidate.password_hash or ''
         if not stored_hash or not bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8')):
-            record_login_attempt(identifier, 'candidate', 'failed', request.remote_addr, request.headers.get('User-Agent'),
+            record_login_attempt(identifier, 'candidate', 'failed', ip_address, user_agent,
                                  'Invalid password')
             return jsonify({'error': 'Invalid credentials'}), 401
 
@@ -497,7 +513,20 @@ def candidate_login():
         'INSERT INTO candidate_login (cid, email, password) VALUES (?, ?, ?)',
         (cid, login_email, stored_hash),
     )
-    record_login_attempt(identifier, 'candidate', 'success', request.remote_addr, request.headers.get('User-Agent'))
+    record_login_attempt(identifier, 'candidate', 'success', ip_address, user_agent)
+
+    if candidate.email:
+        send_notification_email(
+            candidate.email,
+            "New login to your Job Portal account",
+            (
+                f"Hi {candidate.name},\n\n"
+                f"We noticed a login to your Job Portal account on {datetime.utcnow():%Y-%m-%d %H:%M:%S} UTC.\n"
+                f"IP Address: {ip_address or 'Unavailable'}\n"
+                f"Device: {user_agent or 'Unavailable'}\n\n"
+                "If this was you, no action is needed. If you did not sign in, please reset your password immediately."
+            )
+        )
 
     profile = db_get('SELECT * FROM candidate_profiles WHERE candidate_id = ?', (cid,))
     user_data = {
@@ -511,4 +540,149 @@ def candidate_login():
         user_data['profile'] = parse_profile(profile)
 
     return jsonify({'token': token, 'user': user_data}), 200
+
+
+@candidate_auth_bp.post('/forgot-password')
+def candidate_forgot_password():
+    try:
+        data = request.get_json(force=True) or {}
+        email = (data.get('email') or '').strip().lower()
+
+        if not email:
+            return jsonify({'error': 'Email is required.'}), 400
+        if not is_valid_email(email):
+            return jsonify({'error': 'Please provide a valid email address.'}), 400
+
+        with get_session() as session:
+            candidate = _find_candidate(session, email=email)
+            if not candidate:
+                candidate = _bootstrap_legacy_candidate(session, email)
+            if not candidate:
+                return jsonify({'error': 'Account not found for this email.'}), 404
+            if not candidate.is_verified:
+                return jsonify({'error': 'Please verify your account before resetting the password.'}), 400
+
+            otp = generate_otp()
+            candidate.otp = otp
+            candidate.otp_expiry = datetime.utcnow() + timedelta(minutes=10)
+            session.add(candidate)
+
+        if not send_email_otp(email, otp, user_type="Candidate"):
+            return jsonify({'error': 'Failed to send OTP email. Please try again later.'}), 500
+
+        return jsonify({'message': 'OTP sent successfully. Please check your email.'}), 200
+    except Exception as e:
+        print(f"Error in candidate_forgot_password: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@candidate_auth_bp.post('/forgot-password/verify-otp')
+def candidate_verify_reset_otp():
+    try:
+        data = request.get_json(force=True) or {}
+        email = (data.get('email') or '').strip().lower()
+        otp = (data.get('otp') or '').strip()
+
+        if not email or not otp:
+            return jsonify({'error': 'Email and OTP are required.'}), 400
+        if not is_valid_email(email):
+            return jsonify({'error': 'Please provide a valid email address.'}), 400
+
+        with get_session() as session:
+            candidate = _find_candidate(session, email=email)
+            if not candidate:
+                candidate = _bootstrap_legacy_candidate(session, email)
+            if not candidate or not candidate.otp:
+                return jsonify({'error': 'Please request a new OTP.'}), 400
+
+            stored_otp = str(candidate.otp).strip()
+            if stored_otp != otp:
+                return jsonify({'error': 'Invalid OTP.'}), 400
+
+            expiry = parse_otp_expiry(candidate.otp_expiry)
+            if not expiry or expiry < datetime.utcnow():
+                return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+
+        return jsonify({'message': 'OTP verified. You may set a new password.'}), 200
+    except Exception as e:
+        print(f"Error in candidate_verify_reset_otp: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@candidate_auth_bp.post('/reset-password')
+def candidate_reset_password():
+    try:
+        data = request.get_json(force=True) or {}
+        email = (data.get('email') or '').strip().lower()
+        otp = (data.get('otp') or '').strip()
+        new_password = data.get('newPassword') or data.get('password') or ''
+        confirm_password = data.get('confirmPassword') or data.get('confirm_password') or ''
+
+        if not email or not otp:
+            return jsonify({'error': 'Email and OTP are required.'}), 400
+        if len(new_password) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters.'}), 400
+        if new_password != confirm_password:
+            return jsonify({'error': 'Passwords do not match.'}), 400
+
+        candidate_snapshot = None
+        with get_session() as session:
+            candidate = _find_candidate(session, email=email)
+            if not candidate:
+                candidate = _bootstrap_legacy_candidate(session, email)
+            if not candidate or not candidate.otp:
+                return jsonify({'error': 'Please request a new OTP.'}), 400
+
+            stored_otp = str(candidate.otp).strip()
+            if stored_otp != otp:
+                return jsonify({'error': 'Invalid OTP.'}), 400
+
+            expiry = parse_otp_expiry(candidate.otp_expiry)
+            if not expiry or expiry < datetime.utcnow():
+                return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+
+            password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            candidate.password_hash = password_hash
+            candidate.otp = None
+            candidate.otp_expiry = None
+            session.add(candidate)
+            candidate_snapshot = {
+                'name': candidate.name,
+                'email': candidate.email,
+                'phone': candidate.phone,
+            }
+
+        cid = _ensure_candidate_signup(
+            candidate_snapshot['name'],
+            candidate_snapshot['email'],
+            candidate_snapshot['phone'],
+            password_hash,
+        )
+        if not cid:
+            try:
+                db_run('UPDATE candidate_signup SET password = ? WHERE email = ?', (password_hash, email))
+            except Exception:
+                pass
+
+        if candidate_snapshot and candidate_snapshot.get('email'):
+            send_notification_email(
+                candidate_snapshot['email'],
+                "Your Job Portal password was changed",
+                (
+                    f"Hi {candidate_snapshot['name']},\n\n"
+                    "This is a confirmation that the password on your Job Portal account was just changed.\n"
+                    "If this wasn't you, please reset your password immediately or contact support."
+                )
+            )
+
+        return jsonify({'message': 'Password updated successfully. You can now login.'}), 200
+    except Exception as e:
+        print(f"Error in candidate_reset_password: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
 
