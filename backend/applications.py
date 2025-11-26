@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from db import db_get, db_run, db_all
 from utils import authenticate_token, require_candidate
+from matching import calculate_matching_percentage
 
 applications_bp = Blueprint('applications', __name__)
 
@@ -24,9 +25,18 @@ def apply_job():
         profile = db_get('SELECT * FROM candidate_profiles WHERE candidate_id = ? AND completed = 1', (candidate_id,))
         if not profile:
             return jsonify({'error': 'Please complete your profile before applying'}), 400
-        db_run('INSERT INTO applications (candidate_id, job_id, status) VALUES (?, ?, ?)', (candidate_id, job_id, 'pending'))
+        
+        # Calculate matching percentage
+        matching_percentage = calculate_matching_percentage(candidate_id, job_id)
+        
+        # Insert application with matching percentage
+        db_run(
+            'INSERT INTO applications (candidate_id, job_id, status, matching_percentage) VALUES (?, ?, ?, ?)',
+            (candidate_id, job_id, 'pending', matching_percentage)
+        )
         return jsonify({'message': 'Application submitted successfully'}), 201
-    except Exception:
+    except Exception as e:
+        print(f"Error in apply_job: {e}")
         return jsonify({'error': 'Internal server error'}), 500
 
 

@@ -2,7 +2,7 @@ import os
 import pyodbc
 from contextlib import contextmanager
 
-MSSQL_SERVER = os.getenv('MSSQL_SERVER', 'DESKTOP-GC3KL6I')
+MSSQL_SERVER = os.getenv('MSSQL_SERVER', 'localhost')
 MSSQL_DATABASE = os.getenv('MSSQL_DATABASE', 'JobPortal')
 MSSQL_USER = os.getenv('MSSQL_USER', 'Test')
 MSSQL_PASSWORD = os.getenv('MSSQL_PASSWORD', 'Root@123')
@@ -894,6 +894,16 @@ def init_db():
         END
         ''',
         '''
+        -- Add matching_percentage column to applications table
+        IF OBJECT_ID('dbo.applications', 'U') IS NOT NULL
+        BEGIN
+          IF COL_LENGTH('dbo.applications', 'matching_percentage') IS NULL
+          BEGIN
+            ALTER TABLE dbo.applications ADD matching_percentage FLOAT DEFAULT 0;
+          END
+        END
+        ''',
+        '''
         -- Drop saved_jobs table if it exists (feature removed)
         IF OBJECT_ID('dbo.saved_jobs', 'U') IS NOT NULL
         BEGIN
@@ -967,6 +977,68 @@ def init_db():
         )
         BEGIN
           CREATE INDEX idx_login_history_email ON dbo.login_history(email, user_type);
+        END
+        ''',
+        '''
+        IF OBJECT_ID('dbo.CandidateAuth', 'U') IS NULL
+        BEGIN
+          CREATE TABLE dbo.CandidateAuth (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            name NVARCHAR(255) NOT NULL,
+            email NVARCHAR(255) NULL,
+            phone NVARCHAR(20) NULL,
+            password_hash NVARCHAR(255) NOT NULL,
+            otp NVARCHAR(6) NULL,
+            otp_expiry DATETIME2 NULL,
+            is_verified BIT NOT NULL CONSTRAINT DF_CandidateAuth_is_verified DEFAULT 0,
+            created_at DATETIME2 NOT NULL CONSTRAINT DF_CandidateAuth_created DEFAULT SYSUTCDATETIME(),
+            updated_at DATETIME2 NOT NULL CONSTRAINT DF_CandidateAuth_updated DEFAULT SYSUTCDATETIME()
+          );
+        END
+        ''',
+        '''
+        IF OBJECT_ID('dbo.CandidateAuth', 'U') IS NOT NULL
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM sys.indexes WHERE name = 'IX_CandidateAuth_Email' AND object_id = OBJECT_ID('dbo.CandidateAuth')
+          )
+          BEGIN
+            CREATE UNIQUE INDEX IX_CandidateAuth_Email ON dbo.CandidateAuth(email) WHERE email IS NOT NULL;
+          END
+          IF NOT EXISTS (
+            SELECT 1 FROM sys.indexes WHERE name = 'IX_CandidateAuth_Phone' AND object_id = OBJECT_ID('dbo.CandidateAuth')
+          )
+          BEGIN
+            CREATE UNIQUE INDEX IX_CandidateAuth_Phone ON dbo.CandidateAuth(phone) WHERE phone IS NOT NULL;
+          END
+        END
+        ''',
+        '''
+        IF OBJECT_ID('dbo.HRAuth', 'U') IS NULL
+        BEGIN
+          CREATE TABLE dbo.HRAuth (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            full_name NVARCHAR(255) NOT NULL,
+            email NVARCHAR(255) UNIQUE NOT NULL,
+            company NVARCHAR(255) NOT NULL,
+            password_hash NVARCHAR(255) NOT NULL,
+            otp NVARCHAR(6) NULL,
+            otp_expiry DATETIME2 NULL,
+            is_verified BIT NOT NULL CONSTRAINT DF_HRAuth_is_verified DEFAULT 0,
+            created_at DATETIME2 NOT NULL CONSTRAINT DF_HRAuth_created DEFAULT SYSUTCDATETIME(),
+            updated_at DATETIME2 NOT NULL CONSTRAINT DF_HRAuth_updated DEFAULT SYSUTCDATETIME()
+          );
+        END
+        ''',
+        '''
+        IF OBJECT_ID('dbo.HRAuth', 'U') IS NOT NULL
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM sys.indexes WHERE name = 'IX_HRAuth_Email' AND object_id = OBJECT_ID('dbo.HRAuth')
+          )
+          BEGIN
+            CREATE UNIQUE INDEX IX_HRAuth_Email ON dbo.HRAuth(email);
+          END
         END
         '''
     ]

@@ -6,6 +6,21 @@ from utils import authenticate_token, require_hr
 jobs_bp = Blueprint('jobs', __name__)
 
 
+def _resume_bytes(data):
+    if data is None:
+        return None
+    if isinstance(data, bytes):
+        return data
+    if isinstance(data, memoryview):
+        return data.tobytes()
+    if isinstance(data, bytearray):
+        return bytes(data)
+    try:
+        return bytes(data)
+    except (TypeError, ValueError):
+        return None
+
+
 def generate_jdid_from_title(title):
     """
     Generate jdid from job title.
@@ -157,6 +172,197 @@ def get_job(job_id: str):
             'postedOn': job['posted_on'],
         })
     except Exception:
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@jobs_bp.get('/<string:job_id>/applications')
+@authenticate_token
+@require_hr
+def get_job_applications(job_id: str):
+    try:
+        # Verify job belongs to HR user
+        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        if not job:
+            return jsonify({'error': 'Job not found or access denied'}), 404
+        
+        # Get applications with candidate details
+        applications = db_all(
+            '''
+            SELECT 
+                a.id,
+                a.candidate_id,
+                a.job_id,
+                a.status,
+                a.applied_at,
+                a.matching_percentage,
+                cp.full_name,
+                cp.email,
+                cp.phone,
+                cp.current_location,
+                cp.preferred_location,
+                cp.experience_level,
+                cp.serving_notice,
+                cp.notice_period,
+                cp.last_working_day,
+                cp.linkedin_url,
+                cp.portfolio_url,
+                CASE WHEN cp.resume IS NOT NULL THEN 1 ELSE 0 END as has_resume,
+                cs.name as candidate_name
+            FROM applications a
+            INNER JOIN candidate_profiles cp ON a.candidate_id = cp.candidate_id
+            LEFT JOIN candidate_signup cs ON a.candidate_id = cs.cid
+            WHERE a.job_id = ?
+            ORDER BY a.matching_percentage DESC, a.applied_at DESC
+            ''',
+            (job_id,)
+        )
+        
+        # Get related data (education, experiences, certifications)
+        formatted_apps = []
+        for app in applications:
+            candidate_id = app['candidate_id']
+            
+            # Get education
+            education = db_all(
+                'SELECT degree, institution, [cgpa/percentage] as cgpa, start_date, end_date FROM candidate_education WHERE candidate_id = ?',
+                (candidate_id,)
+            )
+            
+            # Get experiences
+            experiences = db_all(
+                'SELECT company, role, start_date, end_date, present FROM candidate_experiences WHERE candidate_id = ?',
+                (candidate_id,)
+            )
+            
+            # Get certifications
+            certifications = db_all(
+                'SELECT certification, issuer, end_month FROM candidate_certifications WHERE candidate_id = ?',
+                (candidate_id,)
+            )
+            
+            # Ensure matching_percentage is a number
+            matching_pct = app.get('matching_percentage')
+            if matching_pct is None:
+                matching_pct = 0
+            else:
+                try:
+                    matching_pct = float(matching_pct)
+                    if matching_pct < 0:
+                        matching_pct = 0
+                    elif matching_pct > 100:
+                        matching_pct = 100
+                except (ValueError, TypeError):
+                    matching_pct = 0
+            
+            formatted_apps.append({
+                'id': app['id'],
+                'candidateId': app['candidate_id'],
+                'jobId': app['job_id'],
+                'status': app['status'],
+                'appliedAt': app['applied_at'],
+                'matchScore': matching_pct,
+                'score': matching_pct,
+                'fullName': app.get('full_name') or app.get('candidate_name') or 'Unknown',
+                'name': app.get('full_name') or app.get('candidate_name') or 'Unknown',
+                'email': app.get('email'),
+                'phone': app.get('phone'),
+                'currentLocation': app.get('current_location'),
+                'preferredLocation': app.get('preferred_location'),
+                'experienceLevel': app.get('experience_level'),
+                'servingNotice': app.get('serving_notice'),
+                'noticePeriod': app.get('notice_period'),
+                'lastWorkingDay': app.get('last_working_day'),
+                'linkedinUrl': app.get('linkedin_url'),
+                'portfolioUrl': app.get('portfolio_url'),
+                'resumeFileName': 'resume.pdf' if app.get('has_resume') else None,
+                'resumeUrl': f'/api/jobs/{job_id}/applications/{candidate_id}/resume' if app.get('has_resume') else None,
+                'education': [
+                    {
+                        'degree': e.get('degree') or '',
+                        'institution': e.get('institution') or '',
+                        'cgpa': e.get('cgpa') or '',
+                        'startMonth': e.get('start_date') or '',
+                        'endMonth': e.get('end_date') or '',
+                    }
+                    for e in (education or [])
+                ],
+                'experiences': [
+                    {
+                        'company': e.get('company') or '',
+                        'role': e.get('role') or '',
+                        'startMonth': e.get('start_date') or '',
+                        'endMonth': e.get('end_date') or '',
+                        'isCurrent': (e.get('present') or '').lower() == 'yes',
+                    }
+                    for e in (experiences or [])
+                ],
+                'certifications': [
+                    {
+                        'certification': c.get('certification') or '',
+                        'issuer': c.get('issuer') or '',
+                        'endMonth': c.get('end_month') or '',
+                    }
+                    for c in (certifications or [])
+                ],
+            })
+        
+        return jsonify({'applications': formatted_apps})
+    except Exception as e:
+        print(f"Error in get_job_applications: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@jobs_bp.get('/<string:job_id>/applications/<string:candidate_id>/resume')
+@authenticate_token
+@require_hr
+def get_candidate_resume(job_id: str, candidate_id: str):
+    """Download candidate resume for HR"""
+    try:
+        # Verify job belongs to HR user
+        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        if not job:
+            return jsonify({'error': 'Job not found or access denied'}), 404
+        
+        # Verify candidate has applied to this job
+        application = db_get('SELECT id FROM applications WHERE job_id = ? AND candidate_id = ?', (job_id, candidate_id))
+        if not application:
+            return jsonify({'error': 'Application not found'}), 404
+        
+        # Get resume
+        profile = db_get(
+            '''
+            SELECT resume
+            FROM candidate_profiles
+            WHERE candidate_id = ?
+            ''',
+            (candidate_id,)
+        )
+        if not profile or not profile.get('resume'):
+            return jsonify({'error': 'Resume not found'}), 404
+        
+        from flask import Response
+        resume_data = _resume_bytes(profile.get('resume'))
+        if resume_data:
+            return Response(
+                resume_data,
+                mimetype='application/pdf',
+                headers={
+                    'Content-Disposition': f'inline; filename=resume_{candidate_id}.pdf',
+                    'Content-Type': 'application/pdf',
+                    'X-Content-Type-Options': 'nosniff',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                }
+            )
+        else:
+            return jsonify({'error': 'Invalid resume data'}), 500
+    except Exception as e:
+        print(f"Error in get_candidate_resume: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Internal server error'}), 500
 
 
