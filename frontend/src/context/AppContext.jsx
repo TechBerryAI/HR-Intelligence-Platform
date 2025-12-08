@@ -1,0 +1,858 @@
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { apiRequest, setUnauthorizedHandler } from '../utils/api'
+import { tokenService } from '../utils/tokenService'
+
+// App state: jobs and auth via backend
+const AppContext = createContext(null)
+
+const STORAGE_KEYS = {
+  auth: 'authState',
+  applicantAuth: 'applicantAuthState',
+  applicantProfile: 'applicantProfileState',
+  applicantApplications: 'applicantApplicationsState',
+  applicantSavedJobs: 'applicantSavedJobsState',
+  jobs: 'jobsState',
+  user: 'authUser',
+}
+
+// Helper function to format date as YYYY-MM-DD
+const formatDate = (date) => {
+  if (typeof date === 'string') return date
+  const d = date || new Date()
+  return d.toISOString().split('T')[0]
+}
+
+// Helper functions for localStorage
+const readJson = (key, fallback) => {
+  if (typeof window === 'undefined') return fallback
+  try {
+    const raw = window.localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : fallback
+  } catch (err) {
+    console.warn('Failed to parse storage key', key, err)
+    return fallback
+  }
+}
+
+const writeJson = (key, value) => {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value))
+  } catch (err) {
+    console.warn('Failed to persist storage key', key, err)
+  }
+}
+
+export function AppProvider({ children }) {
+  const [jobs, setJobs] = useState([])
+  const [jobsLoading, setJobsLoading] = useState(false)
+  const [jobsError, setJobsError] = useState('')
+
+  const defaultAuth = { isLoggedIn: false, role: null, email: '' }
+  const defaultApplicantAuth = { isLoggedIn: false, email: '' }
+  const defaultApplicantProfile = {
+    experienceLevel: '',
+    servingNotice: '',
+    fullName: '',
+    email: '',
+    phone: '',
+    noticePeriod: '',
+    lastWorkingDay: '',
+    linkedinUrl: '',
+    portfolioUrl: '',
+    currentLocation: '',
+    preferredLocation: '',
+    resumeFileName: '',
+    education: [], // [{ degree, institution, year }]
+    certifications: [], // [{ name, issuer, year }]
+    experiences: [], // [{ company, role, years }]
+    completed: false,
+  }
+
+  const [auth, setAuth] = useState(() => readJson(STORAGE_KEYS.auth, defaultAuth))
+  const [applicantAuth, setApplicantAuth] = useState(() => readJson(STORAGE_KEYS.applicantAuth, defaultApplicantAuth))
+  const [token, setToken] = useState('')
+  const [user, setUser] = useState(() => readJson(STORAGE_KEYS.user, null))
+  const [authLoading, setAuthLoading] = useState(false)
+  const [authError, setAuthError] = useState('')
+  const [applicantProfile, setApplicantProfile] = useState(() => readJson(STORAGE_KEYS.applicantProfile, defaultApplicantProfile))
+  const [applicantApplications, setApplicantApplications] = useState(() => readJson(STORAGE_KEYS.applicantApplications, {})) // jobId -> true
+  const [applicantSavedJobs, setApplicantSavedJobs] = useState(() => readJson(STORAGE_KEYS.applicantSavedJobs, {})) // jobId -> true
+
+  useEffect(() => {
+    // Wire global 401 -> logout handling
+    setUnauthorizedHandler(() => logout())
+    // If migrating to HttpOnly cookies in production:
+    // - Have the backend set a SameSite=Lax, Secure HttpOnly cookie on login
+    // - Remove Authorization header usage and token persistence here
+    // - Rely on credentials: 'include' already set in api.js
+    // - Ensure CORS allows credentials and your frontend domain
+    // Note: keep tokenService empty or disabled when using HttpOnly cookies.
+  }, [])
+
+  // Initialize token from tokenService so it survives reloads via persistence
+  useEffect(() => {
+    const existing = tokenService.getToken()
+    if (existing) setToken(existing)
+  }, [])
+
+  useEffect(() => {
+    // Keep in-memory token in sync if any flows setToken elsewhere
+    tokenService.setToken(token)
+  }, [token])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    writeJson(STORAGE_KEYS.auth, auth)
+  }, [auth])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    writeJson(STORAGE_KEYS.applicantAuth, applicantAuth)
+  }, [applicantAuth])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    writeJson(STORAGE_KEYS.applicantProfile, applicantProfile)
+  }, [applicantProfile])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    writeJson(STORAGE_KEYS.applicantApplications, applicantApplications)
+  }, [applicantApplications])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    writeJson(STORAGE_KEYS.applicantSavedJobs, applicantSavedJobs)
+  }, [applicantSavedJobs])
+
+  // Do not persist jobs; source of truth is backend
+
+  // Persist user only (token is kept in-memory for security)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (user) writeJson(STORAGE_KEYS.user, user)
+    else window.localStorage.removeItem(STORAGE_KEYS.user)
+  }, [user])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const hydrateFromStorage = () => {
+      setAuth((prev) => {
+        const stored = readJson(STORAGE_KEYS.auth, defaultAuth)
+        return JSON.stringify(prev) === JSON.stringify(stored) ? prev : stored
+      })
+      setApplicantAuth((prev) => {
+        const stored = readJson(STORAGE_KEYS.applicantAuth, defaultApplicantAuth)
+        return JSON.stringify(prev) === JSON.stringify(stored) ? prev : stored
+      })
+      setApplicantProfile((prev) => {
+        const stored = readJson(STORAGE_KEYS.applicantProfile, defaultApplicantProfile)
+        return JSON.stringify(prev) === JSON.stringify(stored) ? prev : stored
+      })
+      setApplicantApplications((prev) => {
+        const stored = readJson(STORAGE_KEYS.applicantApplications, {})
+        return JSON.stringify(prev) === JSON.stringify(stored) ? prev : stored
+      })
+      // Do not hydrate token from storage
+      setUser(() => readJson(STORAGE_KEYS.user, null))
+    }
+
+    hydrateFromStorage()
+
+    const onStorage = (event) => {
+      if (event.storageArea !== window.localStorage) return
+      if (!event.key || Object.values(STORAGE_KEYS).includes(event.key)) {
+        hydrateFromStorage()
+      }
+    }
+
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  const loginHR = async (email, password) => {
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      const data = await apiRequest('/api/login', {
+        method: 'POST',
+        body: { email, password },
+      })
+      if (data && data.token && data.user) {
+        setToken(data.token)
+        tokenService.setToken(data.token)
+        setUser(data.user)
+        const nextAuth = { isLoggedIn: true, role: 'HR', email: data.user.email || email }
+        setAuth(nextAuth)
+        writeJson(STORAGE_KEYS.auth, nextAuth)
+        return { ok: true }
+      }
+      return { ok: false, message: 'Invalid response from server' }
+    } catch (err) {
+      setAuthError(err?.message || 'Login failed')
+      return { ok: false, message: err?.message || 'Login failed' }
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const requestHrPasswordReset = async (email) => {
+    if (!email) return { ok: false, message: 'Email is required' }
+    try {
+      const data = await apiRequest('/api/forgot-password', {
+        method: 'POST',
+        body: { email },
+      })
+      return { ok: true, data }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'Failed to send OTP' }
+    }
+  }
+
+  const verifyHrPasswordOtp = async ({ email, otp }) => {
+    try {
+      const data = await apiRequest('/api/forgot-password/verify-otp', {
+        method: 'POST',
+        body: { email, otp },
+      })
+      return { ok: true, data }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'OTP verification failed' }
+    }
+  }
+
+  const resetHrPassword = async ({ email, otp, newPassword, confirmPassword }) => {
+    try {
+      const data = await apiRequest('/api/reset-password', {
+        method: 'POST',
+        body: { email, otp, newPassword, confirmPassword },
+      })
+      return { ok: true, data }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'Failed to reset password' }
+    }
+  }
+
+  // Fetch applications and saved jobs from backend
+  const fetchApplicantData = async () => {
+    if (!applicantAuth.isLoggedIn || !token) return
+    try {
+      const applications = await apiRequest('/api/applications', { method: 'GET', token }).catch(() => [])
+      
+      // Convert applications array to map
+      const applicationsMap = {}
+      if (Array.isArray(applications)) {
+        applications.forEach(app => {
+          // Handle both jobId and job.id formats from backend
+          const jobId = app.jobId || (app.job && app.job.id) || app.job_id
+          if (jobId) {
+            // Store as both number and string for compatibility
+            applicationsMap[jobId] = true
+            applicationsMap[String(jobId)] = true
+          }
+        })
+      }
+      setApplicantApplications(applicationsMap)
+      writeJson(STORAGE_KEYS.applicantApplications, applicationsMap)
+    } catch (err) {
+      console.error('Fetch applicant data error:', err)
+    }
+  }
+
+  const loginApplicant = async (idOrEmail, password) => {
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      const data = await apiRequest('/api/candidate/login', {
+        method: 'POST',
+        body: { email: idOrEmail, password },
+      })
+      if (data && data.token && data.user) {
+        setToken(data.token)
+        tokenService.setToken(data.token)
+        setUser(data.user)
+        const nextApplicantAuth = { isLoggedIn: true, email: data.user.email || idOrEmail }
+        setApplicantAuth(nextApplicantAuth)
+        writeJson(STORAGE_KEYS.applicantAuth, nextApplicantAuth)
+        
+        // Load profile from backend if available
+        if (data.user.profile) {
+          setApplicantProfile(data.user.profile)
+          writeJson(STORAGE_KEYS.applicantProfile, data.user.profile)
+        } else {
+          setApplicantProfile((p) => {
+            const nextProfile = { ...p, email: data.user.email || idOrEmail }
+            writeJson(STORAGE_KEYS.applicantProfile, nextProfile)
+            return nextProfile
+          })
+        }
+        
+        // Fetch applications and saved jobs
+        setTimeout(() => fetchApplicantData(), 100)
+        
+        return { ok: true }
+      }
+      return { ok: false, message: 'Invalid response from server' }
+    } catch (err) {
+      setAuthError(err?.message || 'Login failed')
+      return { ok: false, message: err?.message || 'Login failed' }
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const requestApplicantPasswordReset = async (email) => {
+    if (!email) return { ok: false, message: 'Email is required' }
+    try {
+      const data = await apiRequest('/api/candidate/forgot-password', {
+        method: 'POST',
+        body: { email },
+      })
+      return { ok: true, data }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'Failed to send OTP' }
+    }
+  }
+
+  const verifyApplicantPasswordOtp = async ({ email, otp }) => {
+    try {
+      const data = await apiRequest('/api/candidate/forgot-password/verify-otp', {
+        method: 'POST',
+        body: { email, otp },
+      })
+      return { ok: true, data }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'OTP verification failed' }
+    }
+  }
+
+  const resetApplicantPassword = async ({ email, otp, newPassword, confirmPassword }) => {
+    try {
+      const data = await apiRequest('/api/candidate/reset-password', {
+        method: 'POST',
+        body: { email, otp, newPassword, confirmPassword },
+      })
+      return { ok: true, data }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'Failed to reset password' }
+    }
+  }
+
+  const signupApplicant = async ({ name, email, password }) => {
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      const data = await apiRequest('/api/candidate/signup', {
+        method: 'POST',
+        body: { name, email, password },
+      })
+      return { ok: true, data }
+    } catch (err) {
+      setAuthError(err?.message || 'Signup failed')
+      return { ok: false, message: err?.message || 'Signup failed' }
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const verifyApplicantOTP = async ({ email, otp }) => {
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      const data = await apiRequest('/api/candidate/verify-otp', {
+        method: 'POST',
+        body: { email, otp },
+      })
+      return { ok: true, data }
+    } catch (err) {
+      console.error('Verify applicant OTP error:', err)
+      const errorMessage = err?.message || err?.error || 'OTP verification failed'
+      setAuthError(errorMessage)
+      return { ok: false, message: errorMessage }
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const signupHR = async ({ fullName, email, password, company }) => {
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      const data = await apiRequest('/api/signup', {
+        method: 'POST',
+        body: { fullName, email, password, company },
+      })
+      return { ok: true, data }
+    } catch (err) {
+      setAuthError(err?.message || 'Signup failed')
+      return { ok: false, message: err?.message || 'Signup failed' }
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const verifyHROTP = async ({ email, otp }) => {
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      const data = await apiRequest('/api/verify-otp', {
+        method: 'POST',
+        body: { email, otp },
+      })
+      // If verification successful and token provided, store auth
+      if (data && data.token && data.user) {
+        setToken(data.token)
+        tokenService.setToken(data.token)
+        setUser(data.user)
+        const nextAuth = { isLoggedIn: true, role: 'HR', email: data.user.email || email }
+        setAuth(nextAuth)
+        writeJson(STORAGE_KEYS.auth, nextAuth)
+      }
+      return { ok: true, data }
+    } catch (err) {
+      setAuthError(err?.message || 'OTP verification failed')
+      return { ok: false, message: err?.message || 'OTP verification failed' }
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const resendApplicantOTP = async ({ email, phone }) => {
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      const data = await apiRequest('/api/candidate/resend-otp', {
+        method: 'POST',
+        body: { email, phone },
+      })
+      return { ok: true, data }
+    } catch (err) {
+      const errorMessage = err?.message || err?.error || 'Failed to resend OTP'
+      setAuthError(errorMessage)
+      return { ok: false, message: errorMessage }
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const resendHROTP = async ({ email }) => {
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      const data = await apiRequest('/api/resend-otp', {
+        method: 'POST',
+        body: { email },
+      })
+      return { ok: true, data }
+    } catch (err) {
+      const errorMessage = err?.message || err?.error || 'Failed to resend OTP'
+      setAuthError(errorMessage)
+      return { ok: false, message: errorMessage }
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const saveApplicantProfile = async (profile) => {
+    if (!applicantAuth.isLoggedIn) {
+      // Save locally only if not logged in
+      const next = { ...applicantProfile, ...profile }
+      setApplicantProfile(next)
+      writeJson(STORAGE_KEYS.applicantProfile, next)
+      return { ok: true }
+    }
+    try {
+      // Check if there's a resume file to upload
+      const resumeFile = profile.resumeFile
+      const hasFile = resumeFile && resumeFile instanceof File
+      
+      console.log('DEBUG: saveApplicantProfile - resumeFile:', resumeFile)
+      console.log('DEBUG: saveApplicantProfile - hasFile:', hasFile)
+      console.log('DEBUG: saveApplicantProfile - profile keys:', Object.keys(profile))
+      
+      let body
+      if (hasFile) {
+        console.log('DEBUG: Using FormData for file upload')
+        // Use FormData for file upload
+        const formData = new FormData()
+        formData.append('resume', resumeFile)
+        console.log('DEBUG: Added resume file to FormData, size:', resumeFile.size)
+        // Add other fields as JSON strings if they're arrays/objects, or as regular form fields
+        Object.keys(profile).forEach(key => {
+          if (key === 'resumeFile') return // Skip the file object itself
+          const value = profile[key]
+          if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
+            formData.append(key, JSON.stringify(value))
+          } else if (value !== null && value !== undefined) {
+            formData.append(key, value)
+          }
+        })
+        body = formData
+        console.log('DEBUG: FormData created with keys:', Array.from(formData.keys()))
+      } else {
+        console.log('DEBUG: Using JSON (no file)')
+        // Use JSON for regular updates (without file)
+        body = { ...profile }
+        delete body.resumeFile // Remove file object from JSON
+      }
+      
+      await apiRequest('/api/candidate/profile', {
+        method: 'POST',
+        body: body,
+        token
+      })
+      
+      // Fetch updated profile from server to get latest resume info
+      try {
+        const updatedProfile = await apiRequest('/api/candidate/profile', {
+          method: 'GET',
+          token
+        })
+        if (updatedProfile) {
+          // Merge updated profile with current profile data
+          const next = { ...applicantProfile, ...profile, ...updatedProfile }
+          // Don't store file object in localStorage
+          if (next.resumeFile) {
+            delete next.resumeFile
+          }
+          setApplicantProfile(next)
+          writeJson(STORAGE_KEYS.applicantProfile, next)
+          return { ok: true, updatedProfile }
+        }
+      } catch (fetchErr) {
+        console.error('Failed to fetch updated profile:', fetchErr)
+      }
+      
+      // Fallback: use current profile data if fetch fails
+      const next = { ...applicantProfile, ...profile }
+      // Don't store file object in localStorage
+      if (next.resumeFile) {
+        delete next.resumeFile
+      }
+      setApplicantProfile(next)
+      writeJson(STORAGE_KEYS.applicantProfile, next)
+      return { ok: true }
+    } catch (err) {
+      console.error('Save profile error:', err)
+      // Fallback to local storage
+      const next = { ...applicantProfile, ...profile }
+      if (next.resumeFile) {
+        delete next.resumeFile
+      }
+      setApplicantProfile(next)
+      writeJson(STORAGE_KEYS.applicantProfile, next)
+      return { ok: true }
+    }
+  }
+
+  const markApplicantProfileCompleted = async (profileOverrides = null) => {
+    const sourceProfile = profileOverrides ? { ...profileOverrides } : { ...applicantProfile }
+    const profileWithCompleted = { ...sourceProfile, completed: true }
+    // Never send raw File objects in this flow
+    if (profileWithCompleted.resumeFile) {
+      delete profileWithCompleted.resumeFile
+    }
+    if (applicantAuth.isLoggedIn) {
+      try {
+        await apiRequest('/api/candidate/profile', {
+          method: 'POST',
+          body: profileWithCompleted,
+          token
+        })
+      } catch (err) {
+        console.error('Mark profile completed error:', err)
+      }
+    }
+    setApplicantProfile((p) => {
+      const next = { ...p, ...profileWithCompleted }
+      writeJson(STORAGE_KEYS.applicantProfile, next)
+      return next
+    })
+    return { ok: true }
+  }
+
+  const applyToJobAsApplicant = async (jobId) => {
+    if (!applicantAuth.isLoggedIn) return { ok: false, reason: 'not_logged_in' }
+    if (!applicantProfile.completed) return { ok: false, reason: 'profile_incomplete' }
+    const hasResume = !!applicantProfile.resumeFileName
+    const hasEducation = Array.isArray(applicantProfile.education) && applicantProfile.education.some(ed => ed.degree && ed.institution)
+    if (!hasResume || !hasEducation) {
+      return { ok: false, reason: 'profile_requirements_missing' }
+    }
+    try {
+      await apiRequest('/api/applications', {
+        method: 'POST',
+        body: { jobId },
+        token
+      })
+      setApplicantApplications((prev) => {
+        const next = { ...prev }
+        // Store as both number and string for compatibility
+        next[jobId] = true
+        next[String(jobId)] = true
+        writeJson(STORAGE_KEYS.applicantApplications, next)
+        return next
+      })
+      // Refresh applications from backend to ensure sync
+      setTimeout(() => fetchApplicantData(), 500)
+      return { ok: true }
+    } catch (err) {
+      console.error('Apply error:', err)
+      return { ok: false, message: err?.message || 'Failed to apply' }
+    }
+  }
+
+
+  const toggleSaveJob = (jobId) => {
+    setApplicantSavedJobs((prev) => {
+      const next = { ...prev }
+      const key = String(jobId)
+      if (next[key] || next[jobId]) {
+        // Unsave
+        delete next[key]
+        delete next[jobId]
+      } else {
+        // Save
+        next[jobId] = true
+        next[key] = true
+      }
+      return next
+    })
+  }
+
+  const logout = () => {
+    setAuth(defaultAuth)
+    setApplicantAuth(defaultApplicantAuth)
+    setApplicantProfile(defaultApplicantProfile)
+    setApplicantApplications({})
+    setApplicantSavedJobs({})
+    setToken('')
+    tokenService.clear()
+    setUser(null)
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(STORAGE_KEYS.auth)
+      window.localStorage.removeItem(STORAGE_KEYS.applicantAuth)
+      window.localStorage.removeItem(STORAGE_KEYS.applicantProfile)
+      window.localStorage.removeItem(STORAGE_KEYS.applicantApplications)
+      window.localStorage.removeItem(STORAGE_KEYS.applicantSavedJobs)
+      window.localStorage.removeItem(STORAGE_KEYS.user)
+    }
+  }
+
+  const getToken = () => token
+
+  // Fetch applications for a specific job (HR only)
+  const fetchApplicationsForJob = async (jobId) => {
+    if (!auth.isLoggedIn || auth.role !== 'HR') {
+      return { ok: false, message: 'Unauthorized' }
+    }
+    try {
+      const data = await apiRequest(`/api/jobs/${jobId}/applications`, {
+        method: 'GET',
+        token
+      })
+      return { ok: true, data: data.applications || data || [] }
+    } catch (err) {
+      console.error('Fetch applications error:', err)
+      return { ok: false, message: err?.message || 'Failed to fetch applications' }
+    }
+  }
+
+  // Fetch all applications grouped by job (HR only)
+  const fetchAllApplications = async () => {
+    if (!auth.isLoggedIn || auth.role !== 'HR') {
+      return { ok: false, message: 'Unauthorized' }
+    }
+    try {
+      const data = await apiRequest('/api/applications/all', {
+        method: 'GET',
+        token
+      })
+      return { ok: true, data: data.applications || data || [] }
+    } catch (err) {
+      console.error('Fetch all applications error:', err)
+      return { ok: false, message: err?.message || 'Failed to fetch applications' }
+    }
+  }
+
+  // Fetch jobs from backend
+  const fetchJobs = async () => {
+    setJobsLoading(true)
+    setJobsError('')
+    try {
+      // If HR is logged in, fetch all jobs (including disabled)
+      const endpoint = auth.isLoggedIn && auth.role === 'HR' ? '/api/jobs/all' : '/api/jobs'
+      const data = await apiRequest(endpoint, { method: 'GET', token: auth.isLoggedIn ? token : undefined })
+      if (Array.isArray(data)) setJobs(data)
+      else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)
+      else setJobs([])
+    } catch (err) {
+      setJobsError(err?.message || 'Failed to load jobs')
+    } finally {
+      setJobsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    // Clear any legacy locally stored jobs to avoid showing mock data
+    try {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem(STORAGE_KEYS.jobs)
+      }
+    } catch {}
+    fetchJobs()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Refetch jobs when auth state changes (to get all jobs for HR)
+  useEffect(() => {
+    if (auth.isLoggedIn || applicantAuth.isLoggedIn) {
+      fetchJobs()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth.isLoggedIn, applicantAuth.isLoggedIn])
+
+  // Fetch applicant data when logged in
+  useEffect(() => {
+    if (applicantAuth.isLoggedIn && token) {
+      fetchApplicantData()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applicantAuth.isLoggedIn, token])
+
+  // Admin: add a job (best-effort). If backend supports it, create and refresh list.
+  const addJob = async (job) => {
+    try {
+      console.log('addJob called with:', job)
+      console.log('Token available:', !!token)
+      console.log('Token value:', token ? token.substring(0, 20) + '...' : 'none')
+      console.log('BASE_URL:', import.meta.env?.VITE_API_URL || 'not set')
+      console.log('Making API request to /api/jobs')
+      
+      if (!token) {
+        console.error('No token available - user may not be logged in')
+        return { success: false, error: 'You must be logged in to create a job. Please log in and try again.' }
+      }
+      
+      const result = await apiRequest('/api/jobs', { method: 'POST', body: job, token })
+      console.log('API request successful:', result)
+      await fetchJobs()
+      return { success: true, data: result }
+    } catch (err) {
+      console.error('Add job error:', err)
+      console.error('Error details:', {
+        message: err?.message,
+        status: err?.status,
+        data: err?.data,
+        cause: err?.cause
+      })
+      
+      let errorMessage = 'Failed to create job'
+      if (err?.status === 401 || err?.status === 403) {
+        errorMessage = 'Authentication failed. Please log in again.'
+      } else if (err?.status === 400) {
+        errorMessage = err?.data?.error || err?.message || 'Invalid job data. Please check all fields.'
+      } else if (err?.message === 'Network error' || err?.cause) {
+        errorMessage = 'Cannot connect to server. Please check if the backend is running.'
+      } else {
+        errorMessage = err?.data?.error || err?.message || 'Failed to create job. Please try again.'
+      }
+      
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  const setJobEnabled = async (jobId, isEnabled) => {
+    if (!token) {
+      // Fallback to local update
+      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, enabled: isEnabled } : j)))
+      return
+    }
+    try {
+      await apiRequest(`/api/jobs/${jobId}/enabled`, {
+        method: 'PATCH',
+        body: { enabled: isEnabled },
+        token
+      })
+      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, enabled: isEnabled } : j)))
+    } catch (err) {
+      console.error('Set job enabled error:', err)
+      // Fallback to local update
+      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, enabled: isEnabled } : j)))
+    }
+  }
+
+  const updateJob = async (jobId, updates) => {
+    if (!token) {
+      // Fallback to local update
+      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...updates } : j)))
+      return
+    }
+    try {
+      const updated = await apiRequest(`/api/jobs/${jobId}`, {
+        method: 'PUT',
+        body: updates,
+        token
+      })
+      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...updated } : j)))
+      await fetchJobs() // Refresh to get latest data
+    } catch (err) {
+      console.error('Update job error:', err)
+      // Fallback to local update
+      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...updates } : j)))
+    }
+  }
+
+  const value = useMemo(() => ({
+    jobs,
+    jobsLoading,
+    jobsError,
+    fetchJobs,
+    addJob,
+    setJobEnabled,
+    updateJob,
+    auth,
+    authLoading,
+    authError,
+    loginHR,
+    applicantAuth,
+    applicantProfile,
+    applicantApplications,
+    applicantSavedJobs,
+    loginApplicant,
+    requestApplicantPasswordReset,
+    verifyApplicantPasswordOtp,
+    resetApplicantPassword,
+    signupApplicant,
+    verifyApplicantOTP,
+    resendApplicantOTP,
+    signupHR,
+    verifyHROTP,
+    resendHROTP,
+    requestHrPasswordReset,
+    verifyHrPasswordOtp,
+    resetHrPassword,
+    saveApplicantProfile,
+    markApplicantProfileCompleted,
+    applyToJobAsApplicant,
+    toggleSaveJob,
+    getToken,
+    logout,
+    user,
+    fetchApplicantData,
+    fetchApplicationsForJob,
+    fetchAllApplications,
+  }), [jobs, jobsLoading, jobsError, auth, authLoading, authError, applicantAuth, applicantProfile, applicantApplications, applicantSavedJobs, user, token])
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>
+}
+
+export function useApp() {
+  const ctx = useContext(AppContext)
+  if (!ctx) throw new Error('useApp must be used within AppProvider')
+  return ctx
+}
+
+

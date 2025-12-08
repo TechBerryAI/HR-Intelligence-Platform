@@ -1,9 +1,16 @@
 import os
+from datetime import datetime, timedelta
+
 import bcrypt
 import jwt
 from flask import Blueprint, request, jsonify
+
 from db import db_get, db_run
-from sessions_service import record_login_attempt, get_recent_failed_attempts
+from helpers.email_utils import send_notification_email
+from helpers.otp_utils import generate_otp, is_valid_email, parse_otp_expiry, send_email_otp
+from models import get_session
+from models.hr_auth import HRAuth
+from sessions_service import get_recent_failed_attempts, record_login_attempt
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -14,44 +21,436 @@ JWT_SECRET = os.getenv('JWT_SECRET', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c
 def hr_signup():
     try:
         data = request.get_json(force=True)
-        full_name = data.get('fullName')
-        email = data.get('email')
-        password = data.get('password')
-        company = data.get('company')
+        full_name = (data.get('fullName') or '').strip()
+        email = (data.get('email') or '').strip().lower()
+        password = data.get('password') or ''
+        company = (data.get('company') or '').strip()
 
         if not full_name or not email or not password or not company:
             return jsonify({"error": "All fields are required"}), 400
         if len(password) < 6:
             return jsonify({"error": "Password must be at least 6 characters"}), 400
 
-        existing = db_get('SELECT hrid FROM hr_signup WHERE email = ?', (email,))
-        if existing:
+        # Validate email format (must contain @ and be valid email)
+        if not is_valid_email(email):
+            return jsonify({"error": "Please provide a valid email address"}), 400
+
+        # Check if email already exists in hr_signup (verified account)
+        existing_signup = db_get('SELECT hrid FROM hr_signup WHERE email = ?', (email,))
+        if existing_signup:
             return jsonify({"error": "Email already registered"}), 400
 
-        hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        otp = generate_otp()
+        expiry = datetime.utcnow() + timedelta(minutes=5)
+
+        # Store in HRAuth temporarily until OTP verification
+        try:
+            with get_session() as session:
+                existing_hr_auth = session.query(HRAuth).filter(HRAuth.email == email).first()
+                
+                if existing_hr_auth and existing_hr_auth.is_verified:
+                    return jsonify({"error": "Email already registered"}), 400
+                
+                if not existing_hr_auth:
+                    hr_auth = HRAuth(
+                        full_name=full_name,
+                        email=email,
+                        company=company,
+                        password_hash=password_hash,
+                        otp=otp,
+                        otp_expiry=expiry,
+                        is_verified=False,
+                    )
+                    session.add(hr_auth)
+                else:
+                    # Update existing unverified record
+                    existing_hr_auth.full_name = full_name
+                    existing_hr_auth.company = company
+                    existing_hr_auth.password_hash = password_hash
+                    existing_hr_auth.otp = otp
+                    existing_hr_auth.otp_expiry = expiry
+                    existing_hr_auth.is_verified = False
+                
+                # Explicitly flush to ensure data is saved before sending email
+                session.flush()
+        except Exception as db_error:
+            print(f"Database error in hr_signup: {type(db_error).__name__}: {db_error}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": f"Database error: {str(db_error)}"}), 500
+
+        # Send OTP via email
+        try:
+            otp_sent = send_email_otp(email, otp, user_type="HR")
+            if not otp_sent:
+                return jsonify({'error': 'Unable to send OTP. Please try again later.'}), 500
+        except Exception as email_error:
+            print(f"Email error in hr_signup: {type(email_error).__name__}: {email_error}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': 'Failed to send OTP email. Please try again later.'}), 500
+
+        return jsonify({'message': 'OTP sent successfully. Please check your email.'}), 200
+    except Exception as e:
+        print(f"Error in hr_signup: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+
+@auth_bp.post('/verify-otp')
+def verify_hr_otp():
+    try:
+        data = request.get_json(force=True) or {}
+        email = (data.get('email') or '').strip().lower()
+        otp = (data.get('otp') or '').strip()
+
+        if not email or not otp:
+            return jsonify({'error': 'Email and OTP are required.'}), 400
+
+        with get_session() as session:
+            hr_auth = session.query(HRAuth).filter(HRAuth.email == email).first()
+            if not hr_auth:
+                return jsonify({'error': 'HR not found. Please signup again.'}), 404
+            
+            # Convert both OTPs to strings for comparison (handles int/string mismatch)
+            stored_otp = str(hr_auth.otp).strip() if hr_auth.otp else None
+            input_otp = str(otp).strip()
+            
+            if not stored_otp or stored_otp != input_otp:
+                print(f"Invalid OTP for HR. Expected={stored_otp}, Got={input_otp}")
+                return jsonify({'error': 'Invalid OTP.'}), 400
+            
+            # Check OTP expiry - ensure it's a datetime object before comparison
+            current_time = datetime.utcnow()
+            otp_expiry_raw = hr_auth.otp_expiry
+            
+            # Convert otp_expiry to datetime object if needed
+            otp_expiry = None
+            if otp_expiry_raw:
+                if isinstance(otp_expiry_raw, datetime):
+                    otp_expiry = otp_expiry_raw
+                elif isinstance(otp_expiry_raw, str):
+                    try:
+                        # Handle format: "2025-11-21 12:17:54.6400000" (with microseconds)
+                        otp_expiry_str = otp_expiry_raw.strip()
+                        
+                        # Try ISO format first
+                        if 'T' in otp_expiry_str:
+                            otp_expiry_str = otp_expiry_str.replace('Z', '').split('.')[0]
+                            otp_expiry = datetime.fromisoformat(otp_expiry_str)
+                        else:
+                            # Handle SQL Server datetime format: "YYYY-MM-DD HH:MM:SS.microseconds"
+                            if '.' in otp_expiry_str:
+                                base_part = otp_expiry_str.split('.')[0]
+                                try:
+                                    otp_expiry = datetime.strptime(base_part, '%Y-%m-%d %H:%M:%S')
+                                except ValueError:
+                                    try:
+                                        from dateutil import parser
+                                        otp_expiry = parser.parse(otp_expiry_str)
+                                    except Exception:
+                                        otp_expiry = None
+                            else:
+                                try:
+                                    otp_expiry = datetime.strptime(otp_expiry_str, '%Y-%m-%d %H:%M:%S')
+                                except ValueError:
+                                    try:
+                                        from dateutil import parser
+                                        otp_expiry = parser.parse(otp_expiry_str)
+                                    except Exception:
+                                        otp_expiry = None
+                    except (ValueError, AttributeError, TypeError) as parse_error:
+                        print(f"Error parsing HR otp_expiry string '{otp_expiry_raw}': {parse_error}")
+                        otp_expiry = None
+                else:
+                    try:
+                        if hasattr(otp_expiry_raw, 'year'):
+                            otp_expiry = datetime(
+                                otp_expiry_raw.year, otp_expiry_raw.month, otp_expiry_raw.day,
+                                otp_expiry_raw.hour, otp_expiry_raw.minute, otp_expiry_raw.second
+                            )
+                        else:
+                            otp_expiry = datetime.fromisoformat(str(otp_expiry_raw))
+                    except (ValueError, AttributeError, TypeError):
+                        otp_expiry = None
+            
+            if not otp_expiry or not isinstance(otp_expiry, datetime):
+                print(f"Invalid OTP expiry for HR. Raw value: {otp_expiry_raw}, Type: {type(otp_expiry_raw)}")
+                return jsonify({'error': 'Invalid OTP expiry. Please request a new OTP.'}), 400
+            
+            try:
+                if otp_expiry < current_time:
+                    return jsonify({'error': 'OTP expired. Please request a new OTP.'}), 400
+            except TypeError as te:
+                print(f"TypeError comparing OTP expiry: {te}, expiry={otp_expiry}, current={current_time}")
+                return jsonify({'error': 'Invalid OTP expiry format. Please request a new OTP.'}), 400
+
+            # Mark as verified
+            hr_auth.mark_verified()
+            session.add(hr_auth)
+            
+            # Store HR data before session closes
+            hr_data = {
+                'full_name': hr_auth.full_name,
+                'email': hr_auth.email,
+                'company': hr_auth.company,
+                'password_hash': hr_auth.password_hash,
+            }
+            
+            # Explicitly flush to ensure verification is saved
+            session.flush()
+
+        # Check if account already exists in hr_signup
+        existing = db_get('SELECT hrid FROM hr_signup WHERE email = ?', (hr_data['email'],))
+        if existing:
+            return jsonify({"error": "Account already verified and registered"}), 400
 
         # Generate next HRID like HRID001 based on max existing
-        row = db_get("SELECT MAX(CAST(SUBSTRING(hrid,5,10) AS INT)) AS maxn FROM hr_signup", ())
-        next_num = int(row['maxn']) + 1 if row and row.get('maxn') is not None else 1
+        try:
+            row = db_get("SELECT MAX(CAST(SUBSTRING(hrid,5,10) AS INT)) AS maxn FROM hr_signup", ())
+            next_num = int(row['maxn']) + 1 if row and row.get('maxn') is not None else 1
+        except (ValueError, TypeError, KeyError) as e:
+            print(f"Error generating HRID: {e}")
+            # Fallback: count existing records
+            count_row = db_get("SELECT COUNT(*) AS cnt FROM hr_signup", ())
+            next_num = (count_row['cnt'] if count_row else 0) + 1
         hrid = f"HRID{next_num:03d}"
 
-        # Insert signup with HRID primary key and hashed password
-        db_run('INSERT INTO hr_signup (hrid, full_name, email, company, password) VALUES (?, ?, ?, ?, ?);', (hrid, full_name, email, company, hashed))
+        # Insert verified signup into hr_signup table
+        try:
+            db_run(
+                'INSERT INTO hr_signup (hrid, full_name, email, company, password) VALUES (?, ?, ?, ?, ?)',
+                (hrid, hr_data['full_name'], hr_data['email'], hr_data['company'], hr_data['password_hash'])
+            )
+        except Exception as db_error:
+            print(f"Error inserting into hr_signup: {db_error}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": "Failed to create account. Please try again."}), 500
 
-        token = jwt.encode({"hrId": hrid, "email": email, "role": "HR"}, JWT_SECRET, algorithm='HS256')
+        token = jwt.encode({"hrId": hrid, "email": hr_data['email'], "role": "HR"}, JWT_SECRET, algorithm='HS256')
+
+        send_notification_email(
+            hr_data['email'],
+            "Welcome to Job Portal",
+            (
+                f"Hi {hr_data['full_name']},\n\n"
+                "Your HR account has been verified and is ready to use. You can now log in to manage jobs and applicants.\n\n"
+                "If you did not initiate this signup, please contact support immediately."
+            )
+        )
 
         return jsonify({
+            "message": "Account verified and created successfully",
             "token": token,
             "user": {
                 "hrId": hrid,
-                "email": email,
-                "fullName": full_name,
-                "company": company,
+                "email": hr_data['email'],
+                "fullName": hr_data['full_name'],
+                "company": hr_data['company'],
                 "role": "HR"
             }
-        }), 201
+        }), 200
     except Exception as e:
+        print(f"Error in verify_hr_otp: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": "Internal server error"}), 500
+
+
+@auth_bp.post('/resend-otp')
+def resend_hr_otp():
+    """Resend OTP to HR's email"""
+    try:
+        data = request.get_json(force=True)
+        email = (data.get('email') or '').strip().lower()
+
+        if not email:
+            return jsonify({'error': 'Email is required.'}), 400
+
+        if not is_valid_email(email):
+            return jsonify({"error": "Please provide a valid email address"}), 400
+
+        # Check if email already exists in hr_signup (verified account)
+        existing_signup = db_get('SELECT hrid FROM hr_signup WHERE email = ?', (email,))
+        if existing_signup:
+            return jsonify({"error": "Email already registered. Please login."}), 400
+
+        with get_session() as session:
+            hr_auth = session.query(HRAuth).filter(HRAuth.email == email).first()
+            
+            if not hr_auth:
+                return jsonify({'error': 'No signup found. Please signup first.'}), 404
+
+            if hr_auth.is_verified:
+                return jsonify({'error': 'Account already verified. Please login.'}), 400
+
+            # Generate new OTP
+            otp = generate_otp()
+            expiry = datetime.utcnow() + timedelta(minutes=5)
+
+            hr_auth.otp = otp
+            hr_auth.otp_expiry = expiry
+            session.add(hr_auth)
+
+        # Send OTP via email
+        otp_sent = send_email_otp(email, otp, user_type="HR")
+        if not otp_sent:
+            return jsonify({'error': 'Unable to send OTP. Please try again later.'}), 500
+
+        return jsonify({'message': 'OTP resent successfully. Please check your email.'}), 200
+
+    except Exception as e:
+        print(f"Error in resend_hr_otp: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@auth_bp.post('/forgot-password')
+def hr_forgot_password():
+    try:
+        data = request.get_json(force=True) or {}
+        email = (data.get('email') or '').strip().lower()
+
+        if not email:
+            return jsonify({'error': 'Email is required.'}), 400
+        if not is_valid_email(email):
+            return jsonify({'error': 'Please provide a valid email address.'}), 400
+
+        hr_signup = db_get('SELECT full_name, email, company, password FROM hr_signup WHERE email = ?', (email,))
+        if not hr_signup:
+            return jsonify({'error': 'Account not found for this email.'}), 404
+
+        otp = generate_otp()
+        expiry = datetime.utcnow() + timedelta(minutes=10)
+
+        with get_session() as session:
+            hr_auth = session.query(HRAuth).filter(HRAuth.email == email).first()
+            if not hr_auth:
+                hr_auth = HRAuth(
+                    full_name=hr_signup['full_name'],
+                    email=email,
+                    company=hr_signup['company'],
+                    password_hash=hr_signup['password'],
+                    is_verified=True,
+                )
+                session.add(hr_auth)
+                session.flush()
+            hr_auth.otp = otp
+            hr_auth.otp_expiry = expiry
+            session.add(hr_auth)
+
+        if not send_email_otp(email, otp, user_type="HR"):
+            return jsonify({'error': 'Failed to send OTP email. Please try again later.'}), 500
+
+        return jsonify({'message': 'OTP sent successfully. Please check your email.'}), 200
+    except Exception as e:
+        print(f"Error in hr_forgot_password: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@auth_bp.post('/forgot-password/verify-otp')
+def hr_verify_reset_otp():
+    try:
+        data = request.get_json(force=True) or {}
+        email = (data.get('email') or '').strip().lower()
+        otp = (data.get('otp') or '').strip()
+
+        if not email or not otp:
+            return jsonify({'error': 'Email and OTP are required.'}), 400
+        if not is_valid_email(email):
+            return jsonify({'error': 'Please provide a valid email address.'}), 400
+
+        with get_session() as session:
+            hr_auth = session.query(HRAuth).filter(HRAuth.email == email).first()
+            if not hr_auth or not hr_auth.otp:
+                return jsonify({'error': 'Please request a new OTP.'}), 400
+
+            stored_otp = str(hr_auth.otp).strip()
+            if stored_otp != otp:
+                return jsonify({'error': 'Invalid OTP.'}), 400
+
+            expiry = parse_otp_expiry(hr_auth.otp_expiry)
+            if not expiry or expiry < datetime.utcnow():
+                return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+
+        return jsonify({'message': 'OTP verified. You may set a new password.'}), 200
+    except Exception as e:
+        print(f"Error in hr_verify_reset_otp: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@auth_bp.post('/reset-password')
+def hr_reset_password():
+    try:
+        data = request.get_json(force=True) or {}
+        email = (data.get('email') or '').strip().lower()
+        otp = (data.get('otp') or '').strip()
+        new_password = data.get('newPassword') or data.get('password') or ''
+        confirm_password = data.get('confirmPassword') or data.get('confirm_password') or ''
+
+        if not email or not otp:
+            return jsonify({'error': 'Email and OTP are required.'}), 400
+        if len(new_password) < 6:
+            return jsonify({'error': 'Password must be at least 6 characters.'}), 400
+        if new_password != confirm_password:
+            return jsonify({'error': 'Passwords do not match.'}), 400
+
+        signup_row = db_get('SELECT hrid, full_name FROM hr_signup WHERE email = ?', (email,))
+        if not signup_row:
+            return jsonify({'error': 'Account not found for this email.'}), 404
+        hr_name = signup_row.get('full_name') if signup_row else None
+
+        with get_session() as session:
+            hr_auth = session.query(HRAuth).filter(HRAuth.email == email).first()
+            if not hr_auth or not hr_auth.otp:
+                return jsonify({'error': 'Please request a new OTP.'}), 400
+
+            stored_otp = str(hr_auth.otp).strip()
+            if stored_otp != otp:
+                return jsonify({'error': 'Invalid OTP.'}), 400
+
+            expiry = parse_otp_expiry(hr_auth.otp_expiry)
+            if not expiry or expiry < datetime.utcnow():
+                return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+
+            password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            hr_auth.password_hash = password_hash
+            hr_auth.otp = None
+            hr_auth.otp_expiry = None
+            session.add(hr_auth)
+
+        try:
+            db_run('UPDATE hr_signup SET password = ? WHERE email = ?', (password_hash, email))
+        except Exception as db_error:
+            print(f"Error updating hr_signup password: {db_error}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': 'Failed to update password. Please try again.'}), 500
+
+        send_notification_email(
+            email,
+            "Your Job Portal password was changed",
+            (
+                f"Hi {hr_name or 'there'},\n\n"
+                "This is a confirmation that the password for your Job Portal HR account was just changed.\n"
+                "If this wasn't you, please reset your password immediately or contact support."
+            )
+        )
+
+        return jsonify({'message': 'Password updated successfully. You can now login.'}), 200
+    except Exception as e:
+        print(f"Error in hr_reset_password: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @auth_bp.post('/login')
@@ -88,6 +487,18 @@ def hr_login():
 
         db_run('INSERT INTO hr_login (hrid, email, password) VALUES (?, ?, ?)', (user_id, signup_data['email'], signup_data['password']))
         record_login_attempt(email, 'HR', 'success', ip_address, user_agent)
+
+        send_notification_email(
+            signup_data['email'],
+            "New login to your Job Portal HR account",
+            (
+                f"Hi {signup_data['full_name'] or 'there'},\n\n"
+                f"We noticed a login to your Job Portal HR account on {datetime.utcnow():%Y-%m-%d %H:%M:%S} UTC.\n"
+                f"IP Address: {ip_address or 'Unavailable'}\n"
+                f"Device: {user_agent or 'Unavailable'}\n\n"
+                "If this was you, no action is needed. If you did not sign in, please reset your password immediately."
+            )
+        )
 
         return jsonify({
             "token": token,

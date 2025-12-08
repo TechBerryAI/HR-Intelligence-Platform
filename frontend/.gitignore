@@ -1,0 +1,15 @@
+node_modules
+dist
+.DS_Store
+*.log
+
+# Environment files
+.env*
+
+# Platform folders
+.vercel
+.netlify
+.firebase
+.cache
+
+
