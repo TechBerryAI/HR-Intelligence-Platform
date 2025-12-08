@@ -1,6 +1,6 @@
 import os
 import socket
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
 
@@ -14,14 +14,14 @@ def _build_allowed_origins():
     env_origins = os.getenv('FRONTEND_URLS') or os.getenv('FRONTEND_URL')
     if env_origins:
         return [origin.strip() for origin in env_origins.split(',') if origin.strip()]
-    origins = {'http://localhost:5173', 'http://127.0.0.1:5173'}
+    origins = ['http://localhost:5173', 'http://127.0.0.1:5173']
     try:
         local_ip = socket.gethostbyname(socket.gethostname())
-        if local_ip:
-            origins.add(f'http://{local_ip}:5173')
+        if local_ip and local_ip != '127.0.0.1':
+            origins.append(f'http://{local_ip}:5173')
     except OSError:
         pass
-    return sorted(origins)
+    return origins
 
 
 app = Flask(__name__)
@@ -39,20 +39,71 @@ app.config['MAIL_SUPPRESS_SEND'] = os.getenv('MAIL_SUPPRESS_SEND', 'false').lowe
 app.url_map.strict_slashes = False
 
 cors_origins = _build_allowed_origins()
-# Fix CORS: Explicitly allow OPTIONS method and handle preflight properly
-CORS(
+print(f"[CORS] Allowed origins: {cors_origins}")
+
+# ABSOLUTE BULLETPROOF CORS - Handle ALL CORS manually without Flask-CORS interference
+@app.before_request
+def handle_cors_preflight():
+    """Handle CORS preflight requests BEFORE anything else"""
+    origin = request.headers.get('Origin')
+    
+    # Handle OPTIONS preflight requests
+    if request.method == 'OPTIONS':
+        print(f"[CORS] OPTIONS preflight: {request.path} from {origin}")
+        if origin in cors_origins:
+            response = make_response()
+            response.status_code = 200
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With'
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Max-Age'] = '3600'
+            print(f"[CORS] Preflight response sent")
+            return response
+        else:
+            print(f"[CORS] WARNING: Origin {origin} not allowed")
+            return make_response('Origin not allowed', 403)
+
+# Also configure Flask-CORS as additional layer
+cors = CORS(
     app,
     resources={
         r"/api/*": {
             "origins": cors_origins,
-            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization"],
+            "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+            "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
             "supports_credentials": True,
+            "expose_headers": ["Content-Type", "Authorization"],
+            "max_age": 3600,
         }
     },
     supports_credentials=True,
-    automatic_options=True,
+    automatic_options=False,  # Disable automatic OPTIONS since we handle it manually
 )
+
+# ABSOLUTE BULLETPROOF: Force CORS headers on EVERY response
+@app.after_request
+def add_cors_headers(response):
+    """Add CORS headers to ALL responses"""
+    origin = request.headers.get('Origin')
+    
+    # For ALL API routes, set CORS headers
+    if request.path.startswith('/api') or request.path.startswith('/health'):
+        if origin and origin in cors_origins:
+            # Force set headers (overwrite any existing)
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With'
+            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Max-Age'] = '3600'
+            print(f"[CORS] ✓ Headers added to {request.method} {request.path} for {origin}")
+        elif origin:
+            print(f"[CORS] ✗ Blocked {origin} (allowed: {cors_origins})")
+        else:
+            print(f"[CORS] ⚠ No Origin header in request to {request.path}")
+    
+    return response
 
 mail.init_app(app)
 init_models()
@@ -76,6 +127,16 @@ def root():
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok", "message": "Job Portal API is running"})
+
+@app.route('/api/test-cors', methods=['GET', 'OPTIONS'])
+def test_cors():
+    """Test endpoint to verify CORS is working"""
+    return jsonify({
+        "status": "ok",
+        "message": "CORS test successful",
+        "origin": request.headers.get('Origin'),
+        "allowed_origins": cors_origins
+    })
 
 app.register_blueprint(auth_bp, url_prefix='/api')
 app.register_blueprint(jobs_bp, url_prefix='/api/jobs')
