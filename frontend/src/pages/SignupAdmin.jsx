@@ -34,11 +34,11 @@ export default function SignupAdmin() {
         setError('')
         setSubmitting(true)
         const res = await verifyHROTP({ email, otp })
-        if (res.ok && res.data?.token) {
+        if (res.ok) {
             setCreated(true)
-            // Redirect to dashboard after successful verification
+            // Redirect to admin login page after successful verification
             setTimeout(() => {
-                navigate('/dashboard')
+                navigate('/login/admin')
             }, 2000)
         } else {
             setError(res.message || 'OTP verification failed')
@@ -192,7 +192,7 @@ export default function SignupAdmin() {
                                     </button>
                                 </div>
                                 {created && (
-                                    <div className="mt-3 text-sm text-green-400">Account created successfully! Redirecting to dashboard...</div>
+                                    <div className="mt-3 text-sm text-green-400">Account created successfully! Redirecting to login...</div>
                                 )}
                             </form>
                         )}

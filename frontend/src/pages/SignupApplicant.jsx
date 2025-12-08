@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
 import { useApp } from '../context/AppContext.jsx'
+import { useNavigate } from 'react-router-dom'
 
 export default function SignupApplicant() {
     const { signupApplicant, verifyApplicantOTP, resendApplicantOTP } = useApp()
+    const navigate = useNavigate()
     const [name, setName] = useState('')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
@@ -35,6 +37,10 @@ export default function SignupApplicant() {
             const res = await verifyApplicantOTP({ email, otp })
             if (res.ok) {
                 setCreated(true)
+                // Redirect to candidate login page after successful verification
+                setTimeout(() => {
+                    navigate('/login/applicant')
+                }, 2000)
             } else {
                 setError(res.message || 'OTP verification failed. Please try again.')
             }
@@ -183,7 +189,7 @@ export default function SignupApplicant() {
                                     </button>
                                 </div>
                                 {created && (
-                                    <div className="mt-3 text-sm text-green-400">Account created successfully! You can now log in.</div>
+                                    <div className="mt-3 text-sm text-green-400">Account created successfully! Redirecting to login...</div>
                                 )}
                             </form>
                         )}

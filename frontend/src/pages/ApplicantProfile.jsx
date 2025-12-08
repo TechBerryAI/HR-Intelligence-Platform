@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
 import { useToast } from '../components/Toast.jsx'
 import MonthYearPicker from '../components/MonthYearPicker.jsx'
+import ResumeUploadWithParsing from '../components/ResumeUploadWithParsing.jsx'
 
 export default function ApplicantProfile() {
 	const { applicantProfile, saveApplicantProfile, markApplicantProfileCompleted, applyToJobAsApplicant, fetchApplicantData, applicantSavedJobs, toggleSaveJob } = useApp()
@@ -120,6 +121,29 @@ export default function ApplicantProfile() {
 		],
 	}))
 	const removeListItem = (listKey, idx) => setForm((f) => ({ ...f, [listKey]: f[listKey].filter((_, i) => i !== idx) }))
+
+	// Handle autofill from resume parsing
+	const handleResumeAutofill = (parsedData) => {
+		// Merge parsed data with existing form, keeping non-empty existing values
+		setForm((prevForm) => ({
+			...prevForm,
+			fullName: parsedData.fullName || prevForm.fullName,
+			email: parsedData.email || prevForm.email,
+			phone: parsedData.phone || prevForm.phone,
+			experienceLevel: parsedData.experienceLevel || prevForm.experienceLevel,
+			education: parsedData.education && parsedData.education.length > 0 ? parsedData.education : prevForm.education,
+			experiences: parsedData.experiences && parsedData.experiences.length > 0 ? parsedData.experiences : prevForm.experiences,
+			certifications: parsedData.certifications && parsedData.certifications.length > 0 ? parsedData.certifications : prevForm.certifications,
+			resumeFile: parsedData.resumeFile || prevForm.resumeFile,
+			resumeFileName: parsedData.resumeFileName || prevForm.resumeFileName,
+		}));
+		
+		// Clear any existing errors for autofilled fields
+		setErrors({});
+		
+		// Scroll to top to see the success message
+		window.scrollTo({ top: 0, behavior: 'smooth' });
+	}
 
 	const onSave = async (e) => {
 		e.preventDefault()
@@ -243,33 +267,18 @@ export default function ApplicantProfile() {
 							{saved && <div className="text-sm text-green-400">{saved}</div>}
 
 							<div>
-								<label className="block text-sm font-medium text-zinc-300">Resume (PDF) <span className="text-red-400">*</span></label>
-								<input
-									ref={fileInputRef}
-									type="file"
-									accept="application/pdf"
-									key={form.resumeFile ? `file-${form.resumeFile.name}-${form.resumeFile.lastModified}` : 'file-input'}
-									className={`mt-1 w-full text-sm file:bg-zinc-700 file:text-gray-100 file:px-3 file:py-2 file:rounded-md ${errors.resumeFileName ? 'border border-red-500 rounded-md' : ''}`}
-									onChange={(e) => {
-										const file = e.target.files?.[0]
-										if (file) {
-											// When a new file is selected, update both resumeFile and resumeFileName
-											// This ensures the new file name is displayed immediately
-											updateField('resumeFile', file)
-											updateField('resumeFileName', file.name)
-										} else {
-											// If file is cleared, only clear resumeFile, keep resumeFileName if it exists from server
-											updateField('resumeFile', null)
-											// Don't clear resumeFileName here - it should persist if there's a saved resume
-										}
-										if (errors.resumeFileName) setErrors((er)=>({ ...er, resumeFileName: undefined }))
-									}}
-								/>
-								{(form.resumeFileName || form.resumeFile) && (
-									<div className="mt-1 text-xs text-zinc-400">
-										Selected: {form.resumeFile?.name || form.resumeFileName || 'resume.pdf'}
-									</div>
-								)}
+								<label className="block text-sm font-medium text-zinc-300">Resume Upload with AI Parsing <span className="text-red-400">*</span></label>
+								<div className="mt-1">
+									<ResumeUploadWithParsing
+										onAutofill={handleResumeAutofill}
+										onFileSelect={(file) => {
+											updateField('resumeFile', file);
+											updateField('resumeFileName', file.name);
+											if (errors.resumeFileName) setErrors((er)=>({ ...er, resumeFileName: undefined }));
+										}}
+										currentFileName={form.resumeFileName}
+									/>
+								</div>
 								{errors.resumeFileName && <div className="mt-1 text-xs text-red-400">{errors.resumeFileName}</div>}
 							</div>
 
