@@ -74,7 +74,7 @@ try {
 
 Start-Sleep -Seconds 1
 
-# Start Backend
+# Start Backend (with integrated Python LLM parsing)
 Write-Host "Starting backend..." -ForegroundColor Yellow
 $backendJob = Start-Job -ScriptBlock {
     param($dir)
@@ -96,12 +96,12 @@ $frontendJob = Start-Job -ScriptBlock {
 Write-Host "Waiting for servers..." -ForegroundColor Gray
 Start-Sleep -Seconds 6
 
-# Check Backend
 Write-Host ""
+# Check Backend
 try {
     $resp = Invoke-WebRequest -Uri "http://localhost:3000/health" -TimeoutSec 3 -ErrorAction Stop
     if ($resp.StatusCode -eq 200) {
-        Write-Host "[OK] Backend:  http://localhost:3000" -ForegroundColor Green
+        Write-Host "[OK] Backend:     http://localhost:3000" -ForegroundColor Green
     }
 } catch {
     Write-Host "[WAIT] Backend: starting..." -ForegroundColor Yellow
@@ -111,7 +111,7 @@ try {
 try {
     $resp = Invoke-WebRequest -Uri "http://localhost:5173" -TimeoutSec 3 -ErrorAction Stop
     if ($resp.StatusCode -eq 200) {
-        Write-Host "[OK] Frontend: http://localhost:5173" -ForegroundColor Green
+        Write-Host "[OK] Frontend:    http://localhost:5173" -ForegroundColor Green
     }
 } catch {
     Write-Host "[WAIT] Frontend: starting..." -ForegroundColor Yellow
@@ -119,6 +119,7 @@ try {
 
 Write-Host ""
 Write-Host "Jobs: Backend=$($backendJob.Id) Frontend=$($frontendJob.Id)" -ForegroundColor Gray
+Write-Host "Note: AI Parsing integrated in Backend (Python LLM)" -ForegroundColor Cyan
 Write-Host ""
 
 # Open browser
@@ -140,6 +141,7 @@ try {
         if ($bState -eq "Failed") {
             Write-Host ""
             Write-Host "Backend stopped!" -ForegroundColor Red
+            Receive-Job -Id $backendJob.Id
             break
         }
         if ($fState -eq "Failed") {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext.jsx'
+import JDUploadWithParsing from '../components/JDUploadWithParsing.jsx'
 
 // Helper function to format date for display
 const formatDisplayDate = (dateString) => {
@@ -47,6 +48,23 @@ export default function Dashboard() {
       setCompany(user.company)
     }
   }, [user])
+
+  // Handle JD autofill from parsing
+  const handleJDAutofill = (parsedData) => {
+    setTitle(parsedData.title || '');
+    setLocation(parsedData.location || '');
+    setSalary(parsedData.salary || '');
+    setExperienceFrom(parsedData.experienceFrom || '');
+    setExperienceTo(parsedData.experienceTo || '');
+    setDescription(parsedData.description || '');
+    if (parsedData.company) {
+      setCompany(parsedData.company);
+    }
+    
+    // Show success message
+    setSuccess('Job description parsed! Please review the fields below.');
+    setTimeout(() => setSuccess(''), 5000);
+  };
 
   const onSubmit = async (e) => {
     e.preventDefault()
@@ -109,6 +127,8 @@ export default function Dashboard() {
         <form onSubmit={onSubmit} className="mt-6 bg-zinc-900 p-6 rounded-xl shadow-sm ring-1 ring-zinc-800 space-y-4">
           {success && <div className="text-green-400 text-sm">{success}</div>}
           {error && <div className="text-red-400 text-sm">{error}</div>}
+
+          <JDUploadWithParsing onAutofill={handleJDAutofill} />
 
           <div>
             <label className="block text-sm font-medium text-zinc-300">Job Title</label>

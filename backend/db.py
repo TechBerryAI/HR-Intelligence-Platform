@@ -82,6 +82,28 @@ def db_all(query: str, params: list | tuple = ()):  # returns list of dicts
         return rows_to_dicts(cursor, rows)
 
 
+def run_migrations():
+    """Run SQL migration files"""
+    import os
+    migrations_dir = os.path.join(os.path.dirname(__file__), 'migrations')
+    if os.path.exists(migrations_dir):
+        migration_files = sorted([f for f in os.listdir(migrations_dir) if f.endswith('.sql')])
+        for migration_file in migration_files:
+            migration_path = os.path.join(migrations_dir, migration_file)
+            with open(migration_path, 'r', encoding='utf-8') as f:
+                migration_sql = f.read()
+                # Split by GO statements
+                statements = [s.strip() for s in migration_sql.split('GO') if s.strip()]
+                with get_conn() as conn:
+                    cursor = conn.cursor()
+                    for stmt in statements:
+                        if stmt and not stmt.startswith('PRINT'):
+                            try:
+                                cursor.execute(stmt)
+                            except Exception as e:
+                                print(f"Migration warning in {migration_file}: {str(e)}")
+
+
 def init_db():
     statements = [
         '''
@@ -1047,3 +1069,6 @@ def init_db():
         cursor = conn.cursor()
         for stmt in statements:
             cursor.execute(stmt)
+    
+    # Run additional migrations from files
+    run_migrations()

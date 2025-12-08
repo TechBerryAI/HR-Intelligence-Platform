@@ -132,6 +132,7 @@ from candidate import candidate_bp  # noqa: E402
 from applications import applications_bp  # noqa: E402
 from sessions_routes import sessions_bp  # noqa: E402
 from routes.candidate_auth import candidate_auth_bp  # noqa: E402
+from parsing_routes import parsing_bp  # noqa: E402
 
 @app.route('/', methods=['GET'])
 def root():
@@ -161,6 +162,7 @@ app.register_blueprint(candidate_auth_bp, url_prefix='/api/candidate')
 app.register_blueprint(candidate_bp, url_prefix='/api/candidate')
 app.register_blueprint(applications_bp, url_prefix='/api/applications')
 app.register_blueprint(sessions_bp, url_prefix='/api/sessions')
+app.register_blueprint(parsing_bp, url_prefix='/api')
 
 if __name__ == '__main__':
     init_db()
