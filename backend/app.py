@@ -41,67 +41,84 @@ app.url_map.strict_slashes = False
 cors_origins = _build_allowed_origins()
 print(f"[CORS] Allowed origins: {cors_origins}")
 
-# ABSOLUTE BULLETPROOF CORS - Handle ALL CORS manually without Flask-CORS interference
+# CORS Preflight Handler - Allow OPTIONS requests
 @app.before_request
 def handle_cors_preflight():
-    """Handle CORS preflight requests BEFORE anything else"""
+    """Handle CORS preflight requests - permissive for development"""
     origin = request.headers.get('Origin')
     
     # Handle OPTIONS preflight requests
     if request.method == 'OPTIONS':
-        print(f"[CORS] OPTIONS preflight: {request.path} from {origin}")
-        if origin in cors_origins:
-            response = make_response()
-            response.status_code = 200
+        print(f"[CORS] OPTIONS preflight: {request.path} from {origin or 'same-origin'}")
+        
+        # Create response for OPTIONS
+        response = make_response()
+        response.status_code = 200
+        
+        # If origin is present and in allowed list, set it
+        if origin and origin in cors_origins:
             response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With'
             response.headers['Access-Control-Allow-Credentials'] = 'true'
-            response.headers['Access-Control-Max-Age'] = '3600'
-            print(f"[CORS] Preflight response sent")
-            return response
+            print(f"[CORS] Preflight allowed for {origin}")
+        # If origin present but not in list, still allow but don't set credentials
+        elif origin:
+            response.headers['Access-Control-Allow-Origin'] = origin
+            print(f"[CORS] Preflight allowed for {origin} (without credentials)")
+        # If no origin (same-origin request), allow without CORS headers
         else:
-            print(f"[CORS] WARNING: Origin {origin} not allowed")
-            return make_response('Origin not allowed', 403)
+            print(f"[CORS] Preflight allowed for same-origin request")
+        
+        # Set other CORS headers for all OPTIONS requests
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With'
+        response.headers['Access-Control-Max-Age'] = '3600'
+        
+        return response
 
-# Also configure Flask-CORS as additional layer
+# Configure Flask-CORS as backup layer
+# Note: Manual handlers above take precedence, this provides fallback
 cors = CORS(
     app,
     resources={
-        r"/api/*": {
-            "origins": cors_origins,
+        r"/*": {
+            "origins": "*",  # Allow all origins (credentials controlled by manual handler)
             "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
             "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
-            "supports_credentials": True,
             "expose_headers": ["Content-Type", "Authorization"],
             "max_age": 3600,
         }
     },
-    supports_credentials=True,
-    automatic_options=False,  # Disable automatic OPTIONS since we handle it manually
+    supports_credentials=False,  # Credentials only for whitelisted origins (handled manually)
+    automatic_options=False,  # We handle OPTIONS manually in before_request
 )
 
-# ABSOLUTE BULLETPROOF: Force CORS headers on EVERY response
+# Add CORS headers to responses
 @app.after_request
 def add_cors_headers(response):
-    """Add CORS headers to ALL responses"""
+    """Add CORS headers to API responses"""
     origin = request.headers.get('Origin')
     
-    # For ALL API routes, set CORS headers
+    # For API routes, set CORS headers
     if request.path.startswith('/api') or request.path.startswith('/health'):
-        if origin and origin in cors_origins:
-            # Force set headers (overwrite any existing)
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
+        if origin:
+            # Allow whitelisted origins with credentials
+            if origin in cors_origins:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                response.headers['Access-Control-Allow-Credentials'] = 'true'
+                print(f"[CORS] Headers added to {request.method} {request.path} for {origin} (trusted)")
+            # Allow other origins without credentials (for development flexibility)
+            else:
+                response.headers['Access-Control-Allow-Origin'] = origin
+                print(f"[CORS] Headers added to {request.method} {request.path} for {origin} (untrusted)")
+            
+            # Set other CORS headers for all origins
             response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD'
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With'
             response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
             response.headers['Access-Control-Max-Age'] = '3600'
-            print(f"[CORS] OK Headers added to {request.method} {request.path} for {origin}")
-        elif origin:
-            print(f"[CORS] BLOCKED {origin} (allowed: {cors_origins})")
+        # Same-origin requests don't need CORS headers
         else:
-            print(f"[CORS] WARNING No Origin header in request to {request.path}")
+            print(f"[CORS] Same-origin request to {request.method} {request.path}")
     
     return response
 
