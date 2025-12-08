@@ -97,11 +97,11 @@ def add_cors_headers(response):
             response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With'
             response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
             response.headers['Access-Control-Max-Age'] = '3600'
-            print(f"[CORS] ✓ Headers added to {request.method} {request.path} for {origin}")
+            print(f"[CORS] OK Headers added to {request.method} {request.path} for {origin}")
         elif origin:
-            print(f"[CORS] ✗ Blocked {origin} (allowed: {cors_origins})")
+            print(f"[CORS] BLOCKED {origin} (allowed: {cors_origins})")
         else:
-            print(f"[CORS] ⚠ No Origin header in request to {request.path}")
+            print(f"[CORS] WARNING No Origin header in request to {request.path}")
     
     return response
 
