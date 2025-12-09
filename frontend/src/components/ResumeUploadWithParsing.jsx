@@ -1,8 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { uploadAndParseResume, mapResumeTOONToForm, validateFileForParsing } from '../utils/parsingApi';
+import PremiumUploadOverlay from './PremiumUploadOverlay';
+import { motion } from 'framer-motion';
+import { FiUpload, FiFile, FiCheck, FiAlertCircle } from 'react-icons/fi';
 
 /**
- * Resume Upload Component with AI Parsing
+ * Premium Resume Upload Component with AI Parsing
  * Uploads resume, parses it, and autofills form
  */
 export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, currentFileName }) {
@@ -11,11 +14,33 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
   const [parseSuccess, setParseSuccess] = useState('');
   const [confidence, setConfidence] = useState(null);
   const fileInputRef = useRef(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    await processFile(file);
+  };
 
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) {
+      await processFile(file);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const processFile = async (file) => {
     // Clear previous messages
     setParseError('');
     setParseSuccess('');
@@ -46,7 +71,7 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
       onFileSelect(file);
     }
 
-    // Start AI parsing
+    // Start AI parsing - show premium overlay
     setIsUploading(true);
     
     try {
@@ -62,9 +87,9 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
         
         // Show success message
         if (result.is_duplicate) {
-          setParseSuccess('✓ Resume recognized! Using previously parsed data.');
+          setParseSuccess('✨ Resume recognized! Using previously parsed data.');
         } else {
-          setParseSuccess('✓ Resume parsed successfully! Fields auto-filled below.');
+          setParseSuccess('✨ Resume parsed successfully! Fields auto-filled below.');
         }
 
         // Autofill form
@@ -102,98 +127,157 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.doc,.docx"
-          onChange={handleFileChange}
-          disabled={isUploading}
-          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
-        />
-      </div>
+    <>
+      {/* Premium Upload Overlay */}
+      <PremiumUploadOverlay isVisible={isUploading} type="resume" />
 
-      {isUploading && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 space-y-4">
-          {/* Animated Header */}
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-3 h-3 bg-blue-600 rounded-full animate-pulse"></div>
+      <div className="space-y-4">
+        {/* Premium drag & drop upload area */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          className={`relative group transition-all duration-300 ${
+            isDragging
+              ? 'scale-105 ring-4 ring-purple-500/50'
+              : 'hover:scale-[1.02]'
+          }`}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx"
+            onChange={handleFileChange}
+            disabled={isUploading}
+            className="hidden"
+            id="resume-upload-input"
+          />
+          
+          <label
+            htmlFor="resume-upload-input"
+            className={`
+              block glass-card p-8 rounded-2xl cursor-pointer
+              border-2 border-dashed transition-all duration-300
+              ${isDragging 
+                ? 'border-purple-500 bg-purple-500/10' 
+                : 'border-zinc-700 hover:border-purple-500/50 hover:bg-white/10'
+              }
+              ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}
+            `}
+          >
+            <div className="flex flex-col items-center justify-center space-y-4">
+              {/* Animated upload icon */}
+              <motion.div
+                animate={isDragging ? {
+                  scale: [1, 1.2, 1],
+                  rotate: [0, 10, -10, 0],
+                } : {}}
+                transition={{ duration: 0.5 }}
+                className="relative"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full blur-xl opacity-50 group-hover:opacity-75 transition-opacity" />
+                <div className="relative w-16 h-16 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full flex items-center justify-center shadow-glow">
+                  <FiUpload className="w-8 h-8 text-white" />
+                </div>
+              </motion.div>
+
+              <div className="text-center">
+                <p className="text-lg font-semibold text-white mb-1">
+                  {isDragging ? 'Drop your resume here' : 'Upload Your Resume'}
+                </p>
+                <p className="text-sm text-zinc-400">
+                  Drag & drop or click to browse
+                </p>
+              </div>
+
+              <div className="flex items-center gap-4 text-xs text-zinc-500">
+                <div className="flex items-center gap-1">
+                  <FiFile className="w-4 h-4" />
+                  <span>PDF, DOC, DOCX</span>
+                </div>
+                <div className="w-1 h-1 bg-zinc-600 rounded-full" />
+                <span>Max 10MB</span>
+              </div>
+
+              {/* AI Badge */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 0.2 }}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-full border border-purple-500/30"
+              >
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                <span className="text-xs font-medium text-purple-300">
+                  AI-Powered Parsing
+                </span>
+              </motion.div>
+            </div>
+          </label>
+        </motion.div>
+
+        {/* Success message */}
+        {parseSuccess && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="glass-card border-2 border-green-500/30 bg-green-500/10 px-5 py-4 rounded-xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-glow">
+                <FiCheck className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-green-300">{parseSuccess}</p>
+                {confidence !== null && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${confidence * 100}%` }}
+                        transition={{ duration: 1, ease: 'easeOut' }}
+                        className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full"
+                      />
+                    </div>
+                    <span className="text-xs font-medium text-green-300 min-w-[50px] text-right">
+                      {(confidence * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
-            <div>
-              <h4 className="font-semibold text-blue-900">AI is Parsing Your Resume</h4>
-              <p className="text-sm text-blue-700">This usually takes 10-30 seconds...</p>
-            </div>
-          </div>
-          
-          {/* Progress Steps */}
-          <div className="space-y-2 pl-11">
-            <div className="flex items-center gap-2 text-sm">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              <span className="text-gray-700">✓ Extracting text from document</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" style={{animationDelay: '0.2s'}}></div>
-              <span className="text-gray-700">⚡ Analyzing with AI (Grok-4 Fast Reasoning)</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <div className="w-2 h-2 bg-purple-500 rounded-full animate-pulse" style={{animationDelay: '0.4s'}}></div>
-              <span className="text-gray-700">📝 Preparing auto-fill data</span>
-            </div>
-          </div>
-          
-          {/* Progress Bar */}
-          <div className="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
-            <div className="h-full bg-gradient-to-r from-blue-500 to-purple-500 rounded-full animate-progress"></div>
-          </div>
-          
-          <style jsx>{`
-            @keyframes progress {
-              0% { width: 0%; }
-              100% { width: 100%; }
-            }
-            .animate-progress {
-              animation: progress 25s ease-in-out infinite;
-            }
-          `}</style>
-        </div>
-      )}
+          </motion.div>
+        )}
 
-      {parseSuccess && (
-        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-md text-sm flex items-start gap-2">
-          <span className="font-semibold">{parseSuccess}</span>
-          {confidence !== null && (
-            <span className="ml-auto text-xs bg-green-100 px-2 py-1 rounded">
-              Confidence: {(confidence * 100).toFixed(0)}%
-            </span>
-          )}
-        </div>
-      )}
+        {/* Error message */}
+        {parseError && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="glass-card border-2 border-yellow-500/30 bg-yellow-500/10 px-5 py-4 rounded-xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center">
+                <FiAlertCircle className="w-5 h-5 text-white" />
+              </div>
+              <p className="text-sm text-yellow-300 flex-1">{parseError}</p>
+            </div>
+          </motion.div>
+        )}
 
-      {parseError && (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-md text-sm">
-          {parseError}
-        </div>
-      )}
-
-      {currentFileName && !parseSuccess && (
-        <div className="text-sm text-gray-600">
-          Current file: <span className="font-medium">{currentFileName}</span>
-        </div>
-      )}
-
-      <div className="text-xs text-gray-500 space-y-1">
-        <p>📄 Supported formats: PDF, DOC, DOCX (max 10MB)</p>
-        <p>🤖 AI will automatically extract and fill your information</p>
+        {/* Current file indicator */}
+        {currentFileName && !parseSuccess && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center gap-2 text-sm text-zinc-400"
+          >
+            <FiFile className="w-4 h-4" />
+            <span>Current file: <span className="font-medium text-zinc-300">{currentFileName}</span></span>
+          </motion.div>
+        )}
       </div>
-    </div>
+    </>
   );
 }
-

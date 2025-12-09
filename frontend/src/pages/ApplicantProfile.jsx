@@ -4,6 +4,10 @@ import { useApp } from '../context/AppContext.jsx'
 import { useToast } from '../components/Toast.jsx'
 import MonthYearPicker from '../components/MonthYearPicker.jsx'
 import ResumeUploadWithParsing from '../components/ResumeUploadWithParsing.jsx'
+import PremiumInput from '../components/PremiumInput.jsx'
+import PremiumButton from '../components/PremiumButton.jsx'
+import { motion, AnimatePresence } from 'framer-motion'
+import { FiUser, FiMail, FiPhone, FiMapPin, FiLinkedin, FiGlobe, FiSave, FiCheck, FiAlertCircle } from 'react-icons/fi'
 
 export default function ApplicantProfile() {
 	const { applicantProfile, saveApplicantProfile, markApplicantProfileCompleted, applyToJobAsApplicant, fetchApplicantData, applicantSavedJobs, toggleSaveJob } = useApp()
@@ -25,7 +29,7 @@ export default function ApplicantProfile() {
 		portfolioUrl: applicantProfile.portfolioUrl || '',
 		currentLocation: applicantProfile.currentLocation || '',
 		preferredLocation: applicantProfile.preferredLocation || '',
-		resumeFile: null, // Store the actual file object
+		resumeFile: null,
 		resumeFileName: applicantProfile.resumeFileName || '',
 		education: applicantProfile.education.length ? applicantProfile.education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }],
 		certifications: applicantProfile.certifications && applicantProfile.certifications.length ? applicantProfile.certifications : [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }],
@@ -33,13 +37,10 @@ export default function ApplicantProfile() {
 	})
 	const [saved, setSaved] = useState('')
 	const [errors, setErrors] = useState({})
+	const [autofilledFields, setAutofilledFields] = useState({})
 	
-	// Sync resumeFileName from applicantProfile when it changes (e.g., after fetching from server)
-	// This ensures the resume name persists even after page reload or profile fetch
 	useEffect(() => {
 		if (applicantProfile.resumeFileName) {
-			// Update resumeFileName from profile if there's no new file currently selected
-			// This ensures the saved resume name is always displayed
 			if (!form.resumeFile) {
 				updateField('resumeFileName', applicantProfile.resumeFileName)
 			}
@@ -55,19 +56,16 @@ export default function ApplicantProfile() {
 		if (!f.preferredLocation?.trim()) e.preferredLocation = 'Preferred location is required'
 		if (!f.resumeFileName) e.resumeFileName = 'Resume is required'
 		
-		// Enhanced education validation
 		const hasEducation = Array.isArray(f.education) && f.education.some(ed => ed.degree?.trim() && ed.institution?.trim())
 		if (!hasEducation) {
 			e.education = 'At least one education entry with Degree and Institution is required'
 		} else {
-			// Check for 10th standard
 			const has10th = f.education.some(ed => 
 				ed.degree?.toLowerCase().includes('10') || 
 				ed.degree?.toLowerCase().includes('tenth') || 
 				ed.degree?.toLowerCase().includes('ssc') ||
 				ed.degree?.toLowerCase().includes('secondary')
 			)
-			// Check for 12th/Diploma
 			const has12thOrDiploma = f.education.some(ed => 
 				ed.degree?.toLowerCase().includes('12') || 
 				ed.degree?.toLowerCase().includes('twelfth') || 
@@ -88,7 +86,6 @@ export default function ApplicantProfile() {
 		if (f.experienceLevel === 'experienced') {
 			if (!f.servingNotice) e.servingNotice = 'Please select an option'
 			if (!f.noticePeriod) e.noticePeriod = 'Notice period is required'
-			// Require last working day ONLY if serving notice is 'yes' OR notice period is 'Immediate'
 			if (f.servingNotice === 'yes' && !f.lastWorkingDay) {
 				e.lastWorkingDay = 'Last working day is required when serving notice'
 			} else if (f.noticePeriod === 'Immediate' && !f.lastWorkingDay) {
@@ -122,9 +119,18 @@ export default function ApplicantProfile() {
 	}))
 	const removeListItem = (listKey, idx) => setForm((f) => ({ ...f, [listKey]: f[listKey].filter((_, i) => i !== idx) }))
 
-	// Handle autofill from resume parsing
 	const handleResumeAutofill = (parsedData) => {
-		// Merge parsed data with existing form, keeping non-empty existing values
+		// Track which fields were autofilled
+		const autofilled = {};
+		
+		if (parsedData.fullName) autofilled.fullName = true;
+		if (parsedData.email) autofilled.email = true;
+		if (parsedData.phone) autofilled.phone = true;
+		if (parsedData.experienceLevel) autofilled.experienceLevel = true;
+		
+		setAutofilledFields(autofilled);
+		
+		// Merge parsed data with existing form
 		setForm((prevForm) => ({
 			...prevForm,
 			fullName: parsedData.fullName || prevForm.fullName,
@@ -138,41 +144,34 @@ export default function ApplicantProfile() {
 			resumeFileName: parsedData.resumeFileName || prevForm.resumeFileName,
 		}));
 		
-		// Clear any existing errors for autofilled fields
 		setErrors({});
 		
-		// Scroll to top to see the success message
+		// Clear autofill indicators after 3 seconds
+		setTimeout(() => {
+			setAutofilledFields({});
+		}, 3000);
+		
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 
 	const onSave = async (e) => {
 		e.preventDefault()
-		console.log('DEBUG: onSave - form.resumeFile:', form.resumeFile)
-		console.log('DEBUG: onSave - form keys:', Object.keys(form))
 		const result = await saveApplicantProfile(form)
 		if (result.ok) {
 			setSaved('Profile saved')
 			toast.push('Profile saved successfully! You can come back and complete it later.', { type: 'success', duration: 5000 })
 			setTimeout(() => setSaved(''), 3000)
 			
-			// Reset file input after successful save
 			if (fileInputRef.current) {
 				fileInputRef.current.value = ''
 			}
 			
-			// Clear resumeFile from form state after save (file is now on server)
-			// Keep resumeFileName to show the saved resume name permanently
 			if (form.resumeFile) {
 				updateField('resumeFile', null)
-				// Keep the file name that was just saved
-				// It will be updated from server response if available
 			}
-			// Update resumeFileName from the fetched profile to ensure it matches server state
 			if (result.updatedProfile && result.updatedProfile.resumeFileName) {
 				updateField('resumeFileName', result.updatedProfile.resumeFileName)
 			} else if (form.resumeFileName) {
-				// If no updated profile but we have a resumeFileName, keep it
-				// This ensures the name persists after save
 			}
 		} else {
 			toast.push('Failed to save profile. Please try again.', { type: 'error', duration: 4000 })
@@ -189,57 +188,43 @@ export default function ApplicantProfile() {
 		}
 		const saveResult = await saveApplicantProfile(form)
 		
-		// Reset file input after successful save
 		if (fileInputRef.current) {
 			fileInputRef.current.value = ''
 		}
 		
-		// Clear resumeFile from form state after save (file is now on server)
-		// Keep resumeFileName to show the saved resume name permanently
 		if (form.resumeFile) {
 			updateField('resumeFile', null)
-			// Keep the file name that was just saved
 		}
-		// Update resumeFileName from the fetched profile to ensure it matches server state
 		if (saveResult.updatedProfile && saveResult.updatedProfile.resumeFileName) {
 			updateField('resumeFileName', saveResult.updatedProfile.resumeFileName)
 		} else if (form.resumeFileName) {
-			// If no updated profile but we have a resumeFileName, keep it
-			// This ensures the name persists after save
 		}
 		
     await markApplicantProfileCompleted(form)
 		
-		// Check if there's a job to apply for
 		const sp = new URLSearchParams(location.search)
 		let redirectTo = sp.get('redirect') || '/jobs'
 		let applyForJobId = sp.get('applyFor')
 		
-		// If applyFor is in the redirect URL, extract it
 		if (!applyForJobId && redirectTo) {
 			try {
 				const redirectUrl = new URL(redirectTo, window.location.origin)
 				applyForJobId = redirectUrl.searchParams.get('applyFor')
-				// Clean up redirect URL
 				redirectUrl.searchParams.delete('applyFor')
 				redirectTo = redirectUrl.pathname + redirectUrl.search
 			} catch (err) {
-				// If redirectTo is not a full URL, try parsing as relative path
 				const redirectParams = new URLSearchParams(redirectTo.split('?')[1] || '')
 				applyForJobId = redirectParams.get('applyFor') || applyForJobId
 				redirectTo = redirectTo.split('?')[0] || '/jobs'
 			}
 		}
 		
-		// If applyFor parameter exists, apply to that job
 		if (applyForJobId) {
 			const applyResult = await applyToJobAsApplicant(applyForJobId)
 			if (applyResult.ok) {
-				// If job was saved, unsave it after successful application
 				if (applicantSavedJobs[applyForJobId] || applicantSavedJobs[String(applyForJobId)]) {
 					toggleSaveJob(applyForJobId)
 				}
-				// Refresh applications data
 				if (fetchApplicantData) {
 					await fetchApplicantData()
 				}
@@ -251,320 +236,523 @@ export default function ApplicantProfile() {
 
 	return (
 		<section className="relative min-h-[calc(100vh-180px)] flex items-center justify-center px-4 py-10 overflow-visible">
+			{/* Animated background */}
 			<div className="pointer-events-none absolute inset-0">
-				<div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
-				<div className="absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
+				<motion.div 
+					animate={{
+						scale: [1, 1.2, 1],
+						opacity: [0.3, 0.5, 0.3],
+					}}
+					transition={{ duration: 8, repeat: Infinity }}
+					className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-purple-500/20 blur-3xl" 
+				/>
+				<motion.div 
+					animate={{
+						scale: [1.2, 1, 1.2],
+						opacity: [0.3, 0.5, 0.3],
+					}}
+					transition={{ duration: 10, repeat: Infinity }}
+					className="absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-blue-500/20 blur-3xl" 
+				/>
 				<div className="absolute inset-0 opacity-[0.07]" style={{backgroundImage:'radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)', backgroundSize:'24px 24px'}} />
 			</div>
 
-			<div className="w-full max-w-3xl relative">
-				<div className="rounded-2xl bg-gradient-to-br from-zinc-900/90 via-zinc-900/70 to-zinc-900/50 p-[1px] shadow-2xl">
-					<div className="rounded-2xl bg-zinc-950/70 backdrop-blur-md p-6 sm:p-8">
-						<h2 className="text-2xl font-semibold text-white">Complete Your Profile</h2>
-						<p className="mt-1 text-sm text-zinc-400">We’ll use this info when you apply to jobs</p>
+			<motion.div 
+				initial={{ opacity: 0, y: 20 }}
+				animate={{ opacity: 1, y: 0 }}
+				transition={{ duration: 0.6 }}
+				className="w-full max-w-3xl relative"
+			>
+				<div className="glass-card rounded-3xl p-[1px] shadow-premium border border-white/10">
+					<div className="rounded-3xl bg-gradient-to-br from-zinc-900/95 via-zinc-900/90 to-zinc-900/85 backdrop-blur-xl p-6 sm:p-8">
+						<motion.div
+							initial={{ opacity: 0, y: -10 }}
+							animate={{ opacity: 1, y: 0 }}
+							transition={{ delay: 0.2 }}
+						>
+							<h2 className="text-3xl font-bold bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+								Complete Your Profile
+							</h2>
+							<p className="mt-2 text-sm text-zinc-400">We'll use this info when you apply to jobs</p>
+						</motion.div>
 
-						<form onSubmit={onSave} className="mt-6 space-y-6">
-							{saved && <div className="text-sm text-green-400">{saved}</div>}
+						<form onSubmit={onSave} className="mt-8 space-y-8">
+							{saved && (
+								<motion.div
+									initial={{ opacity: 0, scale: 0.95 }}
+									animate={{ opacity: 1, scale: 1 }}
+									className="glass-card border-2 border-green-500/30 bg-green-500/10 px-5 py-4 rounded-xl flex items-center gap-3"
+								>
+									<FiCheck className="w-5 h-5 text-green-400" />
+									<span className="text-sm font-medium text-green-300">{saved}</span>
+								</motion.div>
+							)}
 
-							<div>
-								<label className="block text-sm font-medium text-zinc-300">Resume Upload with AI Parsing <span className="text-red-400">*</span></label>
-								<div className="mt-1">
-									<ResumeUploadWithParsing
-										onAutofill={handleResumeAutofill}
-										onFileSelect={(file) => {
-											updateField('resumeFile', file);
-											updateField('resumeFileName', file.name);
-											if (errors.resumeFileName) setErrors((er)=>({ ...er, resumeFileName: undefined }));
-										}}
-										currentFileName={form.resumeFileName}
-									/>
-								</div>
-								{errors.resumeFileName && <div className="mt-1 text-xs text-red-400">{errors.resumeFileName}</div>}
-							</div>
+							{/* Resume Upload */}
+							<motion.div
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 0.3 }}
+							>
+								<label className="block text-sm font-medium text-zinc-300 mb-3">
+									Resume Upload with AI Parsing <span className="text-red-400">*</span>
+								</label>
+								<ResumeUploadWithParsing
+									onAutofill={handleResumeAutofill}
+									onFileSelect={(file) => {
+										updateField('resumeFile', file);
+										updateField('resumeFileName', file.name);
+										if (errors.resumeFileName) setErrors((er)=>({ ...er, resumeFileName: undefined }));
+									}}
+									currentFileName={form.resumeFileName}
+								/>
+								{errors.resumeFileName && (
+									<motion.div
+										initial={{ opacity: 0, y: -5 }}
+										animate={{ opacity: 1, y: 0 }}
+										className="mt-2 flex items-center gap-2 text-xs text-red-400"
+									>
+										<FiAlertCircle className="w-3 h-3" />
+										{errors.resumeFileName}
+									</motion.div>
+								)}
+							</motion.div>
 
-							<div className="grid sm:grid-cols-2 gap-6">
-								<div>
-									<label className="block text-sm font-medium text-zinc-300">Full name <span className="text-red-400">*</span></label>
-									<input ref={errors.fullName ? firstErrorRef : undefined} className={`mt-1 w-full bg-transparent border-0 border-b py-2.5 text-gray-100 focus:outline-none ${errors.fullName ? 'border-red-500 focus:border-red-400' : 'border-zinc-700 focus:border-white'}`} value={form.fullName} onChange={(e) => { updateField('fullName', e.target.value); if (errors.fullName) setErrors((er)=>({ ...er, fullName: undefined })) }} />
-									{errors.fullName && <div className="mt-1 text-xs text-red-400">{errors.fullName}</div>}
-								</div>
-								<div>
-									<label className="block text-sm font-medium text-zinc-300">Email <span className="text-red-400">*</span></label>
-									<input type="email" className={`mt-1 w-full bg-transparent border-0 border-b py-2.5 text-gray-100 focus:outline-none ${errors.email ? 'border-red-500 focus:border-red-400' : 'border-zinc-700 focus:border-white'}`} value={form.email} onChange={(e) => { updateField('email', e.target.value); if (errors.email) setErrors((er)=>({ ...er, email: undefined })) }} />
-									{errors.email && <div className="mt-1 text-xs text-red-400">{errors.email}</div>}
-								</div>
-								<div>
-									<label className="block text-sm font-medium text-zinc-300">Phone <span className="text-red-400">*</span></label>
-									<input className={`mt-1 w-full bg-transparent border-0 border-b py-2.5 text-gray-100 focus:outline-none ${errors.phone ? 'border-red-500 focus:border-red-400' : 'border-zinc-700 focus:border-white'}`} value={form.phone} onChange={(e) => { updateField('phone', e.target.value); if (errors.phone) setErrors((er)=>({ ...er, phone: undefined })) }} />
-									{errors.phone && <div className="mt-1 text-xs text-red-400">{errors.phone}</div>}
-								</div>
-							</div>
+							{/* Personal Information */}
+							<motion.div
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 0.4 }}
+								className="grid sm:grid-cols-2 gap-6"
+							>
+								<PremiumInput
+									ref={errors.fullName ? firstErrorRef : undefined}
+									label="Full Name"
+									icon={FiUser}
+									required
+									value={form.fullName}
+									onChange={(e) => { 
+										updateField('fullName', e.target.value); 
+										if (errors.fullName) setErrors((er)=>({ ...er, fullName: undefined })) 
+									}}
+									error={errors.fullName}
+									isAutofilled={autofilledFields.fullName}
+								/>
+								<PremiumInput
+									label="Email"
+									icon={FiMail}
+									type="email"
+									required
+									value={form.email}
+									onChange={(e) => { 
+										updateField('email', e.target.value); 
+										if (errors.email) setErrors((er)=>({ ...er, email: undefined })) 
+									}}
+									error={errors.email}
+									isAutofilled={autofilledFields.email}
+								/>
+								<PremiumInput
+									label="Phone"
+									icon={FiPhone}
+									required
+									value={form.phone}
+									onChange={(e) => { 
+										updateField('phone', e.target.value); 
+										if (errors.phone) setErrors((er)=>({ ...er, phone: undefined })) 
+									}}
+									error={errors.phone}
+									isAutofilled={autofilledFields.phone}
+								/>
+							</motion.div>
 
-							<div className="border border-zinc-800 rounded-xl p-4 sm:p-5 bg-zinc-900/40">
-								<h3 className="text-sm font-semibold text-zinc-200 tracking-wide uppercase">Experience Details</h3>
-								<p className="mt-1 text-xs text-zinc-400">Tell us about your current experience and availability.</p>
+							{/* Experience Details */}
+							<motion.div
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 0.5 }}
+								className="glass-card border border-white/10 rounded-2xl p-6 bg-white/5"
+							>
+								<h3 className="text-lg font-semibold text-white mb-2">Experience Details</h3>
+								<p className="text-sm text-zinc-400 mb-6">Tell us about your current experience and availability.</p>
 
-								<div className="mt-4 space-y-4">
+								<div className="space-y-6">
 									<div>
-										<label className="block text-sm font-medium text-zinc-300">Are you a fresher or experienced? <span className="text-red-400">*</span></label>
-										<div className="mt-3 flex flex-wrap gap-3">
-											<label className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${form.experienceLevel === 'fresher' ? 'border-white/70 text-white bg-white/5' : 'border-zinc-800 text-zinc-300 hover:border-zinc-700'}`}>
-												<input
-													type="radio"
-													name="experienceLevel"
-													value="fresher"
-													onChange={(e) => setForm((prev) => ({
-														...prev,
-														experienceLevel: e.target.value,
-														servingNotice: '',
-														noticePeriod: '',
-														lastWorkingDay: '',
-													}))}
-
-													className="accent-white"
-													checked={form.experienceLevel === 'fresher'}
-												/>
-												<span>Fresher</span>
-											</label>
-											<label className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${form.experienceLevel === 'experienced' ? 'border-white/70 text-white bg-white/5' : 'border-zinc-800 text-zinc-300 hover:border-zinc-700'}`}>
-												<input
-													type="radio"
-													name="experienceLevel"
-													value="experienced"
-													onChange={(e) => setForm((prev) => ({
-														...prev,
-														experienceLevel: e.target.value,
-													}))}
-													className="accent-white"
-													checked={form.experienceLevel === 'experienced'}
-												/>
-												<span>Experienced</span>
-											</label>
+										<label className="block text-sm font-medium text-zinc-300 mb-3">
+											Are you a fresher or experienced? <span className="text-red-400">*</span>
+										</label>
+										<div className="flex flex-wrap gap-3">
+											{['fresher', 'experienced'].map((level) => (
+												<motion.label
+													key={level}
+													whileHover={{ scale: 1.05 }}
+													whileTap={{ scale: 0.95 }}
+													className={`flex items-center gap-3 rounded-xl border-2 px-5 py-3 text-sm transition-all cursor-pointer ${
+														form.experienceLevel === level 
+															? 'border-purple-500 bg-purple-500/20 text-white shadow-glow-sm' 
+															: 'border-zinc-700 text-zinc-300 hover:border-zinc-600 bg-white/5'
+													}`}
+												>
+													<input
+														type="radio"
+														name="experienceLevel"
+														value={level}
+														onChange={(e) => setForm((prev) => ({
+															...prev,
+															experienceLevel: e.target.value,
+															servingNotice: '',
+															noticePeriod: '',
+															lastWorkingDay: '',
+														}))}
+														className="sr-only"
+														checked={form.experienceLevel === level}
+													/>
+													<div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+														form.experienceLevel === level ? 'border-purple-400' : 'border-zinc-600'
+													}`}>
+														{form.experienceLevel === level && (
+															<motion.div
+																initial={{ scale: 0 }}
+																animate={{ scale: 1 }}
+																className="w-3 h-3 rounded-full bg-purple-400"
+															/>
+														)}
+													</div>
+													<span className="capitalize font-medium">{level}</span>
+												</motion.label>
+											))}
 										</div>
-										{errors.experienceLevel && <div className="mt-1 text-xs text-red-400">{errors.experienceLevel}</div>}
+										{errors.experienceLevel && (
+											<motion.p
+												initial={{ opacity: 0, y: -5 }}
+												animate={{ opacity: 1, y: 0 }}
+												className="mt-2 text-xs text-red-400 flex items-center gap-1"
+											>
+												<FiAlertCircle className="w-3 h-3" />
+												{errors.experienceLevel}
+											</motion.p>
+										)}
 									</div>
 
-									{form.experienceLevel === 'experienced' && (
-										<div className="space-y-4">
-											<div>
-												<label className="block text-sm font-medium text-zinc-300">Are you currently serving your notice period? <span className="text-red-400">*</span></label>
-												<div className="mt-3 flex flex-wrap gap-3">
-													<label className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${form.servingNotice === 'yes' ? 'border-white/70 text-white bg-white/5' : 'border-zinc-800 text-zinc-300 hover:border-zinc-700'}`}>
-														<input
-															type="radio"
-															name="servingNotice"
-															value="yes"
-															onChange={(e) => {
-																setForm((prev) => ({
-																	...prev,
-																	servingNotice: e.target.value,
-																}))
-																if (errors.servingNotice) setErrors((er)=>({ ...er, servingNotice: undefined }))
-															}}
-															className="accent-white"
-															checked={form.servingNotice === 'yes'}
-														/>
-														<span>Yes</span>
+									<AnimatePresence>
+										{form.experienceLevel === 'experienced' && (
+											<motion.div
+												initial={{ opacity: 0, height: 0 }}
+												animate={{ opacity: 1, height: 'auto' }}
+												exit={{ opacity: 0, height: 0 }}
+												className="space-y-6"
+											>
+												<div>
+													<label className="block text-sm font-medium text-zinc-300 mb-3">
+														Are you currently serving your notice period? <span className="text-red-400">*</span>
 													</label>
-													<label className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition ${form.servingNotice === 'no' ? 'border-white/70 text-white bg-white/5' : 'border-zinc-800 text-zinc-300 hover:border-zinc-700'}`}>
-														<input
-															type="radio"
-															name="servingNotice"
-															value="no"
-															onChange={(e) => {
-																setForm((prev) => ({
-																	...prev,
-																	servingNotice: e.target.value,
-																}))
-																if (errors.servingNotice) setErrors((er)=>({ ...er, servingNotice: undefined }))
-															}}
-															className="accent-white"
-															checked={form.servingNotice === 'no'}
-														/>
-														<span>No</span>
-													</label>
+													<div className="flex flex-wrap gap-3">
+														{[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }].map((option) => (
+															<motion.label
+																key={option.value}
+																whileHover={{ scale: 1.05 }}
+																whileTap={{ scale: 0.95 }}
+																className={`flex items-center gap-3 rounded-xl border-2 px-5 py-3 text-sm transition-all cursor-pointer ${
+																	form.servingNotice === option.value 
+																		? 'border-purple-500 bg-purple-500/20 text-white shadow-glow-sm' 
+																		: 'border-zinc-700 text-zinc-300 hover:border-zinc-600 bg-white/5'
+																}`}
+															>
+																<input
+																	type="radio"
+																	name="servingNotice"
+																	value={option.value}
+																	onChange={(e) => {
+																		setForm((prev) => ({
+																			...prev,
+																			servingNotice: e.target.value,
+																		}))
+																		if (errors.servingNotice) setErrors((er)=>({ ...er, servingNotice: undefined }))
+																	}}
+																	className="sr-only"
+																	checked={form.servingNotice === option.value}
+																/>
+																<div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+																	form.servingNotice === option.value ? 'border-purple-400' : 'border-zinc-600'
+																}`}>
+																	{form.servingNotice === option.value && (
+																		<motion.div
+																			initial={{ scale: 0 }}
+																			animate={{ scale: 1 }}
+																			className="w-3 h-3 rounded-full bg-purple-400"
+																		/>
+																	)}
+																</div>
+																<span className="font-medium">{option.label}</span>
+															</motion.label>
+														))}
+													</div>
 												</div>
-											</div>
 
-											<div>
-												<label className="block text-sm font-medium text-zinc-300">What is your notice period? <span className="text-red-400">*</span></label>
-												<select
-													className={`mt-1 w-full border-0 border-b bg-zinc-900/80 py-2.5 text-zinc-100 focus:outline-none focus:border-white focus:bg-zinc-900 ${errors.noticePeriod ? 'border-red-500' : 'border-zinc-700'}`}
+												<PremiumInput
+													label="What is your notice period?"
+													required
+													as="select"
 													value={form.noticePeriod}
 													onChange={(e) => {
 														updateField('noticePeriod', e.target.value)
 														if (errors.noticePeriod) setErrors((er)=>({ ...er, noticePeriod: undefined }))
 													}}
+													error={errors.noticePeriod}
+													className="premium-input"
 												>
-													<option value="" className="text-zinc-900">Select</option>
+													<option value="">Select</option>
 													<option>Immediate</option>
 													<option>&lt; 30 days</option>
 													<option>&lt; 45 days</option>
 													<option>&lt; 60 days</option>
 													<option>&lt; 90 days</option>
 													<option>Serving Notice Period</option>
-												</select>
-												{errors.noticePeriod && <div className="mt-1 text-xs text-red-400">{errors.noticePeriod}</div>}
-											</div>
+												</PremiumInput>
 
-											{(form.servingNotice === 'yes' || form.noticePeriod === 'Immediate') && (
-												<div>
-													<label className="block text-sm font-medium text-zinc-300">
-														{form.noticePeriod === 'Immediate' ? 'Joining date' : 'Last working day'} <span className="text-red-400">*</span>
-													</label>
-													<input
+												{(form.servingNotice === 'yes' || form.noticePeriod === 'Immediate') && (
+													<PremiumInput
+														label={form.noticePeriod === 'Immediate' ? 'Joining date' : 'Last working day'}
 														type="date"
-														className={`date-picker-dark mt-1 w-full bg-transparent border-0 border-b py-2.5 text-gray-100 focus:outline-none ${errors.lastWorkingDay ? 'border-red-500 focus:border-red-400' : 'border-zinc-700 focus:border-white'}`}
+														required
 														value={form.lastWorkingDay}
 														onChange={(e) => { 
 															updateField('lastWorkingDay', e.target.value)
 															if (errors.lastWorkingDay) setErrors((er)=>({ ...er, lastWorkingDay: undefined }))
 														}}
+														error={errors.lastWorkingDay}
+														helperText={form.noticePeriod === 'Immediate' ? 'As an immediate joiner, you cannot select a future date' : ''}
 														max={form.noticePeriod === 'Immediate' ? new Date().toISOString().split('T')[0] : undefined}
+														className="date-picker-dark"
 													/>
-													{form.noticePeriod === 'Immediate' && !errors.lastWorkingDay && (
-														<div className="mt-1 text-xs text-zinc-400">As an immediate joiner, you cannot select a future date</div>
-													)}
-													{errors.lastWorkingDay && <div className="mt-1 text-xs text-red-400">{errors.lastWorkingDay}</div>}
-												</div>
-											)}
-										</div>
-									)}
+												)}
+											</motion.div>
+										)}
+									</AnimatePresence>
 								</div>
-							</div>
+							</motion.div>
 
-							<div className="grid sm:grid-cols-2 gap-6">
-								<div>
-									<label className="block text-sm font-medium text-zinc-300">Current location <span className="text-red-400">*</span></label>
-									<input className={`mt-1 w-full bg-transparent border-0 border-b py-2.5 text-gray-100 focus:outline-none ${errors.currentLocation ? 'border-red-500 focus:border-red-400' : 'border-zinc-700 focus:border-white'}`} value={form.currentLocation} onChange={(e) => { updateField('currentLocation', e.target.value); if (errors.currentLocation) setErrors((er)=>({ ...er, currentLocation: undefined })) }} />
-									{errors.currentLocation && <div className="mt-1 text-xs text-red-400">{errors.currentLocation}</div>}
-								</div>
-								<div>
-									<label className="block text-sm font-medium text-zinc-300">Preferred location <span className="text-red-400">*</span></label>
-									<input className={`mt-1 w-full bg-transparent border-0 border-b py-2.5 text-gray-100 focus:outline-none ${errors.preferredLocation ? 'border-red-500 focus:border-red-400' : 'border-zinc-700 focus:border-white'}`} value={form.preferredLocation} onChange={(e) => { updateField('preferredLocation', e.target.value); if (errors.preferredLocation) setErrors((er)=>({ ...er, preferredLocation: undefined })) }} />
-									{errors.preferredLocation && <div className="mt-1 text-xs text-red-400">{errors.preferredLocation}</div>}
-								</div>
-							</div>
+							{/* Location */}
+							<motion.div
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 0.6 }}
+								className="grid sm:grid-cols-2 gap-6"
+							>
+								<PremiumInput
+									label="Current Location"
+									icon={FiMapPin}
+									required
+									value={form.currentLocation}
+									onChange={(e) => { 
+										updateField('currentLocation', e.target.value); 
+										if (errors.currentLocation) setErrors((er)=>({ ...er, currentLocation: undefined })) 
+									}}
+									error={errors.currentLocation}
+								/>
+								<PremiumInput
+									label="Preferred Location"
+									icon={FiMapPin}
+									required
+									value={form.preferredLocation}
+									onChange={(e) => { 
+										updateField('preferredLocation', e.target.value); 
+										if (errors.preferredLocation) setErrors((er)=>({ ...er, preferredLocation: undefined })) 
+									}}
+									error={errors.preferredLocation}
+								/>
+							</motion.div>
 
-							<div className="grid sm:grid-cols-2 gap-6">
-								<div>
-									<label className="block text-sm font-medium text-zinc-300">LinkedIn URL</label>
-									<input type="url" className="mt-1 w-full bg-transparent border-0 border-b border-zinc-700 py-2.5 text-gray-100 focus:outline-none focus:border-white" placeholder="https://linkedin.com/in/username" value={form.linkedinUrl} onChange={(e) => updateField('linkedinUrl', e.target.value)} />
-								</div>
-								<div>
-									<label className="block text-sm font-medium text-zinc-300">Website/Portfolio</label>
-									<input type="url" className="mt-1 w-full bg-transparent border-0 border-b border-zinc-700 py-2.5 text-gray-100 focus:outline-none focus:border-white" placeholder="https://your-portfolio.com" value={form.portfolioUrl} onChange={(e) => updateField('portfolioUrl', e.target.value)} />
-								</div>
-							</div>
+							{/* Social Links */}
+							<motion.div
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 0.7 }}
+								className="grid sm:grid-cols-2 gap-6"
+							>
+								<PremiumInput
+									label="LinkedIn URL"
+									icon={FiLinkedin}
+									type="url"
+									placeholder="https://linkedin.com/in/username"
+									value={form.linkedinUrl}
+									onChange={(e) => updateField('linkedinUrl', e.target.value)}
+								/>
+								<PremiumInput
+									label="Website/Portfolio"
+									icon={FiGlobe}
+									type="url"
+									placeholder="https://your-portfolio.com"
+									value={form.portfolioUrl}
+									onChange={(e) => updateField('portfolioUrl', e.target.value)}
+								/>
+							</motion.div>
 
-							<div>
-								<div className="flex items-center justify-between">
-									<label className="block text-sm font-medium text-zinc-300">Education <span className="text-red-400">*</span></label>
-									<button type="button" className="text-sm text-white bg-zinc-800 hover:bg-zinc-700 rounded-md px-3 py-1" onClick={() => { addListItem('education'); if (errors.education) setErrors((er)=>({ ...er, education: undefined })) }}>Add</button>
+							{/* Education */}
+							<motion.div
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 0.8 }}
+							>
+								<div className="flex items-center justify-between mb-4">
+									<div>
+										<label className="block text-sm font-medium text-zinc-300">
+											Education <span className="text-red-400">*</span>
+										</label>
+										<p className="mt-1 text-xs text-zinc-400">Include all education from 10th standard onwards</p>
+									</div>
+									<PremiumButton
+										type="button"
+										variant="secondary"
+										size="sm"
+										onClick={() => { 
+											addListItem('education'); 
+											if (errors.education) setErrors((er)=>({ ...er, education: undefined })) 
+										}}
+									>
+										Add
+									</PremiumButton>
 								</div>
-								<p className="mt-1 text-xs text-zinc-400">Please include all your education starting from 10th standard, 12th/Diploma, and higher degrees</p>
-								{errors.education && <div className="mt-2 text-xs text-red-400">{errors.education}</div>}
-								<div className="mt-3 space-y-4">
+								{errors.education && (
+									<motion.div
+										initial={{ opacity: 0, y: -5 }}
+										animate={{ opacity: 1, y: 0 }}
+										className="mb-3 text-xs text-red-400 flex items-center gap-1"
+									>
+										<FiAlertCircle className="w-3 h-3" />
+										{errors.education}
+									</motion.div>
+								)}
+								<div className="space-y-4">
 									{form.education.map((ed, i) => (
-										<div key={i} className="rounded-lg border border-zinc-800 p-3 bg-zinc-900/30">
+										<motion.div
+											key={i}
+											initial={{ opacity: 0, scale: 0.95 }}
+											animate={{ opacity: 1, scale: 1 }}
+											exit={{ opacity: 0, scale: 0.95 }}
+											className="glass-card border border-white/10 rounded-xl p-4 bg-white/5"
+										>
 											<div className="grid sm:grid-cols-5 gap-3">
-												<input placeholder="Degree" className="bg-transparent border-0 border-b border-zinc-700 py-2.5 text-gray-100 focus:border-white" value={ed.degree || ''} onChange={(e) => updateListItem('education', i, 'degree', e.target.value)} />
-												<input placeholder="Institution" className="bg-transparent border-0 border-b border-zinc-700 py-2.5 text-gray-100 focus:border-white" value={ed.institution || ''} onChange={(e) => updateListItem('education', i, 'institution', e.target.value)} />
-												<input placeholder="CGPA/Percentage" className="bg-transparent border-0 border-b border-zinc-700 py-2.5 text-gray-100 focus:border-white" value={ed.cgpa || ''} onChange={(e) => updateListItem('education', i, 'cgpa', e.target.value)} />
+												<input placeholder="Degree" className="premium-input" value={ed.degree || ''} onChange={(e) => updateListItem('education', i, 'degree', e.target.value)} />
+												<input placeholder="Institution" className="premium-input" value={ed.institution || ''} onChange={(e) => updateListItem('education', i, 'institution', e.target.value)} />
+												<input placeholder="CGPA/%" className="premium-input" value={ed.cgpa || ''} onChange={(e) => updateListItem('education', i, 'cgpa', e.target.value)} />
 												<MonthYearPicker placeholder="Start" value={ed.startMonth || ''} onChange={(v) => updateListItem('education', i, 'startMonth', v)} />
 												<MonthYearPicker placeholder="End" value={ed.endMonth || ''} onChange={(v) => updateListItem('education', i, 'endMonth', v)} />
 											</div>
-											<div className="mt-2 flex justify-end">
-												<button type="button" className="text-xs text-zinc-400 hover:text-zinc-200" onClick={() => removeListItem('education', i)}>Remove</button>
+											<div className="mt-3 flex justify-end">
+												<button type="button" className="text-xs text-zinc-400 hover:text-red-400 transition-colors" onClick={() => removeListItem('education', i)}>Remove</button>
 											</div>
-										</div>
+										</motion.div>
 									))}
 								</div>
-							</div>
+							</motion.div>
 
 							{/* Certifications */}
-							<div>
-								<div className="flex items-center justify-between">
+							<motion.div
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 0.9 }}
+							>
+								<div className="flex items-center justify-between mb-4">
 									<label className="block text-sm font-medium text-zinc-300">Certifications</label>
-									<button type="button" className="text-sm text-white bg-zinc-800 hover:bg-zinc-700 rounded-md px-3 py-1" onClick={() => addListItem('certifications')}>Add</button>
+									<PremiumButton
+										type="button"
+										variant="secondary"
+										size="sm"
+										onClick={() => addListItem('certifications')}
+									>
+										Add
+									</PremiumButton>
 								</div>
-								<div className="mt-3 space-y-4">
+								<div className="space-y-4">
 									{form.certifications.map((ce, i) => (
-										<div key={i} className="rounded-lg border border-zinc-800 p-3 bg-zinc-900/30">
+										<motion.div
+											key={i}
+											initial={{ opacity: 0, scale: 0.95 }}
+											animate={{ opacity: 1, scale: 1 }}
+											exit={{ opacity: 0, scale: 0.95 }}
+											className="glass-card border border-white/10 rounded-xl p-4 bg-white/5"
+										>
 											<div className="grid sm:grid-cols-2 gap-3">
-												<input placeholder="Certification Name" className="bg-transparent border-0 border-b border-zinc-700 py-2.5 text-gray-100 focus:border-white" value={ce.name || ''} onChange={(e) => updateListItem('certifications', i, 'name', e.target.value)} />
-												<input placeholder="Issuer" className="bg-transparent border-0 border-b border-zinc-700 py-2.5 text-gray-100 focus:border-white" value={ce.issuer || ''} onChange={(e) => updateListItem('certifications', i, 'issuer', e.target.value)} />
+												<input placeholder="Certification Name" className="premium-input" value={ce.name || ''} onChange={(e) => updateListItem('certifications', i, 'name', e.target.value)} />
+												<input placeholder="Issuer" className="premium-input" value={ce.issuer || ''} onChange={(e) => updateListItem('certifications', i, 'issuer', e.target.value)} />
 											</div>
 											<div className="grid sm:grid-cols-3 gap-3 mt-3">
-												<div>
-													<input 
-														type="date" 
-														placeholder="Valid Till" 
-														min="1000-01-01"
-														className={`date-picker-dark bg-transparent border-0 border-b py-2.5 text-gray-100 focus:border-white ${
-															ce.validTill && new Date(ce.validTill) < new Date() && ce.status !== 'pursuing' ? 'border-red-500' : 'border-zinc-700'
-														}`} 
-														value={ce.validTill || ''} 
-														onChange={(e) => {
-															const date = e.target.value;
-															if (date && new Date(date) < new Date() && ce.status !== 'pursuing') {
-																alert('Cannot save an expired certification. Please select a future date or mark as Pursuing.');
-																return;
-															}
-															updateListItem('certifications', i, 'validTill', date);
-														}}
-														disabled={ce.status === 'pursuing'}
-													/>
-													{ce.validTill && new Date(ce.validTill) < new Date() && ce.status !== 'pursuing' && (
-														<div className="text-xs text-red-400 mt-1">Expired certification</div>
-													)}
-													{ce.status === 'pursuing' && (
-														<div className="text-xs text-zinc-400 mt-1">Valid Till is optional for pursuing</div>
-													)}
-												</div>
+												<input 
+													type="date" 
+													placeholder="Valid Till" 
+													min="1000-01-01"
+													className={`date-picker-dark premium-input ${
+														ce.validTill && new Date(ce.validTill) < new Date() && ce.status !== 'pursuing' ? 'border-red-500' : ''
+													}`} 
+													value={ce.validTill || ''} 
+													onChange={(e) => {
+														const date = e.target.value;
+														if (date && new Date(date) < new Date() && ce.status !== 'pursuing') {
+															alert('Cannot save an expired certification. Please select a future date or mark as Pursuing.');
+															return;
+														}
+														updateListItem('certifications', i, 'validTill', date);
+													}}
+													disabled={ce.status === 'pursuing'}
+												/>
 												<select 
-													className="bg-transparent border-0 border-b border-zinc-700 py-2.5 text-gray-100 focus:border-white"
+													className="premium-input"
 													value={ce.status || ''}
 													onChange={(e) => updateListItem('certifications', i, 'status', e.target.value)}
 												>
-													<option value="" className="text-zinc-900">Status</option>
-													<option value="completed" className="text-zinc-900">Completed</option>
-													<option value="pursuing" className="text-zinc-900">Pursuing</option>
+													<option value="">Status</option>
+													<option value="completed">Completed</option>
+													<option value="pursuing">Pursuing</option>
 												</select>
 												<input 
 													type="url" 
-													placeholder="Validation URL (optional)" 
-													className="bg-transparent border-0 border-b border-zinc-700 py-2.5 text-gray-100 focus:border-white" 
+													placeholder="Validation URL" 
+													className="premium-input" 
 													value={ce.validationUrl || ''} 
 													onChange={(e) => updateListItem('certifications', i, 'validationUrl', e.target.value)}
 												/>
 											</div>
-											<div className="mt-2 flex items-center justify-between">
-												<span className="text-xs text-zinc-500">Valid Till (required unless pursuing), Status, and Validation URL</span>
-												<button type="button" className="text-xs text-zinc-400 hover:text-zinc-200" onClick={() => removeListItem('certifications', i)}>Remove</button>
+											<div className="mt-3 flex justify-end">
+												<button type="button" className="text-xs text-zinc-400 hover:text-red-400 transition-colors" onClick={() => removeListItem('certifications', i)}>Remove</button>
 											</div>
-										</div>
+										</motion.div>
 									))}
 								</div>
-							</div>
+							</motion.div>
 
 							{/* Experience */}
-							<div>
-								<div className="flex items-center justify-between">
+							<motion.div
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 1.0 }}
+							>
+								<div className="flex items-center justify-between mb-4">
 									<label className="block text-sm font-medium text-zinc-300">Experience</label>
-									<button type="button" className="text-sm text-white bg-zinc-800 hover:bg-zinc-700 rounded-md px-3 py-1" onClick={() => addListItem('experiences')}>Add</button>
+									<PremiumButton
+										type="button"
+										variant="secondary"
+										size="sm"
+										onClick={() => addListItem('experiences')}
+									>
+										Add
+									</PremiumButton>
 								</div>
-								<div className="mt-3 space-y-4">
+								<div className="space-y-4">
 									{form.experiences.map((ex, i) => (
-										<div key={i} className="rounded-lg border border-zinc-800 p-3 bg-zinc-900/30">
+										<motion.div
+											key={i}
+											initial={{ opacity: 0, scale: 0.95 }}
+											animate={{ opacity: 1, scale: 1 }}
+											exit={{ opacity: 0, scale: 0.95 }}
+											className="glass-card border border-white/10 rounded-xl p-4 bg-white/5"
+										>
 											<div className="grid sm:grid-cols-5 gap-3">
-												<input placeholder="Company" className="bg-transparent border-0 border-b border-zinc-700 py-2.5 text-gray-100 focus:border-white" value={ex.company || ''} onChange={(e) => updateListItem('experiences', i, 'company', e.target.value)} />
-												<input placeholder="Role" className="bg-transparent border-0 border-b border-zinc-700 py-2.5 text-gray-100 focus:border-white" value={ex.role || ''} onChange={(e) => updateListItem('experiences', i, 'role', e.target.value)} />
+												<input placeholder="Company" className="premium-input" value={ex.company || ''} onChange={(e) => updateListItem('experiences', i, 'company', e.target.value)} />
+												<input placeholder="Role" className="premium-input" value={ex.role || ''} onChange={(e) => updateListItem('experiences', i, 'role', e.target.value)} />
 												<MonthYearPicker placeholder="Start" value={ex.startMonth || ''} onChange={(v) => updateListItem('experiences', i, 'startMonth', v)} />
 												{!ex.isCurrent ? (
 													<MonthYearPicker placeholder="End" value={ex.endMonth || ''} onChange={(v) => {
 														updateListItem('experiences', i, 'endMonth', v)
-														// If end date is selected, clear isCurrent
 														if (v) updateListItem('experiences', i, 'isCurrent', false)
 													}} />
 												) : (
@@ -575,37 +763,53 @@ export default function ApplicantProfile() {
 												<label className="flex items-center gap-2 text-sm text-zinc-300 select-none">
 													<input
 														type="checkbox"
-														className="accent-white"
+														className="accent-purple-500 w-4 h-4"
 														checked={!!ex.isCurrent}
 														onChange={(e) => {
 															const val = e.target.checked
 															updateListItem('experiences', i, 'isCurrent', val)
-															// If present is checked, clear endMonth
 															if (val) updateListItem('experiences', i, 'endMonth', '')
 														}}
 													/>
 													<span>Present</span>
 												</label>
 											</div>
-											<div className="mt-2 flex items-center justify-between">
-												<span className="text-xs text-zinc-500">Toggle Present if this is your current role</span>
-												<button type="button" className="text-xs text-zinc-400 hover:text-zinc-200" onClick={() => removeListItem('experiences', i)}>Remove</button>
+											<div className="mt-3 flex justify-end">
+												<button type="button" className="text-xs text-zinc-400 hover:text-red-400 transition-colors" onClick={() => removeListItem('experiences', i)}>Remove</button>
 											</div>
-										</div>
+										</motion.div>
 									))}
 								</div>
-							</div>
+							</motion.div>
 
-							<div className="flex items-center justify-end gap-3">
-								<button type="submit" className="px-4 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800">Save</button>
-								<button onClick={onComplete} disabled={!isComplete} className={`px-4 py-2 rounded-lg ${isComplete ? 'bg-white text-black hover:bg-zinc-100' : 'bg-zinc-600 text-zinc-300 cursor-not-allowed'}`}>Save & Complete</button>
-							</div>
+							{/* Action Buttons */}
+							<motion.div
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: 1.1 }}
+								className="flex items-center justify-end gap-4 pt-4"
+							>
+								<PremiumButton
+									type="submit"
+									variant="secondary"
+									icon={FiSave}
+								>
+									Save
+								</PremiumButton>
+								<PremiumButton
+									type="button"
+									onClick={onComplete}
+									disabled={!isComplete}
+									variant="primary"
+									icon={FiCheck}
+								>
+									Save & Complete
+								</PremiumButton>
+							</motion.div>
 						</form>
 					</div>
 				</div>
-			</div>
+			</motion.div>
 		</section>
 	)
 }
-
-

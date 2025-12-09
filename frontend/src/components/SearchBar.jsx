@@ -1,8 +1,11 @@
 import React, { useState } from 'react'
+import { motion } from 'framer-motion'
+import { FiSearch, FiMapPin } from 'react-icons/fi'
 
 export default function SearchBar({ onSearch, large = false, defaultQuery = {}, className = '' }) {
   const [keywords, setKeywords] = useState(defaultQuery.keywords || '')
   const [location, setLocation] = useState(defaultQuery.location || '')
+  const [isFocused, setIsFocused] = useState(false)
 
   const submit = (e) => {
     e.preventDefault()
@@ -10,33 +13,51 @@ export default function SearchBar({ onSearch, large = false, defaultQuery = {}, 
   }
 
   return (
-    <form onSubmit={submit} className={`w-full ${className}`}>
-      <div className={`flex flex-col sm:flex-row gap-3 sm:gap-0 bg-zinc-800 rounded-2xl shadow ring-1 ring-zinc-700 ${large ? 'p-2' : 'p-1.5'} overflow-hidden`}>
-        <div className="flex-1 flex items-center gap-3 px-4 py-3">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-zinc-400"><path fillRule="evenodd" d="M10.5 3.75a6.75 6.75 0 1 0 4.21 12.029l3.255 3.256a.75.75 0 1 0 1.06-1.06l-3.255-3.256A6.75 6.75 0 0 0 10.5 3.75Zm-5.25 6.75a5.25 5.25 0 1 1 10.5 0 5.25 5.25 0 0 1-10.5 0Z" clipRule="evenodd" /></svg>
+    <motion.form
+      onSubmit={submit}
+      className={`w-full ${className}`}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+    >
+      <motion.div
+        className={`flex flex-col sm:flex-row gap-3 sm:gap-0 glass-card rounded-2xl shadow-premium border-2 transition-all duration-300 ${
+          isFocused ? 'border-purple-500/50' : 'border-white/10'
+        } ${large ? 'p-3' : 'p-2'} overflow-hidden`}
+        whileHover={{ scale: 1.01 }}
+      >
+        <div className="flex-1 flex items-center gap-3 px-4 py-3 relative">
+          <FiSearch className="w-5 h-5 text-zinc-400" />
           <input
             value={keywords}
             onChange={(e) => setKeywords(e.target.value)}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
             className="w-full outline-none placeholder:text-zinc-400 text-gray-100 bg-transparent"
             placeholder="Title, skills, or company"
           />
         </div>
         <div className="w-px bg-zinc-700 hidden sm:block" />
         <div className="flex-1 flex items-center gap-3 px-4 py-3">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-zinc-400"><path d="M11.54 22.351l-.002.001C8.25 19.52 3 14.706 3 10.5 3 6.358 6.358 3 10.5 3S18 6.358 18 10.5c0 4.206-5.25 9.02-8.458 11.851l-.002-.001a.75.75 0 0 1-1.001 0zM10.5 12.75a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5z"/></svg>
+          <FiMapPin className="w-5 h-5 text-zinc-400" />
           <input
             value={location}
             onChange={(e) => setLocation(e.target.value)}
+            onFocus={() => setIsFocused(true)}
+            onBlur={() => setIsFocused(false)}
             className="w-full outline-none placeholder:text-zinc-400 text-gray-100 bg-transparent"
             placeholder="Location"
           />
         </div>
-        <button type="submit" className="sm:ml-2 bg-white hover:bg-gray-100 text-black font-medium px-6 py-3 rounded-xl transition">
+        <motion.button
+          type="submit"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="sm:ml-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-semibold px-8 py-3 rounded-xl transition-all shadow-glow"
+        >
           Search
-        </button>
-      </div>
-    </form>
+        </motion.button>
+      </motion.div>
+    </motion.form>
   )
 }
-
-

@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext.jsx'
 import JDUploadWithParsing from '../components/JDUploadWithParsing.jsx'
+import PremiumButton from '../components/PremiumButton.jsx'
+import PremiumInput from '../components/PremiumInput.jsx'
+import AnimatedContainer from '../components/AnimatedContainer.jsx'
+import { motion, AnimatePresence } from 'framer-motion'
+import { FiBriefcase, FiMapPin, FiDollarSign, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiToggleLeft, FiToggleRight } from 'react-icons/fi'
 
 // Helper function to format date for display
 const formatDisplayDate = (dateString) => {
@@ -42,13 +47,6 @@ export default function Dashboard() {
     }
   }, [user])
 
-  // Update company field when user data loads
-  useEffect(() => {
-    if (user?.company && !company) {
-      setCompany(user.company)
-    }
-  }, [user])
-
   // Handle JD autofill from parsing
   const handleJDAutofill = (parsedData) => {
     setTitle(parsedData.title || '');
@@ -68,17 +66,21 @@ export default function Dashboard() {
 
   const onSubmit = async (e) => {
     e.preventDefault()
-    addJob({ title, company, location, salary, experienceFrom, experienceTo, description })
-    setTitle('')
-    // Keep company field populated with admin's company after submission
-    setCompany(user?.company || '')
-    setLocation('')
-    setSalary('')
-    setExperienceFrom('')
-    setExperienceTo('')
-    setDescription('')
-    setSuccess('Job posted! It now appears on the Jobs page.')
-    setTimeout(() => setSuccess(''), 2500)
+    setIsSubmitting(true)
+    try {
+      await addJob({ title, company, location, salary, experienceFrom, experienceTo, description })
+      setTitle('')
+      setCompany(user?.company || '')
+      setLocation('')
+      setSalary('')
+      setExperienceFrom('')
+      setExperienceTo('')
+      setDescription('')
+      setSuccess('Job posted! It now appears on the Jobs page.')
+      setTimeout(() => setSuccess(''), 2500)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleEditClick = (job) => {
@@ -119,270 +121,380 @@ export default function Dashboard() {
   }
 
   return (
-    <section className="py-10">
-      <div className="max-w-5xl mx-auto px-4">
-        <h2 className="text-2xl font-bold text-gray-100">Job Posting Dashboard</h2>
-        <p className="mt-1 text-sm text-zinc-400">Create a new job post</p>
+    <section className="py-10 relative min-h-screen">
+      {/* Animated background */}
+      <div className="pointer-events-none absolute inset-0">
+        <motion.div 
+          animate={{
+            scale: [1, 1.2, 1],
+            opacity: [0.2, 0.4, 0.2],
+          }}
+          transition={{ duration: 10, repeat: Infinity }}
+          className="absolute top-20 left-20 h-96 w-96 rounded-full bg-purple-500/20 blur-3xl" 
+        />
+        <motion.div 
+          animate={{
+            scale: [1.2, 1, 1.2],
+            opacity: [0.2, 0.4, 0.2],
+          }}
+          transition={{ duration: 12, repeat: Infinity }}
+          className="absolute bottom-20 right-20 h-96 w-96 rounded-full bg-blue-500/20 blur-3xl" 
+        />
+      </div>
 
-        <form onSubmit={onSubmit} className="mt-6 bg-zinc-900 p-6 rounded-xl shadow-sm ring-1 ring-zinc-800 space-y-4">
-          {success && <div className="text-green-400 text-sm">{success}</div>}
-          {error && <div className="text-red-400 text-sm">{error}</div>}
+      <div className="max-w-5xl mx-auto px-4 relative z-10">
+        <AnimatedContainer animation="slideDown">
+          <div className="mb-8">
+            <h2 className="text-4xl font-bold bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent">
+              Job Posting Dashboard
+            </h2>
+            <p className="mt-2 text-zinc-400">Create and manage your job postings</p>
+          </div>
+        </AnimatedContainer>
 
-          <JDUploadWithParsing onAutofill={handleJDAutofill} />
+        <AnimatedContainer animation="slideUp" delay={0.2}>
+          <form onSubmit={onSubmit} className="glass-card rounded-3xl p-8 shadow-premium border border-white/10 space-y-6">
+            {success && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                className="glass-card border-2 border-green-500/30 bg-green-500/10 px-5 py-4 rounded-xl flex items-center gap-3"
+              >
+                <FiCheck className="w-5 h-5 text-green-400 flex-shrink-0" />
+                <span className="text-sm font-medium text-green-300">{success}</span>
+              </motion.div>
+            )}
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                className="glass-card border-2 border-red-500/30 bg-red-500/10 px-5 py-4 rounded-xl flex items-center gap-3"
+              >
+                <FiAlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                <span className="text-sm font-medium text-red-300">{error}</span>
+              </motion.div>
+            )}
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-300">Job Title</label>
-            <input
-              className="mt-1 w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600"
+            <JDUploadWithParsing onAutofill={handleJDAutofill} />
+
+            <PremiumInput
+              label="Job Title"
+              icon={FiBriefcase}
+              required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g., Senior React Developer"
-              required
             />
-          </div>
 
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-zinc-300">Company</label>
-              <input
-                className="mt-1 w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600"
+            <div className="grid sm:grid-cols-2 gap-6">
+              <PremiumInput
+                label="Company"
+                icon={FiBriefcase}
+                required
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
                 placeholder="Acme Corp"
-                required
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-300">Location</label>
-              <input
-                className="mt-1 w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600"
+              <PremiumInput
+                label="Location"
+                icon={FiMapPin}
+                required
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder="Bengaluru, KA"
-                required
               />
             </div>
-          </div>
 
-          <div className="grid sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-zinc-300">Salary (optional)</label>
-              <input
-                className="mt-1 w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600"
+            <div className="grid sm:grid-cols-2 gap-6">
+              <PremiumInput
+                label="Salary (optional)"
+                icon={FiDollarSign}
                 value={salary}
                 onChange={(e) => setSalary(e.target.value)}
                 placeholder="₹15-25 LPA"
               />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-zinc-300">Experience range (years)</label>
-              <div className="mt-1 grid grid-cols-2 gap-3">
-                <input
-                  type="number"
-                  min="0"
-                  className="w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600"
-                  value={experienceFrom}
-                  onChange={(e) => setExperienceFrom(e.target.value)}
-                  placeholder="From (e.g., 0)"
-                />
-                <input
-                  type="number"
-                  min="0"
-                  className="w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600"
-                  value={experienceTo}
-                  onChange={(e) => setExperienceTo(e.target.value)}
-                  placeholder="To (e.g., 2)"
-                />
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                  Experience Range (years)
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="number"
+                    min="0"
+                    className="premium-input"
+                    value={experienceFrom}
+                    onChange={(e) => setExperienceFrom(e.target.value)}
+                    placeholder="From (e.g., 0)"
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    className="premium-input"
+                    value={experienceTo}
+                    onChange={(e) => setExperienceTo(e.target.value)}
+                    placeholder="To (e.g., 2)"
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-300">Description</label>
-            <textarea
-              className="mt-1 w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600 min-h-[120px]"
+            <PremiumInput
+              label="Description"
+              as="textarea"
+              required
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe responsibilities, requirements, and perks"
-              required
+              className="min-h-[120px] resize-y"
             />
-          </div>
 
-          <div className="pt-2">
-            <button 
-              type="submit" 
-              disabled={isSubmitting}
-              className={`${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'} bg-white text-black font-medium px-5 py-2.5 rounded-lg transition`}
-            >
-              {isSubmitting ? 'Posting...' : 'Post Job'}
-            </button>
-          </div>
-        </form>
+            <div className="pt-4">
+              <PremiumButton
+                type="submit"
+                variant="primary"
+                loading={isSubmitting}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Posting...' : 'Post Job'}
+              </PremiumButton>
+            </div>
+          </form>
+        </AnimatedContainer>
 
-        {/* Jobs list with enable/disable slider */}
-        <div className="mt-10">
-          <h3 className="text-lg font-semibold text-gray-100">Your Job Posts</h3>
-          <div className="mt-4 grid gap-4">
-            {jobs.length === 0 ? (
-              <div className="text-sm text-zinc-400">No jobs yet. Create one above.</div>
-            ) : (
-              jobs.map((job) => {
-                const isDisabled = job.enabled === false
-                return (
-                  <div key={job.id} className={`relative rounded-xl ring-1 p-5 transition ${
-                    isDisabled ? 'bg-zinc-900 ring-zinc-800 opacity-70' : 'bg-zinc-900 ring-zinc-800'
-                  }`}>
-                    {/* Toggle switch top-right */}
-                    <label className="absolute top-4 right-4 inline-flex items-center cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        className="sr-only peer"
-                        checked={job.enabled !== false}
-                        onChange={(e) => setJobEnabled(job.id, e.target.checked)}
-                      />
-                      <span className={`mr-2 text-xs ${job.enabled === false ? 'text-zinc-500' : 'text-emerald-400'}`}>{job.enabled === false ? 'Disabled' : 'Enabled'}</span>
-                      <span className="w-11 h-6 bg-zinc-700 rounded-full peer transition-colors relative peer-checked:bg-emerald-500">
-                        <span className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transform transition-transform peer-checked:translate-x-5" />
-                      </span>
-                    </label>
-
-                    <div className="pr-28">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <h4 className={`text-base font-semibold ${isDisabled ? 'text-zinc-400' : 'text-white'}`}>{job.title}</h4>
-                          <div className={`mt-1 text-sm ${isDisabled ? 'text-zinc-400' : 'text-zinc-300'}`}>{job.company}</div>
-                          <div className={`mt-2 flex items-center gap-4 text-sm ${isDisabled ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                            <span>{job.location}</span>
-                            {job.salary ? <span>{job.salary}</span> : null}
-                            {job.experienceFrom || job.experienceTo ? (
-                              <span>
-                                {(job.experienceFrom ?? '')}{(job.experienceFrom || job.experienceTo) ? '-' : ''}{(job.experienceTo ?? '')} yrs
-                              </span>
-                            ) : null}
-                          </div>
-                          {job.postedOn && (
-                            <div className={`mt-2 text-xs ${isDisabled ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                              <span className="inline-flex items-center gap-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3"><path d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM12.75 6a.75.75 0 0 0-1.5 0v6c0 .414.336.75.75.75h4.5a.75.75 0 0 0 0-1.5h-3.75V6Z"/></svg>
-                                Posted on {formatDisplayDate(job.postedOn)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => handleEditClick(job)}
-                          className="text-sm font-medium px-3 py-1.5 rounded-lg transition bg-blue-600 hover:bg-blue-700 text-white"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                      {job.description ? (
-                        <p className={`mt-3 text-sm ${isDisabled ? 'text-zinc-500' : 'text-zinc-300'}`}>{job.description}</p>
-                      ) : null}
-                    </div>
+        {/* Jobs list */}
+        <AnimatedContainer animation="fadeIn" delay={0.4}>
+          <div className="mt-12">
+            <h3 className="text-2xl font-bold text-white mb-6">Your Job Posts</h3>
+            <div className="grid gap-4">
+              {jobs.length === 0 ? (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="glass-card p-8 rounded-2xl text-center"
+                >
+                  <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full flex items-center justify-center">
+                    <FiBriefcase className="w-8 h-8 text-white" />
                   </div>
-                )
-              })
-            )}
+                  <p className="text-zinc-400">No jobs yet. Create one above.</p>
+                </motion.div>
+              ) : (
+                jobs.map((job, index) => {
+                  const isDisabled = job.enabled === false
+                  return (
+                    <motion.div
+                      key={job.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className={`glass-card rounded-2xl p-6 border transition-all duration-300 hover:shadow-premium ${
+                        isDisabled ? 'border-zinc-800 opacity-60' : 'border-white/10 hover:border-purple-500/30'
+                      }`}
+                    >
+                      {/* Toggle switch */}
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex-1">
+                          <h4 className={`text-xl font-bold ${isDisabled ? 'text-zinc-500' : 'text-white'}`}>
+                            {job.title}
+                          </h4>
+                          <p className={`text-sm ${isDisabled ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                            {job.company}
+                          </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                          <motion.label
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className="inline-flex items-center gap-2 cursor-pointer select-none"
+                          >
+                            <span className={`text-xs font-medium ${job.enabled === false ? 'text-zinc-500' : 'text-emerald-400'}`}>
+                              {job.enabled === false ? 'Disabled' : 'Enabled'}
+                            </span>
+                            <input
+                              type="checkbox"
+                              className="sr-only peer"
+                              checked={job.enabled !== false}
+                              onChange={(e) => setJobEnabled(job.id, e.target.checked)}
+                            />
+                            <div className={`relative w-11 h-6 rounded-full transition-colors ${
+                              job.enabled === false ? 'bg-zinc-700' : 'bg-emerald-500'
+                            }`}>
+                              <motion.div
+                                animate={{ x: job.enabled === false ? 2 : 22 }}
+                                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                                className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow"
+                              />
+                            </div>
+                          </motion.label>
+                          
+                          <PremiumButton
+                            variant="secondary"
+                            size="sm"
+                            icon={FiEdit2}
+                            onClick={() => handleEditClick(job)}
+                          >
+                            Edit
+                          </PremiumButton>
+                        </div>
+                      </div>
+
+                      <div className={`flex flex-wrap items-center gap-4 text-sm mb-4 ${isDisabled ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                        <div className="flex items-center gap-1">
+                          <FiMapPin className="w-4 h-4" />
+                          <span>{job.location}</span>
+                        </div>
+                        {job.salary && (
+                          <div className="flex items-center gap-1">
+                            <FiDollarSign className="w-4 h-4" />
+                            <span>{job.salary}</span>
+                          </div>
+                        )}
+                        {(job.experienceFrom || job.experienceTo) && (
+                          <div className="flex items-center gap-1">
+                            <FiClock className="w-4 h-4" />
+                            <span>
+                              {job.experienceFrom ?? ''}{(job.experienceFrom || job.experienceTo) ? '-' : ''}{job.experienceTo ?? ''} yrs
+                            </span>
+                          </div>
+                        )}
+                        {job.postedOn && (
+                          <div className="flex items-center gap-1 text-xs">
+                            <FiClock className="w-3 h-3" />
+                            <span>Posted {formatDisplayDate(job.postedOn)}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {job.description && (
+                        <p className={`text-sm ${isDisabled ? 'text-zinc-600' : 'text-zinc-300'} line-clamp-3`}>
+                          {job.description}
+                        </p>
+                      )}
+                    </motion.div>
+                  )
+                })
+              )}
+            </div>
           </div>
-        </div>
+        </AnimatedContainer>
       </div>
 
       {/* Edit Modal */}
-      {editingJobId && (
-        <div className="fixed inset-0 z-[200]">
-          <div className="absolute inset-0 bg-black/60" onClick={handleEditCancel} />
-          <div className="absolute inset-0 overflow-y-auto p-4 flex items-start justify-center">
-            <div className="w-full max-w-2xl bg-zinc-900 ring-1 ring-zinc-800 rounded-xl shadow-xl mt-10 mb-10" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-                <h3 className="text-lg font-semibold text-white">Edit Job Post</h3>
-                <button onClick={handleEditCancel} className="p-2 text-zinc-400 hover:text-white">✕</button>
+      <AnimatePresence>
+        {editingJobId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+          >
+            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={handleEditCancel} />
+            
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-2xl glass-card rounded-3xl border border-white/10 shadow-premium overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gradient-to-r from-purple-600/20 to-blue-600/20">
+                <h3 className="text-xl font-bold text-white">Edit Job Post</h3>
+                <motion.button
+                  whileHover={{ scale: 1.1, rotate: 90 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={handleEditCancel}
+                  className="p-2 text-zinc-400 hover:text-white transition-colors"
+                >
+                  <FiX className="w-5 h-5" />
+                </motion.button>
               </div>
 
-              <form onSubmit={handleEditSubmit} className="px-6 py-4 space-y-4">
-                {success && <div className="text-green-400 text-sm">{success}</div>}
+              <form onSubmit={handleEditSubmit} className="px-6 py-6 space-y-6 max-h-[70vh] overflow-y-auto">
+                {success && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="glass-card border-2 border-green-500/30 bg-green-500/10 px-4 py-3 rounded-xl flex items-center gap-2"
+                  >
+                    <FiCheck className="w-4 h-4 text-green-400" />
+                    <span className="text-sm text-green-300">{success}</span>
+                  </motion.div>
+                )}
 
-                <div>
-                  <label className="block text-sm font-medium text-zinc-300">Job Title</label>
-                  <input
-                    className="mt-1 w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600"
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    placeholder="e.g., Senior React Developer"
-                    required
+                <PremiumInput
+                  label="Job Title"
+                  icon={FiBriefcase}
+                  required
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="e.g., Senior React Developer"
+                />
+
+                <PremiumInput
+                  label="Location"
+                  icon={FiMapPin}
+                  required
+                  value={editLocation}
+                  onChange={(e) => setEditLocation(e.target.value)}
+                  placeholder="Bengaluru, KA"
+                />
+
+                <div className="grid sm:grid-cols-2 gap-6">
+                  <PremiumInput
+                    label="Salary (optional)"
+                    icon={FiDollarSign}
+                    value={editSalary}
+                    onChange={(e) => setEditSalary(e.target.value)}
+                    placeholder="₹15-25 LPA"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-zinc-300">Location</label>
-                  <input
-                    className="mt-1 w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600"
-                    value={editLocation}
-                    onChange={(e) => setEditLocation(e.target.value)}
-                    placeholder="Bengaluru, KA"
-                    required
-                  />
-                </div>
-
-                <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300">Salary (optional)</label>
-                    <input
-                      className="mt-1 w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600"
-                      value={editSalary}
-                      onChange={(e) => setEditSalary(e.target.value)}
-                      placeholder="₹15-25 LPA"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-300">Experience range (years)</label>
-                    <div className="mt-1 grid grid-cols-2 gap-3">
+                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                      Experience Range (years)
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
                       <input
                         type="number"
                         min="0"
-                        className="w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600"
+                        className="premium-input"
                         value={editExperienceFrom}
                         onChange={(e) => setEditExperienceFrom(e.target.value)}
-                        placeholder="From (e.g., 0)"
+                        placeholder="From"
                       />
                       <input
                         type="number"
                         min="0"
-                        className="w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600"
+                        className="premium-input"
                         value={editExperienceTo}
                         onChange={(e) => setEditExperienceTo(e.target.value)}
-                        placeholder="To (e.g., 2)"
+                        placeholder="To"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-zinc-300">Description</label>
-                  <textarea
-                    className="mt-1 w-full rounded-lg border-zinc-700 bg-zinc-800 text-gray-100 focus:ring-blue-600 focus:border-blue-600 min-h-[120px]"
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    placeholder="Describe responsibilities, requirements, and perks"
-                    required
-                  />
-                </div>
+                <PremiumInput
+                  label="Description"
+                  as="textarea"
+                  required
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  placeholder="Describe responsibilities, requirements, and perks"
+                  className="min-h-[120px] resize-y"
+                />
 
                 <div className="flex gap-3 pt-2">
-                  <button type="submit" className="bg-white hover:bg-gray-100 text-black font-medium px-5 py-2.5 rounded-lg transition">
+                  <PremiumButton type="submit" variant="primary">
                     Save Changes
-                  </button>
-                  <button type="button" onClick={handleEditCancel} className="bg-zinc-700 hover:bg-zinc-600 text-white font-medium px-5 py-2.5 rounded-lg transition">
+                  </PremiumButton>
+                  <PremiumButton type="button" variant="secondary" onClick={handleEditCancel}>
                     Cancel
-                  </button>
+                  </PremiumButton>
                 </div>
               </form>
-            </div>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </section>
   )
 }
-
-

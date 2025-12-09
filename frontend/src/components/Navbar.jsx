@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
+import { motion, AnimatePresence } from 'framer-motion'
+import { FiBriefcase, FiUser, FiFileText, FiLogOut, FiUsers } from 'react-icons/fi'
 
 export default function Navbar() {
   const { auth, applicantAuth, applicantProfile, logout, user } = useApp()
@@ -11,7 +13,7 @@ export default function Navbar() {
   const hrMenuRef = useRef(null)
 
   const activeClass = ({ isActive }) =>
-    isActive ? 'text-white' : 'text-zinc-300 hover:text-white'
+    isActive ? 'text-white font-semibold' : 'text-zinc-300 hover:text-white transition-colors'
 
   const isHrLoggedIn = auth.isLoggedIn && auth.role === 'HR'
   const isApplicantLoggedIn = applicantAuth.isLoggedIn && !isHrLoggedIn
@@ -49,76 +51,147 @@ export default function Navbar() {
   }, [])
 
   return (
-    <header className="bg-zinc-950/80 sticky top-0 z-30 border-b border-zinc-900/80 backdrop-blur">
+    <motion.header
+      initial={{ y: -100 }}
+      animate={{ y: 0 }}
+      transition={{ type: 'spring', stiffness: 100, damping: 20 }}
+      className="glass-card sticky top-0 z-30 border-b border-white/10 backdrop-blur-xl"
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="w-8 h-8 rounded-lg bg-white text-black grid place-items-center font-bold">J</div>
-            <span className="font-semibold text-white transition">Job Portal</span>
+            <motion.div
+              whileHover={{ rotate: 360, scale: 1.1 }}
+              transition={{ duration: 0.5 }}
+              className="w-10 h-10 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white grid place-items-center font-bold text-lg shadow-glow"
+            >
+              J
+            </motion.div>
+            <span className="font-bold text-lg bg-gradient-to-r from-white to-zinc-300 bg-clip-text text-transparent">
+              Job Portal
+            </span>
           </Link>
 
           <nav className="flex items-center gap-6">
-            <NavLink to="/jobs" className={activeClass}>Jobs</NavLink>
+            <NavLink to="/jobs" className={activeClass}>
+              <motion.span whileHover={{ scale: 1.05 }} className="inline-block">
+                Jobs
+              </motion.span>
+            </NavLink>
             {!isHrLoggedIn && !isApplicantLoggedIn ? (
               <>
-                <NavLink to="/login" className={activeClass}>Login</NavLink>
+                <NavLink to="/login" className={activeClass}>
+                  <motion.span whileHover={{ scale: 1.05 }} className="inline-block">
+                    Login
+                  </motion.span>
+                </NavLink>
               </>
             ) : (
               <>
                 {isHrLoggedIn && (
                   <div className="relative" ref={hrMenuRef}>
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={() => setHrMenuOpen((o) => !o)}
-                      className="w-8 h-8 rounded-full bg-zinc-800 text-white text-xs font-semibold grid place-items-center ring-1 ring-zinc-700 hover:ring-zinc-500 transition-all"
+                      className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm font-bold grid place-items-center shadow-glow"
                     >
                       {hrInitials}
-                    </button>
-                    {hrMenuOpen && (
-                      <div className="absolute right-0 mt-2 w-44 rounded-lg border border-zinc-800 bg-zinc-900/95 backdrop-blur shadow-lg py-1">
-                        <button
-                          className="w-full text-left px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
-                          onClick={() => { setHrMenuOpen(false); navigate('/dashboard') }}
-                        >Dashboard</button>
-                        <button
-                          className="w-full text-left px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
-                          onClick={() => { setHrMenuOpen(false); navigate('/candidates') }}
-                        >Candidates</button>
-                        <button
-                          className="w-full text-left px-3 py-2 text-sm text-red-300 hover:bg-zinc-800"
-                          onClick={() => { setHrMenuOpen(false); handleLogout() }}
-                        >Logout</button>
-                      </div>
-                    )}
+                    </motion.button>
+                    <AnimatePresence>
+                      {hrMenuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                          transition={{ duration: 0.2 }}
+                          className="absolute right-0 mt-2 w-52 glass-card rounded-xl border border-white/10 shadow-premium overflow-hidden"
+                        >
+                          <div className="py-2">
+                            <motion.button
+                              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
+                              onClick={() => { setHrMenuOpen(false); navigate('/dashboard') }}
+                            >
+                              <FiBriefcase className="w-4 h-4" />
+                              Dashboard
+                            </motion.button>
+                            <motion.button
+                              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
+                              onClick={() => { setHrMenuOpen(false); navigate('/candidates') }}
+                            >
+                              <FiUsers className="w-4 h-4" />
+                              Candidates
+                            </motion.button>
+                            <div className="border-t border-white/10 my-1" />
+                            <motion.button
+                              whileHover={{ backgroundColor: 'rgba(239, 68, 68, 0.1)' }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-red-300 flex items-center gap-3"
+                              onClick={() => { setHrMenuOpen(false); handleLogout() }}
+                            >
+                              <FiLogOut className="w-4 h-4" />
+                              Logout
+                            </motion.button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 )}
                 {isApplicantLoggedIn && (
                   <div className="relative" ref={menuRef}>
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.95 }}
                       onClick={() => setMenuOpen((o) => !o)}
                       className={
                         applicantInitials
-                          ? 'w-8 h-8 rounded-full bg-zinc-800 text-white text-xs font-semibold grid place-items-center ring-1 ring-zinc-700 hover:ring-zinc-500'
+                          ? 'w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm font-bold grid place-items-center shadow-glow'
                           : 'text-zinc-300 hover:text-white'
                       }
                     >
                       {applicantInitials || 'My Profile'}
-                    </button>
-                    {menuOpen && (
-                      <div className="absolute right-0 mt-2 w-44 rounded-lg border border-zinc-800 bg-zinc-900/95 backdrop-blur shadow-lg py-1">
-                        <button
-                          className="w-full text-left px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
-                          onClick={() => { setMenuOpen(false); navigate('/profile/applicant') }}
-                        >Profile</button>
-                        <button
-                          className="w-full text-left px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-800"
-                          onClick={() => { setMenuOpen(false); navigate('/applications') }}
-                        >Application Status</button>
-                        <button
-                          className="w-full text-left px-3 py-2 text-sm text-red-300 hover:bg-zinc-800"
-                          onClick={() => { setMenuOpen(false); handleLogout() }}
-                        >Logout</button>
-                      </div>
-                    )}
+                    </motion.button>
+                    <AnimatePresence>
+                      {menuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                          transition={{ duration: 0.2 }}
+                          className="absolute right-0 mt-2 w-52 glass-card rounded-xl border border-white/10 shadow-premium overflow-hidden"
+                        >
+                          <div className="py-2">
+                            <motion.button
+                              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
+                              onClick={() => { setMenuOpen(false); navigate('/profile/applicant') }}
+                            >
+                              <FiUser className="w-4 h-4" />
+                              Profile
+                            </motion.button>
+                            <motion.button
+                              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
+                              onClick={() => { setMenuOpen(false); navigate('/applications') }}
+                            >
+                              <FiFileText className="w-4 h-4" />
+                              Application Status
+                            </motion.button>
+                            <div className="border-t border-white/10 my-1" />
+                            <motion.button
+                              whileHover={{ backgroundColor: 'rgba(239, 68, 68, 0.1)' }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-red-300 flex items-center gap-3"
+                              onClick={() => { setMenuOpen(false); handleLogout() }}
+                            >
+                              <FiLogOut className="w-4 h-4" />
+                              Logout
+                            </motion.button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 )}
               </>
@@ -126,8 +199,6 @@ export default function Navbar() {
           </nav>
         </div>
       </div>
-    </header>
+    </motion.header>
   )
 }
-
-
