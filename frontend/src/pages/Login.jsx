@@ -64,7 +64,7 @@ export default function Login() {
 				initial={{ opacity: 0, y: 20 }}
 				animate={{ opacity: 1, y: 0 }}
 				transition={{ duration: 0.6 }}
-				className="w-full max-w-6xl relative"
+				className="w-full max-w-4xl mx-auto relative"
 			>
 				{/* Header */}
 				<motion.div
@@ -115,7 +115,7 @@ export default function Login() {
 								animate={{ opacity: 1, x: 0 }}
 								transition={{ duration: 0.6, delay: 0.4 }}
 								whileHover={{ scale: 1.01 }}
-								className="p-6 relative group overflow-hidden"
+								className="p-8 relative group overflow-hidden"
 							>
 								{/* Animated background overlay */}
 								<motion.div
@@ -144,7 +144,7 @@ export default function Login() {
 									className="absolute bottom-20 left-10 w-1.5 h-1.5 bg-purple-300 rounded-full blur-sm"
 								/>
 								
-								<div className="relative">
+								<div className="relative flex flex-col items-center text-center">
 									{/* Icon with enhanced animation - Compact */}
 									<motion.div
 										whileHover={{ 
@@ -156,21 +156,21 @@ export default function Login() {
 											rotate: { duration: 0.5 },
 											scale: { duration: 0.2 }
 										}}
-										className="w-16 h-16 bg-gradient-to-br from-purple-600 to-purple-500 rounded-2xl flex items-center justify-center mb-4 shadow-glow relative group/icon cursor-pointer"
+										className="w-20 h-20 bg-gradient-to-br from-purple-600 to-purple-500 rounded-3xl flex items-center justify-center mb-5 shadow-glow relative group/icon cursor-pointer"
 									>
 										<motion.div
-											className="absolute inset-0 rounded-2xl bg-gradient-to-br from-purple-400 to-purple-600 opacity-0 group-hover/icon:opacity-100 blur-xl transition-opacity"
+											className="absolute inset-0 rounded-3xl bg-gradient-to-br from-purple-400 to-purple-600 opacity-0 group-hover/icon:opacity-100 blur-xl transition-opacity"
 											animate={{ scale: [1, 1.2, 1] }}
 											transition={{ duration: 2, repeat: Infinity }}
 										/>
-										<FiUser className="w-8 h-8 text-white relative z-10" />
+										<FiUser className="w-9 h-9 text-white relative z-10" />
 									</motion.div>
 
 									<motion.h2
 										initial={{ opacity: 0, y: 10 }}
 										animate={{ opacity: 1, y: 0 }}
 										transition={{ delay: 0.5 }}
-										className="text-xl font-bold text-white mb-2"
+										className="text-2xl font-bold text-white mb-3"
 									>
 										For Applicants
 									</motion.h2>
@@ -178,12 +178,12 @@ export default function Login() {
 										initial={{ opacity: 0 }}
 										animate={{ opacity: 1 }}
 										transition={{ delay: 0.6 }}
-										className="text-zinc-400 mb-5 text-sm leading-relaxed"
+										className="text-zinc-400 mb-6 text-sm leading-relaxed max-w-xs"
 									>
 										Access applications, saved jobs, and alerts.
 									</motion.p>
 
-									<ul className="space-y-2 mb-6">
+									<ul className="space-y-3 mb-8 w-full max-w-xs">
 										{[
 											{ icon: FiZap, text: 'Apply instantly', color: 'purple' },
 											{ icon: FiCheck, text: 'AI resume parsing', color: 'purple' },
@@ -192,11 +192,11 @@ export default function Login() {
 										].map((feature, index) => (
 											<motion.li
 												key={index}
-												initial={{ opacity: 0, x: -20 }}
-												animate={{ opacity: 1, x: 0 }}
+												initial={{ opacity: 0, y: 10 }}
+												animate={{ opacity: 1, y: 0 }}
 												transition={{ delay: 0.7 + index * 0.1 }}
-												whileHover={{ x: 5, scale: 1.02 }}
-												className="flex items-center gap-2 text-xs text-zinc-300 group/item cursor-default"
+												whileHover={{ scale: 1.05 }}
+												className="flex items-center justify-center gap-2 text-sm text-zinc-300 group/item cursor-default"
 											>
 												<motion.div
 													whileHover={{ rotate: 360, scale: 1.2 }}
@@ -210,11 +210,11 @@ export default function Login() {
 										))}
 									</ul>
 
-									<Link to="/login/applicant">
+									<Link to="/login/applicant" className="w-full max-w-xs">
 										<motion.button
 											whileHover={{ scale: 1.03, y: -2 }}
 											whileTap={{ scale: 0.97 }}
-											className="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-purple-600 hover:from-purple-500 hover:via-purple-400 hover:to-purple-500 text-white font-semibold py-3 text-sm rounded-xl transition-all shadow-glow flex items-center justify-center gap-2 group/btn relative overflow-hidden"
+											className="w-full bg-gradient-to-r from-purple-600 via-purple-500 to-purple-600 hover:from-purple-500 hover:via-purple-400 hover:to-purple-500 text-white font-semibold py-3.5 text-sm rounded-xl transition-all shadow-glow flex items-center justify-center gap-2 group/btn relative overflow-hidden"
 										>
 											<motion.div
 												className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
@@ -230,7 +230,7 @@ export default function Login() {
 										initial={{ opacity: 0 }}
 										animate={{ opacity: 1 }}
 										transition={{ delay: 0.9 }}
-										className="mt-3 text-center text-xs text-zinc-500"
+										className="mt-4 text-center text-xs text-zinc-500"
 									>
 										Don't have an account?{' '}
 										<Link to="/signup/applicant" className="text-purple-400 hover:text-purple-300 font-medium transition-colors">
@@ -258,7 +258,7 @@ export default function Login() {
 								animate={{ opacity: 1, x: 0 }}
 								transition={{ duration: 0.6, delay: 0.5 }}
 								whileHover={{ scale: 1.01 }}
-								className="p-6 relative group overflow-hidden"
+								className="p-8 relative group overflow-hidden"
 							>
 								{/* Animated background overlay */}
 								<motion.div
@@ -287,7 +287,7 @@ export default function Login() {
 									className="absolute bottom-20 right-10 w-1.5 h-1.5 bg-blue-300 rounded-full blur-sm"
 								/>
 								
-								<div className="relative">
+								<div className="relative flex flex-col items-center text-center">
 									{/* Icon with enhanced animation - Compact */}
 									<motion.div
 										whileHover={{ 
@@ -299,21 +299,21 @@ export default function Login() {
 											rotate: { duration: 0.5 },
 											scale: { duration: 0.2 }
 										}}
-										className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl flex items-center justify-center mb-4 shadow-glow relative group/icon cursor-pointer"
+										className="w-20 h-20 bg-gradient-to-br from-blue-600 to-blue-500 rounded-3xl flex items-center justify-center mb-5 shadow-glow relative group/icon cursor-pointer"
 									>
 										<motion.div
-											className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-400 to-blue-600 opacity-0 group-hover/icon:opacity-100 blur-xl transition-opacity"
+											className="absolute inset-0 rounded-3xl bg-gradient-to-br from-blue-400 to-blue-600 opacity-0 group-hover/icon:opacity-100 blur-xl transition-opacity"
 											animate={{ scale: [1, 1.2, 1] }}
 											transition={{ duration: 2, repeat: Infinity }}
 										/>
-										<FiShield className="w-8 h-8 text-white relative z-10" />
+										<FiShield className="w-9 h-9 text-white relative z-10" />
 									</motion.div>
 
 									<motion.h2
 										initial={{ opacity: 0, y: 10 }}
 										animate={{ opacity: 1, y: 0 }}
 										transition={{ delay: 0.6 }}
-										className="text-xl font-bold text-white mb-2"
+										className="text-2xl font-bold text-white mb-3"
 									>
 										For HR/Admin
 									</motion.h2>
@@ -321,12 +321,12 @@ export default function Login() {
 										initial={{ opacity: 0 }}
 										animate={{ opacity: 1 }}
 										transition={{ delay: 0.7 }}
-										className="text-zinc-400 mb-5 text-sm leading-relaxed"
+										className="text-zinc-400 mb-6 text-sm leading-relaxed max-w-xs"
 									>
 										Manage postings, review candidates, analytics.
 									</motion.p>
 
-									<ul className="space-y-2 mb-6">
+									<ul className="space-y-3 mb-8 w-full max-w-xs">
 										{[
 											{ icon: FiCheck, text: 'Post & manage', color: 'blue' },
 											{ icon: FiZap, text: 'AI JD parsing', color: 'blue' },
@@ -335,11 +335,11 @@ export default function Login() {
 										].map((feature, index) => (
 											<motion.li
 												key={index}
-												initial={{ opacity: 0, x: 20 }}
-												animate={{ opacity: 1, x: 0 }}
+												initial={{ opacity: 0, y: 10 }}
+												animate={{ opacity: 1, y: 0 }}
 												transition={{ delay: 0.8 + index * 0.1 }}
-												whileHover={{ x: 5, scale: 1.02 }}
-												className="flex items-center gap-2 text-xs text-zinc-300 group/item cursor-default"
+												whileHover={{ scale: 1.05 }}
+												className="flex items-center justify-center gap-2 text-sm text-zinc-300 group/item cursor-default"
 											>
 												<motion.div
 													whileHover={{ rotate: 360, scale: 1.2 }}
@@ -353,11 +353,11 @@ export default function Login() {
 										))}
 									</ul>
 
-									<Link to="/login/admin">
+									<Link to="/login/admin" className="w-full max-w-xs">
 										<motion.button
 											whileHover={{ scale: 1.03, y: -2 }}
 											whileTap={{ scale: 0.97 }}
-											className="w-full bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600 hover:from-blue-500 hover:via-blue-400 hover:to-blue-500 text-white font-semibold py-3 text-sm rounded-xl transition-all shadow-glow flex items-center justify-center gap-2 group/btn relative overflow-hidden"
+											className="w-full bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600 hover:from-blue-500 hover:via-blue-400 hover:to-blue-500 text-white font-semibold py-3.5 text-sm rounded-xl transition-all shadow-glow flex items-center justify-center gap-2 group/btn relative overflow-hidden"
 										>
 											<motion.div
 												className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent"
@@ -373,7 +373,7 @@ export default function Login() {
 										initial={{ opacity: 0 }}
 										animate={{ opacity: 1 }}
 										transition={{ delay: 1.0 }}
-										className="mt-3 text-center text-xs text-zinc-500"
+										className="mt-4 text-center text-xs text-zinc-500"
 									>
 										Don't have an account?{' '}
 										<Link to="/signup/admin" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
