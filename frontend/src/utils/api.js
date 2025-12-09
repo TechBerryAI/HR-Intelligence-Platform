@@ -1,4 +1,4 @@
-// API client
+// API client with robust retry logic and error handling
 // Backend CORS requirements for local dev:
 //   app.use(cors({
 //     origin: 'http://localhost:5173',
@@ -12,9 +12,34 @@ import { tokenService } from './tokenService';
 // Default to localhost:3000 if VITE_API_URL is not set (for development)
 export const BASE_URL = (import.meta.env?.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '');
 
+// Retry configuration
+const RETRY_CONFIG = {
+  maxRetries: 2, // Reduced from 3 - fail faster for better UX
+  initialDelayMs: 500, // Reduced from 1000 - faster initial retry
+  maxDelayMs: 3000, // Reduced from 5000
+  backoffMultiplier: 2,
+};
+
 // Log the configured BASE_URL in development
 if (import.meta.env?.DEV) {
   console.log('API BASE_URL configured:', BASE_URL || 'NOT SET - requests will fail');
+}
+
+// Helper to wait with exponential backoff
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Check if error is retryable
+function isRetryableError(error) {
+  // Retry on network errors, timeouts, and 5xx server errors
+  if (error.name === 'AbortError') return false; // Don't retry aborted requests
+  if (error.message === 'Network error') return true;
+  if (error.status >= 500 && error.status < 600) return true;
+  if (error.cause?.code === 'ECONNREFUSED') return true;
+  if (error.cause?.code === 'ETIMEDOUT') return true;
+  if (error.cause?.code === 'ENOTFOUND') return true;
+  return false;
 }
 
 let onUnauthorized = null;
@@ -34,7 +59,7 @@ function joinUrl(base, path) {
 
 export async function apiRequest(
   path,
-  { method = 'GET', body, token, headers = {}, timeoutMs } = {}
+  { method = 'GET', body, token, headers = {}, timeoutMs, skipRetry = false } = {}
 ) {
   if (import.meta.env?.PROD && BASE_URL && BASE_URL.startsWith('http://')) {
     // eslint-disable-next-line no-console
@@ -42,10 +67,73 @@ export async function apiRequest(
   }
 
   const url = joinUrl(BASE_URL, path);
-  // Log all API requests in development for debugging
-  if (import.meta.env?.DEV) {
-    console.log(`[API] ${method} ${url}`, body ? { body } : '');
+  
+  // Attempt the request with retry logic
+  let lastError;
+  const maxAttempts = skipRetry ? 1 : RETRY_CONFIG.maxRetries;
+  
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Log API requests in development (only first attempt to reduce noise)
+    if (import.meta.env?.DEV && attempt === 0) {
+      console.log(`[API] ${method} ${url}`);
+    }
+    
+    try {
+      const result = await performRequest(url, method, body, token, headers, timeoutMs);
+      
+      // Success - log retry success if applicable
+      if (attempt > 0 && import.meta.env?.DEV) {
+        console.log(`[API] ✓ Request succeeded after ${attempt} ${attempt === 1 ? 'retry' : 'retries'}`);
+      }
+      return result;
+      
+    } catch (error) {
+      lastError = error;
+      
+      // Don't retry on 4xx errors (client errors) or non-retryable errors
+      if (!isRetryableError(error)) {
+        throw error;
+      }
+      
+      // Don't retry if this is the last attempt
+      if (attempt === maxAttempts - 1) {
+        break;
+      }
+      
+      // Calculate delay with exponential backoff
+      const delayMs = Math.min(
+        RETRY_CONFIG.initialDelayMs * Math.pow(RETRY_CONFIG.backoffMultiplier, attempt),
+        RETRY_CONFIG.maxDelayMs
+      );
+      
+      if (import.meta.env?.DEV) {
+        console.warn(`[API] ⟲ Retrying in ${delayMs}ms (${attempt + 1}/${maxAttempts})...`);
+      }
+      
+      await delay(delayMs);
+    }
   }
+  
+  // All retries exhausted
+  if (import.meta.env?.DEV) {
+    console.error(`[API] Request failed after ${maxAttempts} attempts`, lastError);
+  }
+  
+  // Enhance error message to be more user-friendly
+  if (lastError.message === 'Network error') {
+    lastError.message = 'Connection failed. Please check your internet connection and try again.';
+  } else if (lastError.status === 500) {
+    lastError.message = 'Server error. Please try again in a moment.';
+  } else if (lastError.status === 503) {
+    lastError.message = 'Service temporarily unavailable. Please try again shortly.';
+  } else if (lastError.cause?.code === 'ECONNREFUSED') {
+    lastError.message = 'Unable to reach server. The service may be starting up.';
+  }
+  
+  throw lastError;
+}
+
+async function performRequest(url, method, body, token, headers, timeoutMs) {
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
 
   const finalHeaders = new Headers(headers);
@@ -62,7 +150,7 @@ export async function apiRequest(
   }
 
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const defaultTimeout = Number(import.meta.env?.VITE_API_TIMEOUT_MS) || 15000;
+  const defaultTimeout = Number(import.meta.env?.VITE_API_TIMEOUT_MS) || 30000; // Increased to 30s
   const ms = typeof timeoutMs === 'number' ? timeoutMs : defaultTimeout;
   let timeoutId;
   if (controller && ms > 0) {
@@ -87,7 +175,7 @@ export async function apiRequest(
   } catch (networkErr) {
     if (!import.meta.env?.PROD) {
       // eslint-disable-next-line no-console
-      console.error('Network error calling API', { url, method, networkErr });
+      console.error('Network error calling API', { url, method, error: networkErr.message });
     }
     const error = new Error('Network error');
     error.cause = networkErr;

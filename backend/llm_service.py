@@ -64,20 +64,58 @@ def call_xai_grok(prompt: str, doc_type: str) -> Dict[str, Any]:
     }
     
     print(f"[LLM] Calling X.AI Grok with model: {XAI_MODEL}")
-    print(f"[LLM] API URL: {url}")
     
-    try:
-        response = requests.post(url, headers=headers, json=payload, timeout=60)
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        print(f"[LLM ERROR] HTTP {e.response.status_code}: {e.response.text}")
-        raise ValueError(f"X.AI API error ({e.response.status_code}): {e.response.text}")
+    # Retry logic for API calls
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=90)
+            response.raise_for_status()
+            
+            result = response.json()
+            content = result['choices'][0]['message']['content']
+            
+            # Parse JSON from response
+            return parse_llm_response(content)
+            
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 2
+                print(f"[LLM RETRY] Request timeout, retrying in {wait_time}s... (attempt {attempt + 1}/{max_retries})")
+                import time
+                time.sleep(wait_time)
+                continue
+            else:
+                raise ValueError(f"X.AI API timeout after {max_retries} attempts")
+                
+        except requests.exceptions.HTTPError as e:
+            # Don't retry on client errors (4xx)
+            if e.response.status_code >= 400 and e.response.status_code < 500:
+                print(f"[LLM ERROR] HTTP {e.response.status_code}: {e.response.text}")
+                raise ValueError(f"X.AI API error ({e.response.status_code}): {e.response.text}")
+            
+            # Retry on server errors (5xx)
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 2
+                print(f"[LLM RETRY] Server error {e.response.status_code}, retrying in {wait_time}s... (attempt {attempt + 1}/{max_retries})")
+                import time
+                time.sleep(wait_time)
+                continue
+            else:
+                print(f"[LLM ERROR] HTTP {e.response.status_code}: {e.response.text}")
+                raise ValueError(f"X.AI API error ({e.response.status_code}): {e.response.text}")
+                
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 2
+                print(f"[LLM RETRY] Network error, retrying in {wait_time}s... (attempt {attempt + 1}/{max_retries})")
+                import time
+                time.sleep(wait_time)
+                continue
+            else:
+                raise ValueError(f"X.AI API network error: {str(e)}")
     
-    result = response.json()
-    content = result['choices'][0]['message']['content']
-    
-    # Parse JSON from response
-    return parse_llm_response(content)
+    raise ValueError("X.AI API call failed after all retries")
 
 
 def call_openai(prompt: str, doc_type: str) -> Dict[str, Any]:
@@ -108,13 +146,28 @@ def call_openai(prompt: str, doc_type: str) -> Dict[str, Any]:
         "response_format": {"type": "json_object"}
     }
     
-    response = requests.post(url, headers=headers, json=payload, timeout=60)
-    response.raise_for_status()
+    # Retry logic
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=90)
+            response.raise_for_status()
+            
+            result = response.json()
+            content = result['choices'][0]['message']['content']
+            
+            return parse_llm_response(content)
+            
+        except (requests.exceptions.Timeout, requests.exceptions.RequestException) as e:
+            if attempt < max_retries - 1:
+                import time
+                wait_time = (attempt + 1) * 2
+                print(f"[LLM RETRY] OpenAI error, retrying in {wait_time}s...")
+                time.sleep(wait_time)
+                continue
+            raise ValueError(f"OpenAI API error: {str(e)}")
     
-    result = response.json()
-    content = result['choices'][0]['message']['content']
-    
-    return parse_llm_response(content)
+    raise ValueError("OpenAI API call failed after all retries")
 
 
 def call_anthropic(prompt: str, doc_type: str) -> Dict[str, Any]:
@@ -142,13 +195,28 @@ def call_anthropic(prompt: str, doc_type: str) -> Dict[str, Any]:
         ]
     }
     
-    response = requests.post(url, headers=headers, json=payload, timeout=60)
-    response.raise_for_status()
+    # Retry logic
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=90)
+            response.raise_for_status()
+            
+            result = response.json()
+            content = result['content'][0]['text']
+            
+            return parse_llm_response(content)
+            
+        except (requests.exceptions.Timeout, requests.exceptions.RequestException) as e:
+            if attempt < max_retries - 1:
+                import time
+                wait_time = (attempt + 1) * 2
+                print(f"[LLM RETRY] Anthropic error, retrying in {wait_time}s...")
+                time.sleep(wait_time)
+                continue
+            raise ValueError(f"Anthropic API error: {str(e)}")
     
-    result = response.json()
-    content = result['content'][0]['text']
-    
-    return parse_llm_response(content)
+    raise ValueError("Anthropic API call failed after all retries")
 
 
 def get_system_prompt(doc_type: str) -> str:

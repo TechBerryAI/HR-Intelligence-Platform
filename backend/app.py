@@ -1,5 +1,6 @@
 import os
 import socket
+import threading
 from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -41,86 +42,20 @@ app.url_map.strict_slashes = False
 cors_origins = _build_allowed_origins()
 print(f"[CORS] Allowed origins: {cors_origins}")
 
-# CORS Preflight Handler - Allow OPTIONS requests
-@app.before_request
-def handle_cors_preflight():
-    """Handle CORS preflight requests - permissive for development"""
-    origin = request.headers.get('Origin')
-    
-    # Handle OPTIONS preflight requests
-    if request.method == 'OPTIONS':
-        print(f"[CORS] OPTIONS preflight: {request.path} from {origin or 'same-origin'}")
-        
-        # Create response for OPTIONS
-        response = make_response()
-        response.status_code = 200
-        
-        # If origin is present and in allowed list, set it
-        if origin and origin in cors_origins:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            response.headers['Access-Control-Allow-Credentials'] = 'true'
-            print(f"[CORS] Preflight allowed for {origin}")
-        # If origin present but not in list, still allow but don't set credentials
-        elif origin:
-            response.headers['Access-Control-Allow-Origin'] = origin
-            print(f"[CORS] Preflight allowed for {origin} (without credentials)")
-        # If no origin (same-origin request), allow without CORS headers
-        else:
-            print(f"[CORS] Preflight allowed for same-origin request")
-        
-        # Set other CORS headers for all OPTIONS requests
-        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With'
-        response.headers['Access-Control-Max-Age'] = '3600'
-        
-        return response
-
-# Configure Flask-CORS as backup layer
-# Note: Manual handlers above take precedence, this provides fallback
-cors = CORS(
+# Simple and effective CORS configuration - allow all origins in development
+CORS(
     app,
     resources={
         r"/*": {
-            "origins": "*",  # Allow all origins (credentials controlled by manual handler)
+            "origins": "*",
             "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
             "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
             "expose_headers": ["Content-Type", "Authorization"],
+            "supports_credentials": True,
             "max_age": 3600,
         }
-    },
-    supports_credentials=False,  # Credentials only for whitelisted origins (handled manually)
-    automatic_options=False,  # We handle OPTIONS manually in before_request
+    }
 )
-
-# Add CORS headers to responses
-@app.after_request
-def add_cors_headers(response):
-    """Add CORS headers to API responses"""
-    origin = request.headers.get('Origin')
-    
-    # For API routes, set CORS headers
-    if request.path.startswith('/api') or request.path.startswith('/health'):
-        if origin:
-            # Allow whitelisted origins with credentials
-            if origin in cors_origins:
-                response.headers['Access-Control-Allow-Origin'] = origin
-                response.headers['Access-Control-Allow-Credentials'] = 'true'
-                print(f"[CORS] Headers added to {request.method} {request.path} for {origin} (trusted)")
-            # Allow other origins without credentials (for development flexibility)
-            else:
-                response.headers['Access-Control-Allow-Origin'] = origin
-                print(f"[CORS] Headers added to {request.method} {request.path} for {origin} (untrusted)")
-            
-            # Set other CORS headers for all origins
-            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD'
-            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, Accept, X-Requested-With'
-            response.headers['Access-Control-Expose-Headers'] = 'Content-Type, Authorization'
-            response.headers['Access-Control-Max-Age'] = '3600'
-        # Same-origin requests don't need CORS headers
-        else:
-            print(f"[CORS] Same-origin request to {request.method} {request.path}")
-    
-    return response
 
 mail.init_app(app)
 init_models()
@@ -132,7 +67,19 @@ from candidate import candidate_bp  # noqa: E402
 from applications import applications_bp  # noqa: E402
 from sessions_routes import sessions_bp  # noqa: E402
 from routes.candidate_auth import candidate_auth_bp  # noqa: E402
+from routes.simple_candidate_auth import simple_candidate_auth_bp  # noqa: E402
 from parsing_routes import parsing_bp  # noqa: E402
+
+# Database initialization - DO IT AT STARTUP, NOT LAZY
+# Lazy loading was causing 10+ second delays on first API call
+print("[DB] Initializing database at startup...")
+try:
+    init_db()
+    print("[DB] Database initialized successfully")
+except Exception as e:
+    print(f"[DB ERROR] Failed to initialize database: {e}")
+    import traceback
+    traceback.print_exc()
 
 @app.route('/', methods=['GET'])
 def root():
@@ -144,7 +91,10 @@ def root():
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({"status": "ok", "message": "Job Portal API is running"})
+    return jsonify({
+        "status": "ok", 
+        "message": "Job Portal API is running"
+    })
 
 @app.route('/api/test-cors', methods=['GET', 'OPTIONS'])
 def test_cors():
@@ -158,13 +108,28 @@ def test_cors():
 
 app.register_blueprint(auth_bp, url_prefix='/api')
 app.register_blueprint(jobs_bp, url_prefix='/api/jobs')
-app.register_blueprint(candidate_auth_bp, url_prefix='/api/candidate')
+# Use simple_candidate_auth (no SQLAlchemy conflicts) instead of candidate_auth
+app.register_blueprint(simple_candidate_auth_bp, url_prefix='/api/candidate')
+# app.register_blueprint(candidate_auth_bp, url_prefix='/api/candidate')  # Disabled - causes timeout
 app.register_blueprint(candidate_bp, url_prefix='/api/candidate')
 app.register_blueprint(applications_bp, url_prefix='/api/applications')
 app.register_blueprint(sessions_bp, url_prefix='/api/sessions')
 app.register_blueprint(parsing_bp, url_prefix='/api')
 
 if __name__ == '__main__':
-    init_db()
     port = int(os.getenv('PORT', '3000'))
-    app.run(host='0.0.0.0', port=port, debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true')
+    debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+    
+    # Disable reloader when running as a job to avoid restart issues
+    use_reloader = debug_mode and os.getenv('FLASK_USE_RELOADER', 'false').lower() == 'true'
+    
+    print(f"[SERVER] Starting Flask server on port {port}...")
+    print(f"[SERVER] Debug mode: {debug_mode}, Reloader: {use_reloader}")
+    
+    app.run(
+        host='0.0.0.0', 
+        port=port, 
+        debug=debug_mode,
+        use_reloader=use_reloader,
+        threaded=True
+    )

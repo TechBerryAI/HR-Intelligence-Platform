@@ -83,9 +83,10 @@ $backendJob = Start-Job -ScriptBlock {
     & ".\venv\Scripts\python.exe" app.py 2>&1
 } -ArgumentList "$ROOT\backend"
 
-Start-Sleep -Seconds 4
+# Give backend a moment to start binding to port
+Start-Sleep -Seconds 2
 
-# Start Frontend
+# Start Frontend immediately
 Write-Host "Starting frontend..." -ForegroundColor Yellow
 $frontendJob = Start-Job -ScriptBlock {
     param($dir)
@@ -93,28 +94,81 @@ $frontendJob = Start-Job -ScriptBlock {
     npm run dev 2>&1
 } -ArgumentList "$ROOT\frontend"
 
-Write-Host "Waiting for servers..." -ForegroundColor Gray
-Start-Sleep -Seconds 6
+Write-Host "Waiting for servers to start..." -ForegroundColor Gray
 
-Write-Host ""
-# Check Backend
-try {
-    $resp = Invoke-WebRequest -Uri "http://localhost:3000/health" -TimeoutSec 3 -ErrorAction Stop
-    if ($resp.StatusCode -eq 200) {
-        Write-Host "[OK] Backend:     http://localhost:3000" -ForegroundColor Green
+# Smart waiting with progressive checks
+$maxWait = 45  # Increased from 30 to 45 seconds
+$backendReady = $false
+$frontendReady = $false
+$backendChecked = $false
+$frontendChecked = $false
+
+for ($i = 0; $i -lt $maxWait; $i++) {
+    Start-Sleep -Seconds 1
+    
+    # Check Backend (start checking after 3 seconds to give it time to start)
+    if (-not $backendReady -and $i -ge 3) {
+        try {
+            $resp = Invoke-WebRequest -Uri "http://localhost:3000/health" -TimeoutSec 3 -ErrorAction Stop
+            if ($resp.StatusCode -eq 200) {
+                $backendReady = $true
+                if (-not $backendChecked) {
+                    Write-Host "[OK] Backend:     http://localhost:3000" -ForegroundColor Green
+                    $backendChecked = $true
+                }
+            }
+        } catch {
+            # Still waiting - check job state
+            $jobState = (Get-Job -Id $backendJob.Id -ErrorAction SilentlyContinue).State
+            if ($jobState -eq "Failed" -or $jobState -eq "Stopped") {
+                Write-Host "[ERROR] Backend job failed! Check logs:" -ForegroundColor Red
+                Receive-Job -Id $backendJob.Id | Write-Host -ForegroundColor Yellow
+                break
+            }
+        }
     }
-} catch {
-    Write-Host "[WAIT] Backend: starting..." -ForegroundColor Yellow
+    
+    # Check Frontend (start checking after 2 seconds)
+    if (-not $frontendReady -and $i -ge 2) {
+        try {
+            $resp = Invoke-WebRequest -Uri "http://localhost:5173" -TimeoutSec 3 -ErrorAction Stop
+            if ($resp.StatusCode -eq 200) {
+                $frontendReady = $true
+                if (-not $frontendChecked) {
+                    Write-Host "[OK] Frontend:    http://localhost:5173" -ForegroundColor Green
+                    $frontendChecked = $true
+                }
+            }
+        } catch {
+            # Still waiting
+        }
+    }
+    
+    # Both ready? Break early!
+    if ($backendReady -and $frontendReady) {
+        break
+    }
+    
+    # Progress indicator every 3 seconds
+    if (($i + 1) % 3 -eq 0 -and (-not $backendReady -or -not $frontendReady)) {
+        $elapsed = $i + 1
+        $status = @()
+        if (-not $backendReady) { $status += "Backend" }
+        if (-not $frontendReady) { $status += "Frontend" }
+        Write-Host "[WAIT] Starting $(($status -join ', '))... ($elapsed`s)" -ForegroundColor Yellow
+    }
 }
 
-# Check Frontend
-try {
-    $resp = Invoke-WebRequest -Uri "http://localhost:5173" -TimeoutSec 3 -ErrorAction Stop
-    if ($resp.StatusCode -eq 200) {
-        Write-Host "[OK] Frontend:    http://localhost:5173" -ForegroundColor Green
-    }
-} catch {
-    Write-Host "[WAIT] Frontend: starting..." -ForegroundColor Yellow
+Write-Host ""
+
+# Final status check
+if (-not $backendReady) {
+    Write-Host "[WARN] Backend is still starting (this is normal, it will be ready soon)" -ForegroundColor Yellow
+    Write-Host "       Check logs if it doesn't become available within 1 minute" -ForegroundColor Gray
+}
+
+if (-not $frontendReady) {
+    Write-Host "[WARN] Frontend is still starting..." -ForegroundColor Yellow
 }
 
 Write-Host ""

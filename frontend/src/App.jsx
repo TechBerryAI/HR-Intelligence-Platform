@@ -4,6 +4,7 @@ import { AppProvider, useApp } from './context/AppContext.jsx'
 import Navbar from './components/Navbar.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { ToastProvider, useToast } from './components/Toast.jsx'
+import ConnectionStatus from './components/ConnectionStatus.jsx'
 
 const Home = lazy(() => import('./pages/Home.jsx'))
 const Jobs = lazy(() => import('./pages/Jobs.jsx'))
@@ -31,6 +32,7 @@ export default function App() {
     <AppProvider>
       <ToastProvider>
         <ErrorBoundary>
+          <ConnectionStatus />
           <div className="min-h-screen flex flex-col bg-zinc-950 text-gray-100">
             <Navbar />
             <ErrorToasts />

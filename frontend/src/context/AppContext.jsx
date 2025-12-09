@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import { apiRequest, setUnauthorizedHandler } from '../utils/api'
 import { tokenService } from '../utils/tokenService'
+import { checkBackendHealth } from '../utils/healthCheck'
 
 // App state: jobs and auth via backend
 const AppContext = createContext(null)
@@ -78,10 +79,38 @@ export function AppProvider({ children }) {
   const [applicantProfile, setApplicantProfile] = useState(() => readJson(STORAGE_KEYS.applicantProfile, defaultApplicantProfile))
   const [applicantApplications, setApplicantApplications] = useState(() => readJson(STORAGE_KEYS.applicantApplications, {})) // jobId -> true
   const [applicantSavedJobs, setApplicantSavedJobs] = useState(() => readJson(STORAGE_KEYS.applicantSavedJobs, {})) // jobId -> true
+  const [backendHealthy, setBackendHealthy] = useState(true) // Backend health status - default to true
+  const [healthCheckAttempts, setHealthCheckAttempts] = useState(0)
 
   useEffect(() => {
     // Wire global 401 -> logout handling
     setUnauthorizedHandler(() => logout())
+    
+    // Wait 2 seconds before first health check to allow backend startup
+    const initialCheckTimer = setTimeout(() => {
+      checkBackendHealth().then(isHealthy => {
+        setBackendHealthy(isHealthy)
+        setHealthCheckAttempts(1)
+      })
+    }, 2000)
+    
+    // Periodic health check every 30 seconds
+    const healthCheckInterval = setInterval(() => {
+      checkBackendHealth().then(isHealthy => {
+        setBackendHealthy(isHealthy)
+        if (!isHealthy) {
+          setHealthCheckAttempts(prev => prev + 1)
+        } else {
+          setHealthCheckAttempts(0)
+        }
+      })
+    }, 30000)
+    
+    return () => {
+      clearTimeout(initialCheckTimer)
+      clearInterval(healthCheckInterval)
+    }
+    
     // If migrating to HttpOnly cookies in production:
     // - Have the backend set a SameSite=Lax, Secure HttpOnly cookie on login
     // - Remove Authorization header usage and token persistence here
@@ -844,7 +873,8 @@ export function AppProvider({ children }) {
     fetchApplicantData,
     fetchApplicationsForJob,
     fetchAllApplications,
-  }), [jobs, jobsLoading, jobsError, auth, authLoading, authError, applicantAuth, applicantProfile, applicantApplications, applicantSavedJobs, user, token])
+    backendHealthy,
+  }), [jobs, jobsLoading, jobsError, auth, authLoading, authError, applicantAuth, applicantProfile, applicantApplications, applicantSavedJobs, user, token, backendHealthy])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

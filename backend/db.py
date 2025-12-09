@@ -1,6 +1,8 @@
 import os
 import pyodbc
 from contextlib import contextmanager
+from queue import Queue, Empty
+import threading
 
 MSSQL_SERVER = os.getenv('MSSQL_SERVER', 'localhost')
 MSSQL_DATABASE = os.getenv('MSSQL_DATABASE', 'JobPortal')
@@ -9,26 +11,101 @@ MSSQL_PASSWORD = os.getenv('MSSQL_PASSWORD', 'Root@123')
 MSSQL_PORT = int(os.getenv('MSSQL_PORT', '1433'))
 MSSQL_ODBC_DRIVER = os.getenv('MSSQL_ODBC_DRIVER', '{ODBC Driver 17 for SQL Server}')
 
+# Connection pool configuration
+POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '5'))
+CONNECTION_TIMEOUT = int(os.getenv('DB_CONNECTION_TIMEOUT', '10'))
+
 connection_string = (
     f'DRIVER={MSSQL_ODBC_DRIVER};'
     f'SERVER={MSSQL_SERVER},{MSSQL_PORT};'
     f'DATABASE={MSSQL_DATABASE};'
     f'UID={MSSQL_USER};'
     f'PWD={MSSQL_PASSWORD};'
-    'TrustServerCertificate=yes;'
+    f'TrustServerCertificate=yes;'
+    f'Connection Timeout={CONNECTION_TIMEOUT};'
 )
+
+# Simple connection pool
+class ConnectionPool:
+    def __init__(self, pool_size=5):
+        self.pool_size = pool_size
+        self.pool = Queue(maxsize=pool_size)
+        self.lock = threading.Lock()
+        self._initialized = False
+    
+    def _create_connection(self):
+        """Create a new database connection"""
+        try:
+            return pyodbc.connect(connection_string, autocommit=False, timeout=CONNECTION_TIMEOUT)
+        except Exception as e:
+            print(f"[DB ERROR] Failed to create connection: {e}")
+            raise
+    
+    def get_connection(self, timeout=5):
+        """Get a connection from the pool"""
+        # Lazy initialization
+        if not self._initialized:
+            with self.lock:
+                if not self._initialized:
+                    print(f"[DB] Initializing connection pool with {self.pool_size} connections...")
+                    for _ in range(self.pool_size):
+                        try:
+                            conn = self._create_connection()
+                            self.pool.put(conn)
+                        except Exception as e:
+                            print(f"[DB WARNING] Could not pre-populate connection: {e}")
+                    self._initialized = True
+        
+        try:
+            # Try to get existing connection
+            conn = self.pool.get(timeout=timeout)
+            # Test if connection is alive
+            try:
+                conn.cursor().execute("SELECT 1").fetchone()
+                return conn
+            except:
+                # Connection is dead, create new one
+                try:
+                    conn.close()
+                except:
+                    pass
+                return self._create_connection()
+        except Empty:
+            # Pool is empty, create new connection on-demand
+            return self._create_connection()
+    
+    def return_connection(self, conn):
+        """Return a connection to the pool"""
+        try:
+            # Only return if pool not full
+            if self.pool.qsize() < self.pool_size:
+                self.pool.put_nowait(conn)
+            else:
+                conn.close()
+        except:
+            try:
+                conn.close()
+            except:
+                pass
+
+# Global connection pool
+_connection_pool = ConnectionPool(pool_size=POOL_SIZE)
 
 @contextmanager
 def get_conn():
-    conn = pyodbc.connect(connection_string, autocommit=False)
+    """Get a database connection from the pool"""
+    conn = None
     try:
+        conn = _connection_pool.get_connection()
         yield conn
         conn.commit()
     except Exception:
-        conn.rollback()
+        if conn:
+            conn.rollback()
         raise
     finally:
-        conn.close()
+        if conn:
+            _connection_pool.return_connection(conn)
 
 
 def rows_to_dicts(cursor, rows):
