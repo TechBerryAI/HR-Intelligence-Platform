@@ -43,6 +43,14 @@ if (-not (Test-Path "$ROOT\frontend\node_modules")) {
     Write-Host "  [SETUP] Frontend dependencies needed..." -ForegroundColor Yellow
     $needsSetup = $true
 }
+if (-not (Test-Path "$ROOT\parsing-api\node_modules")) {
+    Write-Host "  [SETUP] Parsing API dependencies needed..." -ForegroundColor Yellow
+    $needsSetup = $true
+}
+if (-not (Test-Path "$ROOT\parsing-api\dist")) {
+    Write-Host "  [SETUP] Parsing API needs to be built..." -ForegroundColor Yellow
+    $needsSetup = $true
+}
 
 if ($needsSetup) {
     Write-Host ""
@@ -58,6 +66,19 @@ if ($needsSetup) {
     & ".\venv\Scripts\python.exe" -m pip install --upgrade pip --quiet 2>&1 | Out-Null
     & ".\venv\Scripts\pip.exe" install -r requirements.txt --quiet 2>&1 | Out-Null
     Write-Host "  [OK] Backend setup complete" -ForegroundColor Green
+    
+    # Parsing API
+    Set-Location "$ROOT\parsing-api"
+    if (-not (Test-Path "node_modules")) {
+        Write-Host "  Installing Parsing API packages..." -ForegroundColor Gray
+        npm install --silent 2>&1 | Out-Null
+        Write-Host "  [OK] Parsing API dependencies installed" -ForegroundColor Green
+    }
+    if (-not (Test-Path "dist")) {
+        Write-Host "  Building Parsing API (TypeScript)..." -ForegroundColor Gray
+        npm run build --silent 2>&1 | Out-Null
+        Write-Host "  [OK] Parsing API built successfully" -ForegroundColor Green
+    }
     
     # Frontend
     Set-Location "$ROOT\frontend"
@@ -78,16 +99,30 @@ try {
         ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
 } catch {}
 try {
+    Get-NetTCPConnection -LocalPort 4000 -ErrorAction SilentlyContinue | 
+        Select-Object -ExpandProperty OwningProcess -Unique | 
+        ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+} catch {}
+try {
     Get-NetTCPConnection -LocalPort 5173 -ErrorAction SilentlyContinue | 
         Select-Object -ExpandProperty OwningProcess -Unique | 
         ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
 } catch {}
 Start-Sleep -Seconds 1
-Write-Host "  [OK] Ports 3000 and 5173 are free" -ForegroundColor Green
+Write-Host "  [OK] Ports 3000, 4000, and 5173 are free" -ForegroundColor Green
 
 # Step 4: Start services
 Write-Host ""
 Write-Host "Step 4: Starting Services..." -ForegroundColor Cyan
+
+Write-Host "  Starting parsing API..." -ForegroundColor Yellow
+$parsingJob = Start-Job -ScriptBlock {
+    param($dir)
+    Set-Location $dir
+    npm start 2>&1
+} -ArgumentList "$ROOT\parsing-api"
+
+Start-Sleep -Seconds 2
 
 Write-Host "  Starting backend..." -ForegroundColor Yellow
 $backendJob = Start-Job -ScriptBlock {
@@ -111,14 +146,26 @@ Write-Host ""
 Write-Host "Step 5: Waiting for Services..." -ForegroundColor Cyan
 
 $maxWait = 45
+$parsingReady = $false
 $backendReady = $false
 $frontendReady = $false
 
 for ($i = 0; $i -lt $maxWait; $i++) {
     Start-Sleep -Seconds 1
     
+    # Check Parsing API
+    if (-not $parsingReady -and $i -ge 2) {
+        try {
+            $resp = Invoke-WebRequest -Uri "http://localhost:4000/health" -TimeoutSec 3 -ErrorAction Stop
+            if ($resp.StatusCode -eq 200) {
+                $parsingReady = $true
+                Write-Host "  [OK] Parsing API ready at http://localhost:4000" -ForegroundColor Green
+            }
+        } catch {}
+    }
+    
     # Check Backend
-    if (-not $backendReady -and $i -ge 3) {
+    if (-not $backendReady -and $i -ge 4) {
         try {
             $resp = Invoke-WebRequest -Uri "http://localhost:3000/health" -TimeoutSec 3 -ErrorAction Stop
             if ($resp.StatusCode -eq 200) {
@@ -129,7 +176,7 @@ for ($i = 0; $i -lt $maxWait; $i++) {
     }
     
     # Check Frontend
-    if (-not $frontendReady -and $i -ge 2) {
+    if (-not $frontendReady -and $i -ge 3) {
         try {
             $resp = Invoke-WebRequest -Uri "http://localhost:5173" -TimeoutSec 3 -ErrorAction Stop
             if ($resp.StatusCode -eq 200) {
@@ -139,14 +186,15 @@ for ($i = 0; $i -lt $maxWait; $i++) {
         } catch {}
     }
     
-    # Both ready?
-    if ($backendReady -and $frontendReady) {
+    # All ready?
+    if ($parsingReady -and $backendReady -and $frontendReady) {
         break
     }
     
     # Progress
-    if (($i + 1) % 5 -eq 0 -and (-not $backendReady -or -not $frontendReady)) {
+    if (($i + 1) % 5 -eq 0 -and (-not $parsingReady -or -not $backendReady -or -not $frontendReady)) {
         $waiting = @()
+        if (-not $parsingReady) { $waiting += "Parsing API" }
         if (-not $backendReady) { $waiting += "Backend" }
         if (-not $frontendReady) { $waiting += "Frontend" }
         Write-Host "  [WAIT] Still starting: $($waiting -join ', ') ($($i + 1)s)" -ForegroundColor Yellow
@@ -155,13 +203,14 @@ for ($i = 0; $i -lt $maxWait; $i++) {
 
 Write-Host ""
 
-if ($backendReady -and $frontendReady) {
+if ($parsingReady -and $backendReady -and $frontendReady) {
     Write-Host "=======================================" -ForegroundColor Green
     Write-Host "  ALL SYSTEMS READY!" -ForegroundColor Green
     Write-Host "=======================================" -ForegroundColor Green
     Write-Host ""
-    Write-Host "Backend:  http://localhost:3000" -ForegroundColor Cyan
-    Write-Host "Frontend: http://localhost:5173" -ForegroundColor Cyan
+    Write-Host "Parsing API: http://localhost:4000" -ForegroundColor Cyan
+    Write-Host "Backend:     http://localhost:3000" -ForegroundColor Cyan
+    Write-Host "Frontend:    http://localhost:5173" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Opening browser..." -ForegroundColor Gray
     Start-Process "http://localhost:5173"
@@ -171,6 +220,9 @@ if ($backendReady -and $frontendReady) {
     Write-Host ""
 } else {
     Write-Host "[WARN] Some services may still be starting..." -ForegroundColor Yellow
+    if (-not $parsingReady) {
+        Write-Host "  Parsing API: Still starting (check LLM API keys in .env)" -ForegroundColor Yellow
+    }
     if (-not $backendReady) {
         Write-Host "  Backend: Still starting (check SQL Server)" -ForegroundColor Yellow
     }
@@ -183,9 +235,16 @@ if ($backendReady -and $frontendReady) {
 try {
     while ($true) {
         Start-Sleep -Seconds 10
+        $pState = (Get-Job -Id $parsingJob.Id -ErrorAction SilentlyContinue).State
         $bState = (Get-Job -Id $backendJob.Id -ErrorAction SilentlyContinue).State
         $fState = (Get-Job -Id $frontendJob.Id -ErrorAction SilentlyContinue).State
         
+        if ($pState -eq "Failed") {
+            Write-Host ""
+            Write-Host "[ERROR] Parsing API stopped!" -ForegroundColor Red
+            Receive-Job -Id $parsingJob.Id
+            break
+        }
         if ($bState -eq "Failed") {
             Write-Host ""
             Write-Host "[ERROR] Backend stopped!" -ForegroundColor Red
