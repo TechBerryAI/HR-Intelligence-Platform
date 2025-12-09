@@ -4,18 +4,29 @@ from urllib.parse import quote_plus
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+from dotenv import load_dotenv
+
+# Load .env file BEFORE building connection URI
+load_dotenv()
 
 
 def _build_connection_uri() -> str:
-    driver = os.getenv('MSSQL_ODBC_DRIVER', '{ODBC Driver 17 for SQL Server}')
+    driver = os.getenv('MSSQL_ODBC_DRIVER', '{SQL Server}')
+    server = os.getenv('MSSQL_SERVER', 'localhost')
+    port = os.getenv('MSSQL_PORT', '1433')
+    database = os.getenv('MSSQL_DATABASE', 'JobPortal')
+    user = os.getenv('MSSQL_USER', 'Test')
+    password = os.getenv('MSSQL_PASSWORD', 'Root@123')
+    
     raw_conn = (
         f"DRIVER={driver};"
-        f"SERVER={os.getenv('MSSQL_SERVER', 'DESKTOP-GC3KL6I')},{os.getenv('MSSQL_PORT', '1433')};"
-        f"DATABASE={os.getenv('MSSQL_DATABASE', 'JobPortal')};"
-        f"UID={os.getenv('MSSQL_USER', 'Test')};"
-        f"PWD={os.getenv('MSSQL_PASSWORD', 'Root@123')};"
+        f"SERVER={server},{port};"
+        f"DATABASE={database};"
+        f"UID={user};"
+        f"PWD={password};"
         "TrustServerCertificate=yes;"
     )
+    print(f"[SQLAlchemy] Building connection with driver: {driver}, server: {server}, database: {database}")
     return f"mssql+pyodbc:///?odbc_connect={quote_plus(raw_conn)}"
 
 

@@ -62,6 +62,7 @@ def send_email_otp(recipient: str, otp: str, user_type: str = "Candidate") -> bo
     if not recipient:
         return False
     try:
+        print(f"[SEND_EMAIL_OTP] Called with recipient={recipient}, otp={otp}, user_type={user_type}")
         cfg = current_app.config if current_app else {}
         suppress_send = cfg.get('MAIL_SUPPRESS_SEND')
         missing_creds = not cfg.get('MAIL_USERNAME') or not cfg.get('MAIL_PASSWORD')
@@ -69,7 +70,7 @@ def send_email_otp(recipient: str, otp: str, user_type: str = "Candidate") -> bo
             if current_app:
                 current_app.logger.info("Dev email OTP (not sent) to %s: %s", recipient, otp)
             else:
-                print(f"Dev email OTP (not sent) to {recipient}: {otp}")
+                print(f"[SEND_EMAIL_OTP] Dev mode - OTP for {recipient}: {otp}")
             return True
         subject = "Your Job Portal OTP"
         greeting = "Dear HR," if user_type.lower() == "hr" else "Dear Candidate,"
@@ -80,14 +81,16 @@ def send_email_otp(recipient: str, otp: str, user_type: str = "Candidate") -> bo
             f"If you did not request this OTP, please ignore this email.\n\n"
             f"Regards,\nJob Portal Team"
         )
+        print(f"[SEND_EMAIL_OTP] Sending email to {recipient} with OTP: {otp}")
         msg = Message(subject=subject, recipients=[recipient], body=body)
         mail.send(msg)
+        print(f"[SEND_EMAIL_OTP] Email sent successfully to {recipient}")
         return True
     except Exception as exc:
         if current_app:
             current_app.logger.error("Failed to send email OTP: %s", exc)
         else:
-            print(f"Failed to send email OTP: {exc}")
+            print(f"[SEND_EMAIL_OTP] Failed to send email OTP: {exc}")
         return False
 
 

@@ -43,6 +43,8 @@ def hr_signup():
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         otp = generate_otp()
         expiry = datetime.utcnow() + timedelta(minutes=5)
+        
+        print(f"[HR SIGNUP] Generated OTP for {email}: {otp}")
 
         # Store in HRAuth temporarily until OTP verification
         try:
@@ -63,6 +65,7 @@ def hr_signup():
                         is_verified=False,
                     )
                     session.add(hr_auth)
+                    print(f"[HR SIGNUP] Created new HRAuth record with OTP: {otp}")
                 else:
                     # Update existing unverified record
                     existing_hr_auth.full_name = full_name
@@ -71,20 +74,34 @@ def hr_signup():
                     existing_hr_auth.otp = otp
                     existing_hr_auth.otp_expiry = expiry
                     existing_hr_auth.is_verified = False
+                    print(f"[HR SIGNUP] Updated existing HRAuth record with OTP: {otp}")
                 
                 # Explicitly flush to ensure data is saved before sending email
                 session.flush()
+                print(f"[HR SIGNUP] Flushed session - OTP should be saved: {otp}")
         except Exception as db_error:
             print(f"Database error in hr_signup: {type(db_error).__name__}: {db_error}")
             import traceback
             traceback.print_exc()
             return jsonify({"error": f"Database error: {str(db_error)}"}), 500
 
+        # Verify what was actually stored in the database
+        try:
+            stored_hr = db_get('SELECT otp FROM HRAuth WHERE email = ?', (email,))
+            if stored_hr:
+                print(f"[HR SIGNUP] OTP in database after save: {stored_hr.get('otp')}")
+            else:
+                print(f"[HR SIGNUP] WARNING: Could not find HRAuth record for {email}")
+        except Exception as verify_error:
+            print(f"[HR SIGNUP] Error verifying stored OTP: {verify_error}")
+
         # Send OTP via email
         try:
+            print(f"[HR SIGNUP] About to send OTP via email: {otp}")
             otp_sent = send_email_otp(email, otp, user_type="HR")
             if not otp_sent:
                 return jsonify({'error': 'Unable to send OTP. Please try again later.'}), 500
+            print(f"[HR SIGNUP] OTP sent successfully to {email}")
         except Exception as email_error:
             print(f"Email error in hr_signup: {type(email_error).__name__}: {email_error}")
             import traceback

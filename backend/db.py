@@ -3,6 +3,10 @@ import pyodbc
 from contextlib import contextmanager
 from queue import Queue, Empty
 import threading
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 MSSQL_SERVER = os.getenv('MSSQL_SERVER', 'localhost')
 MSSQL_DATABASE = os.getenv('MSSQL_DATABASE', 'JobPortal')
@@ -24,6 +28,12 @@ connection_string = (
     f'TrustServerCertificate=yes;'
     f'Connection Timeout={CONNECTION_TIMEOUT};'
 )
+
+# Debug: Print connection info (without password)
+print(f"[DB CONFIG] Server: {MSSQL_SERVER}:{MSSQL_PORT}")
+print(f"[DB CONFIG] Database: {MSSQL_DATABASE}")
+print(f"[DB CONFIG] User: {MSSQL_USER}")
+print(f"[DB CONFIG] Driver: {MSSQL_ODBC_DRIVER}")
 
 # Simple connection pool
 class ConnectionPool:
