@@ -11,8 +11,9 @@ applications_bp = Blueprint('applications', __name__)
 # N8N ATS WORKFLOW INTEGRATION - START
 # ============================================================================
 
-# Environment variable for n8n webhook URL
+# Environment variables for n8n workflow integration
 N8N_WEBHOOK_URL = os.getenv('N8N_WEBHOOK_URL', '')
+N8N_CALLBACK_SECRET = os.getenv('N8N_CALLBACK_SECRET', '')  # Optional security token
 
 def trigger_n8n(candidate_id, job_id, parsed_resume, parsed_jd):
     """
@@ -253,6 +254,11 @@ def receive_ats_result():
     Receive ATS match results from n8n workflow
     
     POST /api/applications/ats/result
+    
+    SECURITY:
+    If N8N_CALLBACK_SECRET environment variable is set, the request must include
+    a matching 'X-N8N-Callback-Secret' header for authentication.
+    
     Body (JSON):
     {
         "candidate_id": "CID001",
@@ -296,6 +302,15 @@ def receive_ats_result():
     Also updates status to 'shortlisted' or 'rejected' based on shortlisted flag.
     """
     try:
+        # ========================================================================
+        # OPTIONAL SECURITY: Verify callback secret if configured
+        # ========================================================================
+        if N8N_CALLBACK_SECRET:
+            provided_secret = request.headers.get('X-N8N-Callback-Secret', '')
+            if provided_secret != N8N_CALLBACK_SECRET:
+                print(f"[ATS_RESULT] SECURITY: Invalid or missing callback secret")
+                return jsonify({'error': 'Unauthorized - invalid callback secret'}), 401
+        
         data = request.get_json(force=True)
         
         # Validate required fields
