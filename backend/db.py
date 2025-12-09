@@ -1013,6 +1013,68 @@ def init_db():
         END
         ''',
         '''
+        -- ATS WORKFLOW: Add match_score column to applications table
+        IF OBJECT_ID('dbo.applications', 'U') IS NOT NULL
+        BEGIN
+          IF COL_LENGTH('dbo.applications', 'match_score') IS NULL
+          BEGIN
+            ALTER TABLE dbo.applications ADD match_score FLOAT NULL;
+          END
+        END
+        ''',
+        '''
+        -- ATS WORKFLOW: Add shortlisted column to applications table
+        IF OBJECT_ID('dbo.applications', 'U') IS NOT NULL
+        BEGIN
+          IF COL_LENGTH('dbo.applications', 'shortlisted') IS NULL
+          BEGIN
+            ALTER TABLE dbo.applications ADD shortlisted BIT NULL DEFAULT 0;
+          END
+        END
+        ''',
+        '''
+        -- ATS WORKFLOW: Add ats_reasoning column to applications table
+        IF OBJECT_ID('dbo.applications', 'U') IS NOT NULL
+        BEGIN
+          IF COL_LENGTH('dbo.applications', 'ats_reasoning') IS NULL
+          BEGIN
+            ALTER TABLE dbo.applications ADD ats_reasoning NVARCHAR(MAX) NULL;
+          END
+        END
+        ''',
+        '''
+        -- ATS WORKFLOW: Add ats_analysis column to applications table (detailed structured matching data)
+        IF OBJECT_ID('dbo.applications', 'U') IS NOT NULL
+        BEGIN
+          IF COL_LENGTH('dbo.applications', 'ats_analysis') IS NULL
+          BEGIN
+            ALTER TABLE dbo.applications ADD ats_analysis NVARCHAR(MAX) NULL;
+          END
+        END
+        ''',
+        '''
+        -- ATS WORKFLOW: Add index for shortlisted queries
+        IF NOT EXISTS (
+          SELECT 1 FROM sys.indexes 
+          WHERE name = 'IX_applications_shortlisted' 
+          AND object_id = OBJECT_ID('dbo.applications')
+        )
+        BEGIN
+          CREATE INDEX IX_applications_shortlisted ON dbo.applications(shortlisted, match_score DESC);
+        END
+        ''',
+        '''
+        -- ATS WORKFLOW: Add index for status-based queries
+        IF NOT EXISTS (
+          SELECT 1 FROM sys.indexes 
+          WHERE name = 'IX_applications_status' 
+          AND object_id = OBJECT_ID('dbo.applications')
+        )
+        BEGIN
+          CREATE INDEX IX_applications_status ON dbo.applications(status, applied_at DESC);
+        END
+        ''',
+        '''
         -- Drop saved_jobs table if it exists (feature removed)
         IF OBJECT_ID('dbo.saved_jobs', 'U') IS NOT NULL
         BEGIN
