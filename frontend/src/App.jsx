@@ -20,6 +20,8 @@ const Dashboard = lazy(() => import('./pages/Dashboard.jsx'))
 const ApplicantProfile = lazy(() => import('./pages/ApplicantProfile.jsx'))
 const ApplicationStatus = lazy(() => import('./pages/ApplicationStatus.jsx'))
 const AppliedCandidates = lazy(() => import('./pages/AppliedCandidates.jsx'))
+const FAQ = lazy(() => import('./pages/FAQ.jsx'))
+const ContactUs = lazy(() => import('./pages/ContactUs.jsx'))
 const NotFound = lazy(() => import('./pages/NotFound.jsx'))
 
 function PrivateRoute({ children }) {
@@ -41,6 +43,8 @@ export default function App() {
                 <Routes>
                   <Route path="/" element={<Home />} />
                   <Route path="/jobs" element={<Jobs />} />
+                  <Route path="/support/faq" element={<FAQ />} />
+                  <Route path="/support/contact" element={<ContactUs />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/login/applicant" element={<LoginApplicant />} />
                   <Route path="/login/admin" element={<LoginAdmin />} />

@@ -2,15 +2,17 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiBriefcase, FiUser, FiFileText, FiLogOut, FiUsers } from 'react-icons/fi'
+import { FiBriefcase, FiUser, FiFileText, FiLogOut, FiUsers, FiHelpCircle, FiMessageCircle, FiBook } from 'react-icons/fi'
 
 export default function Navbar() {
   const { auth, applicantAuth, applicantProfile, logout, user } = useApp()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [hrMenuOpen, setHrMenuOpen] = useState(false)
+  const [supportMenuOpen, setSupportMenuOpen] = useState(false)
   const menuRef = useRef(null)
   const hrMenuRef = useRef(null)
+  const supportMenuRef = useRef(null)
 
   const activeClass = ({ isActive }) =>
     isActive ? 'text-white font-semibold' : 'text-zinc-300 hover:text-white transition-colors'
@@ -44,6 +46,9 @@ export default function Navbar() {
       }
       if (hrMenuRef.current && !hrMenuRef.current.contains(e.target)) {
         setHrMenuOpen(false)
+      }
+      if (supportMenuRef.current && !supportMenuRef.current.contains(e.target)) {
+        setSupportMenuOpen(false)
       }
     }
     document.addEventListener('mousedown', onDocClick)
@@ -196,6 +201,49 @@ export default function Navbar() {
                 )}
               </>
             )}
+            
+            {/* Support Dropdown - Always at the end */}
+            <div className="relative" ref={supportMenuRef}>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setSupportMenuOpen((o) => !o)}
+                className="text-zinc-300 hover:text-white transition-colors flex items-center gap-1"
+              >
+                <FiHelpCircle className="w-4 h-4" />
+                Support
+              </motion.button>
+              <AnimatePresence>
+                {supportMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="absolute right-0 mt-2 w-52 glass-card rounded-xl border border-white/10 shadow-premium overflow-hidden"
+                  >
+                    <div className="py-2">
+                      <motion.button
+                        whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
+                        onClick={() => { setSupportMenuOpen(false); navigate('/support/faq') }}
+                      >
+                        <FiBook className="w-4 h-4" />
+                        FAQ
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
+                        onClick={() => { setSupportMenuOpen(false); navigate('/support/contact') }}
+                      >
+                        <FiMessageCircle className="w-4 h-4" />
+                        Contact Us
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </nav>
         </div>
       </div>
