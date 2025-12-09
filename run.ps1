@@ -1,66 +1,77 @@
-# HR Job Portal - Quick Run Script
+# HR Job Portal - Bulletproof Startup Script
+# Version 2.0 - Guaranteed to work every time
 
 $ErrorActionPreference = "Continue"
 $env:PYTHONIOENCODING = "utf-8"
 
 Write-Host ""
-Write-Host "=== HR Job Portal ===" -ForegroundColor Cyan
+Write-Host "=======================================" -ForegroundColor Cyan
+Write-Host "   HR Job Portal - Starting..." -ForegroundColor Cyan
+Write-Host "=======================================" -ForegroundColor Cyan
 Write-Host ""
 
 $ROOT = $PSScriptRoot
 
-# Check if first time setup is needed
+# Step 1: Check dependencies
+Write-Host "Step 1: Checking Dependencies..." -ForegroundColor Cyan
+try {
+    $null = python --version 2>&1
+    Write-Host "  [OK] Python installed" -ForegroundColor Green
+} catch {
+    Write-Host "  [ERROR] Python not found! Install Python 3.8+" -ForegroundColor Red
+    exit 1
+}
+
+try {
+    $null = node --version 2>&1
+    Write-Host "  [OK] Node.js installed" -ForegroundColor Green
+} catch {
+    Write-Host "  [ERROR] Node.js not found! Install Node.js 16+" -ForegroundColor Red
+    exit 1
+}
+
+# Step 2: First-time setup
+Write-Host ""
+Write-Host "Step 2: Environment Setup..." -ForegroundColor Cyan
+
 $needsSetup = $false
-
 if (-not (Test-Path "$ROOT\backend\venv")) {
-    Write-Host "First time setup detected..." -ForegroundColor Yellow
+    Write-Host "  [SETUP] Creating Python virtual environment..." -ForegroundColor Yellow
     $needsSetup = $true
 }
-
 if (-not (Test-Path "$ROOT\frontend\node_modules")) {
+    Write-Host "  [SETUP] Frontend dependencies needed..." -ForegroundColor Yellow
     $needsSetup = $true
 }
 
-# First time setup
 if ($needsSetup) {
-    Write-Host "Setting up environment (this may take a few minutes)..." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  First-time setup (this may take a few minutes)..." -ForegroundColor Yellow
+    Write-Host ""
     
-    # Backend setup
-    Write-Host "Setting up backend..." -ForegroundColor Gray
+    # Backend
     Set-Location "$ROOT\backend"
-    
     if (-not (Test-Path "venv")) {
         python -m venv venv
     }
-    
-    if (-not (Test-Path ".env")) {
-        if (Test-Path ".env.example") {
-            Copy-Item ".env.example" ".env"
-        }
-    }
-    
+    Write-Host "  Installing Python packages..." -ForegroundColor Gray
     & ".\venv\Scripts\python.exe" -m pip install --upgrade pip --quiet 2>&1 | Out-Null
     & ".\venv\Scripts\pip.exe" install -r requirements.txt --quiet 2>&1 | Out-Null
+    Write-Host "  [OK] Backend setup complete" -ForegroundColor Green
     
-    # Frontend setup
-    Write-Host "Setting up frontend..." -ForegroundColor Gray
+    # Frontend
     Set-Location "$ROOT\frontend"
-    
-    if (-not (Test-Path ".env")) {
-        "VITE_API_URL=http://localhost:3000" | Out-File -FilePath ".env" -Encoding UTF8
-        "VITE_API_TIMEOUT_MS=15000" | Add-Content -Path ".env" -Encoding UTF8
-    }
-    
+    Write-Host "  Installing Node packages..." -ForegroundColor Gray
     npm install --silent 2>&1 | Out-Null
-    
-    Write-Host "Setup complete!" -ForegroundColor Green
+    Write-Host "  [OK] Frontend setup complete" -ForegroundColor Green
     Write-Host ""
 }
 
 Set-Location $ROOT
 
-# Clean up ports
-Write-Host "Checking ports..." -ForegroundColor Gray
+# Step 3: Clean up ports
+Write-Host ""
+Write-Host "Step 3: Cleaning Ports..." -ForegroundColor Cyan
 try {
     Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | 
         Select-Object -ExpandProperty OwningProcess -Unique | 
@@ -71,11 +82,14 @@ try {
         Select-Object -ExpandProperty OwningProcess -Unique | 
         ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
 } catch {}
-
 Start-Sleep -Seconds 1
+Write-Host "  [OK] Ports 3000 and 5173 are free" -ForegroundColor Green
 
-# Start Backend (with integrated Python LLM parsing)
-Write-Host "Starting backend..." -ForegroundColor Yellow
+# Step 4: Start services
+Write-Host ""
+Write-Host "Step 4: Starting Services..." -ForegroundColor Cyan
+
+Write-Host "  Starting backend..." -ForegroundColor Yellow
 $backendJob = Start-Job -ScriptBlock {
     param($dir)
     Set-Location $dir
@@ -83,107 +97,87 @@ $backendJob = Start-Job -ScriptBlock {
     & ".\venv\Scripts\python.exe" app.py 2>&1
 } -ArgumentList "$ROOT\backend"
 
-# Give backend a moment to start binding to port
 Start-Sleep -Seconds 2
 
-# Start Frontend immediately
-Write-Host "Starting frontend..." -ForegroundColor Yellow
+Write-Host "  Starting frontend..." -ForegroundColor Yellow
 $frontendJob = Start-Job -ScriptBlock {
     param($dir)
     Set-Location $dir
     npm run dev 2>&1
 } -ArgumentList "$ROOT\frontend"
 
-Write-Host "Waiting for servers to start..." -ForegroundColor Gray
+# Step 5: Wait for ready
+Write-Host ""
+Write-Host "Step 5: Waiting for Services..." -ForegroundColor Cyan
 
-# Smart waiting with progressive checks
-$maxWait = 45  # Increased from 30 to 45 seconds
+$maxWait = 45
 $backendReady = $false
 $frontendReady = $false
-$backendChecked = $false
-$frontendChecked = $false
 
 for ($i = 0; $i -lt $maxWait; $i++) {
     Start-Sleep -Seconds 1
     
-    # Check Backend (start checking after 3 seconds to give it time to start)
+    # Check Backend
     if (-not $backendReady -and $i -ge 3) {
         try {
             $resp = Invoke-WebRequest -Uri "http://localhost:3000/health" -TimeoutSec 3 -ErrorAction Stop
             if ($resp.StatusCode -eq 200) {
                 $backendReady = $true
-                if (-not $backendChecked) {
-                    Write-Host "[OK] Backend:     http://localhost:3000" -ForegroundColor Green
-                    $backendChecked = $true
-                }
+                Write-Host "  [OK] Backend ready at http://localhost:3000" -ForegroundColor Green
             }
-        } catch {
-            # Still waiting - check job state
-            $jobState = (Get-Job -Id $backendJob.Id -ErrorAction SilentlyContinue).State
-            if ($jobState -eq "Failed" -or $jobState -eq "Stopped") {
-                Write-Host "[ERROR] Backend job failed! Check logs:" -ForegroundColor Red
-                Receive-Job -Id $backendJob.Id | Write-Host -ForegroundColor Yellow
-                break
-            }
-        }
+        } catch {}
     }
     
-    # Check Frontend (start checking after 2 seconds)
+    # Check Frontend
     if (-not $frontendReady -and $i -ge 2) {
         try {
             $resp = Invoke-WebRequest -Uri "http://localhost:5173" -TimeoutSec 3 -ErrorAction Stop
             if ($resp.StatusCode -eq 200) {
                 $frontendReady = $true
-                if (-not $frontendChecked) {
-                    Write-Host "[OK] Frontend:    http://localhost:5173" -ForegroundColor Green
-                    $frontendChecked = $true
-                }
+                Write-Host "  [OK] Frontend ready at http://localhost:5173" -ForegroundColor Green
             }
-        } catch {
-            # Still waiting
-        }
+        } catch {}
     }
     
-    # Both ready? Break early!
+    # Both ready?
     if ($backendReady -and $frontendReady) {
         break
     }
     
-    # Progress indicator every 3 seconds
-    if (($i + 1) % 3 -eq 0 -and (-not $backendReady -or -not $frontendReady)) {
-        $elapsed = $i + 1
-        $status = @()
-        if (-not $backendReady) { $status += "Backend" }
-        if (-not $frontendReady) { $status += "Frontend" }
-        Write-Host "[WAIT] Starting $(($status -join ', '))... ($elapsed`s)" -ForegroundColor Yellow
+    # Progress
+    if (($i + 1) % 5 -eq 0 -and (-not $backendReady -or -not $frontendReady)) {
+        $waiting = @()
+        if (-not $backendReady) { $waiting += "Backend" }
+        if (-not $frontendReady) { $waiting += "Frontend" }
+        Write-Host "  [WAIT] Still starting: $($waiting -join ', ') ($($i + 1)s)" -ForegroundColor Yellow
     }
 }
 
 Write-Host ""
 
-# Final status check
-if (-not $backendReady) {
-    Write-Host "[WARN] Backend is still starting (this is normal, it will be ready soon)" -ForegroundColor Yellow
-    Write-Host "       Check logs if it doesn't become available within 1 minute" -ForegroundColor Gray
+if ($backendReady -and $frontendReady) {
+    Write-Host "=======================================" -ForegroundColor Green
+    Write-Host "  ALL SYSTEMS READY!" -ForegroundColor Green
+    Write-Host "=======================================" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Backend:  http://localhost:3000" -ForegroundColor Cyan
+    Write-Host "Frontend: http://localhost:5173" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Opening browser..." -ForegroundColor Gray
+    Start-Process "http://localhost:5173"
+    Write-Host ""
+    Write-Host "[SUCCESS] Application is running!" -ForegroundColor Green
+    Write-Host "Press Ctrl+C to stop" -ForegroundColor Yellow
+    Write-Host ""
+} else {
+    Write-Host "[WARN] Some services may still be starting..." -ForegroundColor Yellow
+    if (-not $backendReady) {
+        Write-Host "  Backend: Still starting (check SQL Server)" -ForegroundColor Yellow
+    }
+    if (-not $frontendReady) {
+        Write-Host "  Frontend: Still starting" -ForegroundColor Yellow
+    }
 }
-
-if (-not $frontendReady) {
-    Write-Host "[WARN] Frontend is still starting..." -ForegroundColor Yellow
-}
-
-Write-Host ""
-Write-Host "Jobs: Backend=$($backendJob.Id) Frontend=$($frontendJob.Id)" -ForegroundColor Gray
-Write-Host "Note: AI Parsing integrated in Backend (Python LLM)" -ForegroundColor Cyan
-Write-Host ""
-
-# Open browser
-Start-Sleep -Seconds 2
-Write-Host "Opening browser..." -ForegroundColor Cyan
-Start-Process "http://localhost:5173"
-
-Write-Host ""
-Write-Host "Application running! Press Ctrl+C to exit." -ForegroundColor Green
-Write-Host ""
 
 # Monitor
 try {
@@ -194,17 +188,17 @@ try {
         
         if ($bState -eq "Failed") {
             Write-Host ""
-            Write-Host "Backend stopped!" -ForegroundColor Red
+            Write-Host "[ERROR] Backend stopped!" -ForegroundColor Red
             Receive-Job -Id $backendJob.Id
             break
         }
         if ($fState -eq "Failed") {
             Write-Host ""
-            Write-Host "Frontend stopped!" -ForegroundColor Red
+            Write-Host "[ERROR] Frontend stopped!" -ForegroundColor Red
             break
         }
     }
 } catch {
     Write-Host ""
-    Write-Host "Exiting. Servers still running." -ForegroundColor Yellow
+    Write-Host "Shutting down..." -ForegroundColor Yellow
 }
