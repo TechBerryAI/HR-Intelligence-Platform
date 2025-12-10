@@ -43,7 +43,7 @@ def get_mime_type(filename):
 
 def calculate_confidence(toon: dict, doc_type: str) -> float:
     """
-    Calculate confidence score based on field completeness
+    Calculate confidence score based on field completeness and quality
     
     Args:
         toon: Parsed TOON data
@@ -64,20 +64,49 @@ def calculate_confidence(toon: dict, doc_type: str) -> float:
             max_score += 0.175  # 0.7 / 4
             if field in toon and toon[field]:
                 if field == 'person':
-                    # Check person sub-fields
+                    # Check person sub-fields - more lenient
                     person = toon['person']
-                    if person.get('name') and person.get('email'):
+                    # Give partial credit if at least name OR email exists
+                    if person.get('name') or person.get('email'):
+                        if person.get('name') and person.get('email'):
+                            score += 0.175  # Full credit for both
+                        else:
+                            score += 0.1  # Partial credit for one
+                elif isinstance(toon[field], list):
+                    if len(toon[field]) > 0:
+                        # Give full credit if list has items
                         score += 0.175
-                elif isinstance(toon[field], list) and len(toon[field]) > 0:
+                    # No penalty for empty list, just no points
+                elif toon[field]:  # Non-list field that exists
                     score += 0.175
         
-        # Check optional fields (30% weight)
+        # Check optional fields (30% weight) - these are bonuses, not penalties
         for field in optional_fields:
             max_score += 0.15  # 0.3 / 2
             if field in toon and toon[field]:
-                score += 0.15
+                if isinstance(toon[field], list):
+                    if len(toon[field]) > 0:
+                        score += 0.15
+                elif toon[field]:  # Non-list field
+                    score += 0.15
         
-        return min(score / max_score if max_score > 0 else 0.5, 1.0)
+        # Calculate final confidence
+        # If we have all required fields, confidence should be at least 0.7
+        # Optional fields boost it to 1.0
+        if max_score > 0:
+            base_confidence = score / max_score
+            # Boost confidence if we have the most critical fields
+            has_person = 'person' in toon and toon['person'] and (toon['person'].get('name') or toon['person'].get('email'))
+            has_experience = 'experience' in toon and toon['experience'] and isinstance(toon['experience'], list) and len(toon['experience']) > 0
+            has_education = 'education' in toon and toon['education'] and isinstance(toon['education'], list) and len(toon['education']) > 0
+            
+            # If we have person + (experience OR education), give a minimum confidence boost
+            if has_person and (has_experience or has_education):
+                base_confidence = max(base_confidence, 0.65)  # Minimum 65% if core fields exist
+            
+            return min(base_confidence, 1.0)
+        else:
+            return 0.5  # Default if no fields checked
     
     else:  # jd
         required_fields = ['title', 'skills', 'responsibilities']

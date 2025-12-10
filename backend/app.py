@@ -1,14 +1,27 @@
 import os
+import sys
 import socket
 import threading
 from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
 
+# Load environment variables first
+load_dotenv()
+
+# Validate environment variables before proceeding
+from env_validator import EnvValidator
+is_valid, errors, warnings = EnvValidator.validate()
+if not is_valid:
+    EnvValidator.print_report()
+    print("💡 TIP: Copy backend/.env.example to backend/.env and configure it.\n")
+    sys.exit(1)
+elif warnings:
+    # Print warnings but continue
+    EnvValidator.print_report()
+
 from extensions import mail
 from models import init_models
-
-load_dotenv()
 
 
 def _build_allowed_origins():

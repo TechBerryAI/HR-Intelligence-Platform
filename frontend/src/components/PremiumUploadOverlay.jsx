@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiFile, FiCheck, FiZap, FiCpu, FiDatabase } from 'react-icons/fi';
 
@@ -47,25 +48,38 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
     return () => clearInterval(interval);
   }, [isVisible, steps.length]);
 
-  if (!isVisible) return null;
-
-  return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      width: '100vw',
-      height: '100vh',
-      zIndex: 999999,
-      backgroundColor: 'rgba(0, 0, 0, 0.93)',
-      backdropFilter: 'blur(20px)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '20px'
-    }}>
+  // Use portal to ensure overlay is always at root level
+  const overlayContent = (
+    <AnimatePresence>
+      {isVisible && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100vw',
+            height: '100vh',
+            overflow: 'hidden',
+            zIndex: 9999999,
+            backgroundColor: 'rgba(0, 0, 0, 0.97)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            boxSizing: 'border-box',
+            isolation: 'isolate',
+            pointerEvents: 'auto',
+            margin: 0
+          }}
+        >
       {/* Background effects */}
       <motion.div
         animate={{ scale: [1, 1.2, 1], opacity: [0.08, 0.15, 0.08] }}
@@ -74,12 +88,15 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
           position: 'absolute',
           top: '20%',
           left: '20%',
-          width: '500px',
-          height: '500px',
+          width: 'min(500px, 40vw)',
+          height: 'min(500px, 40vw)',
+          maxWidth: '500px',
+          maxHeight: '500px',
           background: 'radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%)',
           borderRadius: '50%',
           filter: 'blur(100px)',
-          pointerEvents: 'none'
+          pointerEvents: 'none',
+          overflow: 'hidden'
         }}
       />
       <motion.div
@@ -89,12 +106,15 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
           position: 'absolute',
           bottom: '20%',
           right: '20%',
-          width: '500px',
-          height: '500px',
+          width: 'min(500px, 40vw)',
+          height: 'min(500px, 40vw)',
+          maxWidth: '500px',
+          maxHeight: '500px',
           background: 'radial-gradient(circle, rgba(59, 130, 246, 0.4) 0%, transparent 70%)',
           borderRadius: '50%',
           filter: 'blur(100px)',
-          pointerEvents: 'none'
+          pointerEvents: 'none',
+          overflow: 'hidden'
         }}
       />
 
@@ -107,33 +127,40 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
         style={{
           position: 'relative',
           zIndex: 10,
-          width: '90%',
+          width: '100%',
           maxWidth: '420px',
+          maxHeight: 'fit-content',
+          overflowY: 'visible',
+          overflowX: 'hidden',
           backgroundColor: 'rgba(0, 0, 0, 0.95)',
           borderRadius: '28px',
-          padding: '28px 26px',
+          padding: '22px 24px',
           border: '2px solid transparent',
           backgroundImage: 'linear-gradient(rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.95)), linear-gradient(135deg, #8b5cf6, #3b82f6, #06b6d4)',
           backgroundOrigin: 'border-box',
           backgroundClip: 'padding-box, border-box',
-          boxShadow: '0 0 0 1px rgba(139, 92, 246, 0.3), 0 25px 100px rgba(0, 0, 0, 0.9), 0 0 80px rgba(139, 92, 246, 0.4)'
+          boxShadow: '0 0 0 1px rgba(139, 92, 246, 0.3), 0 25px 100px rgba(0, 0, 0, 0.9), 0 0 80px rgba(139, 92, 246, 0.4)',
+          boxSizing: 'border-box',
+          marginTop: '-6vh',
+          contain: 'layout style paint'
         }}
       >
         {/* Top Icon */}
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '18px' }}>
           <motion.div
             animate={{ rotate: 360 }}
             transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
             style={{
-              width: '64px',
-              height: '64px',
+              width: '60px',
+              height: '60px',
               borderRadius: '50%',
               background: 'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               boxShadow: '0 0 35px rgba(139, 92, 246, 0.6), 0 0 70px rgba(59, 130, 246, 0.3)',
-              position: 'relative'
+              position: 'relative',
+              flexShrink: 0
             }}
           >
             <motion.div
@@ -149,13 +176,13 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
               }}
             />
             {React.createElement(steps[currentStep].icon, {
-              style: { width: '32px', height: '32px', color: '#ffffff', strokeWidth: 2 }
+              style: { width: '30px', height: '30px', color: '#ffffff', strokeWidth: 2, flexShrink: 0 }
             })}
           </motion.div>
         </div>
 
         {/* Status Text */}
-        <div style={{ textAlign: 'center', marginBottom: '22px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
           <AnimatePresence mode="wait">
             <motion.h1
               key={currentStep}
@@ -164,7 +191,7 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
               style={{
-                fontSize: '20px',
+                fontSize: '19px',
                 fontWeight: '800',
                 background: `linear-gradient(135deg, ${steps[currentStep].color}, ${steps[currentStep].color}cc)`,
                 WebkitBackgroundClip: 'text',
@@ -172,7 +199,8 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
                 backgroundClip: 'text',
                 margin: '0 0 6px 0',
                 letterSpacing: '-0.3px',
-                filter: `drop-shadow(0 0 15px ${steps[currentStep].color}70)`
+                filter: `drop-shadow(0 0 15px ${steps[currentStep].color}70)`,
+                lineHeight: '1.2'
               }}
             >
               {steps[currentStep].text}
@@ -181,15 +209,16 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
           <p style={{ 
             fontSize: '12px', 
             color: '#9ca3af', 
-            margin: 0,
-            fontWeight: '500'
+            margin: '4px 0 0 0',
+            fontWeight: '500',
+            lineHeight: '1.4'
           }}>
             Takes 10-30 seconds
           </p>
         </div>
 
         {/* Progress Steps */}
-        <div style={{ marginBottom: '18px' }}>
+        <div style={{ marginBottom: '16px', minHeight: 0 }}>
           {steps.map((step, index) => {
             const isActive = index === currentStep;
             const isCompleted = index < currentStep;
@@ -203,7 +232,7 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '10px',
+                  gap: '12px',
                   padding: '10px 12px',
                   marginBottom: index < steps.length - 1 ? '6px' : 0,
                   borderRadius: '12px',
@@ -218,17 +247,19 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
                     ? 'rgba(34, 197, 94, 0.35)' 
                     : 'rgba(255, 255, 255, 0.07)'}`,
                   boxShadow: isActive ? '0 0 18px rgba(139, 92, 246, 0.2)' : 'none',
-                  transition: 'all 0.3s ease'
+                  transition: 'all 0.3s ease',
+                  flexShrink: 0
                 }}
               >
                 <div
                   style={{
-                    width: '28px',
-                    height: '28px',
+                    width: '26px',
+                    height: '26px',
                     borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    flexShrink: 0,
                     background: isActive 
                       ? 'linear-gradient(135deg, #8b5cf6, #3b82f6)' 
                       : isCompleted 
@@ -238,17 +269,16 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
                       ? '0 0 12px rgba(139, 92, 246, 0.5)' 
                       : isCompleted 
                       ? '0 0 8px rgba(34, 197, 94, 0.4)' 
-                      : 'none',
-                    flexShrink: 0
+                      : 'none'
                   }}
                 >
                   {isCompleted ? (
-                    <FiCheck style={{ width: '16px', height: '16px', color: '#ffffff', strokeWidth: 3 }} />
+                    <FiCheck style={{ width: '15px', height: '15px', color: '#ffffff', strokeWidth: 3 }} />
                   ) : (
                     <step.icon
                       style={{ 
-                        width: '14px', 
-                        height: '14px', 
+                        width: '13px', 
+                        height: '13px', 
                         color: isActive ? '#ffffff' : '#6b7280',
                         strokeWidth: 2
                       }}
@@ -261,7 +291,12 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
                     fontSize: '14px',
                     fontWeight: '600',
                     color: isActive || isCompleted ? '#ffffff' : '#9ca3af',
-                    flex: 1
+                    flex: 1,
+                    minWidth: 0,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    lineHeight: '1.4'
                   }}
                 >
                   {step.text}
@@ -277,7 +312,8 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
                       border: '2.5px solid rgba(139, 92, 246, 0.2)',
                       borderTopColor: '#8b5cf6',
                       borderRightColor: '#3b82f6',
-                      borderRadius: '50%'
+                      borderRadius: '50%',
+                      flexShrink: 0
                     }}
                   />
                 )}
@@ -294,7 +330,7 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
           backgroundColor: 'rgba(255, 255, 255, 0.07)', 
           borderRadius: '2.5px', 
           overflow: 'hidden',
-          marginBottom: '16px'
+          marginBottom: '14px'
         }}>
           <motion.div
             style={{
@@ -324,23 +360,33 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
           alignItems: 'center', 
           justifyContent: 'center', 
           gap: '7px',
-          padding: '8px 14px',
+          padding: '7px 14px',
           borderRadius: '10px',
           background: 'linear-gradient(135deg, rgba(250, 204, 21, 0.08), rgba(251, 191, 36, 0.08))',
           border: '1.5px solid rgba(250, 204, 21, 0.25)',
           boxShadow: '0 0 12px rgba(250, 204, 21, 0.12)'
         }}>
-          <FiZap style={{ width: '14px', height: '14px', color: '#fbbf24' }} />
+          <FiZap style={{ width: '14px', height: '14px', color: '#fbbf24', flexShrink: 0 }} />
           <span style={{ 
             fontSize: '12px', 
             color: '#fbbf24', 
             fontWeight: '600',
-            letterSpacing: '0.2px'
+            letterSpacing: '0.2px',
+            whiteSpace: 'nowrap'
           }}>
             Powered by AI
           </span>
         </div>
       </motion.div>
-    </div>
+    </motion.div>
+      )}
+    </AnimatePresence>
   );
+
+  // Render in portal to ensure it's always on top
+  if (typeof document !== 'undefined') {
+    return createPortal(overlayContent, document.body);
+  }
+  
+  return overlayContent;
 }

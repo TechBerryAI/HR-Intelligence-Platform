@@ -10,9 +10,27 @@ Full-stack HR Job Portal with candidate management, job posting, and AI-powered 
 - 💪 **5-15x faster** database queries
 - 📊 Real-time startup progress
 
-See [QUICK_START_OPTIMIZED.md](QUICK_START_OPTIMIZED.md) for details!
+## 🚀 Quick Start
 
-## Quick Start
+### First Time Setup
+
+```powershell
+# 1. Copy environment template
+copy backend\.env.example backend\.env
+
+# 2. Edit with YOUR SQL Server credentials
+notepad backend\.env
+# Change: MSSQL_USER and MSSQL_PASSWORD
+
+# 3. Run the application
+.\run.ps1
+```
+
+The database and tables are created automatically on first run.
+
+📖 **Having issues?** See [SETUP.md](SETUP.md) for detailed troubleshooting.
+
+### Returning Users
 
 ```powershell
 .\run.ps1
@@ -20,57 +38,53 @@ See [QUICK_START_OPTIMIZED.md](QUICK_START_OPTIMIZED.md) for details!
 
 Opens automatically in your browser at http://localhost:5173
 
-**What to expect:**
-1. Backend starts in 1-2 seconds ✅
-2. Frontend starts in parallel ✅
-3. Browser opens automatically ✅
-4. Database initializes on first request (one-time, 5-10 seconds) ⏳
-
 ## Prerequisites
 
-- Python 3.8+
-- Node.js 16+
-- Microsoft SQL Server
-- ODBC Driver for SQL Server
+| Requirement | Version | Check Command |
+|-------------|---------|---------------|
+| Python | 3.8+ | `python --version` |
+| Node.js | 16+ | `node --version` |
+| SQL Server | 2017+ | Local or remote instance |
+| ODBC Driver | Any | `Get-OdbcDriver \| Where-Object { $_.Name -like '*SQL*' }` |
+
+**Database Options:**
+- 💻 **Local SQL Server** - SQL Server Express (free) or full version
+- ☁️ **Cloud SQL** - Azure SQL Database, AWS RDS for SQL Server
 
 ## Configuration
 
-### Backend Environment
+### Quick Setup
 
-Edit `backend/.env`:
+```powershell
+copy backend\.env.example backend\.env
+```
+
+Edit `backend/.env` - only these 2 values need to change:
 
 ```env
-PORT=3000
-FLASK_DEBUG=true
-FRONTEND_URL=http://localhost:5173
-JWT_SECRET=your-secret-key
+MSSQL_USER=YOUR_SQL_USERNAME      # Your SQL Server login
+MSSQL_PASSWORD=YOUR_SQL_PASSWORD  # Your SQL Server password
+```
 
-# Database
-MSSQL_SERVER=localhost
-MSSQL_DATABASE=JobPortal
-MSSQL_USER=Test
-MSSQL_PASSWORD=Root@123
-MSSQL_ODBC_DRIVER={SQL Server}
+Everything else has working defaults.
 
-# Database Performance (NEW)
-DB_POOL_SIZE=5              # Connection pool size
-DB_CONNECTION_TIMEOUT=10    # Timeout in seconds
+### Optional: Email Configuration
 
-# Email (Gmail for OTP)
+For OTP to work, add your Gmail credentials:
+
+```env
 MAIL_USERNAME=your-email@gmail.com
-MAIL_PASSWORD=your-app-password
-MAIL_DEFAULT_SENDER=your-email@gmail.com
+MAIL_PASSWORD=your-16-char-app-password  # Gmail App Password
 ```
 
 **Gmail App Password**: Google Account → Security → 2-Step Verification → App passwords
 
-### Frontend Environment
+### Optional: LLM Configuration
 
-`frontend/.env` (created automatically):
+For AI matching features:
 
 ```env
-VITE_API_URL=http://localhost:3000
-VITE_API_TIMEOUT_MS=30000  # Updated to 30s for better reliability
+XAI_API_KEY=your-xai-api-key
 ```
 
 ## Performance Features
@@ -151,6 +165,40 @@ Auto-created on first run:
 
 ## Troubleshooting
 
+### Environment Validation Failed
+
+The backend validates your configuration on startup. If you see errors:
+```powershell
+# Run validation standalone
+cd backend
+python env_validator.py
+```
+
+### ODBC Driver Not Found
+
+```powershell
+# Check installed drivers
+Get-OdbcDriver | Where-Object { $_.Name -like '*SQL*' }
+
+# Download ODBC Driver 17 from Microsoft:
+# https://aka.ms/downloadmsodbcsql
+```
+
+Update `MSSQL_ODBC_DRIVER` in `.env` to match an installed driver.
+
+### Database Connection Failed
+
+```powershell
+# Check SQL Server service is running
+Get-Service MSSQLSERVER
+
+# Start if needed
+Start-Service MSSQLSERVER
+
+# Test connection
+Test-NetConnection localhost -Port 1433
+```
+
 ### Port in Use
 
 ```powershell
@@ -158,15 +206,11 @@ Get-NetTCPConnection -LocalPort 3000 | Select-Object -ExpandProperty OwningProce
 Get-NetTCPConnection -LocalPort 5173 | Select-Object -ExpandProperty OwningProcess | Stop-Process -Force
 ```
 
-### Database Connection
-
-1. Check SQL Server is running: `Get-Service MSSQLSERVER`
-2. Start if needed: `Start-Service MSSQLSERVER`
-3. Verify credentials in `backend/.env`
-
 ### Email Not Sending
 
-For testing, disable emails: `MAIL_SUPPRESS_SEND=true` in `backend/.env`
+For testing without email: `MAIL_SUPPRESS_SEND=true` in `backend/.env`
+
+📖 **More help**: See [SETUP.md](SETUP.md) for detailed troubleshooting.
 
 ## Manual Setup
 

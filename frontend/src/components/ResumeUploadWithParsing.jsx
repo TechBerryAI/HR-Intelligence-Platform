@@ -1,20 +1,29 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { uploadAndParseResume, mapResumeTOONToForm, validateFileForParsing } from '../utils/parsingApi';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle } from 'react-icons/fi';
+import { useApp } from '../context/AppContext';
+import { tokenService } from '../utils/tokenService';
 
 /**
  * Premium Resume Upload Component with AI Parsing
  * Uploads resume, parses it, and autofills form
  */
 export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, currentFileName }) {
+  const { applicantAuth } = useApp();
   const [isUploading, setIsUploading] = useState(false);
   const [parseError, setParseError] = useState('');
   const [parseSuccess, setParseSuccess] = useState('');
   const [confidence, setConfidence] = useState(null);
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Clear any stale error messages on mount
+  useEffect(() => {
+    // Clear login-related errors on mount
+    setParseError('');
+  }, []);
 
   const handleFileChange = async (e) => {
     const file = e.target.files[0];
@@ -46,13 +55,14 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
     setParseSuccess('');
     setConfidence(null);
 
-    // Check if user is logged in (token stored as 'jwtToken')
-    const token = localStorage.getItem('jwtToken');
-    if (!token) {
-      setParseError('🔒 Please log in first to use AI-powered resume parsing. You can still fill the form manually.');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+    // Check if user is logged in using token service
+    const token = tokenService.getToken();
+    if (!token || !applicantAuth.isLoggedIn) {
+      // Allow manual file selection even if not logged in (no AI parsing)
+      if (onFileSelect) {
+        onFileSelect(file);
       }
+      // Silently allow manual upload without showing error
       return;
     }
 
@@ -114,7 +124,8 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
     } catch (error) {
       // Provide better error messages based on error type
       if (error.message.includes('Invalid or expired token') || error.message.includes('Access token required')) {
-        setParseError('🔒 Your session has expired. Please log in again to use AI-powered resume parsing.');
+        // Don't show login errors - user can still upload manually
+        console.warn('Session expired, allowing manual upload');
       } else if (error.message.includes('Failed to parse resume')) {
         setParseError('❌ Unable to parse resume. The file may be corrupted or in an unsupported format. Please try another file or fill the form manually.');
       } else {
@@ -250,8 +261,8 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
           </motion.div>
         )}
 
-        {/* Error message */}
-        {parseError && (
+        {/* Error message - only show if it's not a login prompt */}
+        {parseError && !parseError.includes('log in') && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
