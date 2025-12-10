@@ -34,6 +34,59 @@ body {
            focus:shadow-glow-sm placeholder:text-zinc-500;
   }
   
+  /* Select dropdown options styling - ensure text is visible */
+  select.premium-input {
+    @apply text-gray-100;
+    color: #f3f4f6 !important;
+  }
+  
+  select.premium-input option {
+    color: #f3f4f6 !important;
+    background-color: #18181b !important;
+    padding: 8px 12px;
+  }
+  
+  /* For all select elements with premium-input class */
+  .premium-input[as="select"],
+  select.premium-input {
+    color: #f3f4f6 !important;
+  }
+  
+  .premium-input[as="select"] option,
+  select.premium-input option {
+    color: #f3f4f6 !important;
+    background-color: #18181b !important;
+    padding: 8px 12px;
+  }
+  
+  /* Global select option styling for dark theme */
+  select option {
+    color: #f3f4f6 !important;
+    background-color: #18181b !important;
+  }
+  
+  /* Ensure selected option is visible */
+  select:focus option:checked,
+  select option:checked {
+    color: #ffffff !important;
+    background-color: #3b82f6 !important;
+  }
+  
+  /* Hover state for options */
+  select option:hover {
+    background-color: #27272a !important;
+  }
+  
+  /* For all selects in the app */
+  select {
+    color: #f3f4f6 !important;
+  }
+  
+  select option {
+    color: #f3f4f6 !important;
+    background-color: #18181b !important;
+  }
+  
   .premium-button {
     @apply relative overflow-hidden rounded-xl px-6 py-3 font-semibold text-white
            transition-all duration-300 hover:scale-105 hover:shadow-premium
