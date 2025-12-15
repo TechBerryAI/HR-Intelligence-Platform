@@ -249,6 +249,12 @@ def verify_hr_otp():
 
         token = jwt.encode({"hrId": hrid, "email": hr_data['email'], "role": "HR"}, JWT_SECRET, algorithm='HS256')
 
+        # Record the signup/login in login_history so subsequent logins from same IP/device are recognized
+        # This prevents sending unnecessary emails for logins from the same device used during signup
+        ip_address = request.remote_addr
+        user_agent = request.headers.get('User-Agent')
+        record_login_attempt(hr_data['email'], 'HR', 'success', ip_address, user_agent)
+
         send_notification_email(
             hr_data['email'],
             "Welcome to Job Portal",
@@ -502,20 +508,29 @@ def hr_login():
         user_id = signup_data['hrid']
         token = jwt.encode({"hrId": user_id, "email": signup_data['email'], "role": "HR"}, JWT_SECRET, algorithm='HS256')
 
+        # Check if this is a new IP/device combination BEFORE recording the login
+        # This way we don't count the current login in our check
+        from sessions_service import has_previous_login_from_same_device
+        is_new_device = not has_previous_login_from_same_device(email, 'HR', ip_address, user_agent)
+        
         db_run('INSERT INTO hr_login (hrid, email, password) VALUES (?, ?, ?)', (user_id, signup_data['email'], signup_data['password']))
         record_login_attempt(email, 'HR', 'success', ip_address, user_agent)
 
-        send_notification_email(
-            signup_data['email'],
-            "New login to your Job Portal HR account",
-            (
-                f"Hi {signup_data['full_name'] or 'there'},\n\n"
-                f"We noticed a login to your Job Portal HR account on {datetime.utcnow():%Y-%m-%d %H:%M:%S} UTC.\n"
-                f"IP Address: {ip_address or 'Unavailable'}\n"
-                f"Device: {user_agent or 'Unavailable'}\n\n"
-                "If this was you, no action is needed. If you did not sign in, please reset your password immediately."
+        # Only send login notification email if this is a new IP/device combination
+        # Skip email if user has logged in from this IP/device before (including signup)
+        if is_new_device:
+            # This is a new device/IP - send notification
+            send_notification_email(
+                signup_data['email'],
+                "New login to your Job Portal HR account",
+                (
+                    f"Hi {signup_data['full_name'] or 'there'},\n\n"
+                    f"We noticed a login to your Job Portal HR account on {datetime.utcnow():%Y-%m-%d %H:%M:%S} UTC.\n"
+                    f"IP Address: {ip_address or 'Unavailable'}\n"
+                    f"Device: {user_agent or 'Unavailable'}\n\n"
+                    "If this was you, no action is needed. If you did not sign in, please reset your password immediately."
+                )
             )
-        )
 
         return jsonify({
             "token": token,

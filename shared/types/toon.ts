@@ -11,6 +11,12 @@ export interface TOONPerson {
   name: string;
   email: string;
   phone: string;
+  linkedin?: string;
+  github?: string;
+  portfolio?: string;
+  website?: string;
+  twitter?: string;
+  otherUrls?: string[];
 }
 
 export interface TOONExperience {

@@ -236,10 +236,18 @@ def parse_resume_upload():
                 'error': f'Text extraction failed: {str(e)}'
             }), 400
         
-        if not raw_text or len(raw_text.strip()) < 50:
+        # Check if we got sufficient text (lowered threshold and better error message)
+        text_length = len(raw_text.strip()) if raw_text else 0
+        if not raw_text or text_length < 30:
+            # Provide more helpful error message
+            error_msg = 'Could not extract sufficient text from document'
+            if text_length > 0:
+                error_msg += f'. Only extracted {text_length} characters. The document may be image-based (scanned) or corrupted.'
+            else:
+                error_msg += '. The document may be image-based (scanned), corrupted, or in an unsupported format.'
             return jsonify({
                 'status': 'error',
-                'error': 'Could not extract sufficient text from document'
+                'error': error_msg
             }), 400
         
         # Classify document (optional verification)
@@ -250,6 +258,64 @@ def parse_resume_upload():
         # Call LLM to parse resume
         try:
             toon = call_llm(raw_text, 'resume')
+            
+            # Post-process: Extract URLs from raw text if LLM missed them
+            import re
+            # More comprehensive URL pattern
+            url_pattern = r'(https?://[^\s<>"\'\)]+|www\.[^\s<>"\'\)]+|linkedin\.com/[^\s<>"\'\)]+|github\.com/[^\s<>"\'\)]+|twitter\.com/[^\s<>"\'\)]+|x\.com/[^\s<>"\'\)]+|[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-zA-Z]{2,}[^\s<>"\'\)]*)'
+            found_urls = re.findall(url_pattern, raw_text, re.IGNORECASE)
+            
+            # Ensure person object exists
+            if 'person' not in toon:
+                toon['person'] = {}
+            
+            # Extract and categorize URLs if not already extracted
+            if not toon['person'].get('linkedin'):
+                linkedin_urls = [url for url in found_urls if 'linkedin' in url.lower() or 'linked.in' in url.lower()]
+                if linkedin_urls:
+                    url = linkedin_urls[0].strip('.,;:')
+                    toon['person']['linkedin'] = url if url.startswith('http') else f"https://{url}"
+            
+            if not toon['person'].get('github'):
+                github_urls = [url for url in found_urls if 'github' in url.lower()]
+                if github_urls:
+                    url = github_urls[0].strip('.,;:')
+                    toon['person']['github'] = url if url.startswith('http') else f"https://{url}"
+            
+            if not toon['person'].get('twitter'):
+                twitter_urls = [url for url in found_urls if 'twitter' in url.lower() or 'x.com' in url.lower()]
+                if twitter_urls:
+                    url = twitter_urls[0].strip('.,;:')
+                    toon['person']['twitter'] = url if url.startswith('http') else f"https://{url}"
+            
+            if not toon['person'].get('portfolio') and not toon['person'].get('website'):
+                # Look for portfolio/website URLs (not linkedin, github, twitter, email domains, or common email providers)
+                excluded_domains = ['linkedin', 'github', 'twitter', 'x.com', 'gmail', 'yahoo', 'outlook', 'hotmail', 'email', 'mail', 'edu', 'ac.', '.gov']
+                portfolio_urls = [url for url in found_urls 
+                                 if not any(x in url.lower() for x in excluded_domains) and 
+                                 '.' in url and len(url) > 5]
+                if portfolio_urls:
+                    url = portfolio_urls[0].strip('.,;:')
+                    toon['person']['portfolio'] = url if url.startswith('http') else f"https://{url}"
+            
+            # Collect any remaining URLs into otherUrls
+            if 'otherUrls' not in toon['person']:
+                toon['person']['otherUrls'] = []
+            
+            # Add URLs that weren't categorized
+            categorized = set()
+            if toon['person'].get('linkedin'): categorized.add(toon['person']['linkedin'].lower())
+            if toon['person'].get('github'): categorized.add(toon['person']['github'].lower())
+            if toon['person'].get('twitter'): categorized.add(toon['person']['twitter'].lower())
+            if toon['person'].get('portfolio'): categorized.add(toon['person']['portfolio'].lower())
+            if toon['person'].get('website'): categorized.add(toon['person']['website'].lower())
+            
+            for url in found_urls:
+                url_clean = url.strip('.,;:')
+                if url_clean.lower() not in categorized and url_clean not in toon['person']['otherUrls']:
+                    url_final = url_clean if url_clean.startswith('http') else f"https://{url_clean}"
+                    toon['person']['otherUrls'].append(url_final)
+            
         except Exception as e:
             return jsonify({
                 'status': 'error',
@@ -404,10 +470,18 @@ def parse_jd_upload():
                 'error': f'Text extraction failed: {str(e)}'
             }), 400
         
-        if not raw_text or len(raw_text.strip()) < 50:
+        # Check if we got sufficient text (lowered threshold and better error message)
+        text_length = len(raw_text.strip()) if raw_text else 0
+        if not raw_text or text_length < 30:
+            # Provide more helpful error message
+            error_msg = 'Could not extract sufficient text from document'
+            if text_length > 0:
+                error_msg += f'. Only extracted {text_length} characters. The document may be image-based (scanned) or corrupted.'
+            else:
+                error_msg += '. The document may be image-based (scanned), corrupted, or in an unsupported format.'
             return jsonify({
                 'status': 'error',
-                'error': 'Could not extract sufficient text from document'
+                'error': error_msg
             }), 400
         
         # Call LLM to parse job description

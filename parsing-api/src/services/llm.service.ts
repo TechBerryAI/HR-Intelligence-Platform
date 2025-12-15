@@ -87,6 +87,11 @@ export async function parseToTOON(text: string, documentType: 'resume' | 'job_de
         throw new Error(`Unknown LLM provider: ${config.llm.provider}`);
     }
     
+    // Post-process: Extract URLs from raw text if LLM missed them (for resumes only)
+    if (documentType === 'resume' && toon && 'person' in toon) {
+      toon = extractUrlsFromText(toon as ResumeTOON, text) as TOON;
+    }
+    
     logger.info('Document parsed to TOON', {
       type: documentType,
       duration: Date.now() - startTime,
@@ -248,16 +253,99 @@ async function parseWithXAI(prompt: string, documentType: string): Promise<TOON>
 }
 
 /**
+ * Extract URLs from text and add to TOON if missing
+ */
+function extractUrlsFromText(toon: ResumeTOON, rawText: string): ResumeTOON {
+  if (!toon.person) {
+    toon.person = { name: '', email: '', phone: '' };
+  }
+  
+  // Comprehensive URL pattern
+  const urlPattern = /(https?:\/\/[^\s<>"')]+|www\.[^\s<>"')]+|linkedin\.com\/[^\s<>"')]+|github\.com\/[^\s<>"')]+|twitter\.com\/[^\s<>"')]+|x\.com\/[^\s<>"')]+|[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-zA-Z]{2,}[^\s<>"')]*)/gi;
+  const foundUrls = rawText.match(urlPattern) || [];
+  
+  // Extract LinkedIn URLs
+  if (!toon.person.linkedin) {
+    const linkedinUrls = foundUrls.filter(url => /linkedin/i.test(url) || /linked\.in/i.test(url));
+    if (linkedinUrls.length > 0) {
+      let url = linkedinUrls[0].replace(/[.,;:]+$/, '');
+      toon.person.linkedin = url.startsWith('http') ? url : `https://${url}`;
+    }
+  }
+  
+  // Extract GitHub URLs
+  if (!toon.person.github) {
+    const githubUrls = foundUrls.filter(url => /github/i.test(url));
+    if (githubUrls.length > 0) {
+      let url = githubUrls[0].replace(/[.,;:]+$/, '');
+      toon.person.github = url.startsWith('http') ? url : `https://${url}`;
+    }
+  }
+  
+  // Extract Twitter URLs
+  if (!toon.person.twitter) {
+    const twitterUrls = foundUrls.filter(url => /twitter/i.test(url) || /x\.com/i.test(url));
+    if (twitterUrls.length > 0) {
+      let url = twitterUrls[0].replace(/[.,;:]+$/, '');
+      toon.person.twitter = url.startsWith('http') ? url : `https://${url}`;
+    }
+  }
+  
+  // Extract portfolio/website URLs
+  if (!toon.person.portfolio && !toon.person.website) {
+    const excludedDomains = ['linkedin', 'github', 'twitter', 'x.com', 'gmail', 'yahoo', 'outlook', 'hotmail', 'email', 'mail', 'edu', 'ac.', '.gov'];
+    const portfolioUrls = foundUrls.filter(url => {
+      const urlLower = url.toLowerCase();
+      return !excludedDomains.some(domain => urlLower.includes(domain)) && 
+             url.includes('.') && 
+             url.length > 5;
+    });
+    if (portfolioUrls.length > 0) {
+      let url = portfolioUrls[0].replace(/[.,;:]+$/, '');
+      toon.person.portfolio = url.startsWith('http') ? url : `https://${url}`;
+    }
+  }
+  
+  // Collect remaining URLs into otherUrls
+  if (!toon.person.otherUrls) {
+    toon.person.otherUrls = [];
+  }
+  
+  const categorized = new Set<string>();
+  if (toon.person.linkedin) categorized.add(toon.person.linkedin.toLowerCase());
+  if (toon.person.github) categorized.add(toon.person.github.toLowerCase());
+  if (toon.person.twitter) categorized.add(toon.person.twitter.toLowerCase());
+  if (toon.person.portfolio) categorized.add(toon.person.portfolio.toLowerCase());
+  if (toon.person.website) categorized.add(toon.person.website.toLowerCase());
+  
+  for (const url of foundUrls) {
+    const urlClean = url.replace(/[.,;:]+$/, '');
+    if (!categorized.has(urlClean.toLowerCase()) && !toon.person.otherUrls!.includes(urlClean)) {
+      const urlFinal = urlClean.startsWith('http') ? urlClean : `https://${urlClean}`;
+      toon.person.otherUrls!.push(urlFinal);
+    }
+  }
+  
+  return toon;
+}
+
+/**
  * Resume Parsing Prompt
  */
 function getResumeParsingPrompt(text: string): string {
-  return `Parse the following resume and extract information into this EXACT JSON format:
+  return `Parse the following resume and extract information into this EXACT JSON format. Extract ALL URLs including LinkedIn, GitHub, portfolio, personal website, Twitter, and any other URLs found:
 
 {
   "person": {
     "name": "Full Name",
     "email": "email@example.com",
-    "phone": "+1234567890"
+    "phone": "+1234567890",
+    "linkedin": "https://linkedin.com/in/username",
+    "github": "https://github.com/username",
+    "portfolio": "https://portfolio.example.com",
+    "website": "https://personal-website.com",
+    "twitter": "https://twitter.com/username",
+    "otherUrls": ["https://other-url.com"]
   },
   "summary": "Professional summary or objective",
   "skills": ["skill1", "skill2", "skill3"],
@@ -286,7 +374,8 @@ function getResumeParsingPrompt(text: string): string {
 }
 
 Important:
-- Extract ALL information accurately
+- Extract ALL information accurately including ALL URLs (LinkedIn, GitHub, portfolio, website, Twitter, etc.)
+- Extract URLs even if they are in different formats (e.g., linkedin.com/in/username or www.linkedin.com/in/username)
 - Use "Present" for current positions
 - Calculate years for experience entries
 - Calculate total_experience_years as sum of all experience
@@ -305,6 +394,7 @@ function getJDParsingPrompt(text: string): string {
 
 {
   "title": "Job Title",
+  "company": "Company Name",
   "location": "City, State/Country",
   "employment_type": "Full-time/Part-time/Contract",
   "min_experience_years": 3,
@@ -313,16 +403,17 @@ function getJDParsingPrompt(text: string): string {
   "responsibilities": ["responsibility1", "responsibility2"],
   "keywords": ["keyword1", "keyword2"],
   "qualifications": ["qualification1", "qualification2"],
-  "salary_range": "$80,000 - $120,000",
-  "company": "Company Name"
+  "salary_range": "$80,000 - $120,000"
 }
 
-Important:
-- Extract ALL information accurately
+CRITICAL INSTRUCTIONS:
+- Extract the COMPANY NAME from the job description - look for phrases like "Company:", "About [Company]", "We are [Company]", or company name in header/footer
+- Extract ALL information accurately including company name
 - For experience, parse "3-5 years" as min_experience_years: 3, max_experience_years: 5
 - If only one number, set min_experience_years only
 - Extract key technical skills separately from requirements
 - Include all important keywords for matching
+- If company name is not found, use empty string
 - If information is missing, use empty string, 0, or empty array
 - Return ONLY valid JSON, no additional text
 

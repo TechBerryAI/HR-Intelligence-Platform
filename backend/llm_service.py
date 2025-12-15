@@ -222,14 +222,20 @@ def call_anthropic(prompt: str, doc_type: str) -> Dict[str, Any]:
 def get_system_prompt(doc_type: str) -> str:
     """Get system prompt for LLM based on document type"""
     if doc_type == 'resume':
-        return """You are an expert resume parser. Extract ALL information from the resume and return ONLY a valid JSON object in this exact format. Be thorough and extract dates, years, and all details:
+        return """You are an expert resume parser. Extract ALL information from the resume including EVERY URL you find. Look carefully for LinkedIn, GitHub, portfolio, personal website, Twitter, and any other URLs. Return ONLY a valid JSON object in this exact format:
 
 {
   "type": "resume",
   "person": {
     "name": "Full Name",
     "email": "email@example.com",
-    "phone": "+1234567890"
+    "phone": "+1234567890",
+    "linkedin": "https://linkedin.com/in/username or empty string if not found",
+    "github": "https://github.com/username or empty string if not found",
+    "portfolio": "https://portfolio.example.com or empty string if not found",
+    "website": "https://personal-website.com or empty string if not found",
+    "twitter": "https://twitter.com/username or empty string if not found",
+    "otherUrls": ["https://other-url.com"] or empty array if none found
   },
   "summary": "Professional summary",
   "skills": ["skill1", "skill2"],
@@ -255,6 +261,17 @@ def get_system_prompt(doc_type: str) -> str:
   "total_experience_years": 3.9
 }
 
+CRITICAL INSTRUCTIONS FOR URL EXTRACTION:
+- Search the ENTIRE resume text for ANY URLs (http://, https://, www., linkedin.com, github.com, etc.)
+- Extract LinkedIn URLs into "linkedin" field (even if format is linkedin.com/in/username without https://)
+- Extract GitHub URLs into "github" field
+- Extract portfolio/personal website URLs into "portfolio" or "website" fields
+- Extract Twitter URLs into "twitter" field
+- Put any other URLs found into "otherUrls" array
+- If a URL doesn't have http:// or https://, add https:// prefix
+- DO NOT skip URLs - extract EVERY URL you find in the resume
+- If no URLs are found, use empty strings and empty arrays
+
 Return ONLY the JSON object, no markdown, no explanations."""
     
     else:  # jd
@@ -273,6 +290,12 @@ Return ONLY the JSON object, no markdown, no explanations."""
   "qualifications": ["qual1", "qual2"],
   "keywords": ["keyword1", "keyword2"]
 }
+
+CRITICAL: Extract the COMPANY NAME from the job description. Look for:
+- Company name in header/footer
+- Phrases like "Company:", "About [Company]", "We are [Company]", "Join [Company]"
+- Company name mentioned in the job description text
+- If company name is not found, use empty string
 
 Return ONLY the JSON object, no markdown, no explanations."""
 

@@ -56,3 +56,36 @@ def get_recent_failed_attempts(email: str, user_type: str, minutes: int = 15) ->
         (email, user_type, minutes)
     )
     return int(row["cnt"]) if row else 0
+
+
+def has_previous_login_from_same_device(email: str, user_type: str, ip_address: Optional[str] = None,
+                                        user_agent: Optional[str] = None) -> bool:
+    """
+    Check if there's been a previous successful login from the same IP address and device.
+    Returns True if this IP/device combination has been used before for successful logins.
+    """
+    if not ip_address and not user_agent:
+        return False
+    
+    # Build query to check for previous successful logins with same IP and device
+    conditions = ["email = ?", "user_type = ?", "status = 'success'"]
+    params = [email, user_type]
+    
+    if ip_address:
+        conditions.append("ip_address = ?")
+        params.append(ip_address)
+    
+    if user_agent:
+        conditions.append("user_agent = ?")
+        params.append(user_agent)
+    
+    query = f"""
+        SELECT COUNT(*) AS cnt FROM login_history
+        WHERE {' AND '.join(conditions)}
+    """
+    
+    row = db_get(query, tuple(params))
+    count = int(row["cnt"]) if row else 0
+    
+    # Return True if there's at least one previous successful login from this IP/device
+    return count > 0

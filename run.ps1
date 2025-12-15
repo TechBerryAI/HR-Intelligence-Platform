@@ -1,5 +1,5 @@
 # HR Job Portal - Bulletproof Startup Script
-# Version 3.0 - Complete automated setup including database initialization
+# Version 3.1 - Enhanced database checking and automatic creation
 
 $ErrorActionPreference = "Continue"
 $env:PYTHONIOENCODING = "utf-8"
@@ -188,48 +188,115 @@ try {
 Write-Host ""
 Write-Host "Step 2.7: Database Initialization..." -ForegroundColor Cyan
 
+# Function to check if database exists
+function Test-DatabaseExists {
+    param(
+        [string]$Server,
+        [string]$Port,
+        [string]$User,
+        [string]$Password,
+        [string]$Database
+    )
+    
+    try {
+        $checkQuery = "SELECT CASE WHEN DB_ID('$Database') IS NOT NULL THEN 1 ELSE 0 END AS db_exists"
+        $result = sqlcmd -S "$Server,$Port" -U $User -P $Password -Q $checkQuery -W -h -1 -b 2>&1
+        
+        if ($LASTEXITCODE -eq 0) {
+            # Check if result contains "1" (database exists)
+            $resultString = $result -join " "
+            if ($resultString -match '\b1\b') {
+                return $true
+            }
+        }
+        return $false
+    } catch {
+        return $false
+    }
+}
+
 # Check if database exists
 $dbExists = $false
-if ($connectionTest) {
-    try {
-        $checkDbQuery = "IF DB_ID('$mssqlDatabase') IS NOT NULL SELECT 1 ELSE SELECT 0"
-        $dbCheckResult = sqlcmd -S "$mssqlServer,$mssqlPort" -U $mssqlUser -P $mssqlPassword -Q $checkDbQuery -W -h -1 -b 2>&1
-        if ($LASTEXITCODE -eq 0 -and $dbCheckResult -match "1") {
-            $dbExists = $true
-            Write-Host "  [OK] Database '$mssqlDatabase' exists" -ForegroundColor Green
+Write-Host "  Checking if database '$mssqlDatabase' exists..." -ForegroundColor Gray
+
+try {
+    $null = Get-Command sqlcmd -ErrorAction Stop
+    $dbExists = Test-DatabaseExists -Server $mssqlServer -Port $mssqlPort -User $mssqlUser -Password $mssqlPassword -Database $mssqlDatabase
+    
+    if ($dbExists) {
+        Write-Host "  [OK] Database '$mssqlDatabase' exists" -ForegroundColor Green
+        
+        # Verify we can connect to the database
+        Write-Host "  Verifying database connection..." -ForegroundColor Gray
+        $verifyQuery = "USE [$mssqlDatabase]; SELECT 1"
+        $verifyResult = sqlcmd -S "$mssqlServer,$mssqlPort" -U $mssqlUser -P $mssqlPassword -Q $verifyQuery -b 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  [OK] Database connection verified" -ForegroundColor Green
+        } else {
+            Write-Host "  [WARN] Could not verify database connection" -ForegroundColor Yellow
         }
-    } catch {
-        # Continue to try creating
+    } else {
+        Write-Host "  [SETUP] Database '$mssqlDatabase' not found" -ForegroundColor Yellow
     }
+} catch {
+    Write-Host "  [WARN] sqlcmd not found - will attempt database creation via application" -ForegroundColor Yellow
+    $dbExists = $false
 }
 
 # Create database if it doesn't exist
 if (-not $dbExists) {
-    Write-Host "  [SETUP] Database '$mssqlDatabase' not found, creating..." -ForegroundColor Yellow
+    Write-Host "  [SETUP] Creating database '$mssqlDatabase'..." -ForegroundColor Yellow
     $initScript = "$ROOT\backend\scripts\init-db.sql"
     
-    if (Test-Path $initScript) {
-        try {
-            # Check if sqlcmd is available
-            $null = Get-Command sqlcmd -ErrorAction Stop
-            Write-Host "  Running database initialization script..." -ForegroundColor Gray
-            $sqlResult = sqlcmd -S "$mssqlServer,$mssqlPort" -U $mssqlUser -P $mssqlPassword -i $initScript -b 2>&1
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "  [OK] Database '$mssqlDatabase' created successfully" -ForegroundColor Green
+    if (-not (Test-Path $initScript)) {
+        Write-Host "  [ERROR] Database init script not found at $initScript" -ForegroundColor Red
+        Write-Host "  [INFO] Please ensure the init-db.sql file exists" -ForegroundColor Yellow
+        exit 1
+    }
+    
+    try {
+        $null = Get-Command sqlcmd -ErrorAction Stop
+        
+        # Create a temporary SQL script with the correct database name
+        $tempScript = "$env:TEMP\init-db-$([System.Guid]::NewGuid().ToString('N')).sql"
+        $sqlContent = Get-Content $initScript -Raw
+        # Replace hardcoded 'JobPortal' with the actual database name from .env
+        $sqlContent = $sqlContent -replace "'JobPortal'", "'$mssqlDatabase'"
+        $sqlContent = $sqlContent -replace "JobPortal;", "$mssqlDatabase;"
+        $sqlContent = $sqlContent -replace "USE JobPortal", "USE [$mssqlDatabase]"
+        Set-Content -Path $tempScript -Value $sqlContent -Encoding UTF8
+        
+        Write-Host "  Running database initialization script..." -ForegroundColor Gray
+        $sqlResult = sqlcmd -S "$mssqlServer,$mssqlPort" -U $mssqlUser -P $mssqlPassword -i $tempScript -b 2>&1
+        
+        # Clean up temporary script
+        Remove-Item $tempScript -ErrorAction SilentlyContinue
+        
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  [OK] Database '$mssqlDatabase' created successfully" -ForegroundColor Green
+            
+            # Verify the database was created
+            Start-Sleep -Seconds 1
+            $verifyExists = Test-DatabaseExists -Server $mssqlServer -Port $mssqlPort -User $mssqlUser -Password $mssqlPassword -Database $mssqlDatabase
+            if ($verifyExists) {
+                Write-Host "  [OK] Database creation verified" -ForegroundColor Green
+                Write-Host "  [INFO] Tables will be created automatically by the backend on startup" -ForegroundColor Gray
             } else {
-                Write-Host "  [WARN] Database creation may have failed (exit code: $LASTEXITCODE)" -ForegroundColor Yellow
-                Write-Host "  [INFO] Database may already exist or will be created by the application" -ForegroundColor Gray
+                Write-Host "  [WARN] Database creation may have failed - backend will attempt to create it" -ForegroundColor Yellow
             }
-        } catch {
-            Write-Host "  [WARN] sqlcmd not found in PATH - database will be created by the application on first run" -ForegroundColor Yellow
-            Write-Host "  [INFO] To manually create: sqlcmd -S $mssqlServer,$mssqlPort -U $mssqlUser -P <password> -i $initScript" -ForegroundColor Gray
+        } else {
+            Write-Host "  [ERROR] Database creation failed (exit code: $LASTEXITCODE)" -ForegroundColor Red
+            Write-Host "  [INFO] Error output:" -ForegroundColor Yellow
+            $sqlResult | ForEach-Object { Write-Host "    $_" -ForegroundColor Gray }
+            Write-Host "  [INFO] Backend will attempt to create the database on startup" -ForegroundColor Yellow
         }
-    } else {
-        Write-Host "  [WARN] Database init script not found at $initScript" -ForegroundColor Yellow
-        Write-Host "  [INFO] Database will be created by the application on first run" -ForegroundColor Gray
+    } catch {
+        Write-Host "  [WARN] sqlcmd not available - database will be created by the application on first run" -ForegroundColor Yellow
+        Write-Host "  [INFO] To manually create: sqlcmd -S $mssqlServer,$mssqlPort -U $mssqlUser -P <password> -i $initScript" -ForegroundColor Gray
     }
 } else {
     Write-Host "  [OK] Database '$mssqlDatabase' is ready" -ForegroundColor Green
+    Write-Host "  [INFO] Tables will be verified/created by the backend on startup" -ForegroundColor Gray
 }
 
 # Step 3: Clean up ports
