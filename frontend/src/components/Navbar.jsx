@@ -139,14 +139,6 @@ export default function Navbar() {
                               <FiFileText className="w-4 h-4" />
                               Bulk Resume Parser
                             </motion.button>
-                            <motion.button
-                              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
-                              className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
-                              onClick={() => { setHrMenuOpen(false); navigate('/admin/job-matches') }}
-                            >
-                              <FiBriefcase className="w-4 h-4" />
-                              Job Matches (ATS)
-                            </motion.button>
                             <div className="border-t border-white/10 my-1" />
                             <motion.button
                               whileHover={{ backgroundColor: 'rgba(239, 68, 68, 0.1)' }}

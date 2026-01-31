@@ -21,7 +21,6 @@ const ApplicantProfile = lazy(() => import('./pages/ApplicantProfile.jsx'))
 const ApplicationStatus = lazy(() => import('./pages/ApplicationStatus.jsx'))
 const AppliedCandidates = lazy(() => import('./pages/AppliedCandidates.jsx'))
 const BulkResumeParser = lazy(() => import('./pages/admin/BulkResumeParser.jsx'))
-const JobMatches = lazy(() => import('./pages/admin/JobMatches.jsx'))
 const FAQ = lazy(() => import('./pages/FAQ.jsx'))
 const ContactUs = lazy(() => import('./pages/ContactUs.jsx'))
 const NotFound = lazy(() => import('./pages/NotFound.jsx'))
@@ -96,14 +95,6 @@ export default function App() {
                     element={
                       <AdminGuard>
                         <BulkResumeParser />
-                      </AdminGuard>
-                    }
-                  />
-                  <Route
-                    path="/admin/job-matches"
-                    element={
-                      <AdminGuard>
-                        <JobMatches />
                       </AdminGuard>
                     }
                   />
