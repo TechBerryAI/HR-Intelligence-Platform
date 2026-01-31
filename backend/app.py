@@ -83,6 +83,7 @@ from routes.candidate_auth import candidate_auth_bp  # noqa: E402
 from routes.simple_candidate_auth import simple_candidate_auth_bp  # noqa: E402
 from parsing_routes import parsing_bp  # noqa: E402
 from support import support_bp  # noqa: E402
+from modules.admin.routes import admin_bp  # noqa: E402
 
 # Database initialization - DO IT AT STARTUP, NOT LAZY
 # Lazy loading was causing 10+ second delays on first API call
@@ -100,7 +101,7 @@ def root():
     return jsonify({
         "status": "ok",
         "message": "Job Portal API root. See /health for status.",
-        "endpoints": ["/health", "/api", "/api/jobs", "/api/candidate", "/api/applications", "/api/sessions"]
+        "endpoints": ["/health", "/api", "/api/jobs", "/api/candidate", "/api/applications", "/api/sessions", "/api/admin"]
     })
 
 @app.route('/health', methods=['GET'])
@@ -130,6 +131,8 @@ app.register_blueprint(applications_bp, url_prefix='/api/applications')
 app.register_blueprint(sessions_bp, url_prefix='/api/sessions')
 app.register_blueprint(parsing_bp, url_prefix='/api')
 app.register_blueprint(support_bp, url_prefix='/api/support')
+# Admin-only: bulk resume parsing (proxy to Bulk-Resume-Parser), job matches (ATS results)
+app.register_blueprint(admin_bp, url_prefix='/api/admin')
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '3000'))

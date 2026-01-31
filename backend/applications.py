@@ -4,6 +4,7 @@ import requests
 from flask import Blueprint, request, jsonify
 from db import db_get, db_run, db_all
 from utils import authenticate_token, require_candidate
+from services.ats_service import match_candidate_to_job
 
 applications_bp = Blueprint('applications', __name__)
 
@@ -168,21 +169,52 @@ def apply_job():
             (candidate_id, job_id, 'applied', 0, None, 0, None)  # Status set to 'applied', ATS fields null initially
         )
         
+        # Get the just-inserted application id (for ATS update and later n8n)
+        app_row = db_get(
+            'SELECT id FROM applications WHERE candidate_id = ? AND job_id = ? ORDER BY id DESC',
+            (candidate_id, job_id)
+        )
+        app_id = str(app_row['id']) if app_row else None
+        
         # ========================================================================
-        # TRIGGER N8N WORKFLOW
+        # ATS MATCHING - call HR-ATS-API internally (no duplicate logic)
         # ========================================================================
+        ats_success, ats_result = match_candidate_to_job(
+            candidate_id, job_id, parsed_resume, parsed_jd, apply_id=app_id
+        )
         
-        n8n_result = trigger_n8n(candidate_id, job_id, parsed_resume, parsed_jd)
-        
-        if not n8n_result.get('success') and not n8n_result.get('skipped'):
-            # Log error but don't fail the application
-            print(f"[APPLY] WARNING: n8n trigger failed but application was created: {n8n_result.get('error')}")
-        
-        return jsonify({
-            'message': 'Application submitted successfully',
-            'status': 'applied',
-            'n8n_triggered': n8n_result.get('success', False)
-        }), 201
+        if ats_success and ats_result:
+            json_out = ats_result.get('json_output') or {}
+            final_score = json_out.get('final_score')
+            decision = (json_out.get('decision') or '').lower()
+            rationale = json_out.get('rationale') or ats_result.get('toon_output', '')[:2000]
+            ats_analysis_json = json.dumps(ats_result) if isinstance(ats_result, dict) else None
+            shortlisted = 1 if decision == 'shortlist' else 0
+            status_after = 'shortlisted' if shortlisted else 'applied'
+            db_run(
+                """
+                UPDATE applications SET match_score = ?, shortlisted = ?, ats_reasoning = ?, ats_analysis = ?, status = ?
+                WHERE candidate_id = ? AND job_id = ?
+                """,
+                (final_score, shortlisted, rationale, ats_analysis_json, status_after, candidate_id, job_id)
+            )
+            # Shortlisted candidate data will later be sent to n8n (not implemented here)
+            return jsonify({
+                'message': 'Application submitted successfully',
+                'status': status_after,
+                'matchScore': final_score,
+                'shortlisted': bool(shortlisted),
+            }), 201
+        else:
+            # ATS failed or not configured - application still created; log and return success
+            err = ats_result.get('error', 'Unknown ATS error') if isinstance(ats_result, dict) else str(ats_result)
+            print(f"[APPLY] ATS not run or failed (non-blocking): {err}")
+            return jsonify({
+                'message': 'Application submitted successfully',
+                'status': 'applied',
+                'matchScore': None,
+                'shortlisted': False,
+            }), 201
         
     except Exception as e:
         print(f"[APPLY] ERROR in apply_job: {e}")

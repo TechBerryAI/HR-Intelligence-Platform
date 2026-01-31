@@ -20,9 +20,14 @@ const Dashboard = lazy(() => import('./pages/Dashboard.jsx'))
 const ApplicantProfile = lazy(() => import('./pages/ApplicantProfile.jsx'))
 const ApplicationStatus = lazy(() => import('./pages/ApplicationStatus.jsx'))
 const AppliedCandidates = lazy(() => import('./pages/AppliedCandidates.jsx'))
+const BulkResumeParser = lazy(() => import('./pages/admin/BulkResumeParser.jsx'))
+const JobMatches = lazy(() => import('./pages/admin/JobMatches.jsx'))
 const FAQ = lazy(() => import('./pages/FAQ.jsx'))
 const ContactUs = lazy(() => import('./pages/ContactUs.jsx'))
 const NotFound = lazy(() => import('./pages/NotFound.jsx'))
+
+import AdminGuard from './guards/AdminGuard.jsx'
+import CandidateGuard from './guards/CandidateGuard.jsx'
 
 function PrivateRoute({ children }) {
   const { auth } = useApp()
@@ -48,11 +53,25 @@ export default function App() {
                   <Route path="/login" element={<Login />} />
                   <Route path="/login/applicant" element={<LoginApplicant />} />
                   <Route path="/login/admin" element={<LoginAdmin />} />
-                  <Route path="/profile/applicant" element={<ApplicantProfile />} />
+                  <Route
+                    path="/profile/applicant"
+                    element={
+                      <CandidateGuard>
+                        <ApplicantProfile />
+                      </CandidateGuard>
+                    }
+                  />
                   <Route path="/forgot-password/:variant" element={<ForgotPasswordRequest />} />
                   <Route path="/forgot-password/:variant/verify" element={<ForgotPasswordVerify />} />
                   <Route path="/forgot-password/:variant/reset" element={<ForgotPasswordReset />} />
-                  <Route path="/applications" element={<ApplicationStatus />} />
+                  <Route
+                    path="/applications"
+                    element={
+                      <CandidateGuard>
+                        <ApplicationStatus />
+                      </CandidateGuard>
+                    }
+                  />
                   <Route path="/signup" element={<Navigate to="/signup/applicant" replace />} />
                   <Route path="/signup/applicant" element={<SignupApplicant />} />
                   <Route path="/signup/admin" element={<SignupAdmin />} />
@@ -70,6 +89,22 @@ export default function App() {
                       <PrivateRoute>
                         <AppliedCandidates />
                       </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/admin/bulk-resume-parser"
+                    element={
+                      <AdminGuard>
+                        <BulkResumeParser />
+                      </AdminGuard>
+                    }
+                  />
+                  <Route
+                    path="/admin/job-matches"
+                    element={
+                      <AdminGuard>
+                        <JobMatches />
+                      </AdminGuard>
                     }
                   />
                   <Route path="*" element={<NotFound />} />
