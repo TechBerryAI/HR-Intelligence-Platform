@@ -8,6 +8,17 @@ html, body, #root {
   scroll-behavior: smooth;
 }
 
+/* Navbar fix - prevent blank space during animations */
+header[class*="glass-card"] {
+  min-height: 64px;
+  position: relative;
+}
+
+/* Ensure navbar container always maintains space */
+.sticky.top-0 {
+  min-height: 64px;
+}
+
 body { 
   @apply font-sans text-gray-100 bg-zinc-950; 
   background: radial-gradient(ellipse at top, #1a1a2e 0%, #0a0a0f 50%, #000000 100%);

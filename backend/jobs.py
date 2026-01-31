@@ -185,7 +185,7 @@ def get_job_applications(job_id: str):
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
         
-        # Get applications with candidate details
+        # Get applications with candidate details (include ATS fields: match_score, shortlisted, ats_reasoning)
         applications = db_all(
             '''
             SELECT 
@@ -195,6 +195,9 @@ def get_job_applications(job_id: str):
                 a.status,
                 a.applied_at,
                 a.matching_percentage,
+                a.match_score,
+                a.shortlisted,
+                a.ats_reasoning,
                 cp.full_name,
                 cp.email,
                 cp.phone,
@@ -240,7 +243,13 @@ def get_job_applications(job_id: str):
                 (candidate_id,)
             )
             
-            # Ensure matching_percentage is a number
+            # Prefer ATS match_score when present; fallback to matching_percentage
+            match_score = app.get('match_score')
+            if match_score is not None:
+                try:
+                    match_score = float(match_score)
+                except (ValueError, TypeError):
+                    match_score = None
             matching_pct = app.get('matching_percentage')
             if matching_pct is None:
                 matching_pct = 0
@@ -253,6 +262,7 @@ def get_job_applications(job_id: str):
                         matching_pct = 100
                 except (ValueError, TypeError):
                     matching_pct = 0
+            score_display = match_score if match_score is not None else matching_pct
             
             formatted_apps.append({
                 'id': app['id'],
@@ -260,8 +270,10 @@ def get_job_applications(job_id: str):
                 'jobId': app['job_id'],
                 'status': app['status'],
                 'appliedAt': app['applied_at'],
-                'matchScore': matching_pct,
-                'score': matching_pct,
+                'matchScore': score_display,
+                'score': score_display,
+                'shortlisted': bool(app.get('shortlisted')),
+                'atsReasoning': app.get('ats_reasoning'),
                 'fullName': app.get('full_name') or app.get('candidate_name') or 'Unknown',
                 'name': app.get('full_name') or app.get('candidate_name') or 'Unknown',
                 'email': app.get('email'),

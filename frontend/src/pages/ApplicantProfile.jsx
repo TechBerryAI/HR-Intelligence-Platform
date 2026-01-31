@@ -173,6 +173,13 @@ export default function ApplicantProfile() {
 	const removeListItem = (listKey, idx) => setForm((f) => ({ ...f, [listKey]: f[listKey].filter((_, i) => i !== idx) }))
 
 	const handleResumeAutofill = (parsedData) => {
+		console.log('DEBUG: handleResumeAutofill called with:', {
+			linkedinUrl: parsedData.linkedinUrl,
+			portfolioUrl: parsedData.portfolioUrl,
+			hasLinkedin: !!parsedData.linkedinUrl,
+			hasPortfolio: !!parsedData.portfolioUrl
+		});
+		
 		// Track which fields were autofilled
 		const autofilled = {};
 		
@@ -180,22 +187,35 @@ export default function ApplicantProfile() {
 		if (parsedData.email) autofilled.email = true;
 		if (parsedData.phone) autofilled.phone = true;
 		if (parsedData.experienceLevel) autofilled.experienceLevel = true;
+		if (parsedData.linkedinUrl) autofilled.linkedinUrl = true;
+		if (parsedData.portfolioUrl) autofilled.portfolioUrl = true;
 		
 		setAutofilledFields(autofilled);
 		
 		// Merge parsed data with existing form
-		setForm((prevForm) => ({
-			...prevForm,
-			fullName: parsedData.fullName || prevForm.fullName,
-			email: parsedData.email || prevForm.email,
-			phone: parsedData.phone || prevForm.phone,
-			experienceLevel: parsedData.experienceLevel || prevForm.experienceLevel,
-			education: parsedData.education && parsedData.education.length > 0 ? parsedData.education : prevForm.education,
-			experiences: parsedData.experiences && parsedData.experiences.length > 0 ? parsedData.experiences : prevForm.experiences,
-			certifications: parsedData.certifications && parsedData.certifications.length > 0 ? parsedData.certifications : prevForm.certifications,
-			resumeFile: parsedData.resumeFile || prevForm.resumeFile,
-			resumeFileName: parsedData.resumeFileName || prevForm.resumeFileName,
-		}));
+		setForm((prevForm) => {
+			const updatedForm = {
+				...prevForm,
+				fullName: parsedData.fullName || prevForm.fullName,
+				email: parsedData.email || prevForm.email,
+				phone: parsedData.phone || prevForm.phone,
+				linkedinUrl: parsedData.linkedinUrl || prevForm.linkedinUrl,
+				portfolioUrl: parsedData.portfolioUrl || prevForm.portfolioUrl,
+				experienceLevel: parsedData.experienceLevel || prevForm.experienceLevel,
+				education: parsedData.education && parsedData.education.length > 0 ? parsedData.education : prevForm.education,
+				experiences: parsedData.experiences && parsedData.experiences.length > 0 ? parsedData.experiences : prevForm.experiences,
+				certifications: parsedData.certifications && parsedData.certifications.length > 0 ? parsedData.certifications : prevForm.certifications,
+				resumeFile: parsedData.resumeFile || prevForm.resumeFile,
+				resumeFileName: parsedData.resumeFileName || prevForm.resumeFileName,
+			};
+			
+			console.log('DEBUG: Updated form with URLs:', {
+				linkedinUrl: updatedForm.linkedinUrl,
+				portfolioUrl: updatedForm.portfolioUrl
+			});
+			
+			return updatedForm;
+		});
 		
 		setErrors({});
 		

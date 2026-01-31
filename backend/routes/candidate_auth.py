@@ -362,6 +362,15 @@ def verify_candidate_otp():
 
         print(f"Successfully created candidate with cid={cid}")
 
+        # Record the signup in login_history so subsequent logins from same IP/device are recognized
+        # This prevents sending unnecessary emails for logins from the same device used during signup
+        ip_address = request.remote_addr
+        user_agent = request.headers.get('User-Agent')
+        identifier = candidate_data.get('email') or candidate_data.get('phone', '')
+        if identifier:
+            from sessions_service import record_login_attempt
+            record_login_attempt(identifier, 'candidate', 'success', ip_address, user_agent)
+
         if candidate_data.get('email'):
             send_notification_email(
                 candidate_data['email'],
@@ -513,9 +522,19 @@ def candidate_login():
         'INSERT INTO candidate_login (cid, email, password) VALUES (?, ?, ?)',
         (cid, login_email, stored_hash),
     )
+    # Check if this is a new IP/device combination BEFORE recording the login
+    # This way we don't count the current login in our check
+    from sessions_service import has_previous_login_from_same_device
+    is_new_device = False
+    if candidate.email:
+        is_new_device = not has_previous_login_from_same_device(candidate.email, 'candidate', ip_address, user_agent)
+    
     record_login_attempt(identifier, 'candidate', 'success', ip_address, user_agent)
 
-    if candidate.email:
+    # Only send login notification email if this is a new IP/device combination
+    # Skip email if user has logged in from this IP/device before (including signup)
+    if candidate.email and is_new_device:
+        # This is a new device/IP - send notification
         send_notification_email(
             candidate.email,
             "New login to your Job Portal account",

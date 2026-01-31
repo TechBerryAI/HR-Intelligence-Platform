@@ -14,29 +14,30 @@ Full-stack HR Job Portal with candidate management, job posting, and AI-powered 
 
 ### First Time Setup
 
-```powershell
-# 1. Copy environment template
-copy backend\.env.example backend\.env
+```bash
+# 1. Copy environment template (or start.js will do it)
+cp backend/.env.example backend/.env
 
-# 2. Edit with YOUR SQL Server credentials
-notepad backend\.env
-# Change: MSSQL_USER and MSSQL_PASSWORD
+# 2. Edit backend/.env with YOUR SQL Server credentials
+# Set: MSSQL_USER and MSSQL_PASSWORD
 
-# 3. Run the application
-.\run.ps1
+# 3. Run the application (from repo root, in your IDE terminal)
+node start.js
 ```
 
-The database and tables are created automatically on first run.
+`start.js` installs backend (Python venv + pip) and frontend (npm) dependencies, starts backend and frontend, then opens the browser at http://localhost:5173. All output runs in the same terminal (no extra windows). Press **Ctrl+C** to stop.
+
+The database and tables are created automatically on first backend run.
 
 📖 **Having issues?** See [SETUP.md](SETUP.md) for detailed troubleshooting.
 
 ### Returning Users
 
-```powershell
-.\run.ps1
+```bash
+node start.js
 ```
 
-Opens automatically in your browser at http://localhost:5173
+Opens automatically in your browser at http://localhost:5173 when ready.
 
 ## Prerequisites
 
@@ -86,6 +87,21 @@ For AI matching features:
 ```env
 XAI_API_KEY=your-xai-api-key
 ```
+
+### Optional: ATS and Bulk Resume Parsing (external services)
+
+Resume/JD parsing and matching run inside the main backend. For ATS scoring on applications and admin bulk resume parsing, configure URLs to external services (deploy separately if needed):
+
+```env
+# ATS Matching (HR-ATS-API) - used when candidates apply
+ATS_API_URL=http://localhost:8000
+ATS_API_KEY=your-ats-api-key
+
+# Bulk Resume Parser - used on Admin > Bulk Resume Parser page
+BULK_PARSER_URL=http://localhost:8001
+```
+
+If not set, applications are still saved; ATS score/shortlist and bulk parsing will be unavailable until these services are running.
 
 ## Performance Features
 
@@ -214,19 +230,19 @@ For testing without email: `MAIL_SUPPRESS_SEND=true` in `backend/.env`
 
 ## Manual Setup
 
-If needed:
+If you prefer to run backend and frontend separately:
 
 **Backend:**
-```powershell
+```bash
 cd backend
 python -m venv venv
-.\venv\Scripts\Activate.ps1
+# Windows: .\venv\Scripts\Activate.ps1  |  macOS/Linux: source venv/bin/activate
 pip install -r requirements.txt
 python app.py
 ```
 
 **Frontend:**
-```powershell
+```bash
 cd frontend
 npm install
 npm run dev
@@ -234,11 +250,7 @@ npm run dev
 
 ## Stopping
 
-```powershell
-# Get process IDs from run.ps1 output, then:
-Stop-Job <backend-id>, <frontend-id>
-Remove-Job <backend-id>, <frontend-id>
-```
+When using `node start.js`, press **Ctrl+C** in the same terminal to stop both backend and frontend.
 
 ## License
 

@@ -116,10 +116,84 @@ export function mapResumeTOONToForm(toon) {
   const totalYears = toon.total_experience_years || 0;
   const experienceLevel = totalYears > 0 ? 'experienced' : 'fresher';
 
-  return {
+  // Extract URLs from person object
+  // Map LinkedIn URL - check multiple possible fields
+  let linkedinUrl = person.linkedin || '';
+  if (!linkedinUrl && person.otherUrls) {
+    const linkedinMatch = person.otherUrls.find(url => 
+      url && (url.toLowerCase().includes('linkedin') || url.toLowerCase().includes('linked.in'))
+    );
+    if (linkedinMatch) linkedinUrl = linkedinMatch;
+  }
+  
+  // Helper function to validate if a URL looks like a real portfolio/website
+  const isValidPortfolioUrl = (url) => {
+    if (!url) return false;
+    const urlLower = url.toLowerCase();
+    // Exclude invalid domains
+    const invalidDomains = ['loading', 'example', 'test', 'placeholder', 'data', 'localhost', 'gmail', 'yahoo', 'outlook', 'hotmail'];
+    // Check if URL contains invalid domain patterns
+    if (invalidDomains.some(domain => urlLower.includes(domain + '.'))) {
+      return false;
+    }
+    // Check if it's a proper domain (has TLD)
+    const domainMatch = url.match(/https?:\/\/(?:www\.)?([^\/]+)/);
+    if (domainMatch) {
+      const domain = domainMatch[1];
+      // Should have a valid TLD (at least 2 characters)
+      return domain.split('.').length >= 2 && domain.split('.').pop().length >= 2;
+    }
+    return true; // If we can't parse it, assume it's valid
+  };
+  
+  // Map portfolio URL - prioritize GitHub, then portfolio/website, then otherUrls
+  // Portfolio field can contain GitHub, portfolio, or personal website
+  let portfolioUrl = '';
+  
+  // First, check if GitHub URL exists and portfolio is invalid - use GitHub as portfolio
+  const githubUrl = person.github || '';
+  const portfolioCandidate = person.portfolio || person.website || '';
+  
+  if (githubUrl && (!portfolioCandidate || !isValidPortfolioUrl(portfolioCandidate))) {
+    // Use GitHub as portfolio if portfolio URL is invalid or missing
+    portfolioUrl = githubUrl;
+  } else if (portfolioCandidate && isValidPortfolioUrl(portfolioCandidate)) {
+    // Use portfolio/website if it's valid
+    portfolioUrl = portfolioCandidate;
+  } else if (person.otherUrls && person.otherUrls.length > 0) {
+    // Look for valid portfolio URLs in otherUrls (excluding social media)
+    const portfolioMatch = person.otherUrls.find(url => 
+      url && 
+      !url.toLowerCase().includes('linkedin') && 
+      !url.toLowerCase().includes('github') && 
+      !url.toLowerCase().includes('twitter') &&
+      isValidPortfolioUrl(url)
+    );
+    if (portfolioMatch) {
+      portfolioUrl = portfolioMatch;
+    } else if (githubUrl) {
+      // Fallback to GitHub if no valid portfolio found
+      portfolioUrl = githubUrl;
+    }
+  } else if (githubUrl) {
+    // Last resort: use GitHub if nothing else is available
+    portfolioUrl = githubUrl;
+  }
+  
+  // Ensure URLs have proper protocol
+  if (linkedinUrl && !linkedinUrl.startsWith('http')) {
+    linkedinUrl = linkedinUrl.startsWith('//') ? `https:${linkedinUrl}` : `https://${linkedinUrl}`;
+  }
+  if (portfolioUrl && !portfolioUrl.startsWith('http')) {
+    portfolioUrl = portfolioUrl.startsWith('//') ? `https:${portfolioUrl}` : `https://${portfolioUrl}`;
+  }
+
+  const mappedData = {
     fullName: person.name || '',
     email: person.email || '',
     phone: person.phone || '',
+    linkedinUrl: linkedinUrl || '',
+    portfolioUrl: portfolioUrl || '',
     experienceLevel,
     education: education.length > 0 ? education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }],
     experiences: experiences.length > 0 ? experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }],
@@ -128,6 +202,21 @@ export function mapResumeTOONToForm(toon) {
     _skills: toon.skills || [],
     _summary: toon.summary || '',
   };
+  
+  console.log('DEBUG: mapResumeTOONToForm returning:', {
+    linkedinUrl: mappedData.linkedinUrl,
+    portfolioUrl: mappedData.portfolioUrl,
+    linkedinUrlLength: mappedData.linkedinUrl?.length,
+    portfolioUrlLength: mappedData.portfolioUrl?.length,
+    personLinkedin: person.linkedin,
+    personGithub: person.github,
+    personPortfolio: person.portfolio,
+    personWebsite: person.website,
+    personOtherUrls: person.otherUrls,
+    fullPerson: person
+  });
+  
+  return mappedData;
 }
 
 /**
