@@ -10,6 +10,7 @@ from services.bulk_parsing_service import (
     upload_files as bulk_upload,
     get_progress as bulk_progress,
     stream_download as bulk_stream_download,
+    ERROR_CODE_UNREACHABLE,
 )
 
 admin_bp = Blueprint('admin', __name__)
@@ -48,6 +49,9 @@ def bulk_parse_upload():
         return jsonify({'error': 'No valid resume files (PDF/DOC/DOCX)'}), 400
     success, result = bulk_upload(files_list, append=request.form.get('append', 'false').lower() == 'true')
     if not success:
+        code = result.get('code')
+        if code == ERROR_CODE_UNREACHABLE or code == 'BULK_PARSER_NOT_CONFIGURED':
+            return jsonify(result), 503
         return jsonify(result), 502
     return jsonify(result), 200
 
@@ -59,6 +63,8 @@ def bulk_parse_progress(job_id):
     """Get bulk parsing job progress. Proxies to Bulk-Resume-Parser API."""
     success, result = bulk_progress(job_id)
     if not success:
+        if result.get('code') == ERROR_CODE_UNREACHABLE or result.get('code') == 'BULK_PARSER_NOT_CONFIGURED':
+            return jsonify(result), 503
         return jsonify(result), 404 if result.get('error') == 'Job not found' else 502
     return jsonify(result), 200
 
@@ -70,6 +76,8 @@ def bulk_parse_download(job_id):
     """Stream Excel download from Bulk-Resume-Parser. Proxies internally."""
     success, payload = bulk_stream_download(job_id)
     if not success:
+        if payload.get('code') == ERROR_CODE_UNREACHABLE or payload.get('code') == 'BULK_PARSER_NOT_CONFIGURED':
+            return jsonify(payload), 503
         return jsonify(payload), 404 if 'not found' in str(payload.get('error', '')).lower() else 502
     iterator, filename, content_type = payload
     return Response(

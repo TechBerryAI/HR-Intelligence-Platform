@@ -96,6 +96,17 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# Optional: warn if bulk parser URL is set but unreachable (bulk upload will fall back to local parsing)
+_bulk_url = (os.getenv('BULK_PARSER_URL') or 'http://localhost:8001').strip().rstrip('/') or None
+if _bulk_url:
+    try:
+        import requests
+        r = requests.get(f"{_bulk_url}/health", timeout=2)
+        if not r.ok:
+            print(f"[BULK PARSER] WARNING: {_bulk_url} returned status {r.status_code}; bulk upload will use local parsing.")
+    except Exception as ex:
+        print(f"[BULK PARSER] {_bulk_url} not reachable; bulk upload will use local parsing (in-process).")
+
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
@@ -106,9 +117,19 @@ def root():
 
 @app.route('/health', methods=['GET'])
 def health():
+    bulk_parser = "not_configured"
+    bulk_url = os.getenv('BULK_PARSER_URL', '').rstrip('/')
+    if bulk_url:
+        try:
+            import requests
+            r = requests.get(f"{bulk_url}/health", timeout=2)
+            bulk_parser = "ok" if r.ok else "unreachable"
+        except Exception:
+            bulk_parser = "unreachable"
     return jsonify({
-        "status": "ok", 
-        "message": "Job Portal API is running"
+        "status": "ok",
+        "message": "Job Portal API is running",
+        "bulk_parser": bulk_parser,
     })
 
 @app.route('/api/test-cors', methods=['GET', 'OPTIONS'])

@@ -10,6 +10,7 @@ requests==2.31.0
 PyPDF2==3.0.1
 python-docx==1.1.0
 python-dateutil==2.9.0.post0
+openpyxl==3.1.2
 
 # IMPORTANT: Do not remove any packages above
 # All are required for the application to work correctly

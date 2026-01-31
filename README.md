@@ -31,6 +31,22 @@ The database and tables are created automatically on first backend run.
 
 📖 **Having issues?** See [SETUP.md](SETUP.md) for detailed troubleshooting.
 
+### Bulk Resume Parser — full folder access (Electron)
+
+In the browser, folder pickers are restricted (e.g. "contains system files"). To **access any folder** for input/output, run the app as a desktop window:
+
+1. **Terminal 1** — start the frontend:
+   ```bash
+   cd frontend && npm run dev
+   ```
+2. **Terminal 2** — from repo root, install once then run Electron:
+   ```bash
+   npm install
+   npm run electron
+   ```
+
+Electron opens a window that loads the app and uses the OS folder/file dialogs, so you can select any directory or file without browser restrictions.
+
 ### Returning Users
 
 ```bash
