@@ -96,16 +96,16 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# Optional: warn if bulk parser URL is set but unreachable (bulk upload will fall back to local parsing)
-_bulk_url = (os.getenv('BULK_PARSER_URL') or 'http://localhost:8001').strip().rstrip('/') or None
+# Optional: log if bulk parser URL is set but unreachable (admin bulk upload will use in-process when available)
+_bulk_url = (os.getenv('BULK_PARSER_URL') or '').strip().rstrip('/') or None
 if _bulk_url:
     try:
         import requests
         r = requests.get(f"{_bulk_url}/health", timeout=2)
         if not r.ok:
-            print(f"[BULK PARSER] WARNING: {_bulk_url} returned status {r.status_code}; bulk upload will use local parsing.")
-    except Exception as ex:
-        print(f"[BULK PARSER] {_bulk_url} not reachable; bulk upload will use local parsing (in-process).")
+            print(f"[BULK PARSER] {_bulk_url} returned {r.status_code}; admin bulk upload may use in-process parsing.")
+    except Exception:
+        print(f"[BULK PARSER] {_bulk_url} not reachable; admin bulk upload will use in-process parsing when available.")
 
 @app.route('/', methods=['GET'])
 def root():
