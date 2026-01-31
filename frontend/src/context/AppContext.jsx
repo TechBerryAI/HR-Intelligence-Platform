@@ -757,7 +757,8 @@ export function AppProvider({ children }) {
     try {
       // If HR is logged in, fetch all jobs (including disabled)
       const endpoint = auth.isLoggedIn && auth.role === 'HR' ? '/api/jobs/all' : '/api/jobs'
-      const data = await apiRequest(endpoint, { method: 'GET', token: auth.isLoggedIn ? token : undefined })
+      const authToken = auth.isLoggedIn ? (token || tokenService.getToken()) : undefined
+      const data = await apiRequest(endpoint, { method: 'GET', token: authToken })
       if (Array.isArray(data)) setJobs(data)
       else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)
       else setJobs([])

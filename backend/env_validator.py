@@ -19,11 +19,12 @@ class EnvValidator:
         'MSSQL_PASSWORD': 'SQL Server password',
     }
     
-    # Optional but recommended variables
+    # Optional but recommended (at least one LLM key: HRMS_API_KEY_1..N or XAI_API_KEY)
     RECOMMENDED_VARS = {
         'MAIL_USERNAME': 'Gmail address for OTP sending',
         'MAIL_PASSWORD': 'Gmail App Password (not regular password)',
-        'XAI_API_KEY': 'X.AI API key for LLM features',
+        'HRMS_API_KEY_1': 'X.AI/Grok API key for LLM; multi-key rotation uses HRMS_API_KEY_1..N',
+        'XAI_API_KEY': 'X.AI API key (alternative/supplement to HRMS_API_KEY_1..N)',
     }
     
     # Variables with safe defaults (don't need to be set)

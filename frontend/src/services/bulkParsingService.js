@@ -13,6 +13,7 @@ export async function uploadBulkResumes(files, append = false) {
     method: 'POST',
     body: form,
     timeoutMs: 60000,
+    skipRetry: true, // Do not retry on 502/503 — parsing service down
   })
 }
 

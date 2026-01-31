@@ -1,57 +1,77 @@
 """
-Bulk Resume Parsing Service - calls Bulk-Resume-Parser API internally.
-Admin-only; no duplicate parsing logic.
+Bulk Resume Parsing Service - calls Bulk-Resume-Parser API when available.
+Falls back to local bulk parsing (text_extraction + LLM) when external service is unreachable.
 """
 import os
 import requests
 
-BULK_PARSER_URL = os.getenv('BULK_PARSER_URL', 'http://localhost:8001').rstrip('/')
+BULK_PARSER_URL = (os.getenv('BULK_PARSER_URL') or 'http://localhost:8001').rstrip('/') or None
+
+ERROR_CODE_UNREACHABLE = 'BULK_PARSER_UNREACHABLE'
+
+
+def _is_connection_error(e):
+    if isinstance(e, (requests.exceptions.ConnectionError, requests.exceptions.ConnectTimeout)):
+        return True
+    if getattr(e, 'cause', None) and getattr(e.cause, 'errno', None):
+        return True
+    err = str(e).lower()
+    return 'connection refused' in err or 'max retries exceeded' in err or 'connection error' in err
 
 
 def upload_files(files_list, output_filename=None, append=False):
     """
-    Forward file upload to Bulk-Resume-Parser POST /api/upload.
-    files_list: list of (filename, file_bytes) or requests-style file tuples.
-    Returns (success, {job_id, total_files, ...} or error dict).
+    Try external Bulk-Resume-Parser first; on connection failure use local bulk parsing.
+    files_list: list of (filename, file_bytes).
+    Returns (success, {job_id, total_files, status, ...} or error dict).
     """
-    if not BULK_PARSER_URL:
-        return False, {'error': 'BULK_PARSER_URL not configured'}
-
-    try:
-        files = [('files', (name, data)) for name, data in files_list]
-        data = {}
-        if output_filename:
-            data['output_path'] = output_filename
-        if append is not None:
-            data['append'] = 'true' if append else 'false'
-
-        resp = requests.post(
-            f'{BULK_PARSER_URL}/api/upload',
-            files=files,
-            data=data,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return True, resp.json()
-    except requests.exceptions.RequestException as e:
-        err = str(e)
-        if getattr(e, 'response', None) is not None:
-            try:
-                err = e.response.json().get('detail', err)
-            except Exception:
-                pass
-        return False, {'error': err}
+    if BULK_PARSER_URL:
+        try:
+            files = [('files', (name, data)) for name, data in files_list]
+            data = {}
+            if output_filename:
+                data['output_path'] = output_filename
+            if append is not None:
+                data['append'] = 'true' if append else 'false'
+            resp = requests.post(
+                f'{BULK_PARSER_URL}/api/upload',
+                files=files,
+                data=data,
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return True, resp.json()
+        except requests.exceptions.RequestException as e:
+            if not _is_connection_error(e):
+                err = str(e)
+                if getattr(e, 'response', None) is not None:
+                    try:
+                        err = e.response.json().get('detail', err)
+                    except Exception:
+                        pass
+                return False, {'error': err}
+            # Fall through to local fallback
+    # Local bulk parsing (external unreachable or BULK_PARSER_URL not set)
+    from services.local_bulk_parser import start_local_job
+    _, result = start_local_job(files_list)
+    return True, result
 
 
 def get_progress(job_id):
-    """Forward progress check to Bulk-Resume-Parser GET /api/progress/{job_id}."""
+    """Check local job first; else forward to Bulk-Resume-Parser GET /api/progress/{job_id}."""
+    from services.local_bulk_parser import get_local_progress
+    ok, result = get_local_progress(job_id)
+    if ok:
+        return True, result
     if not BULK_PARSER_URL:
-        return False, {'error': 'BULK_PARSER_URL not configured'}
+        return False, {'error': 'Job not found'}
     try:
         resp = requests.get(f'{BULK_PARSER_URL}/api/progress/{job_id}', timeout=10)
         resp.raise_for_status()
         return True, resp.json()
     except requests.exceptions.RequestException as e:
+        if _is_connection_error(e):
+            return False, {'error': 'Bulk parsing service unavailable.', 'code': ERROR_CODE_UNREACHABLE}
         err = str(e)
         if getattr(e, 'response', None) is not None and e.response.status_code == 404:
             return False, {'error': 'Job not found'}
@@ -67,11 +87,23 @@ def get_download_url(job_id):
 
 def stream_download(job_id):
     """
-    Stream Excel file from Bulk-Resume-Parser to caller.
+    Return Excel from local job if present; else stream from Bulk-Resume-Parser.
     Returns (success, (content_iterator, filename, content_type)) or (False, error_dict).
     """
+    from services.local_bulk_parser import get_local_download
+    ok, payload = get_local_download(job_id)
+    if ok:
+        bio, filename, content_type = payload
+        bio.seek(0)
+        def chunk_iter(b):
+            while True:
+                chunk = b.read(8192)
+                if not chunk:
+                    break
+                yield chunk
+        return True, (chunk_iter(bio), filename, content_type)
     if not BULK_PARSER_URL:
-        return False, {'error': 'BULK_PARSER_URL not configured'}
+        return False, payload
     try:
         resp = requests.get(
             f'{BULK_PARSER_URL}/api/download/{job_id}',
@@ -83,6 +115,8 @@ def stream_download(job_id):
         content_type = resp.headers.get('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         return True, (resp.iter_content(chunk_size=8192), filename, content_type)
     except requests.exceptions.RequestException as e:
+        if _is_connection_error(e):
+            return False, {'error': 'Bulk parsing service unavailable.', 'code': ERROR_CODE_UNREACHABLE}
         err = str(e)
         if getattr(e, 'response', None) is not None:
             if e.response.status_code == 404:
