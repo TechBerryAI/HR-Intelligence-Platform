@@ -755,9 +755,10 @@ export function AppProvider({ children }) {
     setJobsLoading(true)
     setJobsError('')
     try {
-      // If HR is logged in, fetch all jobs (including disabled)
-      const endpoint = auth.isLoggedIn && auth.role === 'HR' ? '/api/jobs/all' : '/api/jobs'
+      // Only call protected /api/jobs/all when we have a token; avoids 401 -> logout cascade
       const authToken = auth.isLoggedIn ? (token || tokenService.getToken()) : undefined
+      const useProtected = auth.isLoggedIn && auth.role === 'HR' && !!authToken
+      const endpoint = useProtected ? '/api/jobs/all' : '/api/jobs'
       const data = await apiRequest(endpoint, { method: 'GET', token: authToken })
       if (Array.isArray(data)) setJobs(data)
       else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)

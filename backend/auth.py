@@ -11,6 +11,7 @@ from helpers.otp_utils import generate_otp, is_valid_email, parse_otp_expiry, se
 from models import get_session
 from models.hr_auth import HRAuth
 from sessions_service import get_recent_failed_attempts, record_login_attempt
+from utils import build_jwt_payload
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -247,7 +248,7 @@ def verify_hr_otp():
             traceback.print_exc()
             return jsonify({"error": "Failed to create account. Please try again."}), 500
 
-        token = jwt.encode({"hrId": hrid, "email": hr_data['email'], "role": "HR"}, JWT_SECRET, algorithm='HS256')
+        token = jwt.encode(build_jwt_payload({"hrId": hrid, "email": hr_data['email'], "role": "HR"}), JWT_SECRET, algorithm='HS256')
 
         # Record the signup/login in login_history so subsequent logins from same IP/device are recognized
         # This prevents sending unnecessary emails for logins from the same device used during signup
@@ -506,7 +507,7 @@ def hr_login():
             return jsonify({"error": "Invalid email or password"}), 401
 
         user_id = signup_data['hrid']
-        token = jwt.encode({"hrId": user_id, "email": signup_data['email'], "role": "HR"}, JWT_SECRET, algorithm='HS256')
+        token = jwt.encode(build_jwt_payload({"hrId": user_id, "email": signup_data['email'], "role": "HR"}), JWT_SECRET, algorithm='HS256')
 
         # Check if this is a new IP/device combination BEFORE recording the login
         # This way we don't count the current login in our check

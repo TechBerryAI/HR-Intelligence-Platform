@@ -14,6 +14,7 @@ from helpers.otp_utils import (
     send_email_otp,
     parse_otp_expiry
 )
+from utils import build_jwt_payload
 
 simple_candidate_auth_bp = Blueprint('simple_candidate_auth', __name__)
 
@@ -285,11 +286,11 @@ def simple_candidate_login():
         
         # Generate JWT token
         token = jwt.encode(
-            {
+            build_jwt_payload({
                 'id': candidate['cid'],
                 'email': candidate['email'],
                 'role': 'candidate'
-            },
+            }),
             JWT_SECRET,
             algorithm='HS256'
         )

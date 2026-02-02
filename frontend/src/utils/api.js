@@ -145,6 +145,7 @@ async function performRequest(url, method, body, token, headers, timeoutMs) {
   }
 
   const bearer = token || tokenService.getToken();
+  const sentAuth = !!bearer;
   if (bearer) {
     finalHeaders.set('Authorization', `Bearer ${bearer}`);
   }
@@ -189,7 +190,10 @@ async function performRequest(url, method, body, token, headers, timeoutMs) {
   const data = isJson ? await res.json().catch(() => ({})) : await res.text();
 
   if (!res.ok) {
-    if (res.status === 401 && typeof onUnauthorized === 'function') {
+    // Only trigger global logout when we actually sent a token and got auth failure.
+    // Prevents cascade: one request without token (e.g. race after refresh) -> 401 -> logout -> more 401s.
+    const authFailure = (res.status === 401 || res.status === 403);
+    if (authFailure && sentAuth && typeof onUnauthorized === 'function') {
       try { onUnauthorized(); } catch {}
     }
     const message = (isJson && data && (data.error || data.message)) || res.statusText || 'Request failed';

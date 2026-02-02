@@ -1,9 +1,21 @@
 import os
+from datetime import datetime, timedelta
 from functools import wraps
 from flask import request, jsonify
 import jwt
 
 JWT_SECRET = os.getenv('JWT_SECRET', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE')
+# Access token lifetime; default 7 days. Set JWT_ACCESS_EXPIRY_SECONDS to override.
+JWT_ACCESS_EXPIRY_SECONDS = int(os.getenv('JWT_ACCESS_EXPIRY_SECONDS', 7 * 24 * 3600))
+
+
+def build_jwt_payload(identity_dict):
+    """Return a copy of identity_dict with exp (and iat) set for access token lifetime."""
+    payload = dict(identity_dict)
+    now = datetime.utcnow()
+    payload['iat'] = now
+    payload['exp'] = now + timedelta(seconds=JWT_ACCESS_EXPIRY_SECONDS)
+    return payload
 
 
 def authenticate_token(f):
