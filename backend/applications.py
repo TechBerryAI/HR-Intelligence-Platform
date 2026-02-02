@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import requests
 from flask import Blueprint, request, jsonify
 from db import db_get, db_run, db_all
@@ -7,6 +8,66 @@ from utils import authenticate_token, require_candidate
 from services.ats_service import match_candidate_to_job
 
 applications_bp = Blueprint('applications', __name__)
+
+
+def _jd_toon_from_job_row(job):
+    """
+    Build a minimal JD TOON from a job row when no parsed_jd exists.
+    Enables apply + integrated ATS to work for jobs created via the portal (no JD file upload).
+    """
+    desc = (job.get('description') or '').strip()
+    experience_str = (job.get('experience') or '').strip()
+    min_years, max_years = None, None
+    if experience_str:
+        nums = re.findall(r'(\d+(?:\.\d+)?)', experience_str)
+        if len(nums) >= 2:
+            min_years = float(nums[0])
+            max_years = float(nums[1])
+        elif len(nums) == 1:
+            min_years = float(nums[0])
+    skills = []
+    if '**Required Skills:**' in desc or '**Skills:**' in desc:
+        block = re.search(r'\*\*(?:Required )?Skills:\*\*\s*([^\n*]+)', desc, re.I)
+        if block:
+            skills = [s.strip() for s in re.split(r'[,•·]', block.group(1)) if s.strip()]
+    if not skills and desc:
+        for line in desc.split('\n')[:5]:
+            if 'skill' in line.lower() or 'experience' in line.lower():
+                parts = re.split(r'[,•·\-]', line)
+                skills.extend([p.strip().strip('*') for p in parts if len(p.strip()) > 2][:15])
+                break
+    responsibilities = []
+    if '**Responsibilities:**' in desc:
+        block = re.search(r'\*\*Responsibilities:\*\*\s*([\s\S]*?)(?=\n\*\*|\Z)', desc)
+        if block:
+            raw = block.group(1)
+            responsibilities = [s.strip().strip('•').strip() for s in re.split(r'\n', raw) if s.strip() and len(s.strip()) > 3]
+    if not responsibilities and desc:
+        for line in desc.split('\n'):
+            line = line.strip().strip('•').strip()
+            if len(line) > 10:
+                responsibilities.append(line[:500])
+                if len(responsibilities) >= 10:
+                    break
+    qualifications = []
+    if '**Qualifications:**' in desc or 'qualifications' in desc.lower():
+        block = re.search(r'\*\*Qualifications:\*\*\s*([\s\S]*?)(?=\n\*\*|\Z)', desc, re.I)
+        if block:
+            raw = block.group(1)
+            qualifications = [s.strip().strip('•').strip() for s in re.split(r'\n', raw) if s.strip()]
+    return {
+        'type': 'job_description',
+        'title': (job.get('title') or '').strip(),
+        'company': (job.get('company') or job.get('company_name') or '').strip(),
+        'location': (job.get('location') or '').strip(),
+        'salary_range': (job.get('salary') or '').strip(),
+        'min_experience_years': min_years,
+        'max_experience_years': max_years,
+        'skills': skills[:30],
+        'responsibilities': responsibilities[:20],
+        'qualifications': qualifications[:15],
+        'keywords': [],
+    }
 
 # ============================================================================
 # N8N ATS WORKFLOW INTEGRATION - START
@@ -114,23 +175,40 @@ def apply_job():
         # FETCH STORED PARSED DATA (NO RE-PARSING)
         # ========================================================================
         
-        # Fetch the most recent parsed resume for this candidate
+        # Fetch the most recent parsed resume for this candidate (by candidate_id or by uploader)
         parsed_resume_record = db_get(
             """
-            SELECT toon, confidence 
-            FROM parsed_resumes 
-            WHERE candidate_id = ? 
+            SELECT toon, confidence, id
+            FROM parsed_resumes
+            WHERE candidate_id = ?
             ORDER BY created_at DESC
             """,
             (candidate_id,)
         )
-        
+        # Fallback: resume may have been parsed before candidate_id was linked (e.g. from profile upload)
+        if not parsed_resume_record:
+            parsed_resume_record = db_get(
+                """
+                SELECT pr.toon, pr.confidence, pr.id
+                FROM parsed_resumes pr
+                INNER JOIN raw_files rf ON pr.raw_file_id = rf.id
+                WHERE rf.uploader_id = ?
+                ORDER BY pr.created_at DESC
+                """,
+                (candidate_id,)
+            )
+            if parsed_resume_record:
+                # Link this parse to candidate so future applies use direct query
+                db_run(
+                    'UPDATE parsed_resumes SET candidate_id = ? WHERE id = ?',
+                    (candidate_id, parsed_resume_record['id'])
+                )
         if not parsed_resume_record:
             return jsonify({
                 'error': 'No parsed resume found. Please upload and parse your resume first.'
             }), 400
         
-        # Fetch the most recent parsed JD for this job
+        # Fetch the most recent parsed JD for this job (if HR uploaded a JD file)
         parsed_jd_record = db_get(
             """
             SELECT toon, confidence 
@@ -141,17 +219,22 @@ def apply_job():
             (job_id,)
         )
         
-        if not parsed_jd_record:
-            return jsonify({
-                'error': 'No parsed job description found for this job. Please contact HR.'
-            }), 400
+        if parsed_jd_record:
+            try:
+                parsed_jd = json.loads(parsed_jd_record['toon'])
+            except json.JSONDecodeError as e:
+                print(f"[APPLY] ERROR: Failed to parse stored JD JSON: {e}")
+                return jsonify({'error': 'Invalid stored parsing data'}), 500
+        else:
+            # No parsed JD file for this job: build minimal TOON from job row so integrated ATS still runs
+            parsed_jd = _jd_toon_from_job_row(job)
+            print(f"[APPLY] No parsed_jd for job {job_id}; using minimal TOON from job row for ATS")
         
-        # Parse JSON strings to dictionaries
+        # Parse resume TOON
         try:
             parsed_resume = json.loads(parsed_resume_record['toon'])
-            parsed_jd = json.loads(parsed_jd_record['toon'])
         except json.JSONDecodeError as e:
-            print(f"[APPLY] ERROR: Failed to parse stored JSON: {e}")
+            print(f"[APPLY] ERROR: Failed to parse stored resume JSON: {e}")
             return jsonify({'error': 'Invalid stored parsing data'}), 500
         
         # ========================================================================
@@ -185,18 +268,18 @@ def apply_job():
         
         if ats_success and ats_result:
             json_out = ats_result.get('json_output') or {}
-            final_score = json_out.get('final_score')
+            final_score = json_out.get('overall_match_score') or json_out.get('final_score')
             decision = (json_out.get('decision') or '').lower()
-            rationale = json_out.get('rationale') or ats_result.get('toon_output', '')[:2000]
+            rationale = json_out.get('final_reasoning') or json_out.get('rationale') or ats_result.get('toon_output', '')[:2000]
             ats_analysis_json = json.dumps(ats_result) if isinstance(ats_result, dict) else None
-            shortlisted = 1 if decision == 'shortlist' else 0
+            shortlisted = 1 if decision in ('shortlist', 'strong_match', 'partial_match') else 0
             status_after = 'shortlisted' if shortlisted else 'applied'
             db_run(
                 """
-                UPDATE applications SET match_score = ?, shortlisted = ?, ats_reasoning = ?, ats_analysis = ?, status = ?
+                UPDATE applications SET match_score = ?, matching_percentage = ?, shortlisted = ?, ats_reasoning = ?, ats_analysis = ?, status = ?
                 WHERE candidate_id = ? AND job_id = ?
                 """,
-                (final_score, shortlisted, rationale, ats_analysis_json, status_after, candidate_id, job_id)
+                (final_score, final_score, shortlisted, rationale, ats_analysis_json, status_after, candidate_id, job_id)
             )
             # Shortlisted candidate data will later be sent to n8n (not implemented here)
             return jsonify({

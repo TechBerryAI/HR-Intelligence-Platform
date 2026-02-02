@@ -196,8 +196,10 @@ def parse_resume_upload():
                 'error': 'User ID not found in authentication token'
             }), 401
         
-        # Get optional candidate_id from form
+        # Get optional candidate_id from form; for candidates, default to authenticated user
         candidate_id = request.form.get('candidate_id')
+        if jwt_role == 'candidate' and not candidate_id:
+            candidate_id = uploader_id
         
         # Compute file hash for duplicate detection
         file_hash = compute_file_hash(file_data)
@@ -205,6 +207,13 @@ def parse_resume_upload():
         # Check if already parsed (cached result)
         cached = get_cached_parsing_result(file_hash, uploader_id, 'resume')
         if cached:
+            # Link cached parse to candidate so apply can find it
+            if jwt_role == 'candidate' and uploader_id:
+                from db import db_run
+                db_run(
+                    'UPDATE parsed_resumes SET candidate_id = ? WHERE id = ?',
+                    (uploader_id, cached['parsed_id'])
+                )
             return jsonify({
                 'status': 'ok',
                 'raw_file_id': cached['raw_file_id'],
