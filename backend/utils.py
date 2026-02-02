@@ -5,16 +5,21 @@ from flask import request, jsonify
 import jwt
 
 JWT_SECRET = os.getenv('JWT_SECRET', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE')
-# Access token lifetime; default 7 days. Set JWT_ACCESS_EXPIRY_SECONDS to override.
-JWT_ACCESS_EXPIRY_SECONDS = int(os.getenv('JWT_ACCESS_EXPIRY_SECONDS', 7 * 24 * 3600))
+# Access token lifetime; default 1 hour. Refresh replaces it automatically so user stays logged in.
+JWT_ACCESS_EXPIRY_SECONDS = int(os.getenv('JWT_ACCESS_EXPIRY_SECONDS', 3600))
+# Refresh token lifetime; default 30 days. Used to get new access token without re-login.
+JWT_REFRESH_EXPIRY_SECONDS = int(os.getenv('JWT_REFRESH_EXPIRY_SECONDS', 30 * 24 * 3600))
 
 
-def build_jwt_payload(identity_dict):
-    """Return a copy of identity_dict with exp (and iat) set for access token lifetime."""
+def build_jwt_payload(identity_dict, refresh=False):
+    """Return a copy of identity_dict with type, iat, exp. refresh=False -> access token, refresh=True -> refresh token."""
     payload = dict(identity_dict)
     now = datetime.utcnow()
     payload['iat'] = now
-    payload['exp'] = now + timedelta(seconds=JWT_ACCESS_EXPIRY_SECONDS)
+    payload['type'] = 'refresh' if refresh else 'access'
+    payload['exp'] = now + timedelta(
+        seconds=JWT_REFRESH_EXPIRY_SECONDS if refresh else JWT_ACCESS_EXPIRY_SECONDS
+    )
     return payload
 
 
@@ -30,6 +35,9 @@ def authenticate_token(f):
             return jsonify({"error": "Access token required"}), 401
         try:
             user = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+            if user.get('type') == 'refresh':
+                print("[AUTH] Refresh token used as access token - returning 403")
+                return jsonify({"error": "Invalid or expired token"}), 403
             print(f"[AUTH] Token decoded successfully. User: {user}")
             request.user = user
         except jwt.ExpiredSignatureError:

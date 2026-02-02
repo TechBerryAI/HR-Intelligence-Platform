@@ -284,13 +284,15 @@ def simple_candidate_login():
             print(f"[LOGIN] Password check error: {e}")
             return jsonify({'error': 'Invalid credentials'}), 401
         
-        # Generate JWT token
-        token = jwt.encode(
-            build_jwt_payload({
-                'id': candidate['cid'],
-                'email': candidate['email'],
-                'role': 'candidate'
-            }),
+        # Generate JWT access + refresh tokens
+        identity = {'id': candidate['cid'], 'email': candidate['email'], 'role': 'candidate'}
+        access_token = jwt.encode(
+            build_jwt_payload(identity, refresh=False),
+            JWT_SECRET,
+            algorithm='HS256'
+        )
+        refresh_token = jwt.encode(
+            build_jwt_payload(identity, refresh=True),
             JWT_SECRET,
             algorithm='HS256'
         )
@@ -317,7 +319,8 @@ def simple_candidate_login():
         
         print(f"[LOGIN] Success for: {email}")
         return jsonify({
-            'token': token,
+            'token': access_token,
+            'refresh_token': refresh_token,
             'user': user_data
         }), 200
         

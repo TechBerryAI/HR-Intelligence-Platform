@@ -43,8 +43,14 @@ function isRetryableError(error) {
 }
 
 let onUnauthorized = null;
+let onTokensRefreshed = null;
+
 export function setUnauthorizedHandler(fn) {
   onUnauthorized = typeof fn === 'function' ? fn : null;
+}
+
+export function setOnTokensRefreshed(fn) {
+  onTokensRefreshed = typeof fn === 'function' ? fn : null;
 }
 
 function joinUrl(base, path) {
@@ -133,7 +139,32 @@ export async function apiRequest(
   throw lastError;
 }
 
-async function performRequest(url, method, body, token, headers, timeoutMs) {
+async function tryRefresh() {
+  const refreshToken = tokenService.getRefreshToken();
+  if (!refreshToken) return false;
+  const refreshUrl = joinUrl(BASE_URL, '/api/refresh');
+  try {
+    const res = await fetch(refreshUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return false;
+    const json = await res.json().catch(() => ({}));
+    if (!json.token || !json.refresh_token) return false;
+    tokenService.setToken(json.token);
+    tokenService.setRefreshToken(json.refresh_token);
+    if (typeof onTokensRefreshed === 'function') {
+      try { onTokensRefreshed(json.token, json.refresh_token); } catch {}
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function performRequest(url, method, body, token, headers, timeoutMs, alreadyTriedRefresh = false) {
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
 
   const finalHeaders = new Headers(headers);
@@ -190,9 +221,15 @@ async function performRequest(url, method, body, token, headers, timeoutMs) {
   const data = isJson ? await res.json().catch(() => ({})) : await res.text();
 
   if (!res.ok) {
-    // Only trigger global logout when we actually sent a token and got auth failure.
-    // Prevents cascade: one request without token (e.g. race after refresh) -> 401 -> logout -> more 401s.
     const authFailure = (res.status === 401 || res.status === 403);
+    // On 403 with token: try refresh once, then retry this request with new access token.
+    if (res.status === 403 && sentAuth && !alreadyTriedRefresh) {
+      const refreshed = await tryRefresh();
+      if (refreshed) {
+        return performRequest(url, method, body, tokenService.getToken(), headers, timeoutMs, true);
+      }
+    }
+    // Only trigger global logout when we actually sent a token and got auth failure (or refresh failed).
     if (authFailure && sentAuth && typeof onUnauthorized === 'function') {
       try { onUnauthorized(); } catch {}
     }

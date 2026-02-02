@@ -248,7 +248,9 @@ def verify_hr_otp():
             traceback.print_exc()
             return jsonify({"error": "Failed to create account. Please try again."}), 500
 
-        token = jwt.encode(build_jwt_payload({"hrId": hrid, "email": hr_data['email'], "role": "HR"}), JWT_SECRET, algorithm='HS256')
+        identity = {"hrId": hrid, "email": hr_data['email'], "role": "HR"}
+        access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
+        refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
 
         # Record the signup/login in login_history so subsequent logins from same IP/device are recognized
         # This prevents sending unnecessary emails for logins from the same device used during signup
@@ -268,7 +270,8 @@ def verify_hr_otp():
 
         return jsonify({
             "message": "Account verified and created successfully",
-            "token": token,
+            "token": access_token,
+            "refresh_token": refresh_token,
             "user": {
                 "hrId": hrid,
                 "email": hr_data['email'],
@@ -507,7 +510,9 @@ def hr_login():
             return jsonify({"error": "Invalid email or password"}), 401
 
         user_id = signup_data['hrid']
-        token = jwt.encode(build_jwt_payload({"hrId": user_id, "email": signup_data['email'], "role": "HR"}), JWT_SECRET, algorithm='HS256')
+        identity = {"hrId": user_id, "email": signup_data['email'], "role": "HR"}
+        access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
+        refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
 
         # Check if this is a new IP/device combination BEFORE recording the login
         # This way we don't count the current login in our check
@@ -534,7 +539,8 @@ def hr_login():
             )
 
         return jsonify({
-            "token": token,
+            "token": access_token,
+            "refresh_token": refresh_token,
             "user": {
                 "hrId": user_id,
                 "email": signup_data['email'],
@@ -545,6 +551,32 @@ def hr_login():
         })
     except Exception:
         return jsonify({"error": "Internal server error"}), 500
+
+
+@auth_bp.post('/refresh')
+def refresh_tokens():
+    """Exchange a valid refresh token for new access and refresh tokens. No auth header required."""
+    try:
+        data = request.get_json(silent=True) or {}
+        refresh_token = (data.get('refresh_token') or '').strip()
+        if not refresh_token:
+            return jsonify({"error": "refresh_token required"}), 400
+        payload = jwt.decode(refresh_token, JWT_SECRET, algorithms=["HS256"])
+        if payload.get('type') != 'refresh':
+            return jsonify({"error": "Invalid refresh token"}), 403
+        identity = {k: payload[k] for k in ('hrId', 'id', 'email', 'role') if k in payload}
+        if not identity:
+            return jsonify({"error": "Invalid refresh token"}), 403
+        new_access = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
+        new_refresh = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
+        return jsonify({"token": new_access, "refresh_token": new_refresh})
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Refresh token expired"}), 403
+    except jwt.InvalidTokenError:
+        return jsonify({"error": "Invalid refresh token"}), 403
+    except Exception as e:
+        print(f"[REFRESH] Error: {e}")
+        return jsonify({"error": "Invalid refresh token"}), 403
 
 
 @auth_bp.post('/logout')
