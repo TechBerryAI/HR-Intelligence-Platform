@@ -1,17 +1,23 @@
 """
 Local bulk resume parsing when external Bulk-Resume-Parser (port 8001) is unavailable.
 Uses existing text_extraction + llm_service; stores results in memory and exports Excel.
+Processes files in parallel (configurable workers) for faster throughput.
 """
 import io
+import os
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-# In-memory job store: job_id -> { status, total_files, processed_files, failed_files, results, message }
+# In-memory job store: job_id -> { status, total_files, processed_files, failed_files, results, message, failed_filenames, success_filenames }
 _local_jobs: dict[str, dict[str, Any]] = {}
 _local_jobs_lock = threading.Lock()
 
 ALLOWED_EXT = {'pdf', 'doc', 'docx'}
+
+# Parallel workers for bulk parse (default 12 for speed; set BULK_PARSE_MAX_WORKERS lower if hitting API rate limits)
+BULK_PARSE_MAX_WORKERS = max(1, min(24, int(os.getenv('BULK_PARSE_MAX_WORKERS', '12'))))
 
 
 def _flatten_toon(toon: dict, filename: str) -> dict:
@@ -65,51 +71,71 @@ def _build_excel_bytes(rows: list[dict]) -> bytes:
     return buf.getvalue()
 
 
-def _worker(job_id: str, files_list: list[tuple[str, bytes]]) -> None:
-    """Background: extract text + LLM per file, append to job results."""
+def _process_one_file(args: tuple[str, bytes]) -> tuple[str, dict | None, bool, str]:
+    """
+    Process a single file: extract text + LLM. Thread-safe; no shared state.
+    Returns (filename, row or None, failed: bool, message).
+    """
     from text_extraction import extract_text
     from llm_service import call_llm
 
+    filename, data = args
+    try:
+        raw_text = extract_text(data, filename)
+        if not raw_text or len(raw_text.strip()) < 30:
+            return (filename, None, True, f'Skipped (insufficient text): {filename}')
+        toon = call_llm(raw_text, 'resume')
+        row = _flatten_toon(toon, filename)
+        return (filename, row, False, f'Processing: {filename}')
+    except Exception as e:
+        return (filename, None, True, f'Failed: {filename} - {str(e)[:100]}')
+
+
+def _worker(job_id: str, files_list: list[tuple[str, bytes]]) -> None:
+    """Background: process files in parallel (ThreadPoolExecutor), update job progress as each completes."""
     with _local_jobs_lock:
         job = _local_jobs.get(job_id)
     if not job or job.get('status') == 'cancelled':
         return
     total = len(files_list)
-    results = []
-    processed = 0
-    failed = 0
-    for filename, data in files_list:
-        with _local_jobs_lock:
-            j = _local_jobs.get(job_id)
-        if not j or j.get('status') == 'cancelled':
-            break
-        try:
-            raw_text = extract_text(data, filename)
-            if not raw_text or len(raw_text.strip()) < 30:
-                failed += 1
-                with _local_jobs_lock:
-                    _local_jobs[job_id]['processed_files'] = processed + failed
-                    _local_jobs[job_id]['failed_files'] = failed
-                    _local_jobs[job_id]['message'] = f'Skipped (insufficient text): {filename}'
-                continue
-            toon = call_llm(raw_text, 'resume')
-            row = _flatten_toon(toon, filename)
-            results.append(row)
-            processed += 1
-        except Exception as e:
-            failed += 1
+    results: list[dict] = []
+    success_count = 0
+    failed_count = 0
+    max_workers = min(BULK_PARSE_MAX_WORKERS, total)
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_file = {executor.submit(_process_one_file, (fname, fdata)): fname for fname, fdata in files_list}
+        for future in as_completed(future_to_file):
             with _local_jobs_lock:
-                _local_jobs[job_id]['message'] = f'Failed: {filename} - {str(e)[:100]}'
-        with _local_jobs_lock:
-            _local_jobs[job_id]['processed_files'] = processed + failed
-            _local_jobs[job_id]['failed_files'] = failed
+                j = _local_jobs.get(job_id)
+            if not j or j.get('status') == 'cancelled':
+                break
+            filename, row, is_failed, message = future.result()
+            if is_failed:
+                failed_count += 1
+                with _local_jobs_lock:
+                    if job_id in _local_jobs:
+                        _local_jobs[job_id].setdefault('failed_filenames', []).append(filename)
+            else:
+                if row:
+                    results.append(row)
+                success_count += 1
+                with _local_jobs_lock:
+                    if job_id in _local_jobs:
+                        _local_jobs[job_id].setdefault('success_filenames', []).append(filename)
+            with _local_jobs_lock:
+                if job_id in _local_jobs:
+                    _local_jobs[job_id]['processed_files'] = success_count + failed_count
+                    _local_jobs[job_id]['failed_files'] = failed_count
+                    _local_jobs[job_id]['message'] = message
+
     with _local_jobs_lock:
         if job_id in _local_jobs:
             _local_jobs[job_id]['status'] = 'completed'
-            _local_jobs[job_id]['processed_files'] = processed + failed
-            _local_jobs[job_id]['failed_files'] = failed
+            _local_jobs[job_id]['processed_files'] = success_count + failed_count
+            _local_jobs[job_id]['failed_files'] = failed_count
             _local_jobs[job_id]['results'] = results
-            _local_jobs[job_id]['message'] = f'Completed: {processed} successful, {failed} failed'
+            _local_jobs[job_id]['message'] = f'Completed: {success_count} successful, {failed_count} failed'
 
 
 def start_local_job(files_list: list[tuple[str, bytes]]) -> tuple[str, dict]:
@@ -125,6 +151,8 @@ def start_local_job(files_list: list[tuple[str, bytes]]) -> tuple[str, dict]:
             'failed_files': 0,
             'results': [],
             'message': 'Processing...',
+            'failed_filenames': [],
+            'success_filenames': [],
         }
     t = threading.Thread(target=_worker, args=(job_id, files_list), daemon=True)
     t.start()
@@ -148,6 +176,8 @@ def get_local_progress(job_id: str) -> tuple[bool, dict]:
         'processed_files': job.get('processed_files', 0),
         'failed_files': job.get('failed_files', 0),
         'message': job.get('message', ''),
+        'failed_filenames': job.get('failed_filenames', []),
+        'success_filenames': job.get('success_filenames', []),
     }
 
 

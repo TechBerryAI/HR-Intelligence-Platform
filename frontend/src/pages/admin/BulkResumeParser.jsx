@@ -1,13 +1,13 @@
 /**
  * Admin-only: Bulk Resume Parsing. Layout matches design: Configuration (left),
- * Select Folders + File Processing Status (right). Light theme for this page.
+ * Select Folders + File Processing Status (right). Styled to match portal theme (dark, purple/blue accent).
  */
 import React, { useState, useRef, useEffect } from 'react'
 import { uploadBulkResumes, getBulkProgress, downloadBulkResult } from '../../services/bulkParsingService.js'
 import { BASE_URL } from '../../utils/api.js'
 import { checkBackendHealth } from '../../utils/healthCheck.js'
 
-const POLL_INTERVAL_MS = 2000
+const POLL_INTERVAL_MS = 500
 const ALLOWED_EXT = ['pdf', 'doc', 'docx']
 
 export default function BulkResumeParser() {
@@ -228,53 +228,61 @@ export default function BulkResumeParser() {
   const total = progress?.total_files ?? files.length
   const processed = progress?.processed_files ?? 0
   const failed = progress?.failed_files ?? 0
-  const processingCount = Math.max(0, total - processed - failed)
+  const failedFilenames = progress?.failed_filenames ?? progress?.failedFilenames ?? []
+  const successFilenames = progress?.success_filenames ?? progress?.successFilenames ?? []
+  const hasDetailedLists = successFilenames.length > 0 || failedFilenames.length > 0
+  const failedCount = failedFilenames.length || failed
+  const processingCount = Math.max(0, total - processed)
   const progressPct = total ? Math.round((processed / total) * 100) : 0
   const currentFile =
     progress?.message?.replace(/^Processing:\s*/i, '').trim() ||
     (files[processed]?.name ?? (files.length ? files[0]?.name : ''))
+  const inProgressFilenames = hasDetailedLists
+    ? files.map((f) => f.name).filter((name) => !successFilenames.includes(name) && !failedFilenames.includes(name))
+    : files.slice(processed).map((f) => f.name)
+  const processedDisplayNames = hasDetailedLists ? successFilenames : files.slice(0, processed).map((f) => f.name)
 
   return (
-    <div className="min-h-screen bg-[#f8f8f8] text-gray-800">
+    <div className="min-h-screen text-gray-100" style={{ background: 'radial-gradient(ellipse at top, #1a1a2e 0%, #0a0a0f 50%, #000000 100%)' }}>
       <div className="max-w-6xl mx-auto p-6">
         <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
           {/* Left: Configuration */}
-          <section className="bg-white rounded-lg border border-gray-200 shadow-sm p-5 h-fit">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Configuration</h2>
+          <section className="glass-card rounded-xl p-5 h-fit">
+            <h2 className="text-lg font-bold text-white mb-4">Configuration</h2>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Backend URL</label>
+              <label className="block text-sm font-medium text-zinc-300 mb-1">Backend URL</label>
               <input
                 type="text"
                 readOnly
                 value={BASE_URL || 'http://localhost:8000'}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700 text-sm"
+                className="w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-gray-200 text-sm focus:outline-none focus:border-purple-500/50"
               />
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Timeout Settings</label>
-              <label className="block text-xs text-gray-500 mb-1">Request Timeout (minutes)</label>
+              <label className="block text-sm font-medium text-zinc-300 mb-1">Timeout Settings</label>
+              <label className="block text-xs text-zinc-500 mb-1">Request Timeout (minutes)</label>
               <input
                 type="number"
                 min={1}
                 value={timeoutMinutes}
                 onChange={(e) => setTimeoutMinutes(Number(e.target.value) || 60)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md text-gray-800 text-sm"
+                className="w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-gray-200 text-sm focus:outline-none focus:border-purple-500/50"
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-zinc-500 mt-1">
                 Timeout {timeoutMinutes} minutes ({timeoutMinutes * 60} seconds)
               </p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-zinc-500">
                 Maximum time to wait for processing to complete. Increase for large batches.
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Backend Status</label>
+              <label className="block text-sm font-medium text-zinc-300 mb-1">Backend Status</label>
               <div
-                className={`flex items-center gap-2 px-3 py-2 rounded-md border ${
-                  backendOk ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
+                  backendOk ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'
                 }`}
               >
                 {backendOk ? (
@@ -306,12 +314,12 @@ export default function BulkResumeParser() {
 
           {/* Right: Select Folders + Status */}
           <div className="space-y-5">
-            <section className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Select Folders</h2>
+            <section className="glass-card rounded-xl p-5">
+              <h2 className="text-lg font-bold text-white mb-4">Select Folders</h2>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Input Folder</label>
-                <p className="text-xs text-gray-500 mb-1">Enter path to folder containing resumes</p>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">Input Folder</label>
+                <p className="text-xs text-zinc-500 mb-1">Enter path to folder containing resumes</p>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -321,7 +329,7 @@ export default function BulkResumeParser() {
                       setInputFolderFound(!!e.target.value.trim())
                     }}
                     placeholder="C:/Users/.../HR Data"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-gray-800 text-sm"
+                    className="flex-1 px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-gray-200 text-sm focus:outline-none focus:border-purple-500/50 placeholder:text-zinc-500"
                   />
                   <input
                     ref={folderInputRef}
@@ -338,13 +346,13 @@ export default function BulkResumeParser() {
                   <button
                     type="button"
                     onClick={handleInputFolderBrowse}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium text-gray-800"
+                    className="px-4 py-2 bg-white/10 hover:bg-white/15 border border-white/10 rounded-lg text-sm font-medium text-gray-200 transition-colors"
                   >
                     Browse
                   </button>
                 </div>
                 {inputFolderFound && (
-                  <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
+                  <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm">
                     <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path
                         fillRule="evenodd"
@@ -358,7 +366,7 @@ export default function BulkResumeParser() {
               </div>
 
               <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Output Location</label>
+                <label className="block text-sm font-medium text-zinc-300 mb-1">Output Location</label>
                 <div className="flex gap-4 mb-2">
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -366,9 +374,9 @@ export default function BulkResumeParser() {
                       name="outputType"
                       checked={outputType === 'file'}
                       onChange={() => setOutputType('file')}
-                      className="text-blue-600"
+                      className="text-purple-500 accent-purple-500"
                     />
-                    <span className="text-sm">File Path</span>
+                    <span className="text-sm text-gray-200">File Path</span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -376,15 +384,15 @@ export default function BulkResumeParser() {
                       name="outputType"
                       checked={outputType === 'folder'}
                       onChange={() => setOutputType('folder')}
-                      className="text-blue-600"
+                      className="text-purple-500 accent-purple-500"
                     />
-                    <span className="text-sm">Folder Path</span>
+                    <span className="text-sm text-gray-200">Folder Path</span>
                   </label>
                 </div>
-                <label className="block text-xs text-gray-500 mb-1">
+                <label className="block text-xs text-zinc-500 mb-1">
                   {outputType === 'file' ? 'Output File Path' : 'Output Folder Path'}
                 </label>
-                <p className="text-xs text-gray-500 mb-1">
+                <p className="text-xs text-zinc-500 mb-1">
                   {outputType === 'file'
                     ? 'Enter output Excel file path. If file exists, data will be appended.'
                     : 'Enter folder path for output file(s).'}
@@ -398,18 +406,18 @@ export default function BulkResumeParser() {
                       setOutputFolderFound(!!e.target.value.trim())
                     }}
                     placeholder="C:/Users/.../Desktop"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-gray-800 text-sm"
+                    className="flex-1 px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-gray-200 text-sm focus:outline-none focus:border-purple-500/50 placeholder:text-zinc-500"
                   />
                   <button
                     type="button"
                     onClick={handleOutputBrowse}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium text-gray-800"
+                    className="px-4 py-2 bg-white/10 hover:bg-white/15 border border-white/10 rounded-lg text-sm font-medium text-gray-200 transition-colors"
                   >
                     Browse
                   </button>
                 </div>
                 {outputFolderFound && outputPath && (
-                  <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
+                  <div className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm">
                     <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                       <path
                         fillRule="evenodd"
@@ -424,12 +432,12 @@ export default function BulkResumeParser() {
 
               {!jobId && (
                 <div className="flex items-center gap-3 flex-wrap">
-                  <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <label className="flex items-center gap-2 text-sm text-zinc-300">
                     <input
                       type="checkbox"
                       checked={append}
                       onChange={(e) => setAppend(e.target.checked)}
-                      className="rounded border-gray-300 text-blue-600"
+                      className="rounded border-white/20 text-purple-500 accent-purple-500 bg-white/5"
                     />
                     Append to existing output
                   </label>
@@ -437,7 +445,7 @@ export default function BulkResumeParser() {
                     type="button"
                     onClick={startUpload}
                     disabled={uploading || !files.length}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md text-sm font-medium text-white"
+                    className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-sm font-medium text-white shadow-glow transition-all"
                   >
                     {uploading ? 'Uploading…' : 'Upload and parse'}
                   </button>
@@ -447,23 +455,23 @@ export default function BulkResumeParser() {
 
             {/* Progress */}
             {jobId && (
-              <section className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
-                <p className="text-sm text-gray-700 mb-2">
+              <section className="glass-card rounded-xl p-5">
+                <p className="text-sm text-zinc-300 mb-2">
                   Progress: {processed} / {total} files completed ({processed - failed} successful, {failed} failed)
                   {processingCount > 0 && ` • ${processingCount} currently processing`}
                 </p>
-                <div className="h-2 bg-gray-200 rounded-full overflow-hidden mb-3">
+                <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-3">
                   <div
-                    className="h-full bg-blue-600 rounded-full transition-all duration-300"
+                    className="h-full bg-gradient-to-r from-purple-600 to-blue-600 rounded-full transition-all duration-300"
                     style={{ width: `${progressPct}%` }}
                   />
                 </div>
                 {processingCount > 0 && currentFile && (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-sm mb-2">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-300 text-sm mb-2">
                     <span className="font-medium">Currently processing:</span> {currentFile}
                   </div>
                 )}
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-zinc-500">
                   Status: {progress?.status === 'completed' ? 'Completed' : progress?.status === 'failed' ? 'Failed' : `Processing${currentFile ? `: ${currentFile}` : ''}`}
                 </p>
                 {progress?.status === 'completed' && (
@@ -472,14 +480,14 @@ export default function BulkResumeParser() {
                       type="button"
                       onClick={handleDownload}
                       disabled={downloading}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-md text-sm font-medium text-white"
+                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg text-sm font-medium text-white transition-colors"
                     >
                       {downloading ? 'Downloading…' : 'Download Excel'}
                     </button>
                     <button
                       type="button"
                       onClick={reset}
-                      className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium text-gray-800"
+                      className="px-4 py-2 bg-white/10 hover:bg-white/15 border border-white/10 rounded-lg text-sm font-medium text-gray-200 transition-colors"
                     >
                       New job
                     </button>
@@ -489,7 +497,7 @@ export default function BulkResumeParser() {
                   <button
                     type="button"
                     onClick={reset}
-                    className="mt-3 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium text-gray-800"
+                    className="mt-3 px-4 py-2 bg-white/10 hover:bg-white/15 border border-white/10 rounded-lg text-sm font-medium text-gray-200 transition-colors"
                   >
                     Start over
                   </button>
@@ -498,43 +506,61 @@ export default function BulkResumeParser() {
             )}
 
             {/* File Processing Status */}
-            <section className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">File Processing Status</h2>
+            <section className="glass-card rounded-xl p-5">
+              <h2 className="text-lg font-bold text-white mb-4">File Processing Status</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 font-medium text-sm text-gray-800">
-                    Processed ({progress?.status === 'completed' ? total : processed})
+                <div className="border border-white/10 rounded-lg overflow-hidden bg-white/5">
+                  <div className="px-3 py-2 border-b border-white/10 font-medium text-sm text-zinc-300">
+                    Processed ({processedDisplayNames.length})
                   </div>
-                  <div className="min-h-[200px] max-h-[280px] overflow-auto p-3 bg-white">
-                    {processed === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-8">No files processed yet</p>
+                  <div className="min-h-[200px] max-h-[280px] overflow-auto p-3 bg-white/5">
+                    {processedDisplayNames.length === 0 ? (
+                      <p className="text-sm text-zinc-500 text-center py-8">No files processed yet</p>
                     ) : (
-                      <ul className="text-sm text-gray-700 space-y-1">
-                        {files.slice(0, processed).map((f, i) => (
-                          <li key={i} className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0" />
-                            {f.name}
+                      <ul className="text-sm text-gray-300 space-y-1">
+                        {processedDisplayNames.map((name, i) => (
+                          <li key={`s-${i}`} className="flex items-center gap-2">
+                            <svg className="w-4 h-4 flex-shrink-0 text-emerald-500" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                            {name}
                           </li>
                         ))}
                       </ul>
                     )}
                   </div>
                 </div>
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50 border-b border-gray-200 font-medium text-sm text-gray-800">
-                    Processing ({jobId ? processingCount : files.length})
+                <div className="border border-white/10 rounded-lg overflow-hidden bg-white/5">
+                  <div className="px-3 py-2 border-b border-white/10 font-medium text-sm text-zinc-300">
+                    Processing ({inProgressFilenames.length}) / Failed ({failedCount})
                   </div>
-                  <div className="min-h-[200px] max-h-[280px] overflow-auto p-3 bg-white">
+                  <div className="min-h-[200px] max-h-[280px] overflow-auto p-3 bg-white/5">
                     {files.length === 0 ? (
-                      <p className="text-sm text-gray-500 text-center py-8">No files selected</p>
+                      <p className="text-sm text-zinc-500 text-center py-8">No files selected</p>
                     ) : (
-                      <ul className="text-sm text-gray-700 space-y-1">
-                        {files.slice(processed).map((f, i) => (
-                          <li key={i} className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-sm bg-blue-600 flex-shrink-0" />
-                            {f.name}
+                      <ul className="text-sm text-gray-300 space-y-1">
+                        {inProgressFilenames.map((name, i) => (
+                          <li key={`p-${i}`} className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-sm bg-purple-500 flex-shrink-0" aria-hidden />
+                            {name}
                           </li>
                         ))}
+                        {failedFilenames.map((name, i) => (
+                          <li key={`f-${i}`} className="flex items-center gap-2 text-red-400">
+                            <svg className="w-4 h-4 flex-shrink-0 text-red-500" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
+                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                            {name}
+                          </li>
+                        ))}
+                        {failedCount > 0 && failedFilenames.length === 0 && (
+                          <li className="flex items-center gap-2 text-red-400">
+                            <svg className="w-4 h-4 flex-shrink-0 text-red-500" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
+                              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                            <span>{failedCount} file(s) failed (names not available from server)</span>
+                          </li>
+                        )}
                       </ul>
                     )}
                   </div>
@@ -543,11 +569,11 @@ export default function BulkResumeParser() {
             </section>
 
             {/* Instructions (collapsible) */}
-            <section className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+            <section className="glass-card rounded-xl overflow-hidden">
               <button
                 type="button"
                 onClick={() => setInstructionsOpen((o) => !o)}
-                className="w-full flex items-center gap-2 px-4 py-3 text-left font-medium text-gray-800 hover:bg-gray-50"
+                className="w-full flex items-center gap-2 px-4 py-3 text-left font-medium text-gray-200 hover:bg-white/5 transition-colors"
               >
                 <svg
                   className={`w-5 h-5 transition-transform ${instructionsOpen ? 'rotate-90' : ''}`}
@@ -563,7 +589,7 @@ export default function BulkResumeParser() {
                 Instructions
               </button>
               {instructionsOpen && (
-                <div className="px-4 pb-4 pt-0 text-sm text-gray-600 border-t border-gray-100">
+                <div className="px-4 pb-4 pt-0 text-sm text-zinc-400 border-t border-white/10">
                   <p className="mb-2">
                     Add a whole folder from your computer using <strong>Browse</strong> next to Input Folder, or enter a path if you have one.
                     Only PDF, DOC, and DOCX files are processed.
@@ -582,7 +608,7 @@ export default function BulkResumeParser() {
         </div>
 
         {error && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+          <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
             {error}
           </div>
         )}
