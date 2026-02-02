@@ -22,6 +22,7 @@ from helpers.otp_utils import (
 from models import get_session
 from models.candidate_auth import CandidateAuth
 from sessions_service import get_recent_failed_attempts, record_login_attempt
+from utils import build_jwt_payload
 
 candidate_auth_bp = Blueprint('candidate_auth', __name__)
 
@@ -511,8 +512,14 @@ def candidate_login():
         if not cid:
             return jsonify({'error': 'Candidate profile mapping failed.'}), 500
 
-        token = jwt.encode(
-            {'id': cid, 'email': candidate.email, 'role': 'candidate'},
+        identity = {'id': cid, 'email': candidate.email, 'role': 'candidate'}
+        access_token = jwt.encode(
+            build_jwt_payload(identity, refresh=False),
+            JWT_SECRET,
+            algorithm='HS256',
+        )
+        refresh_token = jwt.encode(
+            build_jwt_payload(identity, refresh=True),
             JWT_SECRET,
             algorithm='HS256',
         )
@@ -558,7 +565,7 @@ def candidate_login():
     if profile:
         user_data['profile'] = parse_profile(profile)
 
-    return jsonify({'token': token, 'user': user_data}), 200
+    return jsonify({'token': access_token, 'refresh_token': refresh_token, 'user': user_data}), 200
 
 
 @candidate_auth_bp.post('/forgot-password')

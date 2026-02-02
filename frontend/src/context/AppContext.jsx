@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { apiRequest, setUnauthorizedHandler } from '../utils/api'
+import { apiRequest, setUnauthorizedHandler, setOnTokensRefreshed } from '../utils/api'
 import { tokenService } from '../utils/tokenService'
 import { checkBackendHealth } from '../utils/healthCheck'
 
@@ -83,8 +83,10 @@ export function AppProvider({ children }) {
   const [healthCheckAttempts, setHealthCheckAttempts] = useState(0)
 
   useEffect(() => {
-    // Wire global 401 -> logout handling
+    // Wire global 401/403 -> logout handling
     setUnauthorizedHandler(() => logout())
+    // When access token is refreshed automatically, update React state
+    setOnTokensRefreshed((newAccess) => { setToken(newAccess) })
     
     // Wait 2 seconds before first health check to allow backend startup
     const initialCheckTimer = setTimeout(() => {
@@ -212,6 +214,7 @@ export function AppProvider({ children }) {
       if (data && data.token && data.user) {
         setToken(data.token)
         tokenService.setToken(data.token)
+        if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setUser(data.user)
         const nextAuth = { isLoggedIn: true, role: 'HR', email: data.user.email || email }
         setAuth(nextAuth)
@@ -301,6 +304,7 @@ export function AppProvider({ children }) {
       if (data && data.token && data.user) {
         setToken(data.token)
         tokenService.setToken(data.token)
+        if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setUser(data.user)
         const nextApplicantAuth = { isLoggedIn: true, email: data.user.email || idOrEmail }
         setApplicantAuth(nextApplicantAuth)
@@ -434,6 +438,7 @@ export function AppProvider({ children }) {
       if (data && data.token && data.user) {
         setToken(data.token)
         tokenService.setToken(data.token)
+        if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setUser(data.user)
         const nextAuth = { isLoggedIn: true, role: 'HR', email: data.user.email || email }
         setAuth(nextAuth)
@@ -755,9 +760,10 @@ export function AppProvider({ children }) {
     setJobsLoading(true)
     setJobsError('')
     try {
-      // If HR is logged in, fetch all jobs (including disabled)
-      const endpoint = auth.isLoggedIn && auth.role === 'HR' ? '/api/jobs/all' : '/api/jobs'
+      // Only call protected /api/jobs/all when we have a token; avoids 401 -> logout cascade
       const authToken = auth.isLoggedIn ? (token || tokenService.getToken()) : undefined
+      const useProtected = auth.isLoggedIn && auth.role === 'HR' && !!authToken
+      const endpoint = useProtected ? '/api/jobs/all' : '/api/jobs'
       const data = await apiRequest(endpoint, { method: 'GET', token: authToken })
       if (Array.isArray(data)) setJobs(data)
       else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)
