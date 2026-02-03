@@ -257,10 +257,10 @@ export default function ContactUs() {
                   onChange={(e) => updateField('priority', e.target.value)}
                   helperText="Help us understand how urgent your issue is"
                 >
-                  <option value="low">Low - General inquiry</option>
-                  <option value="medium">Medium - Need assistance</option>
-                  <option value="high">High - Important issue</option>
-                  <option value="urgent">Urgent - Critical problem</option>
+                  <option value="low" style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>Low - General inquiry</option>
+                  <option value="medium" style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>Medium - Need assistance</option>
+                  <option value="high" style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>High - Important issue</option>
+                  <option value="urgent" style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>Urgent - Critical problem</option>
                 </PremiumInput>
 
                 {/* Subject */}

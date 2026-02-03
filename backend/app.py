@@ -1,14 +1,27 @@
 import os
+import sys
 import socket
 import threading
 from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
 
+# Load environment variables first
+load_dotenv()
+
+# Validate environment variables before proceeding
+from env_validator import EnvValidator
+is_valid, errors, warnings = EnvValidator.validate()
+if not is_valid:
+    EnvValidator.print_report()
+    print("💡 TIP: Copy backend/.env.example to backend/.env and configure it.\n")
+    sys.exit(1)
+elif warnings:
+    # Print warnings but continue
+    EnvValidator.print_report()
+
 from extensions import mail
 from models import init_models
-
-load_dotenv()
 
 
 def _build_allowed_origins():
@@ -70,6 +83,7 @@ from routes.candidate_auth import candidate_auth_bp  # noqa: E402
 from routes.simple_candidate_auth import simple_candidate_auth_bp  # noqa: E402
 from parsing_routes import parsing_bp  # noqa: E402
 from support import support_bp  # noqa: E402
+from modules.admin.routes import admin_bp  # noqa: E402
 
 # Database initialization - DO IT AT STARTUP, NOT LAZY
 # Lazy loading was causing 10+ second delays on first API call
@@ -82,19 +96,40 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
+# Optional: log if bulk parser URL is set but unreachable (admin bulk upload will use in-process when available)
+_bulk_url = (os.getenv('BULK_PARSER_URL') or '').strip().rstrip('/') or None
+if _bulk_url:
+    try:
+        import requests
+        r = requests.get(f"{_bulk_url}/health", timeout=2)
+        if not r.ok:
+            print(f"[BULK PARSER] {_bulk_url} returned {r.status_code}; admin bulk upload may use in-process parsing.")
+    except Exception:
+        print(f"[BULK PARSER] {_bulk_url} not reachable; admin bulk upload will use in-process parsing when available.")
+
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
         "status": "ok",
         "message": "Job Portal API root. See /health for status.",
-        "endpoints": ["/health", "/api", "/api/jobs", "/api/candidate", "/api/applications", "/api/sessions"]
+        "endpoints": ["/health", "/api", "/api/jobs", "/api/candidate", "/api/applications", "/api/sessions", "/api/admin"]
     })
 
 @app.route('/health', methods=['GET'])
 def health():
+    bulk_parser = "not_configured"
+    bulk_url = os.getenv('BULK_PARSER_URL', '').rstrip('/')
+    if bulk_url:
+        try:
+            import requests
+            r = requests.get(f"{bulk_url}/health", timeout=2)
+            bulk_parser = "ok" if r.ok else "unreachable"
+        except Exception:
+            bulk_parser = "unreachable"
     return jsonify({
-        "status": "ok", 
-        "message": "Job Portal API is running"
+        "status": "ok",
+        "message": "Job Portal API is running",
+        "bulk_parser": bulk_parser,
     })
 
 @app.route('/api/test-cors', methods=['GET', 'OPTIONS'])
@@ -117,6 +152,8 @@ app.register_blueprint(applications_bp, url_prefix='/api/applications')
 app.register_blueprint(sessions_bp, url_prefix='/api/sessions')
 app.register_blueprint(parsing_bp, url_prefix='/api')
 app.register_blueprint(support_bp, url_prefix='/api/support')
+# Admin-only: bulk resume parsing (proxy to Bulk-Resume-Parser), job matches (ATS results)
+app.register_blueprint(admin_bp, url_prefix='/api/admin')
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '3000'))

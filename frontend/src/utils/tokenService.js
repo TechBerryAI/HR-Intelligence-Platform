@@ -5,40 +5,52 @@
 // When migrating to cookies, disable persistence here and rely on fetch credentials.
 
 const STORAGE_KEY = 'jwtToken'
+const REFRESH_STORAGE_KEY = 'refreshToken'
 let inMemoryToken = ''
+let inMemoryRefreshToken = ''
 
-function readFromStorage() {
-  if (typeof window === 'undefined') return ''
+function readFromStorage(key, fallback = '') {
+  if (typeof window === 'undefined') return fallback
   try {
-    return window.localStorage.getItem(STORAGE_KEY) || ''
+    return window.localStorage.getItem(key) || fallback
   } catch {
-    return ''
+    return fallback
   }
 }
 
-function writeToStorage(value) {
+function writeToStorage(key, value) {
   if (typeof window === 'undefined') return
   try {
-    if (value) window.localStorage.setItem(STORAGE_KEY, value)
-    else window.localStorage.removeItem(STORAGE_KEY)
+    if (value) window.localStorage.setItem(key, value)
+    else window.localStorage.removeItem(key)
   } catch {}
 }
 
 // Initialize cache from storage on first import/use
-inMemoryToken = readFromStorage()
+inMemoryToken = readFromStorage(STORAGE_KEY, '')
+inMemoryRefreshToken = readFromStorage(REFRESH_STORAGE_KEY, '')
 
 export const tokenService = {
   getToken() {
-    // Prioritize in-memory for performance; sync from storage if empty
-    if (!inMemoryToken) inMemoryToken = readFromStorage()
+    if (!inMemoryToken) inMemoryToken = readFromStorage(STORAGE_KEY, '')
     return inMemoryToken
   },
   setToken(token) {
     inMemoryToken = token || ''
-    writeToStorage(inMemoryToken)
+    writeToStorage(STORAGE_KEY, inMemoryToken)
+  },
+  getRefreshToken() {
+    if (!inMemoryRefreshToken) inMemoryRefreshToken = readFromStorage(REFRESH_STORAGE_KEY, '')
+    return inMemoryRefreshToken
+  },
+  setRefreshToken(token) {
+    inMemoryRefreshToken = token || ''
+    writeToStorage(REFRESH_STORAGE_KEY, inMemoryRefreshToken)
   },
   clear() {
     inMemoryToken = ''
-    writeToStorage('')
+    inMemoryRefreshToken = ''
+    writeToStorage(STORAGE_KEY, '')
+    writeToStorage(REFRESH_STORAGE_KEY, '')
   }
 }

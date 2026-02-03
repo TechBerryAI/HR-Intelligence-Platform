@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { FiUser, FiMail, FiPhone, FiMapPin, FiLinkedin, FiGlobe, FiSave, FiCheck, FiAlertCircle } from 'react-icons/fi'
 
 export default function ApplicantProfile() {
-	const { applicantProfile, saveApplicantProfile, markApplicantProfileCompleted, applyToJobAsApplicant, fetchApplicantData, applicantSavedJobs, toggleSaveJob } = useApp()
+	const { applicantProfile, applicantAuth, saveApplicantProfile, markApplicantProfileCompleted, applyToJobAsApplicant, fetchApplicantData, applicantSavedJobs, toggleSaveJob } = useApp()
 	const navigate = useNavigate()
 	const location = useLocation()
 	const toast = useToast()
@@ -31,21 +31,74 @@ export default function ApplicantProfile() {
 		preferredLocation: applicantProfile.preferredLocation || '',
 		resumeFile: null,
 		resumeFileName: applicantProfile.resumeFileName || '',
-		education: applicantProfile.education.length ? applicantProfile.education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }],
+		education: applicantProfile.education && applicantProfile.education.length ? applicantProfile.education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }],
 		certifications: applicantProfile.certifications && applicantProfile.certifications.length ? applicantProfile.certifications : [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }],
-		experiences: applicantProfile.experiences.length ? applicantProfile.experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }],
+		experiences: applicantProfile.experiences && applicantProfile.experiences.length ? applicantProfile.experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }],
 	})
 	const [saved, setSaved] = useState('')
 	const [errors, setErrors] = useState({})
 	const [autofilledFields, setAutofilledFields] = useState({})
+	const [formInitialized, setFormInitialized] = useState(false)
+	
+	// Load profile data into form when component mounts or applicantProfile changes meaningfully
+	useEffect(() => {
+		// Only initialize once, or when applicantProfile changes significantly (e.g., after login/fetch)
+		if (!formInitialized) {
+			console.log('DEBUG: Initializing form with saved profile data:', applicantProfile)
+			setForm(prevForm => {
+				// Check if form is already populated (user might have started typing)
+				const hasUserInput = prevForm.fullName || prevForm.email || 
+					prevForm.experiences?.some(ex => ex.company || ex.role) ||
+					prevForm.education?.some(ed => ed.degree || ed.institution)
+				
+				// Only load from applicantProfile if form is empty
+				if (hasUserInput && !applicantProfile?.fullName && !applicantProfile?.email) {
+					console.log('DEBUG: Form has user input, keeping it')
+					return prevForm
+				}
+				
+				const newForm = {
+					experienceLevel: applicantProfile?.experienceLevel || prevForm.experienceLevel || '',
+					servingNotice: applicantProfile?.servingNotice || prevForm.servingNotice || '',
+					noticePeriod: applicantProfile?.noticePeriod || prevForm.noticePeriod || '',
+					lastWorkingDay: applicantProfile?.lastWorkingDay || prevForm.lastWorkingDay || '',
+					fullName: applicantProfile?.fullName || prevForm.fullName || '',
+					email: applicantProfile?.email || prevForm.email || '',
+					phone: applicantProfile?.phone || prevForm.phone || '',
+					linkedinUrl: applicantProfile?.linkedinUrl || prevForm.linkedinUrl || '',
+					portfolioUrl: applicantProfile?.portfolioUrl || prevForm.portfolioUrl || '',
+					currentLocation: applicantProfile?.currentLocation || prevForm.currentLocation || '',
+					preferredLocation: applicantProfile?.preferredLocation || prevForm.preferredLocation || '',
+					resumeFile: null, // Never load file object from storage
+					resumeFileName: applicantProfile?.resumeFileName || prevForm.resumeFileName || '',
+					education: (applicantProfile?.education && Array.isArray(applicantProfile.education) && applicantProfile.education.length > 0) 
+						? applicantProfile.education 
+						: (prevForm.education && prevForm.education.length > 0 ? prevForm.education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }]),
+					certifications: (applicantProfile?.certifications && Array.isArray(applicantProfile.certifications) && applicantProfile.certifications.length > 0)
+						? applicantProfile.certifications
+						: (prevForm.certifications && prevForm.certifications.length > 0 ? prevForm.certifications : [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }]),
+					experiences: (applicantProfile?.experiences && Array.isArray(applicantProfile.experiences) && applicantProfile.experiences.length > 0)
+						? applicantProfile.experiences
+						: (prevForm.experiences && prevForm.experiences.length > 0 ? prevForm.experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }]),
+				}
+				console.log('DEBUG: Form initialized with:', {
+					fullName: newForm.fullName,
+					experiencesCount: newForm.experiences?.length || 0,
+					educationCount: newForm.education?.length || 0
+				})
+				return newForm
+			})
+			setFormInitialized(true)
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []) // Only run once on mount
 	
 	useEffect(() => {
-		if (applicantProfile.resumeFileName) {
-			if (!form.resumeFile) {
-				updateField('resumeFileName', applicantProfile.resumeFileName)
-			}
+		if (applicantProfile?.resumeFileName && !form.resumeFile) {
+			updateField('resumeFileName', applicantProfile.resumeFileName)
 		}
-	}, [applicantProfile.resumeFileName])
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [applicantProfile?.resumeFileName])
 
 	const validate = (f) => {
 		const e = {}
@@ -120,6 +173,13 @@ export default function ApplicantProfile() {
 	const removeListItem = (listKey, idx) => setForm((f) => ({ ...f, [listKey]: f[listKey].filter((_, i) => i !== idx) }))
 
 	const handleResumeAutofill = (parsedData) => {
+		console.log('DEBUG: handleResumeAutofill called with:', {
+			linkedinUrl: parsedData.linkedinUrl,
+			portfolioUrl: parsedData.portfolioUrl,
+			hasLinkedin: !!parsedData.linkedinUrl,
+			hasPortfolio: !!parsedData.portfolioUrl
+		});
+		
 		// Track which fields were autofilled
 		const autofilled = {};
 		
@@ -127,22 +187,35 @@ export default function ApplicantProfile() {
 		if (parsedData.email) autofilled.email = true;
 		if (parsedData.phone) autofilled.phone = true;
 		if (parsedData.experienceLevel) autofilled.experienceLevel = true;
+		if (parsedData.linkedinUrl) autofilled.linkedinUrl = true;
+		if (parsedData.portfolioUrl) autofilled.portfolioUrl = true;
 		
 		setAutofilledFields(autofilled);
 		
 		// Merge parsed data with existing form
-		setForm((prevForm) => ({
-			...prevForm,
-			fullName: parsedData.fullName || prevForm.fullName,
-			email: parsedData.email || prevForm.email,
-			phone: parsedData.phone || prevForm.phone,
-			experienceLevel: parsedData.experienceLevel || prevForm.experienceLevel,
-			education: parsedData.education && parsedData.education.length > 0 ? parsedData.education : prevForm.education,
-			experiences: parsedData.experiences && parsedData.experiences.length > 0 ? parsedData.experiences : prevForm.experiences,
-			certifications: parsedData.certifications && parsedData.certifications.length > 0 ? parsedData.certifications : prevForm.certifications,
-			resumeFile: parsedData.resumeFile || prevForm.resumeFile,
-			resumeFileName: parsedData.resumeFileName || prevForm.resumeFileName,
-		}));
+		setForm((prevForm) => {
+			const updatedForm = {
+				...prevForm,
+				fullName: parsedData.fullName || prevForm.fullName,
+				email: parsedData.email || prevForm.email,
+				phone: parsedData.phone || prevForm.phone,
+				linkedinUrl: parsedData.linkedinUrl || prevForm.linkedinUrl,
+				portfolioUrl: parsedData.portfolioUrl || prevForm.portfolioUrl,
+				experienceLevel: parsedData.experienceLevel || prevForm.experienceLevel,
+				education: parsedData.education && parsedData.education.length > 0 ? parsedData.education : prevForm.education,
+				experiences: parsedData.experiences && parsedData.experiences.length > 0 ? parsedData.experiences : prevForm.experiences,
+				certifications: parsedData.certifications && parsedData.certifications.length > 0 ? parsedData.certifications : prevForm.certifications,
+				resumeFile: parsedData.resumeFile || prevForm.resumeFile,
+				resumeFileName: parsedData.resumeFileName || prevForm.resumeFileName,
+			};
+			
+			console.log('DEBUG: Updated form with URLs:', {
+				linkedinUrl: updatedForm.linkedinUrl,
+				portfolioUrl: updatedForm.portfolioUrl
+			});
+			
+			return updatedForm;
+		});
 		
 		setErrors({});
 		
@@ -156,25 +229,60 @@ export default function ApplicantProfile() {
 
 	const onSave = async (e) => {
 		e.preventDefault()
-		const result = await saveApplicantProfile(form)
-		if (result.ok) {
-			setSaved('Profile saved')
-			toast.push('Profile saved successfully! You can come back and complete it later.', { type: 'success', duration: 5000 })
+		e.stopPropagation()
+		
+		console.log('DEBUG: onSave called, form data:', {
+			fullName: form.fullName,
+			email: form.email,
+			experiencesCount: form.experiences?.length || 0,
+			educationCount: form.education?.length || 0,
+			hasResumeFile: !!form.resumeFile,
+			resumeFileName: form.resumeFileName
+		})
+		
+		try {
+			// Save immediately - no validation required for save
+			const result = await saveApplicantProfile(form)
+			console.log('DEBUG: saveApplicantProfile result:', result)
+			
+			if (result.ok) {
+				if (result.warning) {
+					// Show warning but still indicate success
+					setSaved('Profile saved locally')
+					toast.push(result.warning, { type: 'warning', duration: 6000 })
+				} else {
+					setSaved('Profile saved')
+					toast.push('Profile saved successfully! You can come back and complete it later.', { type: 'success', duration: 5000 })
+				}
+				setTimeout(() => setSaved(''), 3000)
+				
+				if (fileInputRef.current) {
+					fileInputRef.current.value = ''
+				}
+				
+				if (form.resumeFile) {
+					updateField('resumeFile', null)
+				}
+				if (result.updatedProfile && result.updatedProfile.resumeFileName) {
+					updateField('resumeFileName', result.updatedProfile.resumeFileName)
+				} else if (form.resumeFileName) {
+					// Keep existing filename
+				}
+			} else {
+				console.error('DEBUG: Save failed, result:', result)
+				toast.push('Failed to save profile. Your data has been saved locally as backup.', { type: 'error', duration: 5000 })
+			}
+		} catch (error) {
+			console.error('DEBUG: Save error caught:', error)
+			console.error('DEBUG: Error details:', {
+				message: error?.message,
+				stack: error?.stack,
+				error: error
+			})
+			// Even if there's an error, data should be saved locally
+			setSaved('Profile saved locally')
+			toast.push('An error occurred while saving to server. Your data has been saved locally and will sync when you log in.', { type: 'warning', duration: 6000 })
 			setTimeout(() => setSaved(''), 3000)
-			
-			if (fileInputRef.current) {
-				fileInputRef.current.value = ''
-			}
-			
-			if (form.resumeFile) {
-				updateField('resumeFile', null)
-			}
-			if (result.updatedProfile && result.updatedProfile.resumeFileName) {
-				updateField('resumeFileName', result.updatedProfile.resumeFileName)
-			} else if (form.resumeFileName) {
-			}
-		} else {
-			toast.push('Failed to save profile. Please try again.', { type: 'error', duration: 4000 })
 		}
 	}
 
@@ -276,7 +384,7 @@ export default function ApplicantProfile() {
 							<p className="mt-2 text-sm text-zinc-400">We'll use this info when you apply to jobs</p>
 						</motion.div>
 
-						<form onSubmit={onSave} className="mt-8 space-y-8">
+						<form onSubmit={onSave} noValidate className="mt-8 space-y-8">
 							{saved && (
 								<motion.div
 									initial={{ opacity: 0, scale: 0.95 }}
@@ -500,13 +608,13 @@ export default function ApplicantProfile() {
 													error={errors.noticePeriod}
 													className="premium-input"
 												>
-													<option value="">Select</option>
-													<option>Immediate</option>
-													<option>&lt; 30 days</option>
-													<option>&lt; 45 days</option>
-													<option>&lt; 60 days</option>
-													<option>&lt; 90 days</option>
-													<option>Serving Notice Period</option>
+													<option value="" style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>Select</option>
+													<option style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>Immediate</option>
+													<option style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>&lt; 30 days</option>
+													<option style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>&lt; 45 days</option>
+													<option style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>&lt; 60 days</option>
+													<option style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>&lt; 90 days</option>
+													<option style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>Serving Notice Period</option>
 												</PremiumInput>
 
 												{(form.servingNotice === 'yes' || form.noticePeriod === 'Immediate') && (
@@ -699,10 +807,11 @@ export default function ApplicantProfile() {
 													className="premium-input"
 													value={ce.status || ''}
 													onChange={(e) => updateListItem('certifications', i, 'status', e.target.value)}
+													style={{ color: '#f3f4f6' }}
 												>
-													<option value="">Status</option>
-													<option value="completed">Completed</option>
-													<option value="pursuing">Pursuing</option>
+													<option value="" style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>Status</option>
+													<option value="completed" style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>Completed</option>
+													<option value="pursuing" style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>Pursuing</option>
 												</select>
 												<input 
 													type="url" 
@@ -789,13 +898,17 @@ export default function ApplicantProfile() {
 								transition={{ delay: 1.1 }}
 								className="flex items-center justify-end gap-4 pt-4"
 							>
-								<PremiumButton
-									type="submit"
-									variant="secondary"
-									icon={FiSave}
-								>
-									Save
-								</PremiumButton>
+							<PremiumButton
+								type="submit"
+								variant="secondary"
+								icon={FiSave}
+								onClick={(e) => {
+									// Ensure the form submission is triggered
+									console.log('DEBUG: Save button clicked')
+								}}
+							>
+								Save
+							</PremiumButton>
 								<PremiumButton
 									type="button"
 									onClick={onComplete}

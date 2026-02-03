@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 export default function MonthYearPicker({
   value,
@@ -9,6 +10,7 @@ export default function MonthYearPicker({
   className = '',
 }) {
   const [open, setOpen] = useState(false)
+  const [position, setPosition] = useState({ top: 0, left: 0 })
   const [year, setYear] = useState(() => {
     if (value && /^\d{4}-\d{2}$/.test(value)) return parseInt(value.slice(0, 4), 10)
     return new Date().getFullYear()
@@ -19,11 +21,36 @@ export default function MonthYearPicker({
   })
 
   const containerRef = useRef(null)
+  const dropdownRef = useRef(null)
+
+  // Position dropdown below trigger (viewport coords for position: fixed)
+  useEffect(() => {
+    if (!open || !containerRef.current) return
+    const el = containerRef.current
+    const rect = el.getBoundingClientRect()
+    setPosition({ top: rect.bottom + 4, left: rect.left })
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const onScrollOrResize = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        setPosition({ top: rect.bottom + 4, left: rect.left })
+      }
+    }
+    window.addEventListener('scroll', onScrollOrResize, true)
+    window.addEventListener('resize', onScrollOrResize)
+    return () => {
+      window.removeEventListener('scroll', onScrollOrResize, true)
+      window.removeEventListener('resize', onScrollOrResize)
+    }
+  }, [open])
 
   useEffect(() => {
     const onClick = (e) => {
-      if (!containerRef.current) return
-      if (!containerRef.current.contains(e.target)) setOpen(false)
+      if (!containerRef.current || !dropdownRef.current) return
+      if (!containerRef.current.contains(e.target) && !dropdownRef.current.contains(e.target)) setOpen(false)
     }
     if (open) document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
@@ -74,58 +101,65 @@ export default function MonthYearPicker({
         </svg>
       </button>
 
-      {open && (
-        <div className="absolute z-20 mt-2 w-72 rounded-lg border border-zinc-800 bg-zinc-950/95 backdrop-blur p-3 shadow-xl">
-          <div className="flex items-center justify-between gap-2 mb-3">
-            <button
-              type="button"
-              className="px-2 py-1 text-sm rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={() => setYear((y) => Math.max(minYear, y - 1))}
-              disabled={year <= minYear}
-            >
-              ◀
-            </button>
-            <select
-              className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-gray-100"
-              value={year}
-              onChange={(e) => {
-                const newYear = parseInt(e.target.value, 10)
-                if (newYear >= minYear && newYear <= maxYear) {
-                  setYear(newYear)
-                }
-              }}
-            >
-              {years.map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="px-2 py-1 text-sm rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={() => setYear((y) => Math.min(maxYear, y + 1))}
-              disabled={year >= maxYear}
-            >
-              ▶
-            </button>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
+      {open &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            className="fixed w-72 rounded-lg border border-zinc-800 bg-zinc-950/95 backdrop-blur p-3 shadow-xl z-[9999]"
+            style={{ top: position.top, left: position.left }}
+          >
+            <div className="flex items-center justify-between gap-2 mb-3">
               <button
-                key={m}
                 type="button"
-                onClick={() => commit(year, m)}
-                className={`px-3 py-2 rounded border text-sm ${m === month && year === parseInt((value||'').slice(0,4)||'0',10) ? 'border-white/60 bg-zinc-800 text-white' : 'border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800'}`}
+                className="px-2 py-1 text-sm rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => setYear((y) => Math.max(minYear, y - 1))}
+                disabled={year <= minYear}
               >
-                {new Date(2000, m - 1).toLocaleString('en-US', { month: 'short' })}
+                ◀
               </button>
-            ))}
-          </div>
-          <div className="mt-3 flex justify-end gap-2">
-            <button type="button" className="text-xs text-zinc-400 hover:text-zinc-200" onClick={() => { onChange?.(''); setOpen(false) }}>Clear</button>
-            <button type="button" className="text-xs text-white bg-zinc-800 hover:bg-zinc-700 rounded px-2 py-1" onClick={() => setOpen(false)}>Done</button>
-          </div>
-        </div>
-      )}
+              <select
+                className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-gray-100"
+                value={year}
+                onChange={(e) => {
+                  const newYear = parseInt(e.target.value, 10)
+                  if (newYear >= minYear && newYear <= maxYear) {
+                    setYear(newYear)
+                  }
+                }}
+              >
+                {years.map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="px-2 py-1 text-sm rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => setYear((y) => Math.min(maxYear, y + 1))}
+                disabled={year >= maxYear}
+              >
+                ▶
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[1,2,3,4,5,6,7,8,9,10,11,12].map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => commit(year, m)}
+                  className={`px-3 py-2 rounded border text-sm ${m === month && year === parseInt((value||'').slice(0,4)||'0',10) ? 'border-white/60 bg-zinc-800 text-white' : 'border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800'}`}
+                >
+                  {new Date(2000, m - 1).toLocaleString('en-US', { month: 'short' })}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" className="text-xs text-zinc-400 hover:text-zinc-200" onClick={() => { onChange?.(''); setOpen(false) }}>Clear</button>
+              <button type="button" className="text-xs text-white bg-zinc-800 hover:bg-zinc-700 rounded px-2 py-1" onClick={() => setOpen(false)}>Done</button>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }

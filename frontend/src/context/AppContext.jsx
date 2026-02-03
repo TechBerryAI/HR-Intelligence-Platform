@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { apiRequest, setUnauthorizedHandler } from '../utils/api'
+import { apiRequest, setUnauthorizedHandler, setOnTokensRefreshed } from '../utils/api'
 import { tokenService } from '../utils/tokenService'
 import { checkBackendHealth } from '../utils/healthCheck'
 
@@ -83,8 +83,10 @@ export function AppProvider({ children }) {
   const [healthCheckAttempts, setHealthCheckAttempts] = useState(0)
 
   useEffect(() => {
-    // Wire global 401 -> logout handling
+    // Wire global 401/403 -> logout handling
     setUnauthorizedHandler(() => logout())
+    // When access token is refreshed automatically, update React state
+    setOnTokensRefreshed((newAccess) => { setToken(newAccess) })
     
     // Wait 2 seconds before first health check to allow backend startup
     const initialCheckTimer = setTimeout(() => {
@@ -212,6 +214,7 @@ export function AppProvider({ children }) {
       if (data && data.token && data.user) {
         setToken(data.token)
         tokenService.setToken(data.token)
+        if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setUser(data.user)
         const nextAuth = { isLoggedIn: true, role: 'HR', email: data.user.email || email }
         setAuth(nextAuth)
@@ -301,6 +304,7 @@ export function AppProvider({ children }) {
       if (data && data.token && data.user) {
         setToken(data.token)
         tokenService.setToken(data.token)
+        if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setUser(data.user)
         const nextApplicantAuth = { isLoggedIn: true, email: data.user.email || idOrEmail }
         setApplicantAuth(nextApplicantAuth)
@@ -434,6 +438,7 @@ export function AppProvider({ children }) {
       if (data && data.token && data.user) {
         setToken(data.token)
         tokenService.setToken(data.token)
+        if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setUser(data.user)
         const nextAuth = { isLoggedIn: true, role: 'HR', email: data.user.email || email }
         setAuth(nextAuth)
@@ -485,13 +490,39 @@ export function AppProvider({ children }) {
   }
 
   const saveApplicantProfile = async (profile) => {
+    console.log('DEBUG: saveApplicantProfile called')
+    console.log('DEBUG: applicantAuth.isLoggedIn:', applicantAuth.isLoggedIn)
+    console.log('DEBUG: profile data:', {
+      fullName: profile.fullName,
+      email: profile.email,
+      experiences: profile.experiences?.length || 0,
+      education: profile.education?.length || 0,
+      certifications: profile.certifications?.length || 0
+    })
+    
+    // Always save to localStorage first as backup - this ensures data is never lost
+    const profileForStorage = { ...profile }
+    // Don't store file object in localStorage
+    if (profileForStorage.resumeFile) {
+      delete profileForStorage.resumeFile
+    }
+    const nextLocal = { ...applicantProfile, ...profileForStorage }
+    setApplicantProfile(nextLocal)
+    writeJson(STORAGE_KEYS.applicantProfile, nextLocal)
+    console.log('DEBUG: Saved to localStorage:', nextLocal)
+    
     if (!applicantAuth.isLoggedIn) {
       // Save locally only if not logged in
-      const next = { ...applicantProfile, ...profile }
-      setApplicantProfile(next)
-      writeJson(STORAGE_KEYS.applicantProfile, next)
-      return { ok: true }
+      console.log('DEBUG: User not logged in, saving locally only')
+      return { ok: true, savedLocally: true }
     }
+    
+    // User is logged in, try to save to server
+    if (!token) {
+      console.warn('DEBUG: User logged in but no token available, saving locally only')
+      return { ok: true, savedLocally: true, warning: 'Not authenticated. Saved locally only.' }
+    }
+    
     try {
       // Check if there's a resume file to upload
       const resumeFile = profile.resumeFile
@@ -500,6 +531,9 @@ export function AppProvider({ children }) {
       console.log('DEBUG: saveApplicantProfile - resumeFile:', resumeFile)
       console.log('DEBUG: saveApplicantProfile - hasFile:', hasFile)
       console.log('DEBUG: saveApplicantProfile - profile keys:', Object.keys(profile))
+      console.log('DEBUG: saveApplicantProfile - experiences:', profile.experiences)
+      console.log('DEBUG: saveApplicantProfile - education:', profile.education)
+      console.log('DEBUG: saveApplicantProfile - certifications:', profile.certifications)
       
       let body
       if (hasFile) {
@@ -514,6 +548,7 @@ export function AppProvider({ children }) {
           const value = profile[key]
           if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
             formData.append(key, JSON.stringify(value))
+            console.log(`DEBUG: Added ${key} as JSON string:`, JSON.stringify(value).substring(0, 100))
           } else if (value !== null && value !== undefined) {
             formData.append(key, value)
           }
@@ -525,13 +560,24 @@ export function AppProvider({ children }) {
         // Use JSON for regular updates (without file)
         body = { ...profile }
         delete body.resumeFile // Remove file object from JSON
+        // Ensure arrays are included even if empty
+        if (!body.experiences) body.experiences = []
+        if (!body.education) body.education = []
+        if (!body.certifications) body.certifications = []
+        console.log('DEBUG: JSON body being sent:', JSON.stringify(body, null, 2).substring(0, 500))
       }
       
-      await apiRequest('/api/candidate/profile', {
+      console.log('DEBUG: Making API request to /api/candidate/profile')
+      const response = await apiRequest('/api/candidate/profile', {
         method: 'POST',
         body: body,
         token
+      }).catch(err => {
+        console.error('DEBUG: API request failed:', err)
+        throw err
       })
+      
+      console.log('DEBUG: Save API response:', response)
       
       // Fetch updated profile from server to get latest resume info
       try {
@@ -540,39 +586,42 @@ export function AppProvider({ children }) {
           token
         })
         if (updatedProfile) {
+          console.log('DEBUG: Fetched updated profile:', updatedProfile)
           // Merge updated profile with current profile data
-          const next = { ...applicantProfile, ...profile, ...updatedProfile }
+          const next = { ...applicantProfile, ...profileForStorage, ...updatedProfile }
           // Don't store file object in localStorage
           if (next.resumeFile) {
             delete next.resumeFile
           }
           setApplicantProfile(next)
           writeJson(STORAGE_KEYS.applicantProfile, next)
-          return { ok: true, updatedProfile }
+          return { ok: true, updatedProfile, savedLocally: true }
         }
       } catch (fetchErr) {
         console.error('Failed to fetch updated profile:', fetchErr)
+        // Still return success since we saved locally
+        return { ok: true, savedLocally: true, warning: 'Saved locally but could not verify on server' }
       }
       
-      // Fallback: use current profile data if fetch fails
-      const next = { ...applicantProfile, ...profile }
-      // Don't store file object in localStorage
-      if (next.resumeFile) {
-        delete next.resumeFile
-      }
-      setApplicantProfile(next)
-      writeJson(STORAGE_KEYS.applicantProfile, next)
-      return { ok: true }
+      // If we got here, the save succeeded but fetch failed
+      return { ok: true, savedLocally: true }
     } catch (err) {
-      console.error('Save profile error:', err)
-      // Fallback to local storage
-      const next = { ...applicantProfile, ...profile }
-      if (next.resumeFile) {
-        delete next.resumeFile
+      console.error('DEBUG: Save profile error:', err)
+      console.error('DEBUG: Error details:', {
+        message: err?.message,
+        error: err?.error,
+        status: err?.status,
+        response: err?.response
+      })
+      const errorMessage = err?.message || err?.error || 'Failed to save profile to server'
+      // Data is already saved locally, so return partial success
+      // This ensures the user knows their data is safe even if server save fails
+      return { 
+        ok: true, 
+        savedLocally: true, 
+        warning: `Saved locally. Server sync failed: ${errorMessage}. Your data is safe and will sync when you log in.`,
+        error: errorMessage
       }
-      setApplicantProfile(next)
-      writeJson(STORAGE_KEYS.applicantProfile, next)
-      return { ok: true }
     }
   }
 
@@ -711,9 +760,11 @@ export function AppProvider({ children }) {
     setJobsLoading(true)
     setJobsError('')
     try {
-      // If HR is logged in, fetch all jobs (including disabled)
-      const endpoint = auth.isLoggedIn && auth.role === 'HR' ? '/api/jobs/all' : '/api/jobs'
-      const data = await apiRequest(endpoint, { method: 'GET', token: auth.isLoggedIn ? token : undefined })
+      // Only call protected /api/jobs/all when we have a token; avoids 401 -> logout cascade
+      const authToken = auth.isLoggedIn ? (token || tokenService.getToken()) : undefined
+      const useProtected = auth.isLoggedIn && auth.role === 'HR' && !!authToken
+      const endpoint = useProtected ? '/api/jobs/all' : '/api/jobs'
+      const data = await apiRequest(endpoint, { method: 'GET', token: authToken })
       if (Array.isArray(data)) setJobs(data)
       else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)
       else setJobs([])

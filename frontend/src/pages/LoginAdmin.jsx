@@ -1,13 +1,20 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
 
 export default function LoginAdmin() {
-	const { loginHR } = useApp()
+	const { loginHR, auth } = useApp()
 	const navigate = useNavigate()
 	const [adminEmail, setAdminEmail] = useState('')
 	const [adminPassword, setAdminPassword] = useState('')
 	const [adminError, setAdminError] = useState('')
+
+	// Redirect to dashboard if already logged in
+	useEffect(() => {
+		if (auth.isLoggedIn && auth.role === 'HR') {
+			navigate('/dashboard', { replace: true })
+		}
+	}, [auth.isLoggedIn, auth.role, navigate])
 
 	const onAdminSubmit = async (e) => {
 		e.preventDefault()
@@ -15,6 +22,11 @@ export default function LoginAdmin() {
 		const res = await loginHR(adminEmail, adminPassword)
 		if (res.ok) navigate('/dashboard')
 		else setAdminError(res.message || 'Login failed')
+	}
+
+	// Don't render login form if already logged in (redirect will happen)
+	if (auth.isLoggedIn && auth.role === 'HR') {
+		return null
 	}
 
 	return (

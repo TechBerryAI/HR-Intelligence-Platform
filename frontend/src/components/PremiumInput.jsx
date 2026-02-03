@@ -71,6 +71,10 @@ const PremiumInput = forwardRef(({
               ${error ? 'border-red-500 focus:border-red-400' : ''}
               ${className}
             `}
+            style={{
+              color: '#f3f4f6',
+              ...(props.style || {})
+            }}
             {...props}
           >
             {children}

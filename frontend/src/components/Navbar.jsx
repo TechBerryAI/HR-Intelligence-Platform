@@ -56,14 +56,16 @@ export default function Navbar() {
   }, [])
 
   return (
-    <motion.header
-      initial={{ y: -100 }}
-      animate={{ y: 0 }}
-      transition={{ type: 'spring', stiffness: 100, damping: 20 }}
-      className="glass-card sticky top-0 z-30 border-b border-white/10 backdrop-blur-xl"
-    >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="h-16 flex items-center justify-between">
+    <div className="sticky top-0 z-30 w-full min-h-[64px]">
+      <motion.header
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: 'spring', stiffness: 100, damping: 20 }}
+        className="glass-card border-b border-white/10 backdrop-blur-xl"
+        style={{ willChange: 'transform', minHeight: '64px' }}
+      >
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2 group">
             <motion.div
               whileHover={{ rotate: 360, scale: 1.1 }}
@@ -110,7 +112,7 @@ export default function Navbar() {
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.95, y: -10 }}
                           transition={{ duration: 0.2 }}
-                          className="absolute right-0 mt-2 w-52 glass-card rounded-xl border border-white/10 shadow-premium overflow-hidden"
+                          className="absolute right-0 mt-2 w-52 rounded-xl border border-white/10 shadow-premium overflow-hidden bg-zinc-900 shadow-xl"
                         >
                           <div className="py-2">
                             <motion.button
@@ -128,6 +130,14 @@ export default function Navbar() {
                             >
                               <FiUsers className="w-4 h-4" />
                               Candidates
+                            </motion.button>
+                            <motion.button
+                              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
+                              onClick={() => { setHrMenuOpen(false); navigate('/admin/bulk-resume-parser') }}
+                            >
+                              <FiFileText className="w-4 h-4" />
+                              Bulk Resume Parser
                             </motion.button>
                             <div className="border-t border-white/10 my-1" />
                             <motion.button
@@ -165,7 +175,7 @@ export default function Navbar() {
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.95, y: -10 }}
                           transition={{ duration: 0.2 }}
-                          className="absolute right-0 mt-2 w-52 glass-card rounded-xl border border-white/10 shadow-premium overflow-hidden"
+                          className="absolute right-0 mt-2 w-52 rounded-xl border border-white/10 shadow-premium overflow-hidden bg-zinc-900 shadow-xl"
                         >
                           <div className="py-2">
                             <motion.button
@@ -220,7 +230,7 @@ export default function Navbar() {
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: -10 }}
                     transition={{ duration: 0.2 }}
-                    className="absolute right-0 mt-2 w-52 glass-card rounded-xl border border-white/10 shadow-premium overflow-hidden"
+                    className="absolute right-0 mt-2 w-52 rounded-xl border border-white/10 shadow-premium overflow-hidden bg-zinc-900 shadow-xl"
                   >
                     <div className="py-2">
                       <motion.button
@@ -247,6 +257,7 @@ export default function Navbar() {
           </nav>
         </div>
       </div>
-    </motion.header>
+      </motion.header>
+    </div>
   )
 }

@@ -131,6 +131,15 @@ def validate_toon_format(toon: Dict[str, Any], document_type: str) -> Tuple[bool
         for field in person_fields:
             if field not in toon['person']:
                 return False, f"Missing person field: {field}"
+        
+        # URLs are optional but should be strings or arrays if present
+        optional_url_fields = ['linkedin', 'github', 'portfolio', 'website', 'twitter']
+        for field in optional_url_fields:
+            if field in toon['person'] and not isinstance(toon['person'][field], (str, type(None))):
+                return False, f"person.{field} must be a string or null"
+        
+        if 'otherUrls' in toon['person'] and not isinstance(toon['person']['otherUrls'], (list, type(None))):
+            return False, "person.otherUrls must be an array or null"
     
     elif document_type == 'job_description':
         required_fields = ['title', 'location', 'skills', 'responsibilities']

@@ -40,12 +40,15 @@ export default function Dashboard() {
   const [editExperienceTo, setEditExperienceTo] = useState('')
   const [editDescription, setEditDescription] = useState('')
 
-  // Update company field when user data loads
+  // Always ensure company field is set to user's company when user data loads
   useEffect(() => {
-    if (user?.company && !company) {
-      setCompany(user.company)
+    if (user?.company) {
+      // Set company to user's company if it's empty or not set
+      if (!company || company.trim() === '') {
+        setCompany(user.company)
+      }
     }
-  }, [user])
+  }, [user?.company]) // Only depend on user.company to avoid infinite loops
 
   // Handle JD autofill from parsing
   const handleJDAutofill = (parsedData) => {
@@ -55,8 +58,14 @@ export default function Dashboard() {
     setExperienceFrom(parsedData.experienceFrom || '');
     setExperienceTo(parsedData.experienceTo || '');
     setDescription(parsedData.description || '');
-    if (parsedData.company) {
-      setCompany(parsedData.company);
+    
+    // Use parsed company if available, otherwise keep user's company
+    // This allows HR to override with a different company if needed
+    if (parsedData.company && parsedData.company.trim()) {
+      setCompany(parsedData.company.trim());
+    } else {
+      // If no company in parsed JD, ensure user's company is set
+      setCompany(user?.company || '');
     }
     
     // Show success message
