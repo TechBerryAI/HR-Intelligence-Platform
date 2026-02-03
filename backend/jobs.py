@@ -1,3 +1,4 @@
+import json
 import re
 from flask import Blueprint, request, jsonify
 from db import db_all, db_get, db_run
@@ -185,7 +186,7 @@ def get_job_applications(job_id: str):
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
         
-        # Get applications with candidate details (include ATS fields: match_score, shortlisted, ats_reasoning)
+        # Get applications with candidate details (include ATS: match_score, shortlisted, ats_reasoning, ats_analysis)
         applications = db_all(
             '''
             SELECT 
@@ -198,6 +199,7 @@ def get_job_applications(job_id: str):
                 a.match_score,
                 a.shortlisted,
                 a.ats_reasoning,
+                a.ats_analysis,
                 cp.full_name,
                 cp.email,
                 cp.phone,
@@ -264,6 +266,13 @@ def get_job_applications(job_id: str):
                     matching_pct = 0
             score_display = match_score if match_score is not None else matching_pct
             
+            ats_analysis_raw = app.get('ats_analysis')
+            ats_analysis = None
+            if ats_analysis_raw:
+                try:
+                    ats_analysis = json.loads(ats_analysis_raw) if isinstance(ats_analysis_raw, str) else ats_analysis_raw
+                except (TypeError, ValueError):
+                    pass
             formatted_apps.append({
                 'id': app['id'],
                 'candidateId': app['candidate_id'],
@@ -274,6 +283,7 @@ def get_job_applications(job_id: str):
                 'score': score_display,
                 'shortlisted': bool(app.get('shortlisted')),
                 'atsReasoning': app.get('ats_reasoning'),
+                'atsAnalysis': ats_analysis,
                 'fullName': app.get('full_name') or app.get('candidate_name') or 'Unknown',
                 'name': app.get('full_name') or app.get('candidate_name') or 'Unknown',
                 'email': app.get('email'),
