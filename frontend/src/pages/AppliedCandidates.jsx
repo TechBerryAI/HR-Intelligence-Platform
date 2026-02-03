@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useApp } from '../context/AppContext.jsx'
 import CandidateCard from '../components/CandidateCard.jsx'
+import { MatchHeader, ScoreCard, ChipGroup, CollapsibleSection } from '../components/MatchExplanation'
 import { BASE_URL, apiRequest } from '../utils/api'
 import { tokenService } from '../utils/tokenService'
 import { getAvatarGradient } from '../utils/avatarColor'
@@ -39,6 +40,7 @@ export default function AppliedCandidates() {
   const [viewMode, setViewMode] = useState('grid') // 'grid' or 'list'
   const [resumeAction, setResumeAction] = useState({ isLoading: false, candidateKey: null })
   const [profileLoading, setProfileLoading] = useState(false)
+  const [reasonCandidate, setReasonCandidate] = useState(null)
 
   const resolvedCandidateId = useMemo(() => {
     if (!selectedCandidate) return null
@@ -121,6 +123,14 @@ export default function AppliedCandidates() {
 
   const handleViewDetails = (candidate) => {
     setSelectedCandidate(candidate)
+  }
+
+  const handleViewReason = (candidate) => {
+    setReasonCandidate(candidate)
+  }
+
+  const closeReasonModal = () => {
+    setReasonCandidate(null)
   }
 
   useEffect(() => {
@@ -442,6 +452,7 @@ export default function AppliedCandidates() {
                             key={candidate.id || index}
                             candidate={candidate}
                             onViewDetails={handleViewDetails}
+                            onViewReason={handleViewReason}
                           />
                         ))}
                       </div>
@@ -502,15 +513,23 @@ export default function AppliedCandidates() {
                                       <span className={`text-xs font-medium ${scoreInfo.color}`}>{scoreInfo.label}</span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                      <button
-                                        onClick={() => handleViewDetails(candidate)}
-                                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white text-sm font-medium transition-all duration-200 ring-1 ring-white/10 hover:ring-white/20"
-                                      >
-                                        <span>View</span>
-                                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                                          <path fillRule="evenodd" d="M16.28 11.47a.75.75 0 0 1 0 1.06l-7.5 7.5a.75.75 0 0 1-1.06-1.06L14.69 12 7.72 5.03a.75.75 0 0 1 1.06-1.06l7.5 7.5Z" clipRule="evenodd" />
-                                        </svg>
-                                      </button>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          onClick={() => handleViewReason(candidate)}
+                                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 text-sm font-medium transition-all duration-200 ring-1 ring-violet-500/40"
+                                        >
+                                          <span>Reason</span>
+                                        </button>
+                                        <button
+                                          onClick={() => handleViewDetails(candidate)}
+                                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white text-sm font-medium transition-all duration-200 ring-1 ring-white/10 hover:ring-white/20"
+                                        >
+                                          <span>Profile</span>
+                                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                                            <path fillRule="evenodd" d="M16.28 11.47a.75.75 0 0 1 0 1.06l-7.5 7.5a.75.75 0 0 1-1.06-1.06L14.69 12 7.72 5.03a.75.75 0 0 1 1.06-1.06l7.5 7.5Z" clipRule="evenodd" />
+                                          </svg>
+                                        </button>
+                                      </div>
                                     </td>
                                   </tr>
                                 )
@@ -836,6 +855,123 @@ export default function AppliedCandidates() {
           </div>
         </div>
       )}
+
+      {/* View Reason Modal - Decision-first: Header → Score Cards → Strengths → Gaps → Collapsible Reasoning */}
+      {reasonCandidate && (() => {
+        const score = Math.round(Number(reasonCandidate.matchScore || reasonCandidate.score || 0))
+        const analysis = reasonCandidate.atsAnalysis || {}
+        const jsonOut = analysis.json_output || analysis
+        const breakdown = jsonOut.score_breakdown || {}
+        const rawStrengths = jsonOut.key_strengths || []
+        const rawGaps = jsonOut.key_gaps || []
+        const verdict = jsonOut.verdict || (jsonOut.decision || '').replace(/_/g, ' ')
+        const finalReasoning = jsonOut.final_reasoning || reasonCandidate.atsReasoning || 'No detailed reasoning available.'
+
+        // Score factors: name, breakdown key, weight % (matches backend)
+        const SCORE_FACTORS = [
+          { name: 'Core Skills', key: 'skills', weight: 60 },
+          { name: 'Experience', key: 'experience', weight: 25 },
+          { name: 'Education', key: 'education', weight: 10 },
+          { name: 'Location', key: 'location', weight: 5 },
+        ]
+
+        // Parse list items into chips: "Label: A, B, C" → ["A", "B", "C"]; else one chip per item
+        const toChips = (items) => {
+          const out = []
+          items.forEach((item) => {
+            const s = String(item).trim()
+            if (!s) return
+            const colon = s.indexOf(': ')
+            if (colon !== -1) {
+              const rest = s.slice(colon + 2).split(',').map((x) => x.trim()).filter(Boolean)
+              rest.forEach((x) => out.push(x))
+            } else {
+              out.push(s)
+            }
+          })
+          return out
+        }
+        const strengthChips = toChips(rawStrengths)
+        const gapChips = toChips(rawGaps)
+
+        // Primary reason: first 1–2 lines of final reasoning
+        const primaryReason = finalReasoning.split(/\n/).slice(0, 2).join(' ').trim() || finalReasoning.slice(0, 200)
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={closeReasonModal}>
+            <div className="bg-zinc-900 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto ring-1 ring-zinc-700 shadow-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="match-modal-title">
+              <MatchHeader
+                score={score}
+                candidateName={reasonCandidate.fullName || reasonCandidate.name || 'Candidate'}
+                candidateEmail={reasonCandidate.email || ''}
+                verdict={verdict}
+                onClose={closeReasonModal}
+              />
+              <div className="p-6 space-y-6">
+                {/* Score breakdown – metric cards with progress bars */}
+                {(breakdown.skills != null || breakdown.experience != null || breakdown.education != null || breakdown.location != null) && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Score breakdown</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {SCORE_FACTORS.map(({ name, key, weight }) => {
+                        const value = breakdown[key]
+                        if (value == null) return null
+                        return (
+                          <ScoreCard
+                            key={key}
+                            factorName={name}
+                            scorePct={value}
+                            weightPct={weight}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Strengths – green chips */}
+                <ChipGroup title="Strengths" items={strengthChips} variant="strength" id="strengths-label" />
+
+                {/* Gaps – red chips */}
+                <ChipGroup title="Gaps" items={gapChips} variant="gap" id="gaps-label" />
+
+                {/* Detailed analysis – collapsed by default */}
+                <CollapsibleSection label="Detailed Analysis">
+                  <div className="space-y-3 text-sm text-zinc-300">
+                    <p><span className="text-zinc-400">Overall score:</span> <span className="font-semibold text-white">{score}%</span></p>
+                    <p><span className="text-zinc-400">Summary:</span> {primaryReason}</p>
+                    {jsonOut.mandatory_skills_match_pct != null && (
+                      <p>
+                        <span className="text-zinc-400">Mandatory skills match:</span>{' '}
+                        <span className={jsonOut.mandatory_skills_match_pct >= 60 ? 'text-emerald-400' : 'text-amber-400'}>
+                          {Number(jsonOut.mandatory_skills_match_pct)}%
+                        </span>
+                        {jsonOut.mandatory_skills_match_pct < 60 && (
+                          <span className="text-amber-400 ml-1">(below 60% → Not a Match)</span>
+                        )}
+                      </p>
+                    )}
+                    {(jsonOut.evaluation_report?.skills_analysis?.missing_mandatory_skills?.length > 0 || jsonOut.evaluation_report?.skills_analysis?.missing_preferred_skills?.length > 0) && (
+                      <div className="pt-2 border-t border-zinc-600/50">
+                        {jsonOut.evaluation_report.skills_analysis.missing_mandatory_skills?.length > 0 && (
+                          <p className="text-zinc-400">Missing mandatory: {jsonOut.evaluation_report.skills_analysis.missing_mandatory_skills.join(', ')}</p>
+                        )}
+                        {jsonOut.evaluation_report.skills_analysis.missing_preferred_skills?.length > 0 && (
+                          <p className="text-zinc-400">Missing preferred: {jsonOut.evaluation_report.skills_analysis.missing_preferred_skills.join(', ')}</p>
+                        )}
+                      </div>
+                    )}
+                    <div className="pt-2 border-t border-zinc-600/50">
+                      <p className="text-zinc-400 mb-1">Full reasoning:</p>
+                      <p className="leading-relaxed">{finalReasoning}</p>
+                    </div>
+                  </div>
+                </CollapsibleSection>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </section>
   )
 }

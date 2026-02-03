@@ -112,7 +112,7 @@ export default function Navbar() {
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.95, y: -10 }}
                           transition={{ duration: 0.2 }}
-                          className="absolute right-0 mt-2 w-52 glass-card rounded-xl border border-white/10 shadow-premium overflow-hidden"
+                          className="absolute right-0 mt-2 w-52 rounded-xl border border-white/10 shadow-premium overflow-hidden bg-zinc-900 shadow-xl"
                         >
                           <div className="py-2">
                             <motion.button
@@ -175,7 +175,7 @@ export default function Navbar() {
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.95, y: -10 }}
                           transition={{ duration: 0.2 }}
-                          className="absolute right-0 mt-2 w-52 glass-card rounded-xl border border-white/10 shadow-premium overflow-hidden"
+                          className="absolute right-0 mt-2 w-52 rounded-xl border border-white/10 shadow-premium overflow-hidden bg-zinc-900 shadow-xl"
                         >
                           <div className="py-2">
                             <motion.button
@@ -230,7 +230,7 @@ export default function Navbar() {
                     animate={{ opacity: 1, scale: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.95, y: -10 }}
                     transition={{ duration: 0.2 }}
-                    className="absolute right-0 mt-2 w-52 glass-card rounded-xl border border-white/10 shadow-premium overflow-hidden"
+                    className="absolute right-0 mt-2 w-52 rounded-xl border border-white/10 shadow-premium overflow-hidden bg-zinc-900 shadow-xl"
                   >
                     <div className="py-2">
                       <motion.button

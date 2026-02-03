@@ -25,17 +25,31 @@ def _jd_toon_from_job_row(job):
             max_years = float(nums[1])
         elif len(nums) == 1:
             min_years = float(nums[0])
+    # Mandatory vs preferred skills for ATS (technical roles)
+    mandatory_skills = []
+    preferred_skills = []
     skills = []
-    if '**Required Skills:**' in desc or '**Skills:**' in desc:
+    pref_block = re.search(r'\*\*(?:Preferred|Nice-to-have|Advanced)\s*Skills?\*\*\s*([^\n*]+)', desc, re.I)
+    req_block = re.search(r'\*\*(?:Required|Core|Mandatory)\s*Skills?\*\*\s*([^\n*]+)', desc, re.I)
+    if req_block:
+        mandatory_skills = [s.strip() for s in re.split(r'[,•·]', req_block.group(1)) if s.strip()]
+    if pref_block:
+        preferred_skills = [s.strip() for s in re.split(r'[,•·]', pref_block.group(1)) if s.strip()]
+    if not mandatory_skills and ('**Required Skills:**' in desc or '**Skills:**' in desc):
         block = re.search(r'\*\*(?:Required )?Skills:\*\*\s*([^\n*]+)', desc, re.I)
         if block:
             skills = [s.strip() for s in re.split(r'[,•·]', block.group(1)) if s.strip()]
+            mandatory_skills = skills
+    if not skills and mandatory_skills:
+        skills = mandatory_skills
     if not skills and desc:
         for line in desc.split('\n')[:5]:
             if 'skill' in line.lower() or 'experience' in line.lower():
                 parts = re.split(r'[,•·\-]', line)
                 skills.extend([p.strip().strip('*') for p in parts if len(p.strip()) > 2][:15])
                 break
+        if skills and not mandatory_skills:
+            mandatory_skills = skills
     responsibilities = []
     if '**Responsibilities:**' in desc:
         block = re.search(r'\*\*Responsibilities:\*\*\s*([\s\S]*?)(?=\n\*\*|\Z)', desc)
@@ -63,7 +77,9 @@ def _jd_toon_from_job_row(job):
         'salary_range': (job.get('salary') or '').strip(),
         'min_experience_years': min_years,
         'max_experience_years': max_years,
-        'skills': skills[:30],
+        'skills': (mandatory_skills or skills)[:30],
+        'mandatory_skills': mandatory_skills[:30] if mandatory_skills else [],
+        'preferred_skills': preferred_skills[:20] if preferred_skills else [],
         'responsibilities': responsibilities[:20],
         'qualifications': qualifications[:15],
         'keywords': [],
