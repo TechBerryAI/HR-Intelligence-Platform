@@ -72,3 +72,24 @@ def require_candidate(f):
             return jsonify({"error": "Candidate access required"}), 403
         return f(*args, **kwargs)
     return wrapper
+
+
+def optional_authenticate_token(f):
+    """If Authorization Bearer is present, require valid JWT (401 on invalid/expired). If no header, set request.user = None."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else None
+        request.user = None
+        if token:
+            try:
+                user = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+                if user.get('type') == 'refresh':
+                    return jsonify({"error": "Invalid or expired token"}), 401
+                request.user = user
+            except jwt.ExpiredSignatureError:
+                return jsonify({"error": "Invalid or expired token"}), 401
+            except Exception:
+                return jsonify({"error": "Invalid or expired token"}), 401
+        return f(*args, **kwargs)
+    return wrapper
