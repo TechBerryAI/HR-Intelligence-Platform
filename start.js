@@ -8,7 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawn, execSync: nodeExecSync } = require('child_process');
+const { spawn, execSync: nodeExecSync, spawnSync } = require('child_process');
 const http = require('http');
 
 const ROOT = path.resolve(__dirname);
@@ -16,10 +16,71 @@ const BACKEND_DIR = path.join(ROOT, 'backend');
 const FRONTEND_DIR = path.join(ROOT, 'frontend');
 const BACKEND_ENV = path.join(BACKEND_DIR, '.env');
 const BACKEND_ENV_EXAMPLE = path.join(BACKEND_DIR, '.env.example');
+const VENV_DIR = path.join(BACKEND_DIR, 'venv');
 const VENV_PYTHON = path.join(
   BACKEND_DIR,
   process.platform === 'win32' ? 'venv\\Scripts\\python.exe' : 'venv/bin/python'
 );
+
+// pyodbc does not support Python 3.14+ (C API changes). Backend needs 3.8–3.12.
+const PY_MIN_MINOR = 8;
+const PY_MAX_MINOR = 12;
+
+// Python prints --version to stderr; use -c to get version on stdout.
+const PY_VERSION_SCRIPT = '-c', PY_VERSION_CODE = 'import sys; print(sys.version_info.major, sys.version_info.minor)';
+
+function parsePythonVersion(output) {
+  const parts = (output || '').trim().split(/\s+/);
+  if (parts.length >= 2) {
+    const major = parseInt(parts[0], 10), minor = parseInt(parts[1], 10);
+    if (!isNaN(major) && !isNaN(minor)) return { major, minor };
+  }
+  return null;
+}
+
+function isPythonVersionCompatible(ver) {
+  return ver && ver.major === 3 && ver.minor >= PY_MIN_MINOR && ver.minor <= PY_MAX_MINOR;
+}
+
+/** Get { cmd, venvArgs } to run Python 3.8–3.12 for venv creation (pyodbc requires < 3.14). */
+function getCompatiblePythonForVenv() {
+  const tryCommands = [];
+  if (process.platform === 'win32') {
+    for (let minor = PY_MAX_MINOR; minor >= PY_MIN_MINOR; minor--) {
+      tryCommands.push({ cmd: 'py', args: [`-3.${minor}`, PY_VERSION_SCRIPT, PY_VERSION_CODE], usePy: true, pyLabel: `-3.${minor}` });
+    }
+  }
+  tryCommands.push({ cmd: 'python', args: [PY_VERSION_SCRIPT, PY_VERSION_CODE], usePy: false });
+  tryCommands.push({ cmd: 'python3', args: [PY_VERSION_SCRIPT, PY_VERSION_CODE], usePy: false });
+
+  for (const t of tryCommands) {
+    try {
+      const r = spawnSync(t.cmd, t.args, { encoding: 'utf8', shell: false });
+      if (r.status !== 0) continue;
+      const ver = parsePythonVersion(r.stdout || r.stderr || '');
+      if (isPythonVersionCompatible(ver)) {
+        if (t.usePy) {
+          return { cmd: 'py', venvArgs: [t.pyLabel, '-m', 'venv', 'venv'] };
+        }
+        return { cmd: t.cmd, venvArgs: ['-m', 'venv', 'venv'] };
+      }
+    } catch (_) {
+      // ignore and try next
+    }
+  }
+  return null;
+}
+
+function getVenvPythonVersion() {
+  if (!fs.existsSync(VENV_PYTHON)) return null;
+  try {
+    const r = spawnSync(VENV_PYTHON, [PY_VERSION_SCRIPT, PY_VERSION_CODE], { encoding: 'utf8', cwd: BACKEND_DIR });
+    if (r.status !== 0) return null;
+    return parsePythonVersion(r.stdout || r.stderr || '');
+  } catch (_) {
+    return null;
+  }
+}
 const BACKEND_PORT = 3000;
 const FRONTEND_PORT = 5173;
 const BROWSER_URL = `http://localhost:${FRONTEND_PORT}`;
@@ -89,9 +150,24 @@ function setupEnv() {
 async function setupBackend() {
   logStep(3, 6, 'Setting up backend (venv + pip)');
   const venvDir = path.join(BACKEND_DIR, 'venv');
+  const venvVer = getVenvPythonVersion();
+  if (venvVer && venvVer.major === 3 && venvVer.minor >= 14) {
+    log('Removing existing venv (Python 3.14+ not supported by pyodbc; need 3.8–3.12)...');
+    fs.rmSync(venvDir, { recursive: true, force: true });
+  }
   if (!fs.existsSync(venvDir)) {
-    log('Creating backend virtual environment...');
-    await runCmd('python', ['-m', 'venv', 'venv'], BACKEND_DIR);
+    const compatible = getCompatiblePythonForVenv();
+    if (!compatible) {
+      log('Python 3.8–3.12 required for backend (pyodbc does not support 3.14+).', 'err');
+      if (process.platform === 'win32') {
+        log('Install Python 3.12 from https://www.python.org/downloads/ then run "node start.js" again.', 'err');
+      } else {
+        log('Install Python 3.11 or 3.12 and ensure "python3" or "python" points to it.', 'err');
+      }
+      process.exit(1);
+    }
+    log('Creating backend virtual environment (Python 3.8–3.12 for pyodbc)...');
+    await runCmd(compatible.cmd, compatible.venvArgs, BACKEND_DIR);
     log('Virtual environment created');
   } else {
     log('Backend venv already exists');
@@ -136,7 +212,7 @@ function startBackend() {
 
 function startFrontend() {
   logStep(6, 6, 'Starting frontend (Vite)');
-  // On Windows, npm is usually npm.cmd; shell: true is needed so the system finds it (spawn npm ENOENT otherwise).
+  // On Windows, spawn('npm', ...) needs shell so the system finds npm.cmd (otherwise EINVAL or ENOENT).
   const useShell = process.platform === 'win32';
   frontendProcess = spawn('npm', ['run', 'dev'], {
     cwd: FRONTEND_DIR,
