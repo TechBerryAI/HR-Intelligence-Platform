@@ -80,4 +80,3 @@ export interface ClassificationResult {
     type: 'resume' | 'job_description' | 'unknown';
     confidence: number;
 }
-//# sourceMappingURL=toon.d.ts.map

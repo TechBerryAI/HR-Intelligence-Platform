@@ -1,6 +1,6 @@
 /**
- * TOON (Transfer Object Oriented Notation) Types
- * Standardized format for Resume and Job Description parsing
+ * TOON (Token-Oriented Object Notation) Types
+ * Canonical schemas for Resume, JD, and ATS Result across the ATS pipeline.
  */
 
 export interface TOONBase {
@@ -64,6 +64,24 @@ export interface JDTOON extends TOONBase {
 }
 
 export type TOON = ResumeTOON | JDTOON;
+
+/** ATS scoring/matching result; stored and exchanged as TOON. */
+export interface ATSResultTOON {
+  json_output: {
+    final_score: number;
+    overall_match_score?: number;
+    decision: string;
+    verdict: string;
+    rationale?: string;
+    final_reasoning?: string;
+    evaluation_report?: Record<string, unknown>;
+    mandatory_skills_match_pct?: number;
+    score_breakdown?: Record<string, number>;
+    key_strengths?: string[];
+    key_gaps?: string[];
+  };
+  toon_output?: string;
+}
 
 export interface ParsingResponse {
   status: 'ok' | 'error';

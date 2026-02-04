@@ -1,5 +1,6 @@
 """
-ATS Matching Service - calls HR-ATS-API when configured; otherwise uses internal weighted matcher.
+ATS Matching Service - consumes TOON resume + JD (dict from toon_loads_flex). Calls HR-ATS-API when configured;
+JSON is used only at the external API boundary (request/response with HR-ATS-API).
 
 REFACTORED MODEL (technical roles):
 - Core Technical Skills: 60% (Mandatory 40%, Preferred 20%)
