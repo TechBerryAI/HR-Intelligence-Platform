@@ -1,8 +1,8 @@
-import json
 import re
 from flask import Blueprint, request, jsonify
 from db import db_all, db_get, db_run
 from utils import authenticate_token, require_hr
+from toon import toon_loads_flex
 
 jobs_bp = Blueprint('jobs', __name__)
 
@@ -267,12 +267,7 @@ def get_job_applications(job_id: str):
             score_display = match_score if match_score is not None else matching_pct
             
             ats_analysis_raw = app.get('ats_analysis')
-            ats_analysis = None
-            if ats_analysis_raw:
-                try:
-                    ats_analysis = json.loads(ats_analysis_raw) if isinstance(ats_analysis_raw, str) else ats_analysis_raw
-                except (TypeError, ValueError):
-                    pass
+            ats_analysis = toon_loads_flex(ats_analysis_raw) if ats_analysis_raw else None
             formatted_apps.append({
                 'id': app['id'],
                 'candidateId': app['candidate_id'],

@@ -1,11 +1,11 @@
 import os
-import json
 import re
 import requests
 from flask import Blueprint, request, jsonify
 from db import db_get, db_run, db_all
 from utils import authenticate_token, require_candidate
 from services.ats_service import match_candidate_to_job
+from toon import toon_loads_flex, toon_dumps
 
 applications_bp = Blueprint('applications', __name__)
 
@@ -236,21 +236,18 @@ def apply_job():
         )
         
         if parsed_jd_record:
-            try:
-                parsed_jd = json.loads(parsed_jd_record['toon'])
-            except json.JSONDecodeError as e:
-                print(f"[APPLY] ERROR: Failed to parse stored JD JSON: {e}")
+            parsed_jd = toon_loads_flex(parsed_jd_record['toon'])
+            if not parsed_jd:
+                print("[APPLY] ERROR: Failed to parse stored JD TOON")
                 return jsonify({'error': 'Invalid stored parsing data'}), 500
         else:
             # No parsed JD file for this job: build minimal TOON from job row so integrated ATS still runs
             parsed_jd = _jd_toon_from_job_row(job)
             print(f"[APPLY] No parsed_jd for job {job_id}; using minimal TOON from job row for ATS")
         
-        # Parse resume TOON
-        try:
-            parsed_resume = json.loads(parsed_resume_record['toon'])
-        except json.JSONDecodeError as e:
-            print(f"[APPLY] ERROR: Failed to parse stored resume JSON: {e}")
+        parsed_resume = toon_loads_flex(parsed_resume_record['toon'])
+        if not parsed_resume:
+            print("[APPLY] ERROR: Failed to parse stored resume TOON")
             return jsonify({'error': 'Invalid stored parsing data'}), 500
         
         # ========================================================================
@@ -287,7 +284,7 @@ def apply_job():
             final_score = json_out.get('overall_match_score') or json_out.get('final_score')
             decision = (json_out.get('decision') or '').lower()
             rationale = json_out.get('final_reasoning') or json_out.get('rationale') or ats_result.get('toon_output', '')[:2000]
-            ats_analysis_json = json.dumps(ats_result) if isinstance(ats_result, dict) else None
+            ats_analysis_toon = toon_dumps(ats_result) if isinstance(ats_result, dict) else None
             shortlisted = 1 if decision in ('shortlist', 'strong_match', 'partial_match') else 0
             status_after = 'shortlisted' if shortlisted else 'applied'
             db_run(
@@ -295,7 +292,7 @@ def apply_job():
                 UPDATE applications SET match_score = ?, matching_percentage = ?, shortlisted = ?, ats_reasoning = ?, ats_analysis = ?, status = ?
                 WHERE candidate_id = ? AND job_id = ?
                 """,
-                (final_score, final_score, shortlisted, rationale, ats_analysis_json, status_after, candidate_id, job_id)
+                (final_score, final_score, shortlisted, rationale, ats_analysis_toon, status_after, candidate_id, job_id)
             )
             # Shortlisted candidate data will later be sent to n8n (not implemented here)
             return jsonify({
@@ -354,7 +351,7 @@ def get_my_applications():
                 'matchScore': a.get('match_score'),
                 'shortlisted': bool(a.get('shortlisted')),
                 'atsReasoning': a.get('ats_reasoning'),
-                'atsAnalysis': json.loads(a['ats_analysis']) if a.get('ats_analysis') else None,
+                'atsAnalysis': toon_loads_flex(a['ats_analysis']) if a.get('ats_analysis') else None,
                 'job': {
                     'id': a['job_id'],
                     'title': a['title'],
@@ -512,8 +509,7 @@ def receive_ats_result():
         # STORE DETAILED ATS ANALYSIS IN DATABASE
         # ========================================================================
         
-        # Convert analysis dictionary to JSON string for storage
-        analysis_json = json.dumps(analysis) if analysis else None
+        analysis_toon = toon_dumps(analysis) if analysis else None
         
         # Update application with ATS results AND detailed analysis
         db_run(
@@ -526,7 +522,7 @@ def receive_ats_result():
                 status = ?
             WHERE candidate_id = ? AND job_id = ?
             """,
-            (match_score, 1 if shortlisted else 0, reasoning, analysis_json, new_status, candidate_id, job_id)
+            (match_score, 1 if shortlisted else 0, reasoning, analysis_toon, new_status, candidate_id, job_id)
         )
         
         print(f"[ATS_RESULT] Successfully updated application with detailed analysis. New status: {new_status}")

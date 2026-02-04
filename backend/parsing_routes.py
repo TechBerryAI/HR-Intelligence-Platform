@@ -4,9 +4,9 @@ Resume and Job Description Parsing Routes
 import os
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
-import json
 
 from utils import authenticate_token
+from toon import toon_loads_flex
 from parsing_utils import (
     compute_file_hash,
     store_raw_file,
@@ -560,7 +560,7 @@ def get_parsed_resume(parsed_id):
         return jsonify({
             'status': 'ok',
             'parsed_id': result['id'],
-            'toon': json.loads(result['toon']),
+            'toon': toon_loads_flex(result['toon']),
             'confidence': result['confidence'],
             'model_version': result['model_version'],
             'created_at': result['created_at'].isoformat() if hasattr(result['created_at'], 'isoformat') else str(result['created_at'])
@@ -588,7 +588,7 @@ def get_parsed_jd(parsed_id):
         return jsonify({
             'status': 'ok',
             'parsed_id': result['id'],
-            'toon': json.loads(result['toon']),
+            'toon': toon_loads_flex(result['toon']),
             'confidence': result['confidence'],
             'model_version': result['model_version'],
             'created_at': result['created_at'].isoformat() if hasattr(result['created_at'], 'isoformat') else str(result['created_at'])

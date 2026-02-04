@@ -4,6 +4,7 @@ from flask import current_app
 from flask_mail import Message
 
 from extensions import mail
+from helpers.mail_send import send_with_timeout_and_retries
 
 
 def send_notification_email(recipient: Optional[str], subject: str, body: str) -> bool:
@@ -26,11 +27,16 @@ def send_notification_email(recipient: Optional[str], subject: str, body: str) -
             return True
 
         msg = Message(subject=subject, recipients=[recipient], body=body)
-        mail.send(msg)
+        if not send_with_timeout_and_retries(msg):
+            if current_app:
+                current_app.logger.error("Notification email send failed after retries (to=%s)", recipient)
+            else:
+                print(f"Failed to send notification email to {recipient}")
+            return False
         return True
     except Exception as exc:
         if current_app:
-            current_app.logger.error("Failed to send notification email: %s", exc)
+            current_app.logger.error("Failed to send notification email: %s", exc, exc_info=True)
         else:
             print(f"Failed to send notification email: {exc}")
         return False

@@ -49,6 +49,16 @@ app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', app.config.get('MAIL_USERNAME'))
 app.config['MAIL_SUPPRESS_SEND'] = os.getenv('MAIL_SUPPRESS_SEND', 'false').lower() == 'true'
+# Timeout for SMTP send (seconds); Flask-Mail has no built-in timeout
+app.config['MAIL_TIMEOUT'] = int(os.getenv('MAIL_TIMEOUT', '25'))
+# Optional: retries for transient SMTP failures
+app.config['MAIL_SEND_RETRIES'] = int(os.getenv('MAIL_SEND_RETRIES', '3'))
+
+# Validate mail config at startup when sending is enabled (catch MAIL_USERNAME=display name)
+if not app.config['MAIL_SUPPRESS_SEND'] and app.config.get('MAIL_USERNAME'):
+    un = app.config['MAIL_USERNAME'].strip()
+    if '@' not in un or '.' not in un.split('@')[-1]:
+        print("[MAIL] WARNING: MAIL_USERNAME should be the full email address (e.g. user@gmail.com), not a label. Current value may cause SMTP auth to fail.")
 # Disable strict slashes to prevent redirects that break CORS preflight
 app.url_map.strict_slashes = False
 
@@ -79,7 +89,6 @@ from jobs import jobs_bp  # noqa: E402
 from candidate import candidate_bp  # noqa: E402
 from applications import applications_bp  # noqa: E402
 from sessions_routes import sessions_bp  # noqa: E402
-from routes.candidate_auth import candidate_auth_bp  # noqa: E402
 from routes.simple_candidate_auth import simple_candidate_auth_bp  # noqa: E402
 from parsing_routes import parsing_bp  # noqa: E402
 from support import support_bp  # noqa: E402
@@ -144,9 +153,7 @@ def test_cors():
 
 app.register_blueprint(auth_bp, url_prefix='/api')
 app.register_blueprint(jobs_bp, url_prefix='/api/jobs')
-# Use simple_candidate_auth (no SQLAlchemy conflicts) instead of candidate_auth
 app.register_blueprint(simple_candidate_auth_bp, url_prefix='/api/candidate')
-# app.register_blueprint(candidate_auth_bp, url_prefix='/api/candidate')  # Disabled - causes timeout
 app.register_blueprint(candidate_bp, url_prefix='/api/candidate')
 app.register_blueprint(applications_bp, url_prefix='/api/applications')
 app.register_blueprint(sessions_bp, url_prefix='/api/sessions')
