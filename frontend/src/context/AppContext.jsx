@@ -755,16 +755,13 @@ export function AppProvider({ children }) {
     }
   }
 
-  // Fetch jobs from backend
+  // Fetch jobs from backend. Always send token when available so HR sees only their jobs (backend filters by posted_by).
   const fetchJobs = async () => {
     setJobsLoading(true)
     setJobsError('')
     try {
-      // Only call protected /api/jobs/all when we have a token; avoids 401 -> logout cascade
-      const authToken = auth.isLoggedIn ? (token || tokenService.getToken()) : undefined
-      const useProtected = auth.isLoggedIn && auth.role === 'HR' && !!authToken
-      const endpoint = useProtected ? '/api/jobs/all' : '/api/jobs'
-      const data = await apiRequest(endpoint, { method: 'GET', token: authToken })
+      const authToken = token || tokenService.getToken()
+      const data = await apiRequest('/api/jobs', { method: 'GET', token: authToken })
       if (Array.isArray(data)) setJobs(data)
       else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)
       else setJobs([])

@@ -1,7 +1,7 @@
 import re
 from flask import Blueprint, request, jsonify
 from db import db_all, db_get, db_run
-from utils import authenticate_token, require_hr
+from utils import authenticate_token, require_hr, optional_authenticate_token
 from toon import toon_loads_flex
 
 jobs_bp = Blueprint('jobs', __name__)
@@ -84,17 +84,39 @@ def generate_jdid_from_title(title):
 
 
 @jobs_bp.get('/')
+@optional_authenticate_token
 def get_jobs_public():
+    """List jobs. If authenticated as HR, return only jobs posted by that HR. Otherwise return enabled jobs (public)."""
     try:
-        jobs = db_all(
-            '''
-            SELECT j.*, hs.company as company_name
-            FROM jobs j
-            LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-            WHERE j.enabled = 1
-            ORDER BY j.posted_on DESC
-            '''
-        )
+        user = getattr(request, 'user', None)
+        if user and user.get('role') == 'HR' and user.get('hrId'):
+            # Admin: only jobs posted by this HR
+            jobs = db_all(
+                '''
+                SELECT j.*, hs.company as company_name
+                FROM jobs j
+                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+                WHERE j.posted_by = ?
+                ORDER BY j.posted_on DESC
+                ''',
+                (user.get('hrId'),)
+            )
+            # Further restrict to jobs whose company matches this account's company (from JWT)
+            hr_company = (user.get('company') or '').strip()
+            if hr_company:
+                hr_company_lower = hr_company.lower()
+                jobs = [j for j in jobs if (j.get('company') or '').strip().lower() == hr_company_lower]
+        else:
+            # Public / candidate: only enabled jobs
+            jobs = db_all(
+                '''
+                SELECT j.*, hs.company as company_name
+                FROM jobs j
+                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+                WHERE j.enabled = 1
+                ORDER BY j.posted_on DESC
+                '''
+            )
         formatted = [
             {
                 'id': j['jdid'],
@@ -149,7 +171,9 @@ def get_jobs_all():
 
 
 @jobs_bp.get('/<string:job_id>')
+@optional_authenticate_token
 def get_job(job_id: str):
+    """Get one job. HR sees only their own; candidates/public see enabled jobs only."""
     try:
         job = db_get(
             '''
@@ -161,6 +185,15 @@ def get_job(job_id: str):
         )
         if not job:
             return jsonify({'error': 'Job not found'}), 404
+        user = getattr(request, 'user', None)
+        if user and user.get('role') == 'HR':
+            # HR may only view/edit jobs they posted
+            if job.get('posted_by') != user.get('hrId'):
+                return jsonify({'error': 'Job not found or access denied'}), 404
+        else:
+            # Candidate/public: only enabled jobs
+            if not job.get('enabled'):
+                return jsonify({'error': 'Job not found'}), 404
         return jsonify({
             'id': job['jdid'],
             'title': job['title'],

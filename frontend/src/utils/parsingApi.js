@@ -4,6 +4,34 @@
 import { BASE_URL as API_URL } from './api';
 
 /**
+ * Normalize a value to an array of non-empty strings.
+ * JD/LLM output can return qualifications, skills, or responsibilities as:
+ * - array (expected), string (single or pipe/newline-separated), object, null/undefined.
+ * @param {*} value - Raw value from TOON/API
+ * @returns {string[]} - Safe array of strings for iteration
+ */
+function ensureStringArray(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) {
+    return value.map((v) => (v != null && v !== '' ? String(v).trim() : '')).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return [];
+    // Pipe or newline separated (TOON/LLM style)
+    const parts = trimmed.includes('|')
+      ? trimmed.split('|').map((s) => s.trim()).filter(Boolean)
+      : trimmed.split(/\n/).map((s) => s.trim()).filter(Boolean);
+    return parts.length > 0 ? parts : [trimmed];
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const vals = Object.values(value);
+    return vals.map((v) => (v != null && v !== '' ? String(v).trim() : '')).filter(Boolean);
+  }
+  return [];
+}
+
+/**
  * Upload and parse resume file
  * @param {File} file - Resume file (PDF/DOCX)
  * @param {string} candidateId - Optional candidate ID
@@ -76,27 +104,29 @@ export function mapResumeTOONToForm(toon) {
   }
 
   const person = toon.person || {};
+  // Normalize to string (parser/API may return numbers for phone, etc.)
+  const str = (v) => (v == null || v === '') ? '' : String(v).trim();
+
   const education = (toon.education || []).map(edu => ({
-    degree: edu.degree || '',
-    institution: edu.institution || edu.field || '',
-    cgpa: edu.gpa || edu.cgpa || '',
-    startMonth: edu.start || '',
-    endMonth: edu.year || edu.end || '',
+    degree: str(edu.degree),
+    institution: str(edu.institution || edu.field),
+    cgpa: str(edu.gpa || edu.cgpa),
+    startMonth: str(edu.start),
+    endMonth: str(edu.year || edu.end),
   }));
 
   const experiences = (toon.experience || []).map(exp => ({
-    company: exp.company || '',
-    role: exp.title || exp.role || '',
-    startMonth: exp.from || exp.start || '',
-    endMonth: exp.to === 'Present' || exp.to === 'present' ? '' : (exp.to || exp.end || ''),
+    company: str(exp.company),
+    role: str(exp.title || exp.role),
+    startMonth: str(exp.from || exp.start),
+    endMonth: exp.to === 'Present' || exp.to === 'present' ? '' : str(exp.to || exp.end),
     isCurrent: exp.to === 'Present' || exp.to === 'present' || exp.isCurrent || false,
   }));
 
   const certifications = (toon.certifications || []).map(cert => {
-    // Handle both string and object formats
     if (typeof cert === 'string') {
       return {
-        name: cert,
+        name: str(cert),
         issuer: '',
         validTill: '',
         validationUrl: '',
@@ -104,11 +134,11 @@ export function mapResumeTOONToForm(toon) {
       };
     }
     return {
-      name: cert.name || cert.title || '',
-      issuer: cert.issuer || cert.organization || '',
-      validTill: cert.validTill || cert.expiry || '',
-      validationUrl: cert.url || cert.validationUrl || '',
-      status: cert.status || '',
+      name: str(cert.name || cert.title),
+      issuer: str(cert.issuer || cert.organization),
+      validTill: str(cert.validTill || cert.expiry),
+      validationUrl: str(cert.url || cert.validationUrl),
+      status: str(cert.status),
     };
   });
 
@@ -189,17 +219,17 @@ export function mapResumeTOONToForm(toon) {
   }
 
   const mappedData = {
-    fullName: person.name || '',
-    email: person.email || '',
-    phone: person.phone || '',
-    linkedinUrl: linkedinUrl || '',
-    portfolioUrl: portfolioUrl || '',
+    fullName: str(person.name),
+    email: str(person.email),
+    phone: str(person.phone),
+    linkedinUrl: linkedinUrl ? str(linkedinUrl) : '',
+    portfolioUrl: portfolioUrl ? str(portfolioUrl) : '',
     experienceLevel,
     education: education.length > 0 ? education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }],
     experiences: experiences.length > 0 ? experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }],
     certifications: certifications.length > 0 ? certifications : [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }],
     // Skills are extracted but not directly mapped to form (could be used for suggestions)
-    _skills: toon.skills || [],
+    _skills: ensureStringArray(toon.skills),
     _summary: toon.summary || '',
   };
   
@@ -229,30 +259,25 @@ export function mapJDTOONToForm(toon) {
     throw new Error('Invalid job description TOON format');
   }
 
-  // Parse experience range
+  const str = (v) => (v == null || v === '') ? '' : String(v).trim();
   let experienceFrom = '';
   let experienceTo = '';
-  
-  if (toon.min_experience_years !== undefined) {
-    experienceFrom = String(toon.min_experience_years);
-  }
-  if (toon.max_experience_years !== undefined) {
-    experienceTo = String(toon.max_experience_years);
-  }
+  if (toon.min_experience_years !== undefined) experienceFrom = String(toon.min_experience_years);
+  if (toon.max_experience_years !== undefined) experienceTo = String(toon.max_experience_years);
 
   return {
-    title: toon.title || '',
-    location: toon.location || '',
+    title: str(toon.title),
+    location: str(toon.location),
     experienceFrom,
     experienceTo,
     description: formatJDDescription(toon),
-    salary: toon.salary_range || '',
-    company: toon.company || '',
-    // Additional data for reference
-    _skills: toon.skills || [],
-    _responsibilities: toon.responsibilities || [],
-    _qualifications: toon.qualifications || [],
-    _keywords: toon.keywords || [],
+    salary: str(toon.salary_range),
+    company: str(toon.company),
+    // Additional data for reference (normalized so downstream always gets arrays)
+    _skills: ensureStringArray(toon.skills),
+    _responsibilities: ensureStringArray(toon.responsibilities),
+    _qualifications: ensureStringArray(toon.qualifications),
+    _keywords: ensureStringArray(toon.keywords),
   };
 }
 
@@ -262,26 +287,30 @@ export function mapJDTOONToForm(toon) {
  * @returns {string} - Formatted description
  */
 function formatJDDescription(toon) {
+  const str = (v) => (v == null ? '' : String(v)).trim();
+  const responsibilities = ensureStringArray(toon?.responsibilities);
+  const skills = ensureStringArray(toon?.skills);
+  const qualifications = ensureStringArray(toon?.qualifications);
   let description = '';
 
-  if (toon.responsibilities && toon.responsibilities.length > 0) {
+  if (responsibilities.length > 0) {
     description += '**Responsibilities:**\n';
-    toon.responsibilities.forEach(resp => {
-      description += `• ${resp}\n`;
+    responsibilities.forEach((resp) => {
+      description += `• ${str(resp)}\n`;
     });
     description += '\n';
   }
 
-  if (toon.skills && toon.skills.length > 0) {
+  if (skills.length > 0) {
     description += '**Required Skills:**\n';
-    description += toon.skills.join(', ');
+    description += skills.map((s) => str(s)).join(', ');
     description += '\n\n';
   }
 
-  if (toon.qualifications && toon.qualifications.length > 0) {
+  if (qualifications.length > 0) {
     description += '**Qualifications:**\n';
-    toon.qualifications.forEach(qual => {
-      description += `• ${qual}\n`;
+    qualifications.forEach((qual) => {
+      description += `• ${str(qual)}\n`;
     });
   }
 

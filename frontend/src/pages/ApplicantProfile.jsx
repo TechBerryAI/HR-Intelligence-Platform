@@ -17,18 +17,19 @@ export default function ApplicantProfile() {
   const firstErrorRef = useRef(null)
   const fileInputRef = useRef(null)
 
+	const strField = (v) => (v == null || v === '') ? '' : String(v).trim()
 	const [form, setForm] = useState({
 		experienceLevel: applicantProfile.experienceLevel || '',
 		servingNotice: applicantProfile.servingNotice || '',
 		noticePeriod: applicantProfile.noticePeriod || '',
 		lastWorkingDay: applicantProfile.lastWorkingDay || '',
-		fullName: applicantProfile.fullName || '',
-		email: applicantProfile.email || '',
-		phone: applicantProfile.phone || '',
-		linkedinUrl: applicantProfile.linkedinUrl || '',
-		portfolioUrl: applicantProfile.portfolioUrl || '',
-		currentLocation: applicantProfile.currentLocation || '',
-		preferredLocation: applicantProfile.preferredLocation || '',
+		fullName: strField(applicantProfile.fullName),
+		email: strField(applicantProfile.email),
+		phone: strField(applicantProfile.phone),
+		linkedinUrl: strField(applicantProfile.linkedinUrl),
+		portfolioUrl: strField(applicantProfile.portfolioUrl),
+		currentLocation: strField(applicantProfile.currentLocation),
+		preferredLocation: strField(applicantProfile.preferredLocation),
 		resumeFile: null,
 		resumeFileName: applicantProfile.resumeFileName || '',
 		education: applicantProfile.education && applicantProfile.education.length ? applicantProfile.education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }],
@@ -57,18 +58,19 @@ export default function ApplicantProfile() {
 					return prevForm
 				}
 				
+				const toStr = (v) => (v == null || v === '') ? '' : String(v).trim()
 				const newForm = {
 					experienceLevel: applicantProfile?.experienceLevel || prevForm.experienceLevel || '',
 					servingNotice: applicantProfile?.servingNotice || prevForm.servingNotice || '',
 					noticePeriod: applicantProfile?.noticePeriod || prevForm.noticePeriod || '',
 					lastWorkingDay: applicantProfile?.lastWorkingDay || prevForm.lastWorkingDay || '',
-					fullName: applicantProfile?.fullName || prevForm.fullName || '',
-					email: applicantProfile?.email || prevForm.email || '',
-					phone: applicantProfile?.phone || prevForm.phone || '',
-					linkedinUrl: applicantProfile?.linkedinUrl || prevForm.linkedinUrl || '',
-					portfolioUrl: applicantProfile?.portfolioUrl || prevForm.portfolioUrl || '',
-					currentLocation: applicantProfile?.currentLocation || prevForm.currentLocation || '',
-					preferredLocation: applicantProfile?.preferredLocation || prevForm.preferredLocation || '',
+					fullName: toStr(applicantProfile?.fullName) || prevForm.fullName || '',
+					email: toStr(applicantProfile?.email) || prevForm.email || '',
+					phone: toStr(applicantProfile?.phone) || prevForm.phone || '',
+					linkedinUrl: toStr(applicantProfile?.linkedinUrl) || prevForm.linkedinUrl || '',
+					portfolioUrl: toStr(applicantProfile?.portfolioUrl) || prevForm.portfolioUrl || '',
+					currentLocation: toStr(applicantProfile?.currentLocation) || prevForm.currentLocation || '',
+					preferredLocation: toStr(applicantProfile?.preferredLocation) || prevForm.preferredLocation || '',
 					resumeFile: null, // Never load file object from storage
 					resumeFileName: applicantProfile?.resumeFileName || prevForm.resumeFileName || '',
 					education: (applicantProfile?.education && Array.isArray(applicantProfile.education) && applicantProfile.education.length > 0) 
@@ -102,30 +104,32 @@ export default function ApplicantProfile() {
 
 	const validate = (f) => {
 		const e = {}
-		if (!f.fullName?.trim()) e.fullName = 'Full name is required'
-		if (!f.email?.trim()) e.email = 'Email is required'
-		if (!f.phone?.trim()) e.phone = 'Phone is required'
-		if (!f.currentLocation?.trim()) e.currentLocation = 'Current location is required'
-		if (!f.preferredLocation?.trim()) e.preferredLocation = 'Preferred location is required'
+		const s = (v) => (v == null ? '' : String(v)).trim()
+		if (!s(f.fullName)) e.fullName = 'Full name is required'
+		if (!s(f.email)) e.email = 'Email is required'
+		if (!s(f.phone)) e.phone = 'Phone is required'
+		if (!s(f.currentLocation)) e.currentLocation = 'Current location is required'
+		if (!s(f.preferredLocation)) e.preferredLocation = 'Preferred location is required'
 		if (!f.resumeFileName) e.resumeFileName = 'Resume is required'
 		
-		const hasEducation = Array.isArray(f.education) && f.education.some(ed => ed.degree?.trim() && ed.institution?.trim())
+		const hasEducation = Array.isArray(f.education) && f.education.some(ed => s(ed.degree) && s(ed.institution))
 		if (!hasEducation) {
 			e.education = 'At least one education entry with Degree and Institution is required'
 		} else {
-			const has10th = f.education.some(ed => 
-				ed.degree?.toLowerCase().includes('10') || 
-				ed.degree?.toLowerCase().includes('tenth') || 
-				ed.degree?.toLowerCase().includes('ssc') ||
-				ed.degree?.toLowerCase().includes('secondary')
+			const deg = (ed) => s(ed.degree).toLowerCase()
+			const has10th = f.education.some(ed =>
+				deg(ed).includes('10') ||
+				deg(ed).includes('tenth') ||
+				deg(ed).includes('ssc') ||
+				deg(ed).includes('secondary')
 			)
-			const has12thOrDiploma = f.education.some(ed => 
-				ed.degree?.toLowerCase().includes('12') || 
-				ed.degree?.toLowerCase().includes('twelfth') || 
-				ed.degree?.toLowerCase().includes('hsc') ||
-				ed.degree?.toLowerCase().includes('senior secondary') ||
-				ed.degree?.toLowerCase().includes('diploma') ||
-				ed.degree?.toLowerCase().includes('intermediate')
+			const has12thOrDiploma = f.education.some(ed =>
+				deg(ed).includes('12') ||
+				deg(ed).includes('twelfth') ||
+				deg(ed).includes('hsc') ||
+				deg(ed).includes('senior secondary') ||
+				deg(ed).includes('diploma') ||
+				deg(ed).includes('intermediate')
 			)
 			
 			if (!has10th) {
@@ -192,15 +196,16 @@ export default function ApplicantProfile() {
 		
 		setAutofilledFields(autofilled);
 		
-		// Merge parsed data with existing form
+		// Merge parsed data with existing form (normalize to string - parser may return numbers)
+		const toStr = (v) => (v == null || v === '') ? '' : String(v).trim()
 		setForm((prevForm) => {
 			const updatedForm = {
 				...prevForm,
-				fullName: parsedData.fullName || prevForm.fullName,
-				email: parsedData.email || prevForm.email,
-				phone: parsedData.phone || prevForm.phone,
-				linkedinUrl: parsedData.linkedinUrl || prevForm.linkedinUrl,
-				portfolioUrl: parsedData.portfolioUrl || prevForm.portfolioUrl,
+				fullName: toStr(parsedData.fullName) || prevForm.fullName,
+				email: toStr(parsedData.email) || prevForm.email,
+				phone: toStr(parsedData.phone) || prevForm.phone,
+				linkedinUrl: toStr(parsedData.linkedinUrl) || prevForm.linkedinUrl,
+				portfolioUrl: toStr(parsedData.portfolioUrl) || prevForm.portfolioUrl,
 				experienceLevel: parsedData.experienceLevel || prevForm.experienceLevel,
 				education: parsedData.education && parsedData.education.length > 0 ? parsedData.education : prevForm.education,
 				experiences: parsedData.experiences && parsedData.experiences.length > 0 ? parsedData.experiences : prevForm.experiences,
