@@ -52,8 +52,11 @@ def send_with_timeout_and_retries(msg) -> bool:
                 print(f"[MAIL] Send failed: {e}\n{traceback.format_exc()}")
         if attempt < retries - 1:
             time.sleep(1 + attempt)
+    err_msg = f"Mail send failed after {retries} attempts: {last_exc}"
     if current_app:
-        current_app.logger.error("Mail send failed after %s attempts: %s", retries, last_exc)
-    else:
-        print(f"[MAIL] Failed after {retries} attempts: {last_exc}")
+        current_app.logger.error(err_msg)
+    print(f"[MAIL] {err_msg}")
+    if last_exc and hasattr(last_exc, "__traceback__") and last_exc.__traceback__:
+        import traceback
+        traceback.print_exception(type(last_exc), last_exc, last_exc.__traceback__)
     return False
