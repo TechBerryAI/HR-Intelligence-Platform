@@ -19,12 +19,26 @@ MSSQL_ODBC_DRIVER = os.getenv('MSSQL_ODBC_DRIVER', '{ODBC Driver 17 for SQL Serv
 POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '5'))
 CONNECTION_TIMEOUT = int(os.getenv('DB_CONNECTION_TIMEOUT', '10'))
 
+
+def _odbc_escape(value):
+    """Escape a value for ODBC connection string (handles ;, {, }, ])."""
+    if value is None:
+        return ''
+    s = str(value).strip()
+    if not s:
+        return s
+    # Values containing ; { } ] must be wrapped in {} and } doubled as }}
+    if any(c in s for c in (';', '{', '}', ']')):
+        return '{' + s.replace('}', '}}') + '}'
+    return s
+
+
 connection_string = (
     f'DRIVER={MSSQL_ODBC_DRIVER};'
     f'SERVER={MSSQL_SERVER},{MSSQL_PORT};'
     f'DATABASE={MSSQL_DATABASE};'
-    f'UID={MSSQL_USER};'
-    f'PWD={MSSQL_PASSWORD};'
+    f'UID={_odbc_escape(MSSQL_USER)};'
+    f'PWD={_odbc_escape(MSSQL_PASSWORD)};'
     f'TrustServerCertificate=yes;'
     f'Connection Timeout={CONNECTION_TIMEOUT};'
 )
