@@ -6,8 +6,9 @@ from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-# Load environment variables first
-load_dotenv()
+# Load .env from backend directory so mail/db config is found regardless of CWD
+_backend_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(_backend_dir, '.env'))
 
 # Validate environment variables before proceeding
 from env_validator import EnvValidator
@@ -47,7 +48,8 @@ app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'true').lower() == 'true'
 app.config['MAIL_USE_SSL'] = os.getenv('MAIL_USE_SSL', 'false').lower() == 'true'
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', app.config.get('MAIL_USERNAME'))
+_raw_sender = (os.getenv('MAIL_DEFAULT_SENDER') or '').strip() or app.config.get('MAIL_USERNAME')
+app.config['MAIL_DEFAULT_SENDER'] = (_raw_sender.strip('"').strip("'") if _raw_sender else None) or app.config.get('MAIL_USERNAME')
 app.config['MAIL_SUPPRESS_SEND'] = os.getenv('MAIL_SUPPRESS_SEND', 'false').lower() == 'true'
 # Timeout for SMTP send (seconds); Flask-Mail has no built-in timeout
 app.config['MAIL_TIMEOUT'] = int(os.getenv('MAIL_TIMEOUT', '25'))
@@ -81,6 +83,11 @@ CORS(
 )
 
 mail.init_app(app)
+# Log mail status at startup so we can see if .env was loaded when run from different CWD
+if app.config.get('MAIL_SUPPRESS_SEND') or not app.config.get('MAIL_USERNAME') or not app.config.get('MAIL_PASSWORD'):
+    print("[MAIL] Suppressed or missing creds — emails will NOT be sent. Check backend/.env and MAIL_USERNAME/MAIL_PASSWORD.")
+else:
+    print("[MAIL] Configured — sending enabled (server=%s, user=%s)" % (app.config['MAIL_SERVER'], app.config['MAIL_USERNAME']))
 init_models()
 
 from db import init_db  # noqa: E402
