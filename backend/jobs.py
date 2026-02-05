@@ -101,19 +101,22 @@ def get_jobs_public():
                 ''',
                 (user.get('hrId'),)
             )
-            # Further restrict to jobs whose company matches this account's company (from JWT)
+            # Optionally restrict to jobs whose company matches JWT; if that would hide all, show all (avoid data mismatch hiding jobs)
             hr_company = (user.get('company') or '').strip()
             if hr_company:
                 hr_company_lower = hr_company.lower()
-                jobs = [j for j in jobs if (j.get('company') or '').strip().lower() == hr_company_lower]
+                filtered = [j for j in jobs if (j.get('company') or '').strip().lower() == hr_company_lower]
+                if len(filtered) > 0 or len(jobs) == 0:
+                    jobs = filtered
+                # else: keep full list so HR still sees their jobs
         else:
-            # Public / candidate: only enabled jobs
+            # Public / candidate: only enabled jobs (treat NULL enabled as visible)
             jobs = db_all(
                 '''
                 SELECT j.*, hs.company as company_name
                 FROM jobs j
                 LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-                WHERE j.enabled = 1
+                WHERE (j.enabled = 1 OR j.enabled IS NULL)
                 ORDER BY j.posted_on DESC
                 '''
             )
