@@ -394,8 +394,10 @@ def parse_profile(profile: dict) -> dict:
     formatted_certifications = [
         {
             'certification': row.get('certification') or '',
+            'name': row.get('certification') or '',  # Frontend form expects 'name'
             'issuer': row.get('issuer') or '',
             'endMonth': row.get('end_month') or '',
+            'validTill': row.get('end_month') or '',  # Frontend form alias
         }
         for row in (certification_rows or [])
     ]

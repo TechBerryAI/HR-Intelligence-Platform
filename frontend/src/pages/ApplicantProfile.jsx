@@ -72,6 +72,50 @@ export default function ApplicantProfile() {
 	const [autofilledFields, setAutofilledFields] = useState({})
 	const [formInitialized, setFormInitialized] = useState(false)
 	
+	// Fetch profile from server when page mounts (ensures fresh data after login/navigation)
+	useEffect(() => {
+		if (applicantAuth.isLoggedIn && fetchApplicantData) {
+			fetchApplicantData()
+		}
+	}, [applicantAuth.isLoggedIn])
+	
+	// Helper to build form from applicantProfile (handles backend cert format: certification -> name)
+	const buildFormFromProfile = (profile, prevForm = {}) => {
+		const toStr = (v) => (v == null || v === '') ? '' : String(v).trim()
+		const normCerts = (arr) => {
+			if (!Array.isArray(arr) || arr.length === 0) return prevForm.certifications?.length ? prevForm.certifications : [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }]
+			return arr.map(c => ({
+				name: toStr(c.name ?? c.certification),
+				issuer: toStr(c.issuer),
+				validTill: toStr(c.validTill ?? c.endMonth),
+				validationUrl: toStr(c.validationUrl),
+				status: toStr(c.status),
+			}))
+		}
+		return {
+			experienceLevel: profile?.experienceLevel || prevForm.experienceLevel || '',
+			servingNotice: profile?.servingNotice || prevForm.servingNotice || '',
+			noticePeriod: profile?.noticePeriod || prevForm.noticePeriod || '',
+			lastWorkingDay: profile?.lastWorkingDay || prevForm.lastWorkingDay || '',
+			fullName: toStr(profile?.fullName) || prevForm.fullName || '',
+			email: toStr(profile?.email) || prevForm.email || '',
+			phone: toStr(profile?.phone) || prevForm.phone || '',
+			linkedinUrl: toStr(profile?.linkedinUrl) || prevForm.linkedinUrl || '',
+			portfolioUrl: toStr(profile?.portfolioUrl) || prevForm.portfolioUrl || '',
+			currentLocation: toStr(profile?.currentLocation) || prevForm.currentLocation || '',
+			preferredLocation: toStr(profile?.preferredLocation) || prevForm.preferredLocation || '',
+			resumeFile: null,
+			resumeFileName: profile?.resumeFileName || prevForm.resumeFileName || '',
+			education: (profile?.education && Array.isArray(profile.education) && profile.education.length > 0)
+				? profile.education
+				: (prevForm.education?.length ? prevForm.education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }]),
+			certifications: normCerts(profile?.certifications),
+			experiences: (profile?.experiences && Array.isArray(profile.experiences) && profile.experiences.length > 0)
+				? profile.experiences
+				: (prevForm.experiences?.length ? prevForm.experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }]),
+		}
+	}
+
 	// Load profile data into form when component mounts; restore draft if no saved profile
 	useEffect(() => {
 		if (!formInitialized) {
@@ -79,10 +123,7 @@ export default function ApplicantProfile() {
 				const hasUserInput = prevForm.fullName || prevForm.email ||
 					prevForm.experiences?.some(ex => ex.company || ex.role) ||
 					prevForm.education?.some(ed => ed.degree || ed.institution)
-
-				if (hasUserInput && !applicantProfile?.fullName && !applicantProfile?.email) {
-					return prevForm
-				}
+				if (hasUserInput && !applicantProfile?.fullName && !applicantProfile?.email) return prevForm
 
 				const toStr = (v) => (v == null || v === '') ? '' : String(v).trim()
 				const hasSavedProfile = toStr(applicantProfile?.fullName) || toStr(applicantProfile?.email)
@@ -101,30 +142,7 @@ export default function ApplicantProfile() {
 					}
 				}
 
-				return {
-					experienceLevel: applicantProfile?.experienceLevel || prevForm.experienceLevel || '',
-					servingNotice: applicantProfile?.servingNotice || prevForm.servingNotice || '',
-					noticePeriod: applicantProfile?.noticePeriod || prevForm.noticePeriod || '',
-					lastWorkingDay: applicantProfile?.lastWorkingDay || prevForm.lastWorkingDay || '',
-					fullName: toStr(applicantProfile?.fullName) || prevForm.fullName || '',
-					email: toStr(applicantProfile?.email) || prevForm.email || '',
-					phone: toStr(applicantProfile?.phone) || prevForm.phone || '',
-					linkedinUrl: toStr(applicantProfile?.linkedinUrl) || prevForm.linkedinUrl || '',
-					portfolioUrl: toStr(applicantProfile?.portfolioUrl) || prevForm.portfolioUrl || '',
-					currentLocation: toStr(applicantProfile?.currentLocation) || prevForm.currentLocation || '',
-					preferredLocation: toStr(applicantProfile?.preferredLocation) || prevForm.preferredLocation || '',
-					resumeFile: null,
-					resumeFileName: applicantProfile?.resumeFileName || prevForm.resumeFileName || '',
-					education: (applicantProfile?.education && Array.isArray(applicantProfile.education) && applicantProfile.education.length > 0)
-						? applicantProfile.education
-						: (prevForm.education?.length > 0 ? prevForm.education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }]),
-					certifications: (applicantProfile?.certifications && Array.isArray(applicantProfile.certifications) && applicantProfile.certifications.length > 0)
-						? applicantProfile.certifications
-						: (prevForm.certifications?.length > 0 ? prevForm.certifications : [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }]),
-					experiences: (applicantProfile?.experiences && Array.isArray(applicantProfile.experiences) && applicantProfile.experiences.length > 0)
-						? applicantProfile.experiences
-						: (prevForm.experiences?.length > 0 ? prevForm.experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }]),
-				}
+				return buildFormFromProfile(applicantProfile, prevForm)
 			})
 			setFormInitialized(true)
 		}
@@ -141,6 +159,17 @@ export default function ApplicantProfile() {
 		const t = setTimeout(() => saveDraftToStorage(form), 600)
 		return () => clearTimeout(t)
 	}, [form, formInitialized])
+
+	// Re-sync form when profile is loaded from server after login (form was empty, now we have data)
+	useEffect(() => {
+		if (!applicantProfile?.fullName && !applicantProfile?.resumeFileName) return
+		setForm(prevForm => {
+			const formEmpty = !prevForm.fullName && !prevForm.resumeFileName
+			if (!formEmpty) return prevForm
+			return buildFormFromProfile(applicantProfile, prevForm)
+		})
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [applicantProfile?.fullName, applicantProfile?.resumeFileName, applicantProfile?.education, applicantProfile?.experiences, applicantProfile?.certifications])
 	
 	useEffect(() => {
 		if (applicantProfile?.resumeFileName && !form.resumeFile) {
