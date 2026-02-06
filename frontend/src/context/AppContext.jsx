@@ -267,11 +267,19 @@ export function AppProvider({ children }) {
     }
   }
 
-  // Fetch applications and saved jobs from backend
+  // Fetch applications, saved jobs, and profile from backend (single source of truth for profile)
   const fetchApplicantData = async () => {
-    if (!applicantAuth.isLoggedIn || !token) return
+    const authToken = token || tokenService.getToken()
+    if (!applicantAuth.isLoggedIn || !authToken) return
     try {
-      const applications = await apiRequest('/api/applications', { method: 'GET', token }).catch(() => [])
+      // Fetch profile from backend - this is the canonical source after login
+      const profileRes = await apiRequest('/api/candidate/profile', { method: 'GET', token: authToken }).catch(() => null)
+      if (profileRes && typeof profileRes === 'object' && !profileRes.error) {
+        setApplicantProfile(profileRes)
+        writeJson(STORAGE_KEYS.applicantProfile, profileRes)
+      }
+
+      const applications = await apiRequest('/api/applications', { method: 'GET', token: authToken }).catch(() => [])
       
       // Convert applications array to map
       const applicationsMap = {}
@@ -310,19 +318,14 @@ export function AppProvider({ children }) {
         setApplicantAuth(nextApplicantAuth)
         writeJson(STORAGE_KEYS.applicantAuth, nextApplicantAuth)
         
-        // Load profile from backend if available
-        if (data.user.profile) {
-          setApplicantProfile(data.user.profile)
-          writeJson(STORAGE_KEYS.applicantProfile, data.user.profile)
-        } else {
-          setApplicantProfile((p) => {
-            const nextProfile = { ...p, email: data.user.email || idOrEmail }
-            writeJson(STORAGE_KEYS.applicantProfile, nextProfile)
-            return nextProfile
-          })
-        }
+        // Set email only; full profile is fetched by fetchApplicantData (single source of truth)
+        setApplicantProfile((p) => {
+          const nextProfile = { ...p, email: data.user.email || idOrEmail }
+          writeJson(STORAGE_KEYS.applicantProfile, nextProfile)
+          return nextProfile
+        })
         
-        // Fetch applications and saved jobs
+        // Fetch profile, applications, and saved jobs from backend
         setTimeout(() => fetchApplicantData(), 100)
         
         return { ok: true }
