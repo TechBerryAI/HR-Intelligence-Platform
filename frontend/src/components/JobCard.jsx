@@ -13,7 +13,7 @@ const formatDisplayDate = (dateString) => {
   }
 }
 
-export default function JobCard({ job, onApply, isApplied = false, isSaved = false, onToggleSave, isAdmin = false }) {
+export default function JobCard({ job, onApply, isApplied = false, isSaved = false, onToggleSave, isAdmin = false, isApplying = false }) {
   const isDisabled = job.enabled === false
   
   return (
@@ -93,17 +93,17 @@ export default function JobCard({ job, onApply, isApplied = false, isSaved = fal
         <div className="flex items-center gap-2">
           {!isAdmin && (
             <motion.button
-              disabled={isDisabled || isApplied}
+              disabled={isDisabled || isApplied || isApplying}
               onClick={onApply}
-              whileHover={!isDisabled && !isApplied ? { scale: 1.05 } : {}}
-              whileTap={!isDisabled && !isApplied ? { scale: 0.95 } : {}}
+              whileHover={!isDisabled && !isApplied && !isApplying ? { scale: 1.05 } : {}}
+              whileTap={!isDisabled && !isApplied && !isApplying ? { scale: 0.95 } : {}}
               className={`text-sm font-semibold px-5 py-2.5 rounded-xl transition-all duration-300 ${
-                isDisabled || isApplied 
-                  ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed' 
+                isDisabled || isApplied || isApplying
+                  ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
                   : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-glow'
               }`}
             >
-              {isApplied ? 'Applied' : 'Apply Now'}
+              {isApplying ? 'Applying…' : isApplied ? 'Applied' : 'Apply Now'}
             </motion.button>
           )}
           {!isAdmin && onToggleSave && !isApplied && (

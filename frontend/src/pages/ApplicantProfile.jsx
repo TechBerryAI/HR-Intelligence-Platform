@@ -9,6 +9,36 @@ import PremiumButton from '../components/PremiumButton.jsx'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FiUser, FiMail, FiPhone, FiMapPin, FiLinkedin, FiGlobe, FiSave, FiCheck, FiAlertCircle } from 'react-icons/fi'
 
+const DRAFT_STORAGE_KEY = 'applicantProfileDraft'
+
+function getDraftFromStorage() {
+	try {
+		const raw = typeof window !== 'undefined' && window.sessionStorage.getItem(DRAFT_STORAGE_KEY)
+		return raw ? JSON.parse(raw) : null
+	} catch {
+		return null
+	}
+}
+
+function saveDraftToStorage(formData) {
+	try {
+		if (typeof window === 'undefined') return
+		const toStore = { ...formData }
+		delete toStore.resumeFile
+		window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(toStore))
+	} catch {
+		// ignore
+	}
+}
+
+function clearDraftFromStorage() {
+	try {
+		if (typeof window !== 'undefined') window.sessionStorage.removeItem(DRAFT_STORAGE_KEY)
+	} catch {
+		// ignore
+	}
+}
+
 export default function ApplicantProfile() {
 	const { applicantProfile, applicantAuth, saveApplicantProfile, markApplicantProfileCompleted, applyToJobAsApplicant, fetchApplicantData, applicantSavedJobs, toggleSaveJob } = useApp()
 	const navigate = useNavigate()
@@ -16,6 +46,7 @@ export default function ApplicantProfile() {
 	const toast = useToast()
   const firstErrorRef = useRef(null)
   const fileInputRef = useRef(null)
+  const validationSummaryRef = useRef(null)
 
 	const strField = (v) => (v == null || v === '') ? '' : String(v).trim()
 	const [form, setForm] = useState({
@@ -41,25 +72,36 @@ export default function ApplicantProfile() {
 	const [autofilledFields, setAutofilledFields] = useState({})
 	const [formInitialized, setFormInitialized] = useState(false)
 	
-	// Load profile data into form when component mounts or applicantProfile changes meaningfully
+	// Load profile data into form when component mounts; restore draft if no saved profile
 	useEffect(() => {
-		// Only initialize once, or when applicantProfile changes significantly (e.g., after login/fetch)
 		if (!formInitialized) {
-			console.log('DEBUG: Initializing form with saved profile data:', applicantProfile)
 			setForm(prevForm => {
-				// Check if form is already populated (user might have started typing)
-				const hasUserInput = prevForm.fullName || prevForm.email || 
+				const hasUserInput = prevForm.fullName || prevForm.email ||
 					prevForm.experiences?.some(ex => ex.company || ex.role) ||
 					prevForm.education?.some(ed => ed.degree || ed.institution)
-				
-				// Only load from applicantProfile if form is empty
+
 				if (hasUserInput && !applicantProfile?.fullName && !applicantProfile?.email) {
-					console.log('DEBUG: Form has user input, keeping it')
 					return prevForm
 				}
-				
+
 				const toStr = (v) => (v == null || v === '') ? '' : String(v).trim()
-				const newForm = {
+				const hasSavedProfile = toStr(applicantProfile?.fullName) || toStr(applicantProfile?.email)
+
+				// If no saved profile, try restoring from sessionStorage draft (avoids losing data on remount/navigation)
+				if (!hasSavedProfile) {
+					const draft = getDraftFromStorage()
+					if (draft && (toStr(draft.fullName) || toStr(draft.phone) || (Array.isArray(draft.education) && draft.education.some(ed => toStr(ed?.degree) || toStr(ed?.institution))))) {
+						return {
+							...draft,
+							resumeFile: null,
+							education: Array.isArray(draft.education) && draft.education.length > 0 ? draft.education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }],
+							certifications: Array.isArray(draft.certifications) && draft.certifications.length > 0 ? draft.certifications : [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }],
+							experiences: Array.isArray(draft.experiences) && draft.experiences.length > 0 ? draft.experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }],
+						}
+					}
+				}
+
+				return {
 					experienceLevel: applicantProfile?.experienceLevel || prevForm.experienceLevel || '',
 					servingNotice: applicantProfile?.servingNotice || prevForm.servingNotice || '',
 					noticePeriod: applicantProfile?.noticePeriod || prevForm.noticePeriod || '',
@@ -71,29 +113,34 @@ export default function ApplicantProfile() {
 					portfolioUrl: toStr(applicantProfile?.portfolioUrl) || prevForm.portfolioUrl || '',
 					currentLocation: toStr(applicantProfile?.currentLocation) || prevForm.currentLocation || '',
 					preferredLocation: toStr(applicantProfile?.preferredLocation) || prevForm.preferredLocation || '',
-					resumeFile: null, // Never load file object from storage
+					resumeFile: null,
 					resumeFileName: applicantProfile?.resumeFileName || prevForm.resumeFileName || '',
-					education: (applicantProfile?.education && Array.isArray(applicantProfile.education) && applicantProfile.education.length > 0) 
-						? applicantProfile.education 
-						: (prevForm.education && prevForm.education.length > 0 ? prevForm.education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }]),
+					education: (applicantProfile?.education && Array.isArray(applicantProfile.education) && applicantProfile.education.length > 0)
+						? applicantProfile.education
+						: (prevForm.education?.length > 0 ? prevForm.education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }]),
 					certifications: (applicantProfile?.certifications && Array.isArray(applicantProfile.certifications) && applicantProfile.certifications.length > 0)
 						? applicantProfile.certifications
-						: (prevForm.certifications && prevForm.certifications.length > 0 ? prevForm.certifications : [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }]),
+						: (prevForm.certifications?.length > 0 ? prevForm.certifications : [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }]),
 					experiences: (applicantProfile?.experiences && Array.isArray(applicantProfile.experiences) && applicantProfile.experiences.length > 0)
 						? applicantProfile.experiences
-						: (prevForm.experiences && prevForm.experiences.length > 0 ? prevForm.experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }]),
+						: (prevForm.experiences?.length > 0 ? prevForm.experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }]),
 				}
-				console.log('DEBUG: Form initialized with:', {
-					fullName: newForm.fullName,
-					experiencesCount: newForm.experiences?.length || 0,
-					educationCount: newForm.education?.length || 0
-				})
-				return newForm
 			})
 			setFormInitialized(true)
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []) // Only run once on mount
+	}, [])
+
+	// Persist form as draft to sessionStorage so data survives remounts (e.g. Strict Mode, navigate away and back)
+	useEffect(() => {
+		if (!formInitialized) return
+		const hasContent = strField(form.fullName) || strField(form.phone) || strField(form.email) ||
+			form.education?.some(ed => strField(ed.degree) || strField(ed.institution)) ||
+			form.experiences?.some(ex => strField(ex.company) || strField(ex.role))
+		if (!hasContent) return
+		const t = setTimeout(() => saveDraftToStorage(form), 600)
+		return () => clearTimeout(t)
+	}, [form, formInitialized])
 	
 	useEffect(() => {
 		if (applicantProfile?.resumeFileName && !form.resumeFile) {
@@ -251,6 +298,7 @@ export default function ApplicantProfile() {
 			console.log('DEBUG: saveApplicantProfile result:', result)
 			
 			if (result.ok) {
+				clearDraftFromStorage()
 				if (result.warning) {
 					// Show warning but still indicate success
 					setSaved('Profile saved locally')
@@ -296,10 +344,14 @@ export default function ApplicantProfile() {
 		const eMap = validate(form)
 		setErrors(eMap)
 		if (Object.keys(eMap).length > 0) {
-			if (firstErrorRef.current) firstErrorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+			// Scroll to validation summary so user sees which fields are missing
+			setTimeout(() => {
+				validationSummaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+			}, 50)
 			return
 		}
 		const saveResult = await saveApplicantProfile(form)
+		clearDraftFromStorage()
 		
 		if (fileInputRef.current) {
 			fileInputRef.current.value = ''
@@ -398,6 +450,26 @@ export default function ApplicantProfile() {
 								>
 									<FiCheck className="w-5 h-5 text-green-400" />
 									<span className="text-sm font-medium text-green-300">{saved}</span>
+								</motion.div>
+							)}
+
+							{/* Validation summary: list missing/invalid fields when Save & Complete is clicked */}
+							{Object.keys(errors).length > 0 && (
+								<motion.div
+									ref={validationSummaryRef}
+									initial={{ opacity: 0, y: -10 }}
+									animate={{ opacity: 1, y: 0 }}
+									className="glass-card border-2 border-amber-500/40 bg-amber-500/10 px-5 py-4 rounded-xl"
+								>
+									<p className="text-sm font-semibold text-amber-200 mb-2 flex items-center gap-2">
+										<FiAlertCircle className="w-4 h-4 shrink-0" />
+										Please fill the following required fields:
+									</p>
+									<ul className="list-disc list-inside space-y-1 text-sm text-amber-200/90">
+										{Object.entries(errors).map(([key, message]) => (
+											<li key={key}>{message}</li>
+										))}
+									</ul>
 								</motion.div>
 							)}
 
@@ -917,7 +989,6 @@ export default function ApplicantProfile() {
 								<PremiumButton
 									type="button"
 									onClick={onComplete}
-									disabled={!isComplete}
 									variant="primary"
 									icon={FiCheck}
 								>

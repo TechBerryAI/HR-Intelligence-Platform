@@ -515,7 +515,12 @@ export default function AppliedCandidates() {
                                     <td className="px-6 py-4 whitespace-nowrap">
                                       <div className="flex items-center gap-2">
                                         <button
-                                          onClick={() => handleViewReason(candidate)}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            handleViewReason(candidate)
+                                          }}
                                           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 text-sm font-medium transition-all duration-200 ring-1 ring-violet-500/40"
                                         >
                                           <span>Reason</span>
@@ -859,13 +864,15 @@ export default function AppliedCandidates() {
       {/* View Reason Modal - Decision-first: Header → Score Cards → Strengths → Gaps → Collapsible Reasoning */}
       {reasonCandidate && (() => {
         const score = Math.round(Number(reasonCandidate.matchScore || reasonCandidate.score || 0))
-        const analysis = reasonCandidate.atsAnalysis || {}
-        const jsonOut = analysis.json_output || analysis
-        const breakdown = jsonOut.score_breakdown || {}
-        const rawStrengths = jsonOut.key_strengths || []
-        const rawGaps = jsonOut.key_gaps || []
-        const verdict = jsonOut.verdict || (jsonOut.decision || '').replace(/_/g, ' ')
-        const finalReasoning = jsonOut.final_reasoning || reasonCandidate.atsReasoning || 'No detailed reasoning available.'
+        const analysis = reasonCandidate.atsAnalysis != null && typeof reasonCandidate.atsAnalysis === 'object'
+          ? reasonCandidate.atsAnalysis
+          : {}
+        const jsonOut = (analysis && analysis.json_output) ? analysis.json_output : (typeof analysis === 'object' ? analysis : {})
+        const breakdown = (jsonOut && typeof jsonOut === 'object' && jsonOut.score_breakdown) ? jsonOut.score_breakdown : {}
+        const rawStrengths = Array.isArray(jsonOut?.key_strengths) ? jsonOut.key_strengths : []
+        const rawGaps = Array.isArray(jsonOut?.key_gaps) ? jsonOut.key_gaps : []
+        const verdict = (jsonOut?.verdict || (jsonOut?.decision || '')).replace(/_/g, ' ') || 'Match'
+        const finalReasoning = (jsonOut?.final_reasoning || reasonCandidate.atsReasoning || 'No detailed reasoning available.') || 'No detailed reasoning available.'
 
         // Score factors: name, breakdown key, weight % (matches backend)
         const SCORE_FACTORS = [
@@ -898,7 +905,7 @@ export default function AppliedCandidates() {
         const primaryReason = finalReasoning.split(/\n/).slice(0, 2).join(' ').trim() || finalReasoning.slice(0, 200)
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={closeReasonModal}>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={closeReasonModal}>
             <div className="bg-zinc-900 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto ring-1 ring-zinc-700 shadow-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="match-modal-title">
               <MatchHeader
                 score={score}
