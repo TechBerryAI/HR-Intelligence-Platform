@@ -2,7 +2,6 @@ from flask import Blueprint, request, jsonify
 from db import db_get, db_run, db_all
 from utils import authenticate_token, require_candidate, require_hr
 from matching import calculate_matching_percentage
-from helpers.email_utils import send_notification_email
 
 candidate_bp = Blueprint('candidate', __name__)
 
@@ -459,26 +458,6 @@ def get_profile_admin(candidate_id: str):
         )
         if not profile:
             return jsonify({'error': 'Profile not found'}), 404
-
-        # Notify candidate that their profile was viewed by HR
-        candidate_email = profile.get('email')
-        if not candidate_email:
-            signup = db_get('SELECT email FROM candidate_signup WHERE cid = ?', (candidate_id,))
-            candidate_email = (signup or {}).get('email')
-        if candidate_email:
-            hr_id = request.user.get('hrId')
-            hr_info = db_get('SELECT company, full_name FROM hr_signup WHERE hrid = ?', (hr_id,)) if hr_id else {}
-            company = (hr_info or {}).get('company') or 'an employer'
-            candidate_name = (profile.get('full_name') or '').strip() or 'there'
-            send_notification_email(
-                candidate_email,
-                'Your profile was viewed by HR',
-                f"Hi {candidate_name},\n\n"
-                f"Your profile on the Job Portal was just viewed by {company}.\n\n"
-                "If you applied to a job at this company, they may be reviewing your application. "
-                "Good luck!\n\n"
-                "— Job Portal Team"
-            )
 
         return jsonify(parse_profile(profile))
     except Exception as e:
