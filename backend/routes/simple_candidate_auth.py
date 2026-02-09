@@ -328,5 +328,4 @@ def simple_candidate_login():
         print(f"[LOGIN ERROR] {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': 'Login failed. Please try again.'}), 500
-
+        return jsonify({'error': 'An unexpected error occurred during login. Please contact support if the issue persists.'}), 500

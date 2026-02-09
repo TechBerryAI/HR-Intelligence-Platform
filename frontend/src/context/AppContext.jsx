@@ -318,14 +318,37 @@ export function AppProvider({ children }) {
         setApplicantAuth(nextApplicantAuth)
         writeJson(STORAGE_KEYS.applicantAuth, nextApplicantAuth)
         
-        // Set email only; full profile is fetched by fetchApplicantData (single source of truth)
-        setApplicantProfile((p) => {
-          const nextProfile = { ...p, email: data.user.email || idOrEmail }
-          writeJson(STORAGE_KEYS.applicantProfile, nextProfile)
-          return nextProfile
-        })
+        // Use profile from login response if full (has fullName or education); otherwise fetch full profile from API
+        const loginProfile = data.user.profile
+        const hasFullProfile = loginProfile && (
+          (loginProfile.fullName || loginProfile.email) &&
+          (Array.isArray(loginProfile.education) || Array.isArray(loginProfile.experiences))
+        )
+        if (hasFullProfile) {
+          setApplicantProfile(loginProfile)
+          writeJson(STORAGE_KEYS.applicantProfile, loginProfile)
+        } else {
+          setApplicantProfile((p) => {
+            const nextProfile = { ...p, email: data.user.email || idOrEmail }
+            writeJson(STORAGE_KEYS.applicantProfile, nextProfile)
+            return nextProfile
+          })
+          // Fetch full profile from backend so data persists after logout/login
+          try {
+            const fullProfile = await apiRequest('/api/candidate/profile', {
+              method: 'GET',
+              token: data.token
+            })
+            if (fullProfile && (fullProfile.fullName || fullProfile.email || (fullProfile.education && fullProfile.education.length > 0))) {
+              setApplicantProfile(fullProfile)
+              writeJson(STORAGE_KEYS.applicantProfile, fullProfile)
+            }
+          } catch (err) {
+            console.warn('Could not fetch profile after login:', err)
+          }
+        }
         
-        // Fetch profile, applications, and saved jobs from backend
+        // Fetch applications and saved jobs from backend
         setTimeout(() => fetchApplicantData(), 100)
         
         return { ok: true }
