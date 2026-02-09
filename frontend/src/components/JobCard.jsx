@@ -1,6 +1,6 @@
 import React from 'react'
 import { motion } from 'framer-motion'
-import { FiMapPin, FiDollarSign, FiClock, FiCheck, FiBookmark } from 'react-icons/fi'
+import { FiMapPin, FiClock, FiCheck, FiBookmark } from 'react-icons/fi'
 
 // Helper function to format date for display
 const formatDisplayDate = (dateString) => {
@@ -13,7 +13,7 @@ const formatDisplayDate = (dateString) => {
   }
 }
 
-export default function JobCard({ job, onApply, isApplied = false, isSaved = false, onToggleSave, isAdmin = false, isApplying = false }) {
+export default function JobCard({ job, onApply, isApplied = false, isSaved = false, onToggleSave, isAdmin = false }) {
   const isDisabled = job.enabled === false
   
   return (
@@ -66,7 +66,6 @@ export default function JobCard({ job, onApply, isApplied = false, isSaved = fal
             </div>
             {job.salary && (
               <div className="flex items-center gap-1.5">
-                <FiDollarSign className="w-4 h-4" />
                 <span>{job.salary}</span>
               </div>
             )}
@@ -93,17 +92,17 @@ export default function JobCard({ job, onApply, isApplied = false, isSaved = fal
         <div className="flex items-center gap-2">
           {!isAdmin && (
             <motion.button
-              disabled={isDisabled || isApplied || isApplying}
+              disabled={isDisabled || isApplied}
               onClick={onApply}
-              whileHover={!isDisabled && !isApplied && !isApplying ? { scale: 1.05 } : {}}
-              whileTap={!isDisabled && !isApplied && !isApplying ? { scale: 0.95 } : {}}
+              whileHover={!isDisabled && !isApplied ? { scale: 1.05 } : {}}
+              whileTap={!isDisabled && !isApplied ? { scale: 0.95 } : {}}
               className={`text-sm font-semibold px-5 py-2.5 rounded-xl transition-all duration-300 ${
-                isDisabled || isApplied || isApplying
-                  ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                isDisabled || isApplied 
+                  ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed' 
                   : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-glow'
               }`}
             >
-              {isApplying ? 'Applying…' : isApplied ? 'Applied' : 'Apply Now'}
+              {isApplied ? 'Applied' : 'Apply Now'}
             </motion.button>
           )}
           {!isAdmin && onToggleSave && !isApplied && (

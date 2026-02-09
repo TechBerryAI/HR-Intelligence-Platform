@@ -394,10 +394,8 @@ def parse_profile(profile: dict) -> dict:
     formatted_certifications = [
         {
             'certification': row.get('certification') or '',
-            'name': row.get('certification') or '',  # Frontend form expects 'name'
             'issuer': row.get('issuer') or '',
             'endMonth': row.get('end_month') or '',
-            'validTill': row.get('end_month') or '',  # Frontend form alias
         }
         for row in (certification_rows or [])
     ]
@@ -460,6 +458,7 @@ def get_profile_admin(candidate_id: str):
         )
         if not profile:
             return jsonify({'error': 'Profile not found'}), 404
+
         return jsonify(parse_profile(profile))
     except Exception as e:
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500

@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
- * HR Job Portal - Single start script.
- * Sets up: backend/.env, backend venv + pip, frontend npm.
- * Starts backend (Flask) + frontend (Vite), waits until ready, opens browser.
- * Ctrl+C stops both. No shell for spawn (avoids Node DEP0190).
+ * HR Job Portal - Single start script (IDE terminal only, no extra windows).
+ * Sets up: .env, backend venv + pip install, frontend npm install.
+ * Runs backend + frontend, waits until ready, opens browser.
+ * Ctrl+C stops both.
  */
 
 const fs = require('fs');
@@ -23,49 +23,31 @@ const VENV_PYTHON = path.join(
 const BACKEND_PORT = 3000;
 const FRONTEND_PORT = 5173;
 const BROWSER_URL = `http://localhost:${FRONTEND_PORT}`;
-const isWin = process.platform === 'win32';
 
-/** On Windows, npm is npm.cmd (batch); spawn needs shell:true to run it. */
 let backendProcess = null;
 let frontendProcess = null;
 
-// ---- Logging ----
-function ts() {
+function timestamp() {
   return new Date().toISOString().replace('T', ' ').slice(0, 19);
 }
 
 function log(msg, type = 'info') {
-  const tag = type === 'err' ? 'ERROR' : type === 'warn' ? 'WARN' : 'start';
-  console.log(`[${tag}] [${ts()}] ${msg}`);
+  const prefix = type === 'err' ? '[ERROR]' : type === 'warn' ? '[WARN]' : '[start]';
+  console.log(`${prefix} [${timestamp()}] ${msg}`);
 }
 
 function logStep(step, total, label) {
-  console.log(`[start] [${ts()}] Step ${step}/${total}: ${label}`);
+  console.log(`[start] [${timestamp()}] Step ${step}/${total}: ${label}`);
 }
 
-function logPhase(title) {
-  console.log('');
-  console.log('  ' + title);
-  console.log('  ' + '-'.repeat(Math.min(60, title.length)));
-}
-
-/** Run a command. Use shell only when required (e.g. npm.cmd on Windows). */
+/** Run command. useShell: on Windows set true for npm (npm.cmd). */
 function runCmd(cmd, args, cwd = ROOT, env = process.env, useShell = false) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { cwd, env, stdio: 'inherit', shell: useShell });
-    child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`Exit ${code}`))));
+    const c = spawn(cmd, args, { cwd, env, stdio: 'inherit', shell: useShell });
+    c.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`Exit ${code}`))));
   });
 }
 
-/** Open URL in default browser (no shell on Windows: use cmd /c start). */
-function openBrowser(url) {
-  const args = isWin ? ['/c', 'start', '', url] : [url];
-  const cmd = isWin ? 'cmd' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-  spawn(cmd, args, { stdio: 'ignore', shell: false }).on('error', () => {});
-  log(`Opening browser: ${url}`);
-}
-
-// ---- Steps ----
 function checkEnv() {
   logStep(1, 6, 'Checking environment');
   try {
@@ -98,9 +80,9 @@ function setupEnv() {
       process.exit(1);
     }
     fs.copyFileSync(BACKEND_ENV_EXAMPLE, BACKEND_ENV);
-    log('Created backend/.env from template. Configure MSSQL and MAIL_* in backend/.env');
+    log('Created backend/.env from template. Configure MSSQL_USER and MSSQL_PASSWORD in backend/.env');
   } else {
-    log('backend/.env found');
+    log('backend/.env exists');
   }
 }
 
@@ -116,7 +98,7 @@ async function setupBackend() {
   }
   log('Upgrading pip...');
   await runCmd(VENV_PYTHON, ['-m', 'pip', 'install', '--upgrade', 'pip', '-q'], BACKEND_DIR);
-  log('Installing backend dependencies (requirements.txt)...');
+  log('Installing backend dependencies from requirements.txt...');
   await runCmd(VENV_PYTHON, ['-m', 'pip', 'install', '-r', 'requirements.txt', '-q'], BACKEND_DIR);
   log('Backend setup complete');
 }
@@ -126,7 +108,7 @@ async function setupFrontend() {
   const nodeModules = path.join(FRONTEND_DIR, 'node_modules');
   if (!fs.existsSync(nodeModules)) {
     log('Installing frontend dependencies (npm install)...');
-    await runCmd(isWin ? 'npm.cmd' : 'npm', ['install'], FRONTEND_DIR, process.env, isWin);
+    await runCmd('npm', ['install'], FRONTEND_DIR, process.env, process.platform === 'win32');
     log('Frontend dependencies installed');
   } else {
     log('Frontend node_modules present (run "npm install" in frontend/ to update)');
@@ -147,32 +129,27 @@ function startBackend() {
     log('Backend failed to start: ' + err.message, 'err');
   });
   backendProcess.on('close', (code) => {
-    if (code != null && code !== 0) {
-      log('Backend process exited with code ' + code, 'warn');
-    }
+    if (code != null && code !== 0) log('Backend exited with code ' + code, 'warn');
   });
-  log('Backend process started (Flask will bind to port ' + BACKEND_PORT + ')');
+  log('Backend process started (port ' + BACKEND_PORT + ')');
 }
 
 function startFrontend() {
   logStep(6, 6, 'Starting frontend (Vite)');
-  // Windows: npm is npm.cmd (batch); spawning it without shell causes EINVAL. Use shell on Windows only.
-  const opts = {
+  // On Windows, npm is usually npm.cmd; shell: true is needed so the system finds it (spawn npm ENOENT otherwise).
+  const useShell = process.platform === 'win32';
+  frontendProcess = spawn('npm', ['run', 'dev'], {
     cwd: FRONTEND_DIR,
     stdio: 'inherit',
-    env: process.env,
-    shell: isWin,
-  };
-  frontendProcess = spawn(isWin ? 'npm.cmd' : 'npm', ['run', 'dev'], opts);
+    shell: useShell,
+  });
   frontendProcess.on('error', (err) => {
     log('Frontend failed to start: ' + err.message, 'err');
   });
   frontendProcess.on('close', (code) => {
-    if (code != null && code !== 0) {
-      log('Frontend process exited with code ' + code, 'warn');
-    }
+    if (code != null && code !== 0) log('Frontend exited with code ' + code, 'warn');
   });
-  log('Frontend process started (Vite will bind to port ' + FRONTEND_PORT + ')');
+  log('Frontend process started (port ' + FRONTEND_PORT + ')');
 }
 
 function httpGet(url) {
@@ -182,73 +159,58 @@ function httpGet(url) {
       { hostname: u.hostname, port: u.port || 80, path: u.pathname || '/', method: 'GET' },
       (res) => resolve(res.statusCode === 200)
     );
-    req.setTimeout(3000, () => { req.destroy(); resolve(false); });
+    req.setTimeout(2000, () => { req.destroy(); resolve(false); });
     req.on('error', () => resolve(false));
     req.end();
   });
 }
 
 async function waitForReady(maxWaitMs = 60000) {
-  const intervalMs = 1500;
+  const step = 1500;
   const backendUrl = `http://localhost:${BACKEND_PORT}/health`;
   const frontendUrl = `http://localhost:${FRONTEND_PORT}`;
   let elapsed = 0;
   let backendOk = false;
   let frontendOk = false;
-
-  logPhase('Waiting for services');
-  log('Polling backend (' + backendUrl + ') and frontend (' + frontendUrl + ')...');
-
+  log('Waiting for backend and frontend to be ready...');
   while (elapsed < maxWaitMs) {
     if (!backendOk) backendOk = await httpGet(backendUrl);
     if (!frontendOk) frontendOk = await httpGet(frontendUrl);
     if (backendOk && frontendOk) {
-      log('Backend and frontend are ready.');
+      log('Backend and frontend are ready');
       return true;
     }
-    if (elapsed > 0 && elapsed % 6000 === 0) {
-      log(
-        `  Backend: ${backendOk ? 'OK' : 'waiting'} | Frontend: ${frontendOk ? 'OK' : 'waiting'} (${elapsed / 1000}s)`
-      );
+    if (elapsed > 0 && elapsed % 5000 === 0) {
+      log(`Still waiting... Backend: ${backendOk ? 'OK' : 'pending'}, Frontend: ${frontendOk ? 'OK' : 'pending'} (${elapsed / 1000}s)`);
     }
-    await new Promise((r) => setTimeout(r, intervalMs));
-    elapsed += intervalMs;
+    await new Promise((r) => setTimeout(r, step));
+    elapsed += step;
   }
-
-  log(
-    'Timeout waiting for services. Backend: ' + (backendOk ? 'OK' : 'not ready') + ', Frontend: ' + (frontendOk ? 'OK' : 'not ready'),
-    'warn'
-  );
+  log('Timeout waiting for services. Backend: ' + (backendOk ? 'OK' : 'not ready') + ', Frontend: ' + (frontendOk ? 'OK' : 'not ready'), 'warn');
   return false;
 }
 
-function onExit(signal) {
-  logPhase('Shutting down');
-  log((signal === 'SIGINT' ? 'Ctrl+C received.' : 'Signal ' + signal + ' received.') + ' Stopping processes...');
-  let pending = 0;
-  if (backendProcess) pending++;
-  if (frontendProcess) pending++;
-  const done = () => {
-    pending--;
-    if (pending <= 0) {
-      log('Backend and frontend stopped. Goodbye.');
-      process.exit(0);
-    }
-  };
+function openBrowser() {
+  const url = BROWSER_URL;
+  const cmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+  spawn(cmd, [url], { stdio: 'ignore', shell: true }).on('error', () => {});
+  log('Opening browser: ' + url);
+}
 
+function onExit() {
+  log('Shutting down (Ctrl+C received)...');
   if (backendProcess) {
-    backendProcess.removeAllListeners('close');
-    backendProcess.on('close', done);
+    log('Stopping backend process...');
     backendProcess.kill('SIGTERM');
     backendProcess = null;
   }
   if (frontendProcess) {
-    frontendProcess.removeAllListeners('close');
-    frontendProcess.on('close', done);
+    log('Stopping frontend process...');
     frontendProcess.kill('SIGTERM');
     frontendProcess = null;
   }
-  if (pending === 0) process.exit(0);
+  log('Goodbye.');
+  process.exit(0);
 }
 
 async function main() {
@@ -261,28 +223,22 @@ async function main() {
   await setupBackend();
   await setupFrontend();
 
-  process.on('SIGINT', () => onExit('SIGINT'));
-  process.on('SIGTERM', () => onExit('SIGTERM'));
+  process.on('SIGINT', onExit);
+  process.on('SIGTERM', onExit);
 
-  logPhase('Starting processes');
   startBackend();
   startFrontend();
 
   const ready = await waitForReady();
-  if (ready) {
-    openBrowser(BROWSER_URL);
-    logPhase('Ready');
-    console.log('  Backend:  http://localhost:' + BACKEND_PORT);
-    console.log('  Frontend: ' + BROWSER_URL);
-    console.log('  Press Ctrl+C to stop.');
-    console.log('');
-  } else {
-    log('Not opening browser because services did not become ready.', 'warn');
-    console.log('');
-  }
+  if (ready) openBrowser();
+
+  console.log('\n--- Ready ---');
+  console.log('Backend:  http://localhost:' + BACKEND_PORT);
+  console.log('Frontend: ' + BROWSER_URL);
+  console.log('Press Ctrl+C to stop.\n');
 }
 
 main().catch((err) => {
-  log(err.message || String(err), 'err');
+  log(err.message || err, 'err');
   process.exit(1);
 });
