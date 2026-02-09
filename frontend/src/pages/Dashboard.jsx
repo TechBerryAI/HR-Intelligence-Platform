@@ -5,7 +5,7 @@ import PremiumButton from '../components/PremiumButton.jsx'
 import PremiumInput from '../components/PremiumInput.jsx'
 import AnimatedContainer from '../components/AnimatedContainer.jsx'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiBriefcase, FiMapPin, FiDollarSign, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiToggleLeft, FiToggleRight } from 'react-icons/fi'
+import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiToggleLeft, FiToggleRight } from 'react-icons/fi'
 
 // Helper function to format date for display
 const formatDisplayDate = (dateString) => {
@@ -217,7 +217,6 @@ export default function Dashboard() {
             <div className="grid sm:grid-cols-2 gap-6">
               <PremiumInput
                 label="Salary (optional)"
-                icon={FiDollarSign}
                 value={salary}
                 onChange={(e) => setSalary(e.target.value)}
                 placeholder="₹15-25 LPA"
@@ -354,7 +353,6 @@ export default function Dashboard() {
                         </div>
                         {job.salary && (
                           <div className="flex items-center gap-1">
-                            <FiDollarSign className="w-4 h-4" />
                             <span>{job.salary}</span>
                           </div>
                         )}
@@ -451,7 +449,6 @@ export default function Dashboard() {
                 <div className="grid sm:grid-cols-2 gap-6">
                   <PremiumInput
                     label="Salary (optional)"
-                    icon={FiDollarSign}
                     value={editSalary}
                     onChange={(e) => setEditSalary(e.target.value)}
                     placeholder="₹15-25 LPA"
