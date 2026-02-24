@@ -222,8 +222,9 @@ def get_job_applications(job_id: str):
         # Verify job belongs to HR user
         job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
         if not job:
-            return jsonify({'error': 'Job not found or access denied'}), 404
-        
+            # Return 200 with empty list so UI shows "No candidates" instead of errors; avoids 404 in terminal
+            return jsonify({'applications': []}), 200
+
         # Get applications with candidate details (include ATS: match_score, shortlisted, ats_reasoning, ats_analysis)
         applications = db_all(
             '''
