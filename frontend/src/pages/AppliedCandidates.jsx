@@ -7,6 +7,15 @@ import { tokenService } from '../utils/tokenService'
 import { getAvatarGradient } from '../utils/avatarColor'
 
 // Helper function to get score color and label (same as CandidateCard)
+const formatStatusLabel = (status) => {
+  if (!status) return 'Applied'
+  const s = String(status).toLowerCase()
+  if (s === 'profile_viewed') return 'Profile Viewed'
+  if (s === 'shortlisted') return 'Shortlisted'
+  if (s === 'rejected') return 'Not Shortlisted'
+  return status
+}
+
 const getScoreInfo = (score) => {
   if (score >= 80) return { color: 'text-green-400', bgColor: 'bg-green-900/30', ringColor: 'ring-green-700', label: 'Excellent Match' }
   if (score >= 70) return { color: 'text-emerald-400', bgColor: 'bg-emerald-900/30', ringColor: 'ring-emerald-700', label: 'Great Match' }
@@ -41,6 +50,7 @@ export default function AppliedCandidates() {
   const [resumeAction, setResumeAction] = useState({ isLoading: false, candidateKey: null })
   const [profileLoading, setProfileLoading] = useState(false)
   const [reasonCandidate, setReasonCandidate] = useState(null)
+  const [statusAction, setStatusAction] = useState({ loading: false, action: null })
 
   const resolvedCandidateId = useMemo(() => {
     if (!selectedCandidate) return null
@@ -133,17 +143,43 @@ export default function AppliedCandidates() {
     setReasonCandidate(null)
   }
 
+  const handleStatusAction = async (action) => {
+    if (!selectedJobId || !resolvedCandidateId || statusAction.loading) return
+    setStatusAction({ loading: true, action })
+    try {
+      await apiRequest(`/api/jobs/${encodeURIComponent(selectedJobId)}/applications/${encodeURIComponent(resolvedCandidateId)}/status`, {
+        method: 'PATCH',
+        body: { action },
+        token: tokenService.getToken(),
+      })
+      setSelectedCandidate((prev) => prev ? { ...prev, status: action === 'shortlist' ? 'Shortlisted' : 'Not Shortlisted', shortlisted: action === 'shortlist' } : prev)
+      const result = await fetchApplicationsForJob(selectedJobId)
+      if (result.ok) setApplications(result.data || [])
+    } catch (err) {
+      console.error('Status action failed:', err)
+      alert(err?.message || 'Failed to update status')
+    } finally {
+      setStatusAction({ loading: false, action: null })
+    }
+  }
+
   useEffect(() => {
-    if (!resolvedCandidateId) return
+    if (!resolvedCandidateId || !selectedJobId) return
 
     let cancelled = false
 
     const loadProfile = async () => {
       setProfileLoading(true)
       try {
-        const profile = await apiRequest(`/api/candidate/profile/${encodeURIComponent(resolvedCandidateId)}`, {
-          token: tokenService.getToken(),
-        })
+        const [profile, _viewed] = await Promise.all([
+          apiRequest(`/api/candidate/profile/${encodeURIComponent(resolvedCandidateId)}`, {
+            token: tokenService.getToken(),
+          }),
+          apiRequest(`/api/jobs/${encodeURIComponent(selectedJobId)}/applications/${encodeURIComponent(resolvedCandidateId)}/viewed`, {
+            method: 'POST',
+            token: tokenService.getToken(),
+          }).catch(() => null),
+        ])
         if (!cancelled) {
           setSelectedCandidate((prev) => (prev ? { ...prev, ...profile } : prev))
         }
@@ -159,7 +195,7 @@ export default function AppliedCandidates() {
     return () => {
       cancelled = true
     }
-  }, [resolvedCandidateId])
+  }, [resolvedCandidateId, selectedJobId])
 
   const closeModal = () => {
     setSelectedCandidate(null)
@@ -513,12 +549,17 @@ export default function AppliedCandidates() {
                                       </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                      <span className={`text-xs font-medium ${scoreInfo.color}`}>{scoreInfo.label}</span>
+                                      <span className="text-xs font-medium text-zinc-300">{formatStatusLabel(candidate.status)}</span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                       <div className="flex items-center gap-2">
                                         <button
-                                          onClick={() => handleViewReason(candidate)}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            handleViewReason(candidate)
+                                          }}
                                           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 text-sm font-medium transition-all duration-200 ring-1 ring-violet-500/40"
                                         >
                                           <span>Reason</span>
@@ -571,11 +612,39 @@ export default function AppliedCandidates() {
                   <p className="text-sm text-zinc-400">{selectedCandidate.email || ''}</p>
                 </div>
               </div>
-              <button onClick={closeModal} className="text-zinc-400 hover:text-white transition p-2 hover:bg-zinc-800 rounded-lg">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-3">
+                {(() => {
+                  const status = selectedCandidate.status || (selectedCandidate.shortlisted ? 'Shortlisted' : '')
+                  const canUpdate = !['shortlisted', 'rejected', 'Shortlisted', 'Not Shortlisted'].includes(String(status))
+                  return canUpdate ? (
+                    <>
+                      <button
+                        onClick={() => handleStatusAction('shortlist')}
+                        disabled={statusAction.loading}
+                        className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      >
+                        {statusAction.loading && statusAction.action === 'shortlist' ? 'Updating…' : 'Shortlist'}
+                      </button>
+                      <button
+                        onClick={() => handleStatusAction('reject')}
+                        disabled={statusAction.loading}
+                        className="px-4 py-2 rounded-lg bg-zinc-600 hover:bg-zinc-500 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      >
+                        {statusAction.loading && statusAction.action === 'reject' ? 'Updating…' : 'Reject'}
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-sm text-zinc-400 px-3 py-1 rounded-lg bg-zinc-800">
+                      {status === 'shortlisted' || status === 'Shortlisted' ? 'Shortlisted' : 'Not Shortlisted'}
+                    </span>
+                  )
+                })()}
+                <button onClick={closeModal} className="text-zinc-400 hover:text-white transition p-2 hover:bg-zinc-800 rounded-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className="p-6 space-y-6">
               {/* Match Score Badge */}
@@ -865,18 +934,18 @@ export default function AppliedCandidates() {
         const analysis = reasonCandidate.atsAnalysis != null && typeof reasonCandidate.atsAnalysis === 'object'
           ? reasonCandidate.atsAnalysis
           : {}
-        const jsonOut = analysis.json_output || analysis
-        const breakdown = jsonOut.score_breakdown || {}
-        const rawStrengths = jsonOut.key_strengths || []
-        const rawGaps = jsonOut.key_gaps || []
-        const verdict = (jsonOut.verdict || (jsonOut.decision || '').replace(/_/g, ' ') || '').trim()
-        const evalReport = jsonOut.evaluation_report || {}
-        const skillsAnalysis = evalReport.skills_analysis || {}
-        const mandatoryPct = jsonOut.mandatory_skills_match_pct ?? skillsAnalysis.mandatory_skills_match_pct
-        const decisionBullets = Array.isArray(evalReport.final_decision_logic) ? evalReport.final_decision_logic : []
-        const experienceAssessment = evalReport.experience_assessment || {}
-        const educationAssessment = evalReport.education_certification_assessment
-        const finalReasoning = (jsonOut.final_reasoning || jsonOut.rationale || reasonCandidate.atsReasoning || '').trim() || 'No detailed reasoning available.'
+        const jsonOut = analysis?.json_output ?? analysis
+        const breakdown = jsonOut?.score_breakdown ?? {}
+        const rawStrengths = Array.isArray(jsonOut?.key_strengths) ? jsonOut.key_strengths : []
+        const rawGaps = Array.isArray(jsonOut?.key_gaps) ? jsonOut.key_gaps : []
+        const verdict = (jsonOut?.verdict || (jsonOut?.decision || '').replace(/_/g, ' ') || '').trim()
+        const evalReport = jsonOut?.evaluation_report ?? {}
+        const skillsAnalysis = evalReport?.skills_analysis ?? {}
+        const mandatoryPct = jsonOut?.mandatory_skills_match_pct ?? skillsAnalysis?.mandatory_skills_match_pct
+        const decisionBullets = Array.isArray(evalReport?.final_decision_logic) ? evalReport.final_decision_logic : []
+        const experienceAssessment = evalReport?.experience_assessment ?? {}
+        const educationAssessment = evalReport?.education_certification_assessment
+        const finalReasoning = (jsonOut?.final_reasoning || jsonOut?.rationale || reasonCandidate?.atsReasoning || '').trim() || 'No detailed reasoning available.'
 
         // Score factors: name, breakdown key, weight % (matches backend)
         const SCORE_FACTORS = [
@@ -926,7 +995,7 @@ export default function AppliedCandidates() {
         const gapChips = toChips(rawGaps)
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={closeReasonModal}>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={closeReasonModal}>
             <div className="bg-zinc-900 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto ring-1 ring-zinc-700 shadow-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="match-modal-title">
               <MatchHeader
                 score={score}

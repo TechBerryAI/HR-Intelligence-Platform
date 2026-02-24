@@ -172,10 +172,10 @@ def apply_job():
         if not job_id:
             return jsonify({'error': 'Job ID is required'}), 400
         
-        # Validate job exists and is enabled
-        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND enabled = 1', (job_id,))
+        # Validate job exists and is enabled (treat NULL enabled as available, consistent with list view)
+        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND (enabled = 1 OR enabled IS NULL)', (job_id,))
         if not job:
-            return jsonify({'error': 'Job not found or not available'}), 404
+            return jsonify({'error': 'Job not found or not available for applications'}), 404
         
         # Check for duplicate application
         existing = db_get('SELECT id FROM applications WHERE candidate_id = ? AND job_id = ?', (candidate_id, job_id))

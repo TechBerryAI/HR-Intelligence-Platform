@@ -10,7 +10,7 @@ from helpers.email_utils import send_notification_email
 from helpers.otp_utils import generate_otp, is_valid_email, parse_otp_expiry, send_email_otp
 from models import get_session
 from models.hr_auth import HRAuth
-from sessions_service import get_recent_failed_attempts, record_login_attempt
+from sessions_service import record_login_attempt
 from utils import build_jwt_payload
 
 auth_bp = Blueprint('auth', __name__)
@@ -248,7 +248,7 @@ def verify_hr_otp():
             traceback.print_exc()
             return jsonify({"error": "Failed to create account. Please try again."}), 500
 
-        identity = {"hrId": hrid, "email": hr_data['email'], "role": "HR", "company": (hr_data.get('company') or '').strip()}
+        identity = {"hrId": hrid, "email": hr_data['email'], "role": "HR"}
         access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
         refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
 
@@ -492,11 +492,6 @@ def hr_login():
         if not email or not password:
             return jsonify({"error": "Email and password are required"}), 400
 
-        failed_attempts = get_recent_failed_attempts(email, 'HR', 15)
-        if failed_attempts >= 5:
-            record_login_attempt(email, 'HR', 'failed', ip_address, user_agent, 'Too many failed attempts')
-            return jsonify({"error": "Too many failed login attempts. Please try again later."}), 429
-
         signup_data = db_get(
             'SELECT hrid, email, password, full_name, company FROM hr_signup WHERE email = ?',
             (email,)
@@ -510,7 +505,7 @@ def hr_login():
             return jsonify({"error": "Invalid email or password"}), 401
 
         user_id = signup_data['hrid']
-        identity = {"hrId": user_id, "email": signup_data['email'], "role": "HR", "company": (signup_data.get('company') or '').strip()}
+        identity = {"hrId": user_id, "email": signup_data['email'], "role": "HR"}
         access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
         refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
 
@@ -564,7 +559,7 @@ def refresh_tokens():
         payload = jwt.decode(refresh_token, JWT_SECRET, algorithms=["HS256"])
         if payload.get('type') != 'refresh':
             return jsonify({"error": "Invalid refresh token"}), 403
-        identity = {k: payload[k] for k in ('hrId', 'id', 'email', 'role', 'company') if k in payload}
+        identity = {k: payload[k] for k in ('hrId', 'id', 'email', 'role') if k in payload}
         if not identity:
             return jsonify({"error": "Invalid refresh token"}), 403
         new_access = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')

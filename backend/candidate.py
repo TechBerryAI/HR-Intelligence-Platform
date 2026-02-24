@@ -458,6 +458,7 @@ def get_profile_admin(candidate_id: str):
         )
         if not profile:
             return jsonify({'error': 'Profile not found'}), 404
+
         return jsonify(parse_profile(profile))
     except Exception as e:
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500

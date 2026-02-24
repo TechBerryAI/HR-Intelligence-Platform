@@ -1,6 +1,6 @@
 import React from 'react'
 import { motion } from 'framer-motion'
-import { FiMapPin, FiDollarSign, FiClock, FiCheck, FiBookmark } from 'react-icons/fi'
+import { FiMapPin, FiClock, FiCheck, FiBookmark } from 'react-icons/fi'
 
 // Helper function to format date for display
 const formatDisplayDate = (dateString) => {
@@ -66,7 +66,6 @@ export default function JobCard({ job, onApply, isApplied = false, isSaved = fal
             </div>
             {job.salary && (
               <div className="flex items-center gap-1.5">
-                <FiDollarSign className="w-4 h-4" />
                 <span>{job.salary}</span>
               </div>
             )}

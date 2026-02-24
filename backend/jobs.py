@@ -1,8 +1,10 @@
 import re
+from datetime import datetime
 from flask import Blueprint, request, jsonify
 from db import db_all, db_get, db_run
 from utils import authenticate_token, require_hr, optional_authenticate_token
 from toon import toon_loads_flex
+from services.candidate_notification_service import send_and_get_output
 
 jobs_bp = Blueprint('jobs', __name__)
 
@@ -101,19 +103,22 @@ def get_jobs_public():
                 ''',
                 (user.get('hrId'),)
             )
-            # Further restrict to jobs whose company matches this account's company (from JWT)
+            # Optionally restrict to jobs whose company matches JWT; if that would hide all, show all (avoid data mismatch hiding jobs)
             hr_company = (user.get('company') or '').strip()
             if hr_company:
                 hr_company_lower = hr_company.lower()
-                jobs = [j for j in jobs if (j.get('company') or '').strip().lower() == hr_company_lower]
+                filtered = [j for j in jobs if (j.get('company') or '').strip().lower() == hr_company_lower]
+                if len(filtered) > 0 or len(jobs) == 0:
+                    jobs = filtered
+                # else: keep full list so HR still sees their jobs
         else:
-            # Public / candidate: only enabled jobs
+            # Public / candidate: only enabled jobs (treat NULL enabled as visible)
             jobs = db_all(
                 '''
                 SELECT j.*, hs.company as company_name
                 FROM jobs j
                 LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-                WHERE j.enabled = 1
+                WHERE (j.enabled = 1 OR j.enabled IS NULL)
                 ORDER BY j.posted_on DESC
                 '''
             )
@@ -412,6 +417,96 @@ def get_candidate_resume(job_id: str, candidate_id: str):
             return jsonify({'error': 'Invalid resume data'}), 500
     except Exception as e:
         print(f"Error in get_candidate_resume: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@jobs_bp.post('/<string:job_id>/applications/<string:candidate_id>/viewed')
+@authenticate_token
+@require_hr
+def record_profile_viewed(job_id: str, candidate_id: str):
+    """Record that HR viewed this candidate's profile for this job. Sends email and updates status."""
+    try:
+        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        if not job:
+            return jsonify({'error': 'Job not found or access denied'}), 404
+        app = db_get('SELECT id FROM applications WHERE job_id = ? AND candidate_id = ?', (job_id, candidate_id))
+        if not app:
+            return jsonify({'error': 'Application not found'}), 404
+        profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
+        signup = db_get('SELECT email FROM candidate_signup WHERE cid = ?', (candidate_id,))
+        app['full_name'] = (profile or {}).get('full_name') or ''
+        app['email'] = (profile or {}).get('email') or (signup or {}).get('email') or ''
+        ts = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        status_db = 'profile_viewed'
+        if app['email']:
+            out = send_and_get_output(
+                hr_action='PROFILE_VIEWED',
+                candidate_name=app.get('full_name') or '',
+                candidate_email=app['email'],
+                job_title=job.get('title') or '',
+                company_name=job.get('company') or '',
+                application_id=app['id'],
+                timestamp=ts,
+            )
+            status_db = out['profile_update']['status_db']
+        db_run(
+            'UPDATE applications SET status = ? WHERE id = ?',
+            (status_db, app['id'])
+        )
+        return jsonify({'status': 'ok', 'profile_update': {'application_id': str(app['id']), 'status': 'Profile Viewed', 'updated_at': ts}}), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        print(f"Error in record_profile_viewed: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@jobs_bp.patch('/<string:job_id>/applications/<string:candidate_id>/status')
+@authenticate_token
+@require_hr
+def update_application_status(job_id: str, candidate_id: str):
+    """Shortlist or reject candidate. Body: { "action": "shortlist" | "reject" }."""
+    try:
+        data = request.get_json(force=True) or {}
+        action = (data.get('action') or '').strip().lower()
+        if action not in ('shortlist', 'reject'):
+            return jsonify({'error': 'action must be "shortlist" or "reject"'}), 400
+        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        if not job:
+            return jsonify({'error': 'Job not found or access denied'}), 404
+        app = db_get('SELECT id FROM applications WHERE job_id = ? AND candidate_id = ?', (job_id, candidate_id))
+        if not app:
+            return jsonify({'error': 'Application not found'}), 404
+        profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
+        signup = db_get('SELECT email FROM candidate_signup WHERE cid = ?', (candidate_id,))
+        app['full_name'] = (profile or {}).get('full_name') or ''
+        app['email'] = (profile or {}).get('email') or (signup or {}).get('email') or ''
+        if not app['email']:
+            return jsonify({'error': 'Candidate email not found; cannot send notification'}), 400
+        hr_action = 'SHORTLISTED' if action == 'shortlist' else 'NOT_SHORTLISTED'
+        ts = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        out = send_and_get_output(
+            hr_action=hr_action,
+            candidate_name=app.get('full_name') or '',
+            candidate_email=app.get('email') or '',
+            job_title=job.get('title') or '',
+            company_name=job.get('company') or '',
+            application_id=app['id'],
+            timestamp=ts,
+        )
+        db_run(
+            'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
+            (out['profile_update']['status_db'], 1 if action == 'shortlist' else 0, app['id'])
+        )
+        return jsonify({'status': 'ok', 'profile_update': out['profile_update']}), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        print(f"Error in update_application_status: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Internal server error'}), 500

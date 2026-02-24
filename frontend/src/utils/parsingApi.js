@@ -4,6 +4,18 @@
 import { BASE_URL as API_URL } from './api';
 
 /**
+ * Ensure a value is an array (for TOON list fields like education, experience, certifications).
+ * LLM/API may return array, single object, string, or null/undefined.
+ * @param {*} value - Raw value from TOON/API
+ * @returns {Array} - Safe array for iteration (never null/undefined)
+ */
+function ensureArray(value) {
+  if (value == null) return [];
+  if (Array.isArray(value)) return value;
+  return [value];
+}
+
+/**
  * Normalize a value to an array of non-empty strings.
  * JD/LLM output can return qualifications, skills, or responsibilities as:
  * - array (expected), string (single or pipe/newline-separated), object, null/undefined.
@@ -104,26 +116,40 @@ export function mapResumeTOONToForm(toon) {
   }
 
   const person = toon.person || {};
+  const otherUrls = ensureArray(person.otherUrls);
   // Normalize to string (parser/API may return numbers for phone, etc.)
   const str = (v) => (v == null || v === '') ? '' : String(v).trim();
 
-  const education = (toon.education || []).map(edu => ({
-    degree: str(edu.degree),
-    institution: str(edu.institution || edu.field),
-    cgpa: str(edu.gpa || edu.cgpa),
-    startMonth: str(edu.start),
-    endMonth: str(edu.year || edu.end),
-  }));
+  const education = ensureArray(toon.education).map(edu => {
+    if (edu == null || typeof edu !== 'object') {
+      return { degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' };
+    }
+    return {
+      degree: str(edu.degree),
+      institution: str(edu.institution || edu.field),
+      cgpa: str(edu.gpa || edu.cgpa),
+      startMonth: str(edu.start),
+      endMonth: str(edu.year || edu.end),
+    };
+  });
 
-  const experiences = (toon.experience || []).map(exp => ({
-    company: str(exp.company),
-    role: str(exp.title || exp.role),
-    startMonth: str(exp.from || exp.start),
-    endMonth: exp.to === 'Present' || exp.to === 'present' ? '' : str(exp.to || exp.end),
-    isCurrent: exp.to === 'Present' || exp.to === 'present' || exp.isCurrent || false,
-  }));
+  const experiences = ensureArray(toon.experience).map(exp => {
+    if (exp == null || typeof exp !== 'object') {
+      return { company: '', role: '', startMonth: '', endMonth: '', isCurrent: false };
+    }
+    return {
+      company: str(exp.company),
+      role: str(exp.title || exp.role),
+      startMonth: str(exp.from || exp.start),
+      endMonth: exp.to === 'Present' || exp.to === 'present' ? '' : str(exp.to || exp.end),
+      isCurrent: exp.to === 'Present' || exp.to === 'present' || exp.isCurrent || false,
+    };
+  });
 
-  const certifications = (toon.certifications || []).map(cert => {
+  const certifications = ensureArray(toon.certifications).map(cert => {
+    if (cert == null) {
+      return { name: '', issuer: '', validTill: '', validationUrl: '', status: '' };
+    }
     if (typeof cert === 'string') {
       return {
         name: str(cert),
@@ -132,6 +158,9 @@ export function mapResumeTOONToForm(toon) {
         validationUrl: '',
         status: '',
       };
+    }
+    if (typeof cert !== 'object') {
+      return { name: str(cert), issuer: '', validTill: '', validationUrl: '', status: '' };
     }
     return {
       name: str(cert.name || cert.title),
@@ -149,8 +178,8 @@ export function mapResumeTOONToForm(toon) {
   // Extract URLs from person object
   // Map LinkedIn URL - check multiple possible fields
   let linkedinUrl = person.linkedin || '';
-  if (!linkedinUrl && person.otherUrls) {
-    const linkedinMatch = person.otherUrls.find(url => 
+  if (!linkedinUrl && otherUrls.length > 0) {
+    const linkedinMatch = otherUrls.find(url => 
       url && (url.toLowerCase().includes('linkedin') || url.toLowerCase().includes('linked.in'))
     );
     if (linkedinMatch) linkedinUrl = linkedinMatch;
@@ -190,9 +219,9 @@ export function mapResumeTOONToForm(toon) {
   } else if (portfolioCandidate && isValidPortfolioUrl(portfolioCandidate)) {
     // Use portfolio/website if it's valid
     portfolioUrl = portfolioCandidate;
-  } else if (person.otherUrls && person.otherUrls.length > 0) {
+  } else if (otherUrls.length > 0) {
     // Look for valid portfolio URLs in otherUrls (excluding social media)
-    const portfolioMatch = person.otherUrls.find(url => 
+    const portfolioMatch = otherUrls.find(url => 
       url && 
       !url.toLowerCase().includes('linkedin') && 
       !url.toLowerCase().includes('github') && 

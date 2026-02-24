@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react'
+import React, { useMemo, useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
 import FilterBar from '../components/FilterBar.jsx'
@@ -16,6 +16,8 @@ export default function Jobs() {
     keywords: params.get('q') || '',
     location: params.get('loc') || '',
   }
+  const [applyError, setApplyError] = useState('')
+  const [applyingJobId, setApplyingJobId] = useState(null)
 
   const filtered = useMemo(() => {
     const kw = query.keywords.toLowerCase()
@@ -114,6 +116,39 @@ export default function Jobs() {
           </div>
         </AnimatedContainer>
 
+        {applyError && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 glass-card border-2 border-amber-500/30 bg-amber-500/10 rounded-2xl p-4 flex items-start justify-between gap-4"
+          >
+            <div className="flex items-start gap-3">
+              <FiAlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-amber-200 font-medium">Could not apply</p>
+                <p className="text-sm text-amber-300/90 mt-1">{applyError}</p>
+                {(applyError.includes('profile') || applyError.includes('resume') || applyError.includes('education')) && (
+                  <button
+                    type="button"
+                    onClick={() => { setApplyError(''); navigate('/profile/applicant') }}
+                    className="mt-2 text-sm font-medium text-amber-300 hover:text-amber-200 underline"
+                  >
+                    Complete profile →
+                  </button>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setApplyError('')}
+              className="text-amber-400 hover:text-amber-300 text-sm px-2"
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </motion.div>
+        )}
+
         <div className="mt-8">
           {filtered.length === 0 ? (
             <motion.div
@@ -143,20 +178,31 @@ export default function Jobs() {
                     isApplied={!!applicantApplications[job.id] || !!applicantApplications[String(job.id)]}
                     isSaved={!!applicantSavedJobs[job.id] || !!applicantSavedJobs[String(job.id)]}
                     isAdmin={auth.role === 'HR' || auth.role === 'admin'}
+                    isApplying={applyingJobId === job.id}
                     onApply={async () => {
+                      setApplyError('')
                       if (!applicantAuth.isLoggedIn) {
                         const qs = new URLSearchParams({ redirect: window.location.pathname + window.location.search, applyFor: job.id }).toString()
                         navigate(`/login/applicant?${qs}`)
                         return
                       }
-                      if (applicantProfile.completed) {
-                        const result = await applyToJobAsApplicant(job.id)
-                        if (result.ok && (applicantSavedJobs[job.id] || applicantSavedJobs[String(job.id)])) {
+                      if (!applicantProfile.completed) {
+                        const qs = new URLSearchParams({ redirect: window.location.pathname + window.location.search, applyFor: job.id }).toString()
+                        navigate(`/profile/applicant?${qs}`)
+                        return
+                      }
+                      setApplyingJobId(job.id)
+                      const result = await applyToJobAsApplicant(job.id)
+                      setApplyingJobId(null)
+                      if (result.ok) {
+                        if (applicantSavedJobs[job.id] || applicantSavedJobs[String(job.id)]) {
                           toggleSaveJob(job.id)
                         }
                       } else {
-                        const qs = new URLSearchParams({ redirect: window.location.pathname + window.location.search, applyFor: job.id }).toString()
-                        navigate(`/profile/applicant?${qs}`)
+                        const msg = result.reason === 'profile_requirements_missing'
+                          ? 'Add a resume and at least one education entry (degree + institution) to your profile to apply.'
+                          : (result.message || 'Failed to apply. Please try again.')
+                        setApplyError(msg)
                       }
                     }}
                     onToggleSave={() => {

@@ -267,11 +267,19 @@ export function AppProvider({ children }) {
     }
   }
 
-  // Fetch applications and saved jobs from backend
+  // Fetch applications, saved jobs, and profile from backend (single source of truth for profile)
   const fetchApplicantData = async () => {
-    if (!applicantAuth.isLoggedIn || !token) return
+    const authToken = token || tokenService.getToken()
+    if (!applicantAuth.isLoggedIn || !authToken) return
     try {
-      const applications = await apiRequest('/api/applications', { method: 'GET', token }).catch(() => [])
+      // Fetch profile from backend - this is the canonical source after login
+      const profileRes = await apiRequest('/api/candidate/profile', { method: 'GET', token: authToken }).catch(() => null)
+      if (profileRes && typeof profileRes === 'object' && !profileRes.error) {
+        setApplicantProfile(profileRes)
+        writeJson(STORAGE_KEYS.applicantProfile, profileRes)
+      }
+
+      const applications = await apiRequest('/api/applications', { method: 'GET', token: authToken }).catch(() => [])
       
       // Convert applications array to map
       const applicationsMap = {}
@@ -310,19 +318,37 @@ export function AppProvider({ children }) {
         setApplicantAuth(nextApplicantAuth)
         writeJson(STORAGE_KEYS.applicantAuth, nextApplicantAuth)
         
-        // Load profile from backend if available
-        if (data.user.profile) {
-          setApplicantProfile(data.user.profile)
-          writeJson(STORAGE_KEYS.applicantProfile, data.user.profile)
+        // Use profile from login response if full (has fullName or education); otherwise fetch full profile from API
+        const loginProfile = data.user.profile
+        const hasFullProfile = loginProfile && (
+          (loginProfile.fullName || loginProfile.email) &&
+          (Array.isArray(loginProfile.education) || Array.isArray(loginProfile.experiences))
+        )
+        if (hasFullProfile) {
+          setApplicantProfile(loginProfile)
+          writeJson(STORAGE_KEYS.applicantProfile, loginProfile)
         } else {
           setApplicantProfile((p) => {
             const nextProfile = { ...p, email: data.user.email || idOrEmail }
             writeJson(STORAGE_KEYS.applicantProfile, nextProfile)
             return nextProfile
           })
+          // Fetch full profile from backend so data persists after logout/login
+          try {
+            const fullProfile = await apiRequest('/api/candidate/profile', {
+              method: 'GET',
+              token: data.token
+            })
+            if (fullProfile && (fullProfile.fullName || fullProfile.email || (fullProfile.education && fullProfile.education.length > 0))) {
+              setApplicantProfile(fullProfile)
+              writeJson(STORAGE_KEYS.applicantProfile, fullProfile)
+            }
+          } catch (err) {
+            console.warn('Could not fetch profile after login:', err)
+          }
         }
         
-        // Fetch applications and saved jobs
+        // Fetch applications and saved jobs from backend
         setTimeout(() => fetchApplicantData(), 100)
         
         return { ok: true }
