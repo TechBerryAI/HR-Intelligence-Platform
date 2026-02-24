@@ -733,7 +733,13 @@ export function AppProvider({ children }) {
       })
       return { ok: true, data: data.applications || data || [] }
     } catch (err) {
-      console.error('Fetch applications error:', err)
+      // 404 = job not found or no access: show empty candidates instead of error
+      if (err?.status === 404) {
+        return { ok: true, data: [] }
+      }
+      if (import.meta.env?.DEV) {
+        console.error('Fetch applications error:', err)
+      }
       return { ok: false, message: err?.message || 'Failed to fetch applications' }
     }
   }
