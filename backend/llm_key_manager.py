@@ -15,7 +15,7 @@ KEY_ENV_PREFIX = "HRMS_API_KEY_"
 KEY_ENV_FALLBACK = "XAI_API_KEY"
 MAX_NUMERIC_KEYS = 9
 
-COOLDOWN_SECONDS = int(os.getenv("LLM_KEY_COOLDOWN_SECONDS", "90"))
+COOLDOWN_SECONDS = int(os.getenv("LLM_KEY_COOLDOWN_SECONDS", "45"))  # Shorter cooldown for 4+ keys = faster rotation
 MAX_KEYS_TO_TRY = None  # None = try all keys once per request
 
 

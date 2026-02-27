@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
@@ -44,8 +44,8 @@ def hr_signup():
 
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         otp = generate_otp()
-        expiry = datetime.utcnow() + timedelta(minutes=5)
-        
+        # Use timezone-aware UTC so PostgreSQL TIMESTAMPTZ stores/compares correctly
+        expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
         print(f"[HR SIGNUP] Generated OTP for {email}: {otp}")
 
         # Store in HRAuth temporarily until OTP verification
@@ -199,7 +199,10 @@ def verify_hr_otp():
                 print(f"Invalid OTP expiry for HR. Raw value: {otp_expiry_raw}, Type: {type(otp_expiry_raw)}")
                 return jsonify({'error': 'Invalid OTP expiry. Please request a new OTP.'}), 400
             otp_expiry_utc = normalize_to_utc_aware(otp_expiry)
-            if otp_expiry_utc and current_time > otp_expiry_utc:
+            # 30s grace after nominal expiry to avoid clock skew
+            grace = timedelta(seconds=30)
+            if otp_expiry_utc and current_time > (otp_expiry_utc + grace):
+                print(f"[VERIFY OTP] Expired: now_utc={current_time}, expiry_utc={otp_expiry_utc}")
                 return jsonify({'error': 'OTP expired. Please request a new OTP.'}), 400
 
             # Mark as verified
@@ -311,9 +314,9 @@ def resend_hr_otp():
             if hr_auth.is_verified:
                 return jsonify({'error': 'Account already verified. Please login.'}), 400
 
-            # Generate new OTP
+            # Generate new OTP (timezone-aware UTC for TIMESTAMPTZ)
             otp = generate_otp()
-            expiry = datetime.utcnow() + timedelta(minutes=5)
+            expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
 
             hr_auth.otp = otp
             hr_auth.otp_expiry = expiry
@@ -349,7 +352,7 @@ def hr_forgot_password():
             return jsonify({'error': 'Account not found for this email.'}), 404
 
         otp = generate_otp()
-        expiry = datetime.utcnow() + timedelta(minutes=10)
+        expiry = datetime.now(timezone.utc) + timedelta(minutes=10)
 
         with get_session() as session:
             hr_auth = session.query(HRAuth).filter(HRAuth.email == email).first()
@@ -403,7 +406,8 @@ def hr_verify_reset_otp():
             if not expiry:
                 return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
             expiry_utc = normalize_to_utc_aware(expiry)
-            if expiry_utc and utc_now_aware() > expiry_utc:
+            now = utc_now_aware()
+            if expiry_utc and now > (expiry_utc + timedelta(seconds=30)):
                 return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
 
         return jsonify({'message': 'OTP verified. You may set a new password.'}), 200

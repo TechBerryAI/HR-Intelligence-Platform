@@ -578,11 +578,13 @@ def create_job():
         
         description = (data.get('description') or '').strip()
         
-        # Get company from HR profile if not provided
-        if not company and request.user.get('hrId'):
-            hr_profile = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (request.user.get('hrId'),))
-            if hr_profile:
-                company = hr_profile.get('company') or ''
+        # Company is always taken from the HR account — not from request body (keeps it unchangeable)
+        hr_id = request.user.get('hrId')
+        if hr_id:
+            hr_profile = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (hr_id,))
+            if hr_profile and (hr_profile.get('company') or '').strip():
+                company = (hr_profile.get('company') or '').strip()
+            # else keep company from request only if HR has no company set (e.g. legacy)
         
         if not title or not company or not location or not description:
             missing_fields = []

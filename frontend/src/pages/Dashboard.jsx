@@ -50,7 +50,7 @@ export default function Dashboard() {
     }
   }, [user?.company]) // Only depend on user.company to avoid infinite loops
 
-  // Handle JD autofill from parsing
+  // Handle JD autofill from parsing (company is never changed — always from HR account)
   const handleJDAutofill = (parsedData) => {
     setTitle(parsedData.title || '');
     setLocation(parsedData.location || '');
@@ -58,17 +58,8 @@ export default function Dashboard() {
     setExperienceFrom(parsedData.experienceFrom || '');
     setExperienceTo(parsedData.experienceTo || '');
     setDescription(parsedData.description || '');
-    
-    // Use parsed company if available, otherwise keep user's company
-    // This allows HR to override with a different company if needed
-    if (parsedData.company && parsedData.company.trim()) {
-      setCompany(parsedData.company.trim());
-    } else {
-      // If no company in parsed JD, ensure user's company is set
-      setCompany(user?.company || '');
-    }
-    
-    // Show success message
+    // Keep company as the logged-in HR's company; do not overwrite with parsed JD
+    setCompany(user?.company || '');
     setSuccess('Job description parsed! Please review the fields below.');
     setTimeout(() => setSuccess(''), 5000);
   };
@@ -77,7 +68,8 @@ export default function Dashboard() {
     e.preventDefault()
     setIsSubmitting(true)
     try {
-      await addJob({ title, company, location, salary, experienceFrom, experienceTo, description })
+      const companyToUse = user?.company || company
+      await addJob({ title, company: companyToUse, location, salary, experienceFrom, experienceTo, description })
       setTitle('')
       setCompany(user?.company || '')
       setLocation('')
@@ -200,9 +192,10 @@ export default function Dashboard() {
                 label="Company"
                 icon={FiBriefcase}
                 required
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                placeholder="Acme Corp"
+                value={user?.company || company}
+                readOnly
+                placeholder="From your account"
+                title="Company is set from your HR account and cannot be changed here."
               />
               <PremiumInput
                 label="Location"
