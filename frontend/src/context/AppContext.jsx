@@ -345,13 +345,19 @@ export function AppProvider({ children }) {
             writeJson(STORAGE_KEYS.applicantProfile, nextProfile)
             return nextProfile
           })
-          // Fetch full profile from backend so data persists after logout/login
+          // Fetch full profile from backend (includes saved resume) so data persists after server restart / login
           try {
             const fullProfile = await apiRequest('/api/candidate/profile', {
               method: 'GET',
               token: data.token
             })
-            if (fullProfile && (fullProfile.fullName || fullProfile.email || (fullProfile.education && fullProfile.education.length > 0))) {
+            const hasAnyProfile =
+              (fullProfile && fullProfile.fullName && fullProfile.fullName.trim()) ||
+              (fullProfile && fullProfile.email && fullProfile.email.trim()) ||
+              (fullProfile && fullProfile.resumeFileName && fullProfile.resumeFileName.trim()) ||
+              (fullProfile && Array.isArray(fullProfile.education) && fullProfile.education.length > 0) ||
+              (fullProfile && Array.isArray(fullProfile.experiences) && fullProfile.experiences.length > 0)
+            if (hasAnyProfile) {
               setApplicantProfile(fullProfile)
               writeJson(STORAGE_KEYS.applicantProfile, fullProfile)
             }
@@ -359,8 +365,8 @@ export function AppProvider({ children }) {
             console.warn('Could not fetch profile after login:', err)
           }
         }
-        
-        // Fetch applications and saved jobs from backend
+
+        // Fetch applications and saved jobs (and re-fetch profile so resume is never missed)
         setTimeout(() => fetchApplicantData(), 100)
         
         return { ok: true }

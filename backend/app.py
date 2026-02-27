@@ -10,6 +10,11 @@ from dotenv import load_dotenv
 _backend_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_backend_dir, '.env'))
 
+# Use PostgreSQL when USE_POSTGRES=1 or DATABASE_URL is postgresql (so "from db import ..." resolves to db_pg)
+if os.getenv('USE_POSTGRES') or (os.getenv('DATABASE_URL') or '').strip().lower().startswith('postgresql'):
+    import db_pg
+    sys.modules['db'] = db_pg
+
 # Validate environment variables before proceeding
 from env_validator import EnvValidator
 is_valid, errors, warnings = EnvValidator.validate()

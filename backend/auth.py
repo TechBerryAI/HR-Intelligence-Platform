@@ -5,15 +5,16 @@ import bcrypt
 import jwt
 from flask import Blueprint, request, jsonify
 
-from db import db_get, db_run
+from db import db_get, db_run, BACKEND
 from helpers.email_utils import send_notification_email
-from helpers.otp_utils import generate_otp, is_valid_email, parse_otp_expiry, send_email_otp
+from helpers.otp_utils import generate_otp, is_valid_email, parse_otp_expiry, send_email_otp, utc_now_aware, normalize_to_utc_aware
 from models import get_session
 from models.hr_auth import HRAuth
 from sessions_service import record_login_attempt
 from utils import build_jwt_payload
 
 auth_bp = Blueprint('auth', __name__)
+HRAUTH_T = '"HRAuth"' if BACKEND == 'postgresql' else 'HRAuth'
 
 JWT_SECRET = os.getenv('JWT_SECRET', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE')
 
@@ -88,7 +89,7 @@ def hr_signup():
 
         # Verify what was actually stored in the database
         try:
-            stored_hr = db_get('SELECT otp FROM HRAuth WHERE email = ?', (email,))
+            stored_hr = db_get('SELECT otp FROM ' + HRAUTH_T + ' WHERE email = ?', (email,))
             if stored_hr:
                 print(f"[HR SIGNUP] OTP in database after save: {stored_hr.get('otp')}")
             else:
@@ -140,8 +141,8 @@ def verify_hr_otp():
                 print(f"Invalid OTP for HR. Expected={stored_otp}, Got={input_otp}")
                 return jsonify({'error': 'Invalid OTP.'}), 400
             
-            # Check OTP expiry - ensure it's a datetime object before comparison
-            current_time = datetime.utcnow()
+            # Check OTP expiry (PG returns timezone-aware; use aware UTC for comparison)
+            current_time = utc_now_aware()
             otp_expiry_raw = hr_auth.otp_expiry
             
             # Convert otp_expiry to datetime object if needed
@@ -197,13 +198,9 @@ def verify_hr_otp():
             if not otp_expiry or not isinstance(otp_expiry, datetime):
                 print(f"Invalid OTP expiry for HR. Raw value: {otp_expiry_raw}, Type: {type(otp_expiry_raw)}")
                 return jsonify({'error': 'Invalid OTP expiry. Please request a new OTP.'}), 400
-            
-            try:
-                if otp_expiry < current_time:
-                    return jsonify({'error': 'OTP expired. Please request a new OTP.'}), 400
-            except TypeError as te:
-                print(f"TypeError comparing OTP expiry: {te}, expiry={otp_expiry}, current={current_time}")
-                return jsonify({'error': 'Invalid OTP expiry format. Please request a new OTP.'}), 400
+            otp_expiry_utc = normalize_to_utc_aware(otp_expiry)
+            if otp_expiry_utc and current_time > otp_expiry_utc:
+                return jsonify({'error': 'OTP expired. Please request a new OTP.'}), 400
 
             # Mark as verified
             hr_auth.mark_verified()
@@ -403,7 +400,10 @@ def hr_verify_reset_otp():
                 return jsonify({'error': 'Invalid OTP.'}), 400
 
             expiry = parse_otp_expiry(hr_auth.otp_expiry)
-            if not expiry or expiry < datetime.utcnow():
+            if not expiry:
+                return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+            expiry_utc = normalize_to_utc_aware(expiry)
+            if expiry_utc and utc_now_aware() > expiry_utc:
                 return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
 
         return jsonify({'message': 'OTP verified. You may set a new password.'}), 200
@@ -445,7 +445,10 @@ def hr_reset_password():
                 return jsonify({'error': 'Invalid OTP.'}), 400
 
             expiry = parse_otp_expiry(hr_auth.otp_expiry)
-            if not expiry or expiry < datetime.utcnow():
+            if not expiry:
+                return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+            expiry_utc = normalize_to_utc_aware(expiry)
+            if expiry_utc and utc_now_aware() > expiry_utc:
                 return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
 
             password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')

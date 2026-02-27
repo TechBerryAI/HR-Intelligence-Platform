@@ -1,7 +1,21 @@
 import random
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+
+
+def utc_now_aware() -> datetime:
+    """Return current UTC time as timezone-aware (for comparing with PG timestamptz)."""
+    return datetime.now(timezone.utc)
+
+
+def normalize_to_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
+    """Convert a datetime to timezone-aware UTC. Handles naive (from MSSQL) and aware (from PostgreSQL)."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 from flask import current_app
 from flask_mail import Message
