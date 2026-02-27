@@ -52,14 +52,18 @@ class EnvValidator:
         """
         errors = []
         warnings = []
-        
-        # Check required variables
-        for var, description in cls.REQUIRED_VARS.items():
-            value = os.getenv(var)
-            if not value:
-                errors.append(f"  ❌ {var}: {description}")
-            elif value.startswith('YOUR_'):
-                errors.append(f"  ❌ {var}: Still has placeholder value. {description}")
+        use_pg = os.getenv('USE_POSTGRES') or (os.getenv('DATABASE_URL') or '').strip().lower().startswith('postgresql')
+
+        if use_pg:
+            if not os.getenv('DATABASE_URL') and not (os.getenv('POSTGRES_USER') and os.getenv('POSTGRES_PASSWORD')):
+                errors.append("  ❌ For PostgreSQL set DATABASE_URL or POSTGRES_USER and POSTGRES_PASSWORD")
+        else:
+            for var, description in cls.REQUIRED_VARS.items():
+                value = os.getenv(var)
+                if not value:
+                    errors.append(f"  ❌ {var}: {description}")
+                elif value.startswith('YOUR_'):
+                    errors.append(f"  ❌ {var}: Still has placeholder value. {description}")
         
         # Check recommended variables
         for var, description in cls.RECOMMENDED_VARS.items():
@@ -69,9 +73,10 @@ class EnvValidator:
             elif value.startswith('YOUR_'):
                 warnings.append(f"  ⚠️  {var}: Still has placeholder value. {description}")
         
-        # Check ODBC driver availability
-        odbc_driver = os.getenv('MSSQL_ODBC_DRIVER', '{ODBC Driver 17 for SQL Server}')
-        cls._check_odbc_driver(odbc_driver, errors, warnings)
+        # Check ODBC driver availability (skip when using PostgreSQL)
+        if not use_pg:
+            odbc_driver = os.getenv('MSSQL_ODBC_DRIVER', '{ODBC Driver 17 for SQL Server}')
+            cls._check_odbc_driver(odbc_driver, errors, warnings)
         
         is_valid = len(errors) == 0
         if strict:

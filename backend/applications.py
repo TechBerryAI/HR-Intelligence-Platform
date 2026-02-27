@@ -2,7 +2,7 @@ import os
 import re
 import requests
 from flask import Blueprint, request, jsonify
-from db import db_get, db_run, db_all
+from db import db_get, db_run, db_all, BACKEND, TRUE_SQL
 from utils import authenticate_token, require_candidate
 from services.ats_service import match_candidate_to_job
 from toon import toon_loads_flex, toon_dumps
@@ -173,7 +173,7 @@ def apply_job():
             return jsonify({'error': 'Job ID is required'}), 400
         
         # Validate job exists and is enabled (treat NULL enabled as available, consistent with list view)
-        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND (enabled = 1 OR enabled IS NULL)', (job_id,))
+        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND (enabled = ' + TRUE_SQL + ' OR enabled IS NULL)', (job_id,))
         if not job:
             return jsonify({'error': 'Job not found or not available for applications'}), 404
         
@@ -183,7 +183,7 @@ def apply_job():
             return jsonify({'error': 'Already applied to this job'}), 400
         
         # Validate candidate profile is complete
-        profile = db_get('SELECT * FROM candidate_profiles WHERE candidate_id = ? AND completed = 1', (candidate_id,))
+        profile = db_get('SELECT * FROM candidate_profiles WHERE candidate_id = ? AND completed = ' + TRUE_SQL, (candidate_id,))
         if not profile:
             return jsonify({'error': 'Please complete your profile before applying'}), 400
         
@@ -256,13 +256,14 @@ def apply_job():
         
         print(f"[APPLY] Creating application for candidate {candidate_id} to job {job_id}")
         
+        _shortlisted_init = False if BACKEND == 'postgresql' else 0
         db_run(
             """
-            INSERT INTO applications 
-            (candidate_id, job_id, status, matching_percentage, match_score, shortlisted, ats_reasoning) 
+            INSERT INTO applications
+            (candidate_id, job_id, status, matching_percentage, match_score, shortlisted, ats_reasoning)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (candidate_id, job_id, 'applied', 0, None, 0, None)  # Status set to 'applied', ATS fields null initially
+            (candidate_id, job_id, 'applied', 0, None, _shortlisted_init, None)  # Status set to 'applied', ATS fields null initially
         )
         
         # Get the just-inserted application id (for ATS update and later n8n)
@@ -285,21 +286,22 @@ def apply_job():
             decision = (json_out.get('decision') or '').lower()
             rationale = json_out.get('final_reasoning') or json_out.get('rationale') or ats_result.get('toon_output', '')[:2000]
             ats_analysis_toon = toon_dumps(ats_result) if isinstance(ats_result, dict) else None
-            shortlisted = 1 if decision in ('shortlist', 'strong_match', 'partial_match') else 0
-            status_after = 'shortlisted' if shortlisted else 'applied'
+            _shortlisted = decision in ('shortlist', 'strong_match', 'partial_match')
+            shortlisted_val = _shortlisted if BACKEND == 'postgresql' else (1 if _shortlisted else 0)
+            status_after = 'shortlisted' if _shortlisted else 'applied'
             db_run(
                 """
                 UPDATE applications SET match_score = ?, matching_percentage = ?, shortlisted = ?, ats_reasoning = ?, ats_analysis = ?, status = ?
                 WHERE candidate_id = ? AND job_id = ?
                 """,
-                (final_score, final_score, shortlisted, rationale, ats_analysis_toon, status_after, candidate_id, job_id)
+                (final_score, final_score, shortlisted_val, rationale, ats_analysis_toon, status_after, candidate_id, job_id)
             )
             # Shortlisted candidate data will later be sent to n8n (not implemented here)
             return jsonify({
                 'message': 'Application submitted successfully',
                 'status': status_after,
                 'matchScore': final_score,
-                'shortlisted': bool(shortlisted),
+                'shortlisted': bool(_shortlisted),
             }), 201
         else:
             # ATS failed or not configured - application still created; log and return success
@@ -512,17 +514,18 @@ def receive_ats_result():
         analysis_toon = toon_dumps(analysis) if analysis else None
         
         # Update application with ATS results AND detailed analysis
+        _shortlisted_val = shortlisted if BACKEND == 'postgresql' else (1 if shortlisted else 0)
         db_run(
             """
-            UPDATE applications 
-            SET match_score = ?, 
-                shortlisted = ?, 
+            UPDATE applications
+            SET match_score = ?,
+                shortlisted = ?,
                 ats_reasoning = ?,
                 ats_analysis = ?,
                 status = ?
             WHERE candidate_id = ? AND job_id = ?
             """,
-            (match_score, 1 if shortlisted else 0, reasoning, analysis_toon, new_status, candidate_id, job_id)
+            (match_score, _shortlisted_val, reasoning, analysis_toon, new_status, candidate_id, job_id)
         )
         
         print(f"[ATS_RESULT] Successfully updated application with detailed analysis. New status: {new_status}")

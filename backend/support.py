@@ -2,10 +2,11 @@
 Support Routes - Handle help and support requests
 """
 from flask import Blueprint, request, jsonify
-from db import db_run, db_get, db_all
+from db import db_run, db_get, db_all, BACKEND, NOW_SQL
 from datetime import datetime
 
 support_bp = Blueprint('support', __name__)
+SUPPORT_TABLE = "support_requests" if BACKEND == "postgresql" else "dbo.support_requests"
 
 
 @support_bp.route('/submit', methods=['POST'])
@@ -51,14 +52,21 @@ def submit_support_request():
         if user_type not in ['candidate', 'hr', 'guest']:
             user_type = 'guest'
         
-        # Insert support request
-        query = """
-            INSERT INTO dbo.support_requests 
-            (name, email, user_id, user_type, subject, message, status, priority, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'open', ?, SYSUTCDATETIME(), SYSUTCDATETIME());
-            SELECT CAST(SCOPE_IDENTITY() AS INT) as lastID;
-        """
-        
+        # Insert support request (PG: RETURNING id; MSSQL: SCOPE_IDENTITY in second statement)
+        if BACKEND == "postgresql":
+            query = """
+                INSERT INTO """ + SUPPORT_TABLE + """
+                (name, email, user_id, user_type, subject, message, status, priority, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'open', ?, """ + NOW_SQL + """, """ + NOW_SQL + """)
+                RETURNING id
+            """
+        else:
+            query = """
+                INSERT INTO """ + SUPPORT_TABLE + """
+                (name, email, user_id, user_type, subject, message, status, priority, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'open', ?, SYSUTCDATETIME(), SYSUTCDATETIME());
+                SELECT CAST(SCOPE_IDENTITY() AS INT) as lastID;
+            """
         result = db_run(query, (name, email, user_id, user_type, subject, message, priority))
         request_id = result.get('lastID')
         
@@ -89,7 +97,7 @@ def get_my_requests():
             query = """
                 SELECT id, name, email, user_id, user_type, subject, message, 
                        status, priority, created_at, updated_at, resolved_at
-                FROM dbo.support_requests
+                FROM """ + SUPPORT_TABLE + """
                 WHERE email = ?
                 ORDER BY created_at DESC
             """
@@ -98,7 +106,7 @@ def get_my_requests():
             query = """
                 SELECT id, name, email, user_id, user_type, subject, message, 
                        status, priority, created_at, updated_at, resolved_at
-                FROM dbo.support_requests
+                FROM """ + SUPPORT_TABLE + """
                 WHERE user_id = ?
                 ORDER BY created_at DESC
             """
@@ -136,7 +144,7 @@ def get_all_requests():
             query = """
                 SELECT id, name, email, user_id, user_type, subject, message, 
                        status, priority, created_at, updated_at, resolved_at
-                FROM dbo.support_requests
+                FROM """ + SUPPORT_TABLE + """
                 WHERE status = ?
                 ORDER BY created_at DESC
             """
@@ -145,7 +153,7 @@ def get_all_requests():
             query = """
                 SELECT id, name, email, user_id, user_type, subject, message, 
                        status, priority, created_at, updated_at, resolved_at
-                FROM dbo.support_requests
+                FROM """ + SUPPORT_TABLE + """
                 ORDER BY created_at DESC
             """
             requests = db_all(query)
@@ -178,7 +186,7 @@ def get_request_by_id(request_id):
         query = """
             SELECT id, name, email, user_id, user_type, subject, message, 
                    status, priority, created_at, updated_at, resolved_at, admin_notes
-            FROM dbo.support_requests
+            FROM """ + SUPPORT_TABLE + """
             WHERE id = ?
         """
         support_request = db_get(query, (request_id,))
@@ -225,7 +233,7 @@ def update_request_status(request_id):
             return jsonify({"error": "Invalid status"}), 400
         
         # Check if request exists
-        check_query = "SELECT id FROM dbo.support_requests WHERE id = ?"
+        check_query = "SELECT id FROM " + SUPPORT_TABLE + " WHERE id = ?"
         existing = db_get(check_query, (request_id,))
         if not existing:
             return jsonify({"error": "Support request not found"}), 404
@@ -233,16 +241,16 @@ def update_request_status(request_id):
         # Update status
         if status in ['resolved', 'closed']:
             query = """
-                UPDATE dbo.support_requests 
-                SET status = ?, updated_at = SYSUTCDATETIME(), 
-                    resolved_at = SYSUTCDATETIME(), admin_notes = ?
+                UPDATE """ + SUPPORT_TABLE + """
+                SET status = ?, updated_at = """ + NOW_SQL + """,
+                    resolved_at = """ + NOW_SQL + """, admin_notes = ?
                 WHERE id = ?
             """
             db_run(query, (status, admin_notes, request_id))
         else:
             query = """
-                UPDATE dbo.support_requests 
-                SET status = ?, updated_at = SYSUTCDATETIME(), admin_notes = ?
+                UPDATE """ + SUPPORT_TABLE + """
+                SET status = ?, updated_at = """ + NOW_SQL + """, admin_notes = ?
                 WHERE id = ?
             """
             db_run(query, (status, admin_notes, request_id))

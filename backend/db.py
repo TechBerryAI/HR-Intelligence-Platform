@@ -43,6 +43,13 @@ connection_string = (
     f'Connection Timeout={CONNECTION_TIMEOUT};'
 )
 
+# Backend identifier for conditional SQL (e.g. RETURNING vs SCOPE_IDENTITY)
+BACKEND = "mssql"
+# Current timestamp in DB dialect (for raw SQL)
+NOW_SQL = "SYSUTCDATETIME()"
+TRUE_SQL = "1"
+FALSE_SQL = "0"
+
 # Debug: Print connection info (without password)
 print(f"[DB CONFIG] Server: {MSSQL_SERVER}:{MSSQL_PORT}")
 print(f"[DB CONFIG] Database: {MSSQL_DATABASE}")

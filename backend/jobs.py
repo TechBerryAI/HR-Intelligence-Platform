@@ -1,7 +1,7 @@
 import re
 from datetime import datetime
 from flask import Blueprint, request, jsonify
-from db import db_all, db_get, db_run
+from db import db_all, db_get, db_run, BACKEND, TRUE_SQL, FALSE_SQL
 from utils import authenticate_token, require_hr, optional_authenticate_token
 from toon import toon_loads_flex
 from services.candidate_notification_service import send_and_get_output
@@ -44,23 +44,39 @@ def generate_jdid_from_title(title):
         # Take first letter of each word, up to reasonable length
         prefix = ''.join(words[:5])  # Max 5 letters for prefix
     
-    # Find the last jdid with this prefix
-    # Handle both old INT jdid and new NVARCHAR jdid
-    existing = db_get(
-        '''
-        SELECT TOP 1 jdid 
-        FROM jobs 
-        WHERE jdid LIKE ?
-        ORDER BY 
-          CASE 
-            WHEN ISNUMERIC(SUBSTRING(jdid, LEN(?) + 1, 10)) = 1 
-            THEN CAST(SUBSTRING(jdid, LEN(?) + 1, 10) AS INT)
-            ELSE 0
-          END DESC,
-          jdid DESC
-        ''',
-        (f'{prefix}%', prefix, prefix)
-    )
+    # Find the last jdid with this prefix (e.g. DA001, SD002)
+    if BACKEND == "postgresql":
+        # PostgreSQL: use SUBSTRING and ~ for numeric suffix
+        existing = db_get(
+            '''
+            SELECT jdid FROM jobs
+            WHERE jdid LIKE ?
+            ORDER BY
+              CASE WHEN SUBSTRING(jdid FROM LENGTH(?) + 1) ~ '^[0-9]+$'
+                THEN CAST(SUBSTRING(jdid FROM LENGTH(?) + 1) AS INT)
+                ELSE 0
+              END DESC NULLS LAST,
+              jdid DESC
+            LIMIT 1
+            ''',
+            (f'{prefix}%', prefix, prefix)
+        )
+    else:
+        existing = db_get(
+            '''
+            SELECT TOP 1 jdid
+            FROM jobs
+            WHERE jdid LIKE ?
+            ORDER BY
+              CASE
+                WHEN ISNUMERIC(SUBSTRING(jdid, LEN(?) + 1, 10)) = 1
+                THEN CAST(SUBSTRING(jdid, LEN(?) + 1, 10) AS INT)
+                ELSE 0
+              END DESC,
+              jdid DESC
+            ''',
+            (f'{prefix}%', prefix, prefix)
+        )
     
     if existing and existing.get('jdid'):
         try:
@@ -118,7 +134,7 @@ def get_jobs_public():
                 SELECT j.*, hs.company as company_name
                 FROM jobs j
                 LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-                WHERE (j.enabled = 1 OR j.enabled IS NULL)
+                WHERE (j.enabled = ''' + TRUE_SQL + ''' OR j.enabled IS NULL)
                 ORDER BY j.posted_on DESC
                 '''
             )
@@ -267,8 +283,9 @@ def get_job_applications(job_id: str):
             candidate_id = app['candidate_id']
             
             # Get education
+            _cgpa_col = '"cgpa/percentage"' if BACKEND == "postgresql" else "[cgpa/percentage]"
             education = db_all(
-                'SELECT degree, institution, [cgpa/percentage] as cgpa, start_date, end_date FROM candidate_education WHERE candidate_id = ?',
+                'SELECT degree, institution, ' + _cgpa_col + ' as cgpa, start_date, end_date FROM candidate_education WHERE candidate_id = ?',
                 (candidate_id,)
             )
             
@@ -498,9 +515,11 @@ def update_application_status(job_id: str, candidate_id: str):
             application_id=app['id'],
             timestamp=ts,
         )
+        _sl = action == 'shortlist'
+        _sl_val = _sl if BACKEND == 'postgresql' else (1 if _sl else 0)
         db_run(
             'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
-            (out['profile_update']['status_db'], 1 if action == 'shortlist' else 0, app['id'])
+            (out['profile_update']['status_db'], _sl_val, app['id'])
         )
         return jsonify({'status': 'ok', 'profile_update': out['profile_update']}), 200
     except ValueError as e:
@@ -585,12 +604,13 @@ def create_job():
         print(f"Prepared job data: jdid={jdid}, title={title}, company={company}, location={location}, hr_id={hr_id}")
         print("Executing INSERT query...")
         
+        _enabled_val = True if BACKEND == 'postgresql' else 1
         result = db_run(
             '''
             INSERT INTO jobs (jdid, title, company, location, salary, experience, description, posted_by, enabled)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
-            (jdid, title, company, location, salary, experience, description, hr_id)
+            (jdid, title, company, location, salary, experience, description, hr_id, _enabled_val)
         )
         print(f"INSERT result: {result}")
         
@@ -697,8 +717,12 @@ def update_job(job_id: str):
             if new_jdid != job_id:
                 # Update applications table
                 db_run('UPDATE applications SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
-                # Update saved_jobs table
-                db_run('UPDATE saved_jobs SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
+                # saved_jobs table was removed in migrations; skip if present
+                if BACKEND != "postgresql":
+                    try:
+                        db_run('UPDATE saved_jobs SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
+                    except Exception:
+                        pass
 
         # Update job with new jdid if it changed
         db_run(
@@ -740,7 +764,8 @@ def toggle_job(job_id: str):
         job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
-        db_run('UPDATE jobs SET enabled = ? WHERE jdid = ?', (1 if enabled else 0, job_id))
+        _enabled = (True, False) if BACKEND == 'postgresql' else (1, 0)
+        db_run('UPDATE jobs SET enabled = ? WHERE jdid = ?', (_enabled[0] if enabled else _enabled[1], job_id))
         return jsonify({'message': 'Job status updated', 'enabled': enabled})
     except Exception:
         return jsonify({'error': 'Internal server error'}), 500
