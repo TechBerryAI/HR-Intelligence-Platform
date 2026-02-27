@@ -212,6 +212,7 @@ type: resume
 person.name: Full Name
 person.email: email@example.com
 person.phone: +1234567890
+person.location: City, State/Country
 person.linkedin: https://linkedin.com/in/username
 person.github: 
 person.portfolio: 
@@ -232,7 +233,7 @@ education.0.year: 2020
 certifications: cert1|cert2
 total_experience_years: 3.9
 
-CRITICAL: Extract EVERY URL (LinkedIn, GitHub, portfolio, website, Twitter) into the person fields; use empty string if not found. Use pipe (|) for lists of strings. Return ONLY the TOON block, no markdown, no explanations. You may also return valid JSON and it will be accepted."""
+CRITICAL: Extract EVERY URL (LinkedIn, GitHub, portfolio, website, Twitter) into the person fields; use empty string if not found. Extract location/city/address (e.g. Mumbai, Bangalore, Delhi NCR, City - Country) into person.location. Use pipe (|) for lists of strings. Return ONLY the TOON block, no markdown, no explanations. You may also return valid JSON and it will be accepted."""
     
     else:  # jd
         return """You are an expert job description parser. Extract information and return ONLY valid TOON (Token-Oriented Object Notation): one key-value per line, key: value, lists with pipe. Example:

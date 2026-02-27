@@ -326,6 +326,30 @@ def parse_resume_upload():
                 if url_clean.lower() not in categorized and url_clean not in toon['person']['otherUrls']:
                     url_final = url_clean if url_clean.startswith('http') else f"https://{url_clean}"
                     toon['person']['otherUrls'].append(url_final)
+
+            # Post-process: Extract location from raw text if LLM did not return it
+            if not toon['person'].get('location') or not str(toon['person'].get('location', '')).strip():
+                import re
+                # Patterns: "Location: Mumbai", "Address: Bangalore", "City: Delhi", "Based in Mumbai"
+                location_patterns = [
+                    r'(?:location|current\s*location|address|city|based\s*in)\s*[:\-]\s*([A-Za-z\s,\.\-]+?)(?:\n|$|\.|;)',
+                    r'(?:location|address|city)\s*[:\-]\s*([A-Za-z\s,\.\-]+)',
+                ]
+                for pat in location_patterns:
+                    m = re.search(pat, raw_text, re.IGNORECASE)
+                    if m and m.group(1):
+                        loc = m.group(1).strip().strip('.,;:')
+                        if len(loc) >= 2 and len(loc) <= 80:
+                            toon['person']['location'] = loc
+                            break
+                # Fallback: common Indian cities if they appear in the first ~500 chars (header area)
+                if not toon['person'].get('location') or not str(toon['person'].get('location', '')).strip():
+                    header_text = raw_text[:500] if len(raw_text) > 500 else raw_text
+                    cities = ['Mumbai', 'Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune', 'Ahmedabad', 'Gurgaon', 'Gurugram', 'Noida', 'Faridabad', 'Jaipur', 'Lucknow']
+                    for city in cities:
+                        if city in header_text:
+                            toon['person']['location'] = city
+                            break
             
         except Exception as e:
             return jsonify({

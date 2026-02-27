@@ -1,16 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { uploadAndParseResume, mapResumeTOONToForm, validateFileForParsing } from '../utils/parsingApi';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
-import { motion } from 'framer-motion';
-import { FiUpload, FiFile, FiCheck, FiAlertCircle } from 'react-icons/fi';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiExternalLink, FiTrash2 } from 'react-icons/fi';
 import { useApp } from '../context/AppContext';
 import { tokenService } from '../utils/tokenService';
 
 /**
  * Premium Resume Upload Component with AI Parsing
- * Uploads resume, parses it, and autofills form
+ * When a resume is present: shows file name with Open and Remove.
+ * When no resume: shows upload area to drag/drop or parse a new resume.
  */
-export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, currentFileName }) {
+export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, currentFileName, onRemove, onOpenResume }) {
   const { applicantAuth } = useApp();
   const [isUploading, setIsUploading] = useState(false);
   const [parseError, setParseError] = useState('');
@@ -47,6 +48,18 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
 
   const handleDragLeave = () => {
     setIsDragging(false);
+  };
+
+  const handleRemove = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setParseSuccess('');
+    setParseError('');
+    setConfidence(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    onRemove?.();
   };
 
   const processFile = async (file) => {
@@ -137,98 +150,128 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
     }
   };
 
+  const hasResume = currentFileName && currentFileName.trim() && !isUploading;
+
   return (
     <>
-      {/* Premium Upload Overlay */}
       <PremiumUploadOverlay isVisible={isUploading} type="resume" />
 
       <div className="space-y-4">
-        {/* Premium drag & drop upload area */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          className={`relative group transition-all duration-300 ${
-            isDragging
-              ? 'scale-105 ring-4 ring-purple-500/50'
-              : 'hover:scale-[1.02]'
-          }`}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf,.doc,.docx"
-            onChange={handleFileChange}
-            disabled={isUploading}
-            className="hidden"
-            id="resume-upload-input"
-          />
-          
-          <label
-            htmlFor="resume-upload-input"
-            className={`
-              block glass-card p-8 rounded-2xl cursor-pointer
-              border-2 border-dashed transition-all duration-300
-              ${isDragging 
-                ? 'border-purple-500 bg-purple-500/10' 
-                : 'border-zinc-700 hover:border-purple-500/50 hover:bg-white/10'
-              }
-              ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}
-            `}
-          >
-            <div className="flex flex-col items-center justify-center space-y-4">
-              {/* Animated upload icon */}
-              <motion.div
-                animate={isDragging ? {
-                  scale: [1, 1.2, 1],
-                  rotate: [0, 10, -10, 0],
-                } : {}}
-                transition={{ duration: 0.5 }}
-                className="relative"
-              >
-                <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full blur-xl opacity-50 group-hover:opacity-75 transition-opacity" />
-                <div className="relative w-16 h-16 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full flex items-center justify-center shadow-glow">
-                  <FiUpload className="w-8 h-8 text-white" />
+        <AnimatePresence mode="wait">
+          {hasResume ? (
+            /* Resume present: show only file card with Open and Remove */
+            <motion.div
+              key="resume-card"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="glass-card border-2 border-green-500/30 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4"
+            >
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="flex-shrink-0 w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center border border-green-500/40">
+                  <FiFile className="w-6 h-6 text-green-400" />
                 </div>
-              </motion.div>
-
-              <div className="text-center">
-                <p className="text-lg font-semibold text-white mb-1">
-                  {isDragging ? 'Drop your resume here' : 'Upload Your Resume'}
-                </p>
-                <p className="text-sm text-zinc-400">
-                  Drag & drop or click to browse
-                </p>
-              </div>
-
-              <div className="flex items-center gap-4 text-xs text-zinc-500">
-                <div className="flex items-center gap-1">
-                  <FiFile className="w-4 h-4" />
-                  <span>PDF, DOC, DOCX</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-green-300">Resume uploaded</p>
+                  <p className="text-sm text-zinc-300 truncate" title={currentFileName}>{currentFileName}</p>
                 </div>
-                <div className="w-1 h-1 bg-zinc-600 rounded-full" />
-                <span>Max 10MB</span>
               </div>
-
-              {/* AI Badge */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.2 }}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-full border border-purple-500/30"
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {onOpenResume && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); onOpenResume(); }}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-zinc-200 text-sm font-medium transition-colors border border-zinc-600"
+                  >
+                    <FiExternalLink className="w-4 h-4" />
+                    View resume
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleRemove}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 text-sm font-medium transition-colors border border-red-500/40"
+                >
+                  <FiTrash2 className="w-4 h-4" />
+                  Remove
+                </button>
+              </div>
+            </motion.div>
+          ) : (
+            /* No resume: show full upload area to parse a new resume */
+            <motion.div
+              key="upload-area"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              className={`relative group transition-all duration-300 ${
+                isDragging ? 'scale-105 ring-4 ring-purple-500/50' : 'hover:scale-[1.02]'
+              }`}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx"
+                onChange={handleFileChange}
+                disabled={isUploading}
+                className="hidden"
+                id="resume-upload-input"
+              />
+              <label
+                htmlFor="resume-upload-input"
+                className={`
+                  block glass-card p-8 rounded-2xl cursor-pointer
+                  border-2 border-dashed transition-all duration-300
+                  ${isDragging ? 'border-purple-500 bg-purple-500/10' : 'border-zinc-700 hover:border-purple-500/50 hover:bg-white/10'}
+                  ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}
+                `}
               >
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                <span className="text-xs font-medium text-purple-300">
-                  AI-Powered Parsing
-                </span>
-              </motion.div>
-            </div>
-          </label>
-        </motion.div>
+                <div className="flex flex-col items-center justify-center space-y-4">
+                  <motion.div
+                    animate={isDragging ? { scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] } : {}}
+                    transition={{ duration: 0.5 }}
+                    className="relative"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full blur-xl opacity-50 group-hover:opacity-75 transition-opacity" />
+                    <div className="relative w-16 h-16 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full flex items-center justify-center shadow-glow">
+                      <FiUpload className="w-8 h-8 text-white" />
+                    </div>
+                  </motion.div>
+                  <div className="text-center">
+                    <p className="text-lg font-semibold text-white mb-1">
+                      {isDragging ? 'Drop your resume here' : 'Upload Your Resume'}
+                    </p>
+                    <p className="text-sm text-zinc-400">Drag & drop or click to browse</p>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-zinc-500">
+                    <div className="flex items-center gap-1">
+                      <FiFile className="w-4 h-4" />
+                      <span>PDF, DOC, DOCX</span>
+                    </div>
+                    <div className="w-1 h-1 bg-zinc-600 rounded-full" />
+                    <span>Max 10MB</span>
+                  </div>
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-full border border-purple-500/30"
+                  >
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                    <span className="text-xs font-medium text-purple-300">AI-Powered Parsing</span>
+                  </motion.div>
+                </div>
+              </label>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {/* Success message */}
+        {/* Success message (e.g. after parsing) */}
         {parseSuccess && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: -10 }}
@@ -277,17 +320,6 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
           </motion.div>
         )}
 
-        {/* Current file indicator */}
-        {currentFileName && !parseSuccess && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex items-center gap-2 text-sm text-zinc-400"
-          >
-            <FiFile className="w-4 h-4" />
-            <span>Current file: <span className="font-medium text-zinc-300">{currentFileName}</span></span>
-          </motion.div>
-        )}
       </div>
     </>
   );

@@ -6,6 +6,7 @@ import MonthYearPicker from '../components/MonthYearPicker.jsx'
 import ResumeUploadWithParsing from '../components/ResumeUploadWithParsing.jsx'
 import PremiumInput from '../components/PremiumInput.jsx'
 import PremiumButton from '../components/PremiumButton.jsx'
+import { BASE_URL } from '../utils/api'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FiUser, FiMail, FiPhone, FiMapPin, FiLinkedin, FiGlobe, FiSave, FiCheck, FiAlertCircle } from 'react-icons/fi'
 
@@ -40,7 +41,7 @@ function clearDraftFromStorage() {
 }
 
 export default function ApplicantProfile() {
-	const { applicantProfile, applicantAuth, saveApplicantProfile, markApplicantProfileCompleted, applyToJobAsApplicant, fetchApplicantData, applicantSavedJobs, toggleSaveJob } = useApp()
+	const { applicantProfile, applicantAuth, saveApplicantProfile, markApplicantProfileCompleted, applyToJobAsApplicant, fetchApplicantData, applicantSavedJobs, toggleSaveJob, getToken } = useApp()
 	const navigate = useNavigate()
 	const location = useLocation()
 	const toast = useToast()
@@ -160,11 +161,20 @@ export default function ApplicantProfile() {
 		return () => clearTimeout(t)
 	}, [form, formInitialized])
 
-	// Re-sync form when profile is loaded from server after login (form was empty, now we have data)
+	// Re-sync form when profile is loaded/updated (e.g. from server after fetch) so we never show empty when profile has data
 	useEffect(() => {
-		if (!applicantProfile?.fullName && !applicantProfile?.resumeFileName) return
+		const profileHasData =
+			(applicantProfile?.fullName && applicantProfile.fullName.trim()) ||
+			(applicantProfile?.resumeFileName && applicantProfile.resumeFileName.trim()) ||
+			(Array.isArray(applicantProfile?.education) && applicantProfile.education.length > 0) ||
+			(Array.isArray(applicantProfile?.experiences) && applicantProfile.experiences.length > 0)
+		if (!profileHasData) return
 		setForm(prevForm => {
-			const formEmpty = !prevForm.fullName && !prevForm.resumeFileName
+			const formEmpty =
+				!prevForm.fullName &&
+				!prevForm.resumeFileName &&
+				!(Array.isArray(prevForm.education) && prevForm.education.some((ed) => (ed?.degree || '').trim() || (ed?.institution || '').trim())) &&
+				!(Array.isArray(prevForm.experiences) && prevForm.experiences.some((ex) => (ex?.company || '').trim() || (ex?.role || '').trim()))
 			if (!formEmpty) return prevForm
 			return buildFormFromProfile(applicantProfile, prevForm)
 		})
@@ -253,57 +263,48 @@ export default function ApplicantProfile() {
 	const removeListItem = (listKey, idx) => setForm((f) => ({ ...f, [listKey]: f[listKey].filter((_, i) => i !== idx) }))
 
 	const handleResumeAutofill = (parsedData) => {
-		console.log('DEBUG: handleResumeAutofill called with:', {
-			linkedinUrl: parsedData.linkedinUrl,
-			portfolioUrl: parsedData.portfolioUrl,
-			hasLinkedin: !!parsedData.linkedinUrl,
-			hasPortfolio: !!parsedData.portfolioUrl
-		});
-		
 		// Track which fields were autofilled
 		const autofilled = {};
-		
 		if (parsedData.fullName) autofilled.fullName = true;
 		if (parsedData.email) autofilled.email = true;
 		if (parsedData.phone) autofilled.phone = true;
 		if (parsedData.experienceLevel) autofilled.experienceLevel = true;
 		if (parsedData.linkedinUrl) autofilled.linkedinUrl = true;
 		if (parsedData.portfolioUrl) autofilled.portfolioUrl = true;
-		
+		if (parsedData.currentLocation) autofilled.currentLocation = true;
+		if (parsedData.preferredLocation) autofilled.preferredLocation = true;
 		setAutofilledFields(autofilled);
-		
-		// Merge parsed data with existing form (normalize to string - parser may return numbers)
-		const toStr = (v) => (v == null || v === '') ? '' : String(v).trim()
-		setForm((prevForm) => {
-			const updatedForm = {
-				...prevForm,
-				fullName: toStr(parsedData.fullName) || prevForm.fullName,
-				email: toStr(parsedData.email) || prevForm.email,
-				phone: toStr(parsedData.phone) || prevForm.phone,
-				linkedinUrl: toStr(parsedData.linkedinUrl) || prevForm.linkedinUrl,
-				portfolioUrl: toStr(parsedData.portfolioUrl) || prevForm.portfolioUrl,
-				experienceLevel: parsedData.experienceLevel || prevForm.experienceLevel,
-				education: parsedData.education && parsedData.education.length > 0 ? parsedData.education : prevForm.education,
-				experiences: parsedData.experiences && parsedData.experiences.length > 0 ? parsedData.experiences : prevForm.experiences,
-				certifications: parsedData.certifications && parsedData.certifications.length > 0 ? parsedData.certifications : prevForm.certifications,
-				resumeFile: parsedData.resumeFile || prevForm.resumeFile,
-				resumeFileName: parsedData.resumeFileName || prevForm.resumeFileName,
-			};
-			
-			console.log('DEBUG: Updated form with URLs:', {
-				linkedinUrl: updatedForm.linkedinUrl,
-				portfolioUrl: updatedForm.portfolioUrl
-			});
-			
-			return updatedForm;
-		});
-		
+
+		const toStr = (v) => (v == null || v === '') ? '' : String(v).trim();
+		const defaultEducation = [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }];
+		const defaultCertifications = [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }];
+		const defaultExperiences = [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }];
+
+		// Replace form with new parsed resume data (new resume fully replaces previous parsed data)
+		setForm((prevForm) => ({
+			...prevForm,
+			fullName: toStr(parsedData.fullName),
+			email: toStr(parsedData.email),
+			phone: toStr(parsedData.phone),
+			linkedinUrl: toStr(parsedData.linkedinUrl),
+			portfolioUrl: toStr(parsedData.portfolioUrl),
+			currentLocation: toStr(parsedData.currentLocation),
+			preferredLocation: toStr(parsedData.preferredLocation),
+			experienceLevel: parsedData.experienceLevel || '',
+			education: Array.isArray(parsedData.education) && parsedData.education.length > 0 ? parsedData.education : defaultEducation,
+			experiences: Array.isArray(parsedData.experiences) && parsedData.experiences.length > 0 ? parsedData.experiences : defaultExperiences,
+			certifications: Array.isArray(parsedData.certifications) && parsedData.certifications.length > 0 ? parsedData.certifications : defaultCertifications,
+			resumeFile: parsedData.resumeFile ?? prevForm.resumeFile,
+			resumeFileName: parsedData.resumeFileName || prevForm.resumeFileName,
+			// Keep form-only fields (not from resume)
+			servingNotice: prevForm.servingNotice,
+			noticePeriod: prevForm.noticePeriod,
+			lastWorkingDay: prevForm.lastWorkingDay,
+		}));
+
 		setErrors({});
-		
-		// Clear autofill indicators after 3 seconds
-		setTimeout(() => {
-			setAutofilledFields({});
-		}, 3000);
+
+		setTimeout(() => setAutofilledFields({}), 3000);
 		
 		window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
@@ -519,6 +520,27 @@ export default function ApplicantProfile() {
 										if (errors.resumeFileName) setErrors((er)=>({ ...er, resumeFileName: undefined }));
 									}}
 									currentFileName={form.resumeFileName}
+									onRemove={() => {
+										updateField('resumeFile', null);
+										updateField('resumeFileName', '');
+										if (errors.resumeFileName) setErrors((er)=>({ ...er, resumeFileName: undefined }));
+									}}
+									onOpenResume={applicantAuth.isLoggedIn ? async () => {
+										const token = getToken?.();
+										if (!token) return;
+										try {
+											const res = await fetch(`${BASE_URL}/api/candidate/resume`, {
+												headers: { Authorization: `Bearer ${token}` },
+											});
+											if (!res.ok) throw new Error('Failed to load resume');
+											const blob = await res.blob();
+											const url = URL.createObjectURL(blob);
+											window.open(url, '_blank');
+											setTimeout(() => URL.revokeObjectURL(url), 60000);
+										} catch (e) {
+											toast.push('Could not open resume. Try again or download after saving.', { type: 'error' });
+										}
+									} : undefined}
 								/>
 								{errors.resumeFileName && (
 									<motion.div

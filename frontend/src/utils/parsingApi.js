@@ -247,12 +247,25 @@ export function mapResumeTOONToForm(toon) {
     portfolioUrl = portfolioUrl.startsWith('//') ? `https:${portfolioUrl}` : `https://${portfolioUrl}`;
   }
 
+  // Location: person.location, person.current_location, person.city, or from first experience
+  const locationRaw =
+    str(person.location) ||
+    str(person.current_location) ||
+    str(person.city) ||
+    str(person.address) ||
+    (ensureArray(toon.experience)[0] && typeof toon.experience[0] === 'object' ? str(toon.experience[0].location || toon.experience[0].city) : '') ||
+    '';
+  const currentLocation = locationRaw.trim();
+  const preferredLocation = str(person.preferred_location) || currentLocation;
+
   const mappedData = {
     fullName: str(person.name),
     email: str(person.email),
     phone: str(person.phone),
     linkedinUrl: linkedinUrl ? str(linkedinUrl) : '',
     portfolioUrl: portfolioUrl ? str(portfolioUrl) : '',
+    currentLocation,
+    preferredLocation,
     experienceLevel,
     education: education.length > 0 ? education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }],
     experiences: experiences.length > 0 ? experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }],

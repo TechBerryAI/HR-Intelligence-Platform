@@ -275,8 +275,20 @@ export function AppProvider({ children }) {
       // Fetch profile from backend - this is the canonical source after login
       const profileRes = await apiRequest('/api/candidate/profile', { method: 'GET', token: authToken }).catch(() => null)
       if (profileRes && typeof profileRes === 'object' && !profileRes.error) {
-        setApplicantProfile(profileRes)
-        writeJson(STORAGE_KEYS.applicantProfile, profileRes)
+        // Only replace local profile when server actually has saved data. This prevents
+        // overwriting the user's filled form with an empty default when the server
+        // has no profile row yet (e.g. save failed or they hadn't saved to server).
+        const hasServerProfile =
+          (profileRes.fullName && profileRes.fullName.trim()) ||
+          (profileRes.email && profileRes.email.trim()) ||
+          (profileRes.resumeFileName && profileRes.resumeFileName.trim()) ||
+          (Array.isArray(profileRes.education) && profileRes.education.length > 0) ||
+          (Array.isArray(profileRes.experiences) && profileRes.experiences.length > 0) ||
+          (Array.isArray(profileRes.certifications) && profileRes.certifications.length > 0)
+        if (hasServerProfile) {
+          setApplicantProfile(profileRes)
+          writeJson(STORAGE_KEYS.applicantProfile, profileRes)
+        }
       }
 
       const applications = await apiRequest('/api/applications', { method: 'GET', token: authToken }).catch(() => [])
