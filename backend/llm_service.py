@@ -9,9 +9,20 @@ from typing import Dict, Any, Literal, Optional
 
 from toon import toon_loads_flex
 
+# Reuse a session for connection keep-alive (faster repeated calls)
+_session: Optional[requests.Session] = None
+
+def _get_session() -> requests.Session:
+    global _session
+    if _session is None:
+        _session = requests.Session()
+    return _session
+
 # Load configuration
 LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'xai')  # xai, openai, anthropic
-XAI_MODEL = os.getenv('XAI_MODEL', 'grok-4-fast-reasoning')  # Default to fast reasoning model
+XAI_MODEL = os.getenv('XAI_MODEL', 'grok-4-fast-reasoning')  # Fast model for parsing
+LLM_REQUEST_TIMEOUT = int(os.getenv('LLM_REQUEST_TIMEOUT', '45'))  # Lower = faster fail; 45s suits grok-4-fast
+LLM_MAX_INPUT_CHARS = int(os.getenv('LLM_MAX_INPUT_CHARS', '0'))  # 0 = no trim; set e.g. 18000 to speed very long docs
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
 
@@ -27,6 +38,8 @@ def call_llm(prompt: str, doc_type: Literal['resume', 'jd']) -> Dict[str, Any]:
     Returns:
         Parsed TOON format as dict
     """
+    if LLM_MAX_INPUT_CHARS and len(prompt) > LLM_MAX_INPUT_CHARS:
+        prompt = prompt[:LLM_MAX_INPUT_CHARS] + "\n\n[Document truncated for length. Extract from above.]"
     if LLM_PROVIDER == 'xai':
         return call_xai_grok(prompt, doc_type)
     elif LLM_PROVIDER == 'openai':
@@ -38,7 +51,7 @@ def call_llm(prompt: str, doc_type: Literal['resume', 'jd']) -> Dict[str, Any]:
 
 
 def call_xai_grok(prompt: str, doc_type: str, service_id: str = "parsing") -> Dict[str, Any]:
-    """Call X.AI Grok API with multi-key rotation and cooldown on failure."""
+    """Call X.AI Grok API with multi-key rotation and cooldown on failure. Optimized for grok-4-fast-reasoning."""
     from llm_key_manager import get_key_for_service, report_result
 
     url = "https://api.x.ai/v1/chat/completions"
@@ -48,10 +61,9 @@ def call_xai_grok(prompt: str, doc_type: str, service_id: str = "parsing") -> Di
             {"role": "system", "content": get_system_prompt(doc_type)},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.3,
-        "max_tokens": 2000,
+        "temperature": 0.2,
+        "max_tokens": 2048,
     }
-    # Try up to N distinct keys (one attempt per key)
     keys_tried = 0
     last_error: Optional[str] = None
     key_count = 0
@@ -61,6 +73,7 @@ def call_xai_grok(prompt: str, doc_type: str, service_id: str = "parsing") -> Di
     except Exception:
         key_count = 0
     max_keys_to_try = key_count if key_count else 1
+    timeout = max(15, min(120, LLM_REQUEST_TIMEOUT))
 
     while keys_tried < max_keys_to_try:
         key_slot = get_key_for_service(service_id)
@@ -74,7 +87,8 @@ def call_xai_grok(prompt: str, doc_type: str, service_id: str = "parsing") -> Di
         }
         t0 = time.perf_counter()
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=90)
+            session = _get_session()
+            response = session.post(url, headers=headers, json=payload, timeout=timeout)
             latency_ms = (time.perf_counter() - t0) * 1000
             if response.ok:
                 report_result(slot_id, True, response.status_code, latency_ms)

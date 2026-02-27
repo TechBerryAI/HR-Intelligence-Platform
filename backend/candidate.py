@@ -1,4 +1,5 @@
-from flask import Blueprint, request, jsonify
+import os
+from flask import Blueprint, request, jsonify, Response
 from db import db_get, db_run, db_all, BACKEND, NOW_SQL
 from utils import authenticate_token, require_candidate, require_hr
 from matching import calculate_matching_percentage
@@ -320,11 +321,27 @@ def save_profile():
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
 
 
+def _read_resume_from_storage_url(storage_url: str) -> bytes | None:
+    """Read file bytes from a file:// storage URL (local path)."""
+    if not storage_url or not str(storage_url).strip().startswith('file://'):
+        return None
+    path = str(storage_url).replace('file://', '').lstrip('/')
+    if os.name == 'nt' and path.startswith('/'):
+        path = path[1:]
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, 'rb') as f:
+            return f.read()
+    except Exception:
+        return None
+
+
 @candidate_bp.get('/resume')
 @authenticate_token
 @require_candidate
 def get_resume():
-    """Download the candidate's resume"""
+    """Download the candidate's resume (from profile or latest upload before save)."""
     try:
         candidate_id = request.user['id']
         profile = db_get(
@@ -335,22 +352,36 @@ def get_resume():
             ''',
             (candidate_id,)
         )
-        if not profile or not profile.get('resume'):
-            return jsonify({'error': 'Resume not found'}), 404
-        
-        from flask import Response
-        resume_data = _resume_bytes(profile.get('resume'))
-        if resume_data:
-            return Response(
-                resume_data,
-                mimetype='application/pdf',
-                headers={
-                    'Content-Disposition': 'attachment; filename=resume.pdf',
-                    'Content-Type': 'application/pdf'
-                }
+        resume_data = None
+        filename = 'resume.pdf'
+        if profile and profile.get('resume'):
+            resume_data = _resume_bytes(profile.get('resume'))
+        if not resume_data:
+            # Fallback: serve latest uploaded resume from parse flow (raw_files) so "View" works before profile save
+            raw = db_get(
+                '''
+                SELECT storage_url, original_filename
+                FROM raw_files
+                WHERE uploader_id = ? AND uploader_role = 'candidate'
+                ORDER BY created_at DESC
+                LIMIT 1
+                ''',
+                (candidate_id,)
             )
-        else:
-            return jsonify({'error': 'Invalid resume data'}), 500
+            if raw and raw.get('storage_url'):
+                resume_data = _read_resume_from_storage_url(raw.get('storage_url'))
+                if raw.get('original_filename'):
+                    filename = raw.get('original_filename') or filename
+        if not resume_data:
+            return jsonify({'error': 'Resume not found'}), 404
+        return Response(
+            resume_data,
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"',
+                'Content-Type': 'application/pdf'
+            }
+        )
     except Exception as e:
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
 
