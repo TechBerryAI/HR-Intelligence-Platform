@@ -6,7 +6,7 @@ Run the schema once against an empty PostgreSQL database:
 psql -h localhost -U your_user -d JobPortal -f 01_schema.sql
 ```
 
-Or set `PGPASSWORD` and use connection string. After loading existing data from SQL Server, set the candidate CID sequence to avoid conflicts:
+Or set `PGPASSWORD` and use connection string. To align the candidate CID sequence with existing data:
 
 ```sql
 SELECT setval('candidate_cid_seq', COALESCE((
