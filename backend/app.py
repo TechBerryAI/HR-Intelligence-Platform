@@ -10,11 +10,6 @@ from dotenv import load_dotenv
 _backend_dir = os.path.dirname(os.path.abspath(__file__))
 load_dotenv(os.path.join(_backend_dir, '.env'))
 
-# Use PostgreSQL when USE_POSTGRES=1 or DATABASE_URL is postgresql (so "from db import ..." resolves to db_pg)
-if os.getenv('USE_POSTGRES') or (os.getenv('DATABASE_URL') or '').strip().lower().startswith('postgresql'):
-    import db_pg
-    sys.modules['db'] = db_pg
-
 # Validate environment variables before proceeding
 from env_validator import EnvValidator
 is_valid, errors, warnings = EnvValidator.validate()
@@ -115,13 +110,6 @@ try:
 except Exception as e:
     err_msg = str(e)
     print(f"[DB ERROR] Failed to initialize database: {e}")
-    if '18487' in err_msg or 'password of the account has expired' in err_msg.lower():
-        print("\n  >>> SQL Server login password has EXPIRED. Reset it in SQL Server:")
-        print("      1. Open SQL Server Management Studio (SSMS) or sqlcmd.")
-        print("      2. Connect as a sysadmin, then run:")
-        print("         ALTER LOGIN [Test] WITH PASSWORD = 'YourNewPassword';")
-        print("         (Replace [Test] with your MSSQL_USER and set a new password.)")
-        print("      3. Update MSSQL_PASSWORD in backend/.env and restart the app.\n")
     import traceback
     traceback.print_exc()
 

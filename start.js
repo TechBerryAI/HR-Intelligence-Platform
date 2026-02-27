@@ -80,7 +80,7 @@ function setupEnv() {
       process.exit(1);
     }
     fs.copyFileSync(BACKEND_ENV_EXAMPLE, BACKEND_ENV);
-    log('Created backend/.env from template. Configure MSSQL_USER and MSSQL_PASSWORD in backend/.env');
+    log('Created backend/.env from template. Configure POSTGRES_* or DATABASE_URL in backend/.env');
   } else {
     log('backend/.env exists');
   }
