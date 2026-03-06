@@ -526,6 +526,13 @@ export default function ApplicantProfile() {
 										if (errors.resumeFileName) setErrors((er)=>({ ...er, resumeFileName: undefined }));
 									}}
 									onOpenResume={applicantAuth.isLoggedIn ? async () => {
+										// Prefer current form file (new upload) so "View resume" shows the file user just uploaded, not the old saved one
+										if (form.resumeFile instanceof File) {
+											const url = URL.createObjectURL(form.resumeFile);
+											window.open(url, '_blank');
+											setTimeout(() => URL.revokeObjectURL(url), 60000);
+											return;
+										}
 										const token = getToken?.();
 										if (!token) return;
 										try {
