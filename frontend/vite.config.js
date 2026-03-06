@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => ({
     target: 'es2018',
   },
   server: {
+    host: "0.0.0.0",
     port: 5173,
     proxy: {
       // Optional: Proxy API requests during development

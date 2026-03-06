@@ -67,12 +67,14 @@ app.url_map.strict_slashes = False
 cors_origins = _build_allowed_origins()
 print(f"[CORS] Allowed origins: {cors_origins}")
 
-# Simple and effective CORS configuration - allow all origins in development
+# CORS: use the explicit origin list so Flask-CORS reflects the actual Origin header.
+# browsers block credentialed requests (credentials: 'include') when the server
+# responds with Access-Control-Allow-Origin: * — a specific list is required.
 CORS(
     app,
     resources={
         r"/*": {
-            "origins": "*",
+            "origins": cors_origins,
             "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
             "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
             "expose_headers": ["Content-Type", "Authorization"],
