@@ -48,6 +48,8 @@ export default function ApplicantProfile() {
   const firstErrorRef = useRef(null)
   const fileInputRef = useRef(null)
   const validationSummaryRef = useRef(null)
+  const currentResumeFileRef = useRef(null)
+  const lastAutoSavedResumeRef = useRef(null)
 
 	const strField = (v) => (v == null || v === '') ? '' : String(v).trim()
 	const [form, setForm] = useState({
@@ -188,6 +190,26 @@ export default function ApplicantProfile() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [applicantProfile?.resumeFileName])
 
+	// Keep ref in sync so "View resume" always sees the current file (avoids stale closure)
+	useEffect(() => {
+		currentResumeFileRef.current = form.resumeFile instanceof File ? form.resumeFile : null
+	}, [form.resumeFile])
+
+	// Auto-save new resume to server when user uploads (so refresh shows the new resume)
+	useEffect(() => {
+		const file = form.resumeFile instanceof File ? form.resumeFile : null
+		if (!applicantAuth.isLoggedIn || !(file instanceof File)) {
+			if (!file) lastAutoSavedResumeRef.current = null
+			return
+		}
+		const key = `${file.name}-${file.size}`
+		if (lastAutoSavedResumeRef.current === key) return
+		lastAutoSavedResumeRef.current = key
+		saveApplicantProfile({ ...form, resumeFile: file })
+			.catch(() => { lastAutoSavedResumeRef.current = null })
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [form.resumeFile])
+
 	const validate = (f) => {
 		const e = {}
 		const s = (v) => (v == null ? '' : String(v)).trim()
@@ -323,8 +345,9 @@ export default function ApplicantProfile() {
 		})
 		
 		try {
-			// Save immediately - no validation required for save
-			const result = await saveApplicantProfile(form)
+			// Use ref so we never lose the current resume file when saving (same as View resume)
+			const profileToSave = { ...form, resumeFile: form.resumeFile ?? currentResumeFileRef.current }
+			const result = await saveApplicantProfile(profileToSave)
 			console.log('DEBUG: saveApplicantProfile result:', result)
 			
 			if (result.ok) {
@@ -380,14 +403,15 @@ export default function ApplicantProfile() {
 			}, 50)
 			return
 		}
-		const saveResult = await saveApplicantProfile(form)
+		const profileToSave = { ...form, resumeFile: form.resumeFile ?? currentResumeFileRef.current }
+		const saveResult = await saveApplicantProfile(profileToSave)
 		clearDraftFromStorage()
 		
 		if (fileInputRef.current) {
 			fileInputRef.current.value = ''
 		}
 		
-		if (form.resumeFile) {
+		if (form.resumeFile || currentResumeFileRef.current) {
 			updateField('resumeFile', null)
 		}
 		if (saveResult.updatedProfile && saveResult.updatedProfile.resumeFileName) {
@@ -526,9 +550,10 @@ export default function ApplicantProfile() {
 										if (errors.resumeFileName) setErrors((er)=>({ ...er, resumeFileName: undefined }));
 									}}
 									onOpenResume={applicantAuth.isLoggedIn ? async () => {
-										// Prefer current form file (new upload) so "View resume" shows the file user just uploaded, not the old saved one
-										if (form.resumeFile instanceof File) {
-											const url = URL.createObjectURL(form.resumeFile);
+										// Use ref so we always get the latest file (avoids stale closure after upload)
+										const file = currentResumeFileRef.current;
+										if (file instanceof File) {
+											const url = URL.createObjectURL(file);
 											window.open(url, '_blank');
 											setTimeout(() => URL.revokeObjectURL(url), 60000);
 											return;
@@ -536,7 +561,7 @@ export default function ApplicantProfile() {
 										const token = getToken?.();
 										if (!token) return;
 										try {
-											const res = await fetch(`${BASE_URL}/api/candidate/resume`, {
+											const res = await fetch(`${BASE_URL}/api/candidate/resume?t=${Date.now()}`, {
 												headers: { Authorization: `Bearer ${token}` },
 											});
 											if (!res.ok) throw new Error('Failed to load resume');
