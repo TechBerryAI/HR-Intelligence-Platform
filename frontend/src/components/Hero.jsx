@@ -1,6 +1,7 @@
 import React from 'react'
 import SearchBar from './SearchBar.jsx'
 import { motion } from 'framer-motion'
+import { FiCpu, FiZap, FiLayers } from 'react-icons/fi'
 
 export default function Hero({ onSearch }) {
   return (
@@ -75,22 +76,25 @@ export default function Hero({ onSearch }) {
             className="mt-8 flex flex-wrap items-center justify-center gap-4"
           >
             {[
-              { icon: '🚀', text: 'AI Resume Parsing' },
-              { icon: '⚡', text: 'Instant Apply' },
-              { icon: '🎯', text: 'Smart Matching' },
-            ].map((feature, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.4, delay: 0.8 + index * 0.1 }}
-                whileHover={{ scale: 1.05, y: -2 }}
-                className="glass-card px-4 py-2 rounded-full border border-white/10 flex items-center gap-2"
-              >
-                <span className="text-xl">{feature.icon}</span>
-                <span className="text-sm font-medium text-zinc-300">{feature.text}</span>
-              </motion.div>
-            ))}
+              { Icon: FiCpu, text: 'AI Resume Parsing' },
+              { Icon: FiZap, text: 'Instant Apply' },
+              { Icon: FiLayers, text: 'Smart Matching' },
+            ].map((feature, index) => {
+              const Icon = feature.Icon
+              return (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.4, delay: 0.8 + index * 0.1 }}
+                  whileHover={{ scale: 1.05, y: -2 }}
+                  className="glass-card px-4 py-2 rounded-full border border-white/10 flex items-center gap-2"
+                >
+                  <Icon className="w-5 h-5 text-purple-400 flex-shrink-0" aria-hidden />
+                  <span className="text-sm font-medium text-zinc-300">{feature.text}</span>
+                </motion.div>
+              )
+            })}
           </motion.div>
         </div>
 
