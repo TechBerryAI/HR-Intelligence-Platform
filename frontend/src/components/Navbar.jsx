@@ -224,16 +224,16 @@ export default function Navbar() {
               </>
             )}
             
-            {/* Super Admin — always visible shield icon */}
+            {/* Super Admin — always visible pill button */}
             {!isSuperAdminLoggedIn && (
               <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
                 onClick={() => navigate('/login/super-admin')}
-                title="Super Admin Portal"
-                className="w-8 h-8 rounded-lg grid place-items-center text-zinc-600 hover:text-zinc-200 hover:bg-white/8 border border-transparent hover:border-white/15 transition-all duration-200"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-zinc-400 hover:text-white border border-zinc-700 hover:border-purple-500/60 hover:bg-purple-500/10 transition-all duration-200"
               >
-                <FiShield className="w-4 h-4" />
+                <FiShield className="w-3.5 h-3.5" />
+                Super Admin
               </motion.button>
             )}
 
@@ -241,13 +241,13 @@ export default function Navbar() {
             {isSuperAdminLoggedIn && (
               <div className="relative" ref={superAdminMenuRef}>
                 <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
                   onClick={() => setSuperAdminMenuOpen((o) => !o)}
-                  className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm font-bold grid place-items-center shadow-glow"
-                  title="Super Admin"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 shadow-glow transition-all duration-200"
                 >
-                  <FiShield className="w-4 h-4" />
+                  <FiShield className="w-3.5 h-3.5" />
+                  Super Admin
                 </motion.button>
                 <AnimatePresence>
                   {superAdminMenuOpen && (
