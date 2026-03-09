@@ -9,6 +9,7 @@ const AppContext = createContext(null)
 const STORAGE_KEYS = {
   auth: 'authState',
   applicantAuth: 'applicantAuthState',
+  superAdminAuth: 'superAdminAuthState',
   applicantProfile: 'applicantProfileState',
   applicantApplications: 'applicantApplicationsState',
   applicantSavedJobs: 'applicantSavedJobsState',
@@ -51,6 +52,7 @@ export function AppProvider({ children }) {
 
   const defaultAuth = { isLoggedIn: false, role: null, email: '' }
   const defaultApplicantAuth = { isLoggedIn: false, email: '' }
+  const defaultSuperAdminAuth = { isLoggedIn: false, email: '' }
   const defaultApplicantProfile = {
     experienceLevel: '',
     servingNotice: '',
@@ -72,6 +74,7 @@ export function AppProvider({ children }) {
 
   const [auth, setAuth] = useState(() => readJson(STORAGE_KEYS.auth, defaultAuth))
   const [applicantAuth, setApplicantAuth] = useState(() => readJson(STORAGE_KEYS.applicantAuth, defaultApplicantAuth))
+  const [superAdminAuth, setSuperAdminAuth] = useState(() => readJson(STORAGE_KEYS.superAdminAuth, defaultSuperAdminAuth))
   const [token, setToken] = useState('')
   const [user, setUser] = useState(() => readJson(STORAGE_KEYS.user, null))
   const [authLoading, setAuthLoading] = useState(false)
@@ -144,6 +147,11 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    writeJson(STORAGE_KEYS.superAdminAuth, superAdminAuth)
+  }, [superAdminAuth])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
     writeJson(STORAGE_KEYS.applicantProfile, applicantProfile)
   }, [applicantProfile])
 
@@ -176,6 +184,10 @@ export function AppProvider({ children }) {
       })
       setApplicantAuth((prev) => {
         const stored = readJson(STORAGE_KEYS.applicantAuth, defaultApplicantAuth)
+        return JSON.stringify(prev) === JSON.stringify(stored) ? prev : stored
+      })
+      setSuperAdminAuth((prev) => {
+        const stored = readJson(STORAGE_KEYS.superAdminAuth, defaultSuperAdminAuth)
         return JSON.stringify(prev) === JSON.stringify(stored) ? prev : stored
       })
       setApplicantProfile((prev) => {
@@ -744,9 +756,47 @@ export function AppProvider({ children }) {
     })
   }
 
+  const loginSuperAdmin = async (email, password) => {
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      const data = await apiRequest('/api/super-admin/login', {
+        method: 'POST',
+        body: { email, password },
+      })
+      if (data && data.token && data.user) {
+        tokenService.setToken(data.token)
+        if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
+        setToken(data.token)
+        setUser(data.user)
+        const nextAuth = { isLoggedIn: true, email: data.user.email, name: data.user.name }
+        setSuperAdminAuth(nextAuth)
+        writeJson(STORAGE_KEYS.superAdminAuth, nextAuth)
+        return { ok: true }
+      }
+      return { ok: false, message: 'Invalid response from server' }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'Login failed' }
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const logoutSuperAdmin = () => {
+    setSuperAdminAuth(defaultSuperAdminAuth)
+    setToken('')
+    tokenService.clear()
+    setUser(null)
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(STORAGE_KEYS.superAdminAuth)
+      window.localStorage.removeItem(STORAGE_KEYS.user)
+    }
+  }
+
   const logout = () => {
     setAuth(defaultAuth)
     setApplicantAuth(defaultApplicantAuth)
+    setSuperAdminAuth(defaultSuperAdminAuth)
     setApplicantProfile(defaultApplicantProfile)
     setApplicantApplications({})
     setApplicantSavedJobs({})
@@ -756,6 +806,7 @@ export function AppProvider({ children }) {
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(STORAGE_KEYS.auth)
       window.localStorage.removeItem(STORAGE_KEYS.applicantAuth)
+      window.localStorage.removeItem(STORAGE_KEYS.superAdminAuth)
       window.localStorage.removeItem(STORAGE_KEYS.applicantProfile)
       window.localStorage.removeItem(STORAGE_KEYS.applicantApplications)
       window.localStorage.removeItem(STORAGE_KEYS.applicantSavedJobs)
@@ -944,6 +995,9 @@ export function AppProvider({ children }) {
     authLoading,
     authError,
     loginHR,
+    superAdminAuth,
+    loginSuperAdmin,
+    logoutSuperAdmin,
     applicantAuth,
     applicantProfile,
     applicantApplications,
@@ -972,7 +1026,7 @@ export function AppProvider({ children }) {
     fetchApplicationsForJob,
     fetchAllApplications,
     backendHealthy,
-  }), [jobs, jobsLoading, jobsError, auth, authLoading, authError, applicantAuth, applicantProfile, applicantApplications, applicantSavedJobs, user, token, backendHealthy])
+  }), [jobs, jobsLoading, jobsError, auth, authLoading, authError, superAdminAuth, applicantAuth, applicantProfile, applicantApplications, applicantSavedJobs, user, token, backendHealthy])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
