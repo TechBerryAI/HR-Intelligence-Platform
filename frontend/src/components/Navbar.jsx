@@ -22,6 +22,8 @@ export default function Navbar() {
   const isHrLoggedIn = auth.isLoggedIn && auth.role === 'HR'
   const isApplicantLoggedIn = applicantAuth.isLoggedIn && !isHrLoggedIn
   const isSuperAdminLoggedIn = superAdminAuth?.isLoggedIn
+  const hrEmail = (user?.email || auth?.email || '').toLowerCase().trim()
+  const canCreateAdminAccount = hrEmail === 'chetan.gore@techberryinfotech.com'
 
   const applicantInitials = (() => {
     const name = applicantProfile?.completed && applicantProfile?.fullName ? applicantProfile.fullName : ''
@@ -97,6 +99,18 @@ export default function Navbar() {
                 Jobs
               </motion.span>
             </NavLink>
+            {/* Create account (admin signup) – show only for chetan.gore@techberryinfotech.com */}
+            {isHrLoggedIn && canCreateAdminAccount && (
+              <Link to="/signup/admin">
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.98 }}
+                  className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-blue-600 text-white text-sm font-semibold hover:from-purple-500 hover:to-blue-500 shadow-glow transition-all"
+                >
+                  Create account
+                </motion.button>
+              </Link>
+            )}
             {!isHrLoggedIn && !isApplicantLoggedIn ? (
               <>
                 <NavLink to="/login" className={activeClass}>

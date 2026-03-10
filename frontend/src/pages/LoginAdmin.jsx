@@ -90,9 +90,8 @@ export default function LoginAdmin() {
 							>
 								Login
 							</button>
-							<div className="mt-3 flex items-center justify-between text-sm">
+							<div className="mt-3 text-sm">
 								<Link to="/forgot-password/admin" className="text-zinc-400 hover:text-zinc-200 transition-colors">Forgot Password?</Link>
-								<a href="/signup/admin" className="text-white font-medium hover:underline">Don't have an account? Sign up</a>
 							</div>
 							{/* Admin login should be backed by backend; demo credentials removed. */}
 						</form>
