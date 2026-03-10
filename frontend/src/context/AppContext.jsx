@@ -546,16 +546,6 @@ export function AppProvider({ children }) {
   }
 
   const saveApplicantProfile = async (profile) => {
-    console.log('DEBUG: saveApplicantProfile called')
-    console.log('DEBUG: applicantAuth.isLoggedIn:', applicantAuth.isLoggedIn)
-    console.log('DEBUG: profile data:', {
-      fullName: profile.fullName,
-      email: profile.email,
-      experiences: profile.experiences?.length || 0,
-      education: profile.education?.length || 0,
-      certifications: profile.certifications?.length || 0
-    })
-    
     // Always save to localStorage first as backup - this ensures data is never lost
     const profileForStorage = { ...profile }
     // Don't store file object in localStorage
@@ -565,54 +555,34 @@ export function AppProvider({ children }) {
     const nextLocal = { ...applicantProfile, ...profileForStorage }
     setApplicantProfile(nextLocal)
     writeJson(STORAGE_KEYS.applicantProfile, nextLocal)
-    console.log('DEBUG: Saved to localStorage:', nextLocal)
-    
+
     if (!applicantAuth.isLoggedIn) {
-      // Save locally only if not logged in
-      console.log('DEBUG: User not logged in, saving locally only')
       return { ok: true, savedLocally: true }
     }
-    
-    // User is logged in, try to save to server
+
     if (!token) {
-      console.warn('DEBUG: User logged in but no token available, saving locally only')
       return { ok: true, savedLocally: true, warning: 'Not authenticated. Saved locally only.' }
     }
-    
+
     try {
-      // Check if there's a resume file to upload
       const resumeFile = profile.resumeFile
       const hasFile = resumeFile && resumeFile instanceof File
-      
-      console.log('DEBUG: saveApplicantProfile - resumeFile:', resumeFile)
-      console.log('DEBUG: saveApplicantProfile - hasFile:', hasFile)
-      console.log('DEBUG: saveApplicantProfile - profile keys:', Object.keys(profile))
-      console.log('DEBUG: saveApplicantProfile - experiences:', profile.experiences)
-      console.log('DEBUG: saveApplicantProfile - education:', profile.education)
-      console.log('DEBUG: saveApplicantProfile - certifications:', profile.certifications)
-      
+
       let body
       if (hasFile) {
-        console.log('DEBUG: Using FormData for file upload')
-        // Use FormData for file upload
         const formData = new FormData()
         formData.append('resume', resumeFile)
-        console.log('DEBUG: Added resume file to FormData, size:', resumeFile.size)
-        // Add other fields as JSON strings if they're arrays/objects, or as regular form fields
         Object.keys(profile).forEach(key => {
-          if (key === 'resumeFile') return // Skip the file object itself
+          if (key === 'resumeFile') return
           const value = profile[key]
           if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
             formData.append(key, JSON.stringify(value))
-            console.log(`DEBUG: Added ${key} as JSON string:`, JSON.stringify(value).substring(0, 100))
           } else if (value !== null && value !== undefined) {
             formData.append(key, value)
           }
         })
         body = formData
-        console.log('DEBUG: FormData created with keys:', Array.from(formData.keys()))
       } else {
-        console.log('DEBUG: Using JSON (no file)')
         // Use JSON for regular updates (without file)
         body = { ...profile }
         delete body.resumeFile // Remove file object from JSON
@@ -620,29 +590,20 @@ export function AppProvider({ children }) {
         if (!body.experiences) body.experiences = []
         if (!body.education) body.education = []
         if (!body.certifications) body.certifications = []
-        console.log('DEBUG: JSON body being sent:', JSON.stringify(body, null, 2).substring(0, 500))
       }
-      
-      console.log('DEBUG: Making API request to /api/candidate/profile')
+
       const response = await apiRequest('/api/candidate/profile', {
         method: 'POST',
         body: body,
         token
-      }).catch(err => {
-        console.error('DEBUG: API request failed:', err)
-        throw err
       })
-      
-      console.log('DEBUG: Save API response:', response)
-      
-      // Fetch updated profile from server to get latest resume info
+
       try {
         const updatedProfile = await apiRequest('/api/candidate/profile', {
           method: 'GET',
           token
         })
         if (updatedProfile) {
-          console.log('DEBUG: Fetched updated profile:', updatedProfile)
           // Merge updated profile with current profile data
           const next = { ...applicantProfile, ...profileForStorage, ...updatedProfile }
           // Don't store file object in localStorage
@@ -662,13 +623,6 @@ export function AppProvider({ children }) {
       // If we got here, the save succeeded but fetch failed
       return { ok: true, savedLocally: true }
     } catch (err) {
-      console.error('DEBUG: Save profile error:', err)
-      console.error('DEBUG: Error details:', {
-        message: err?.message,
-        error: err?.error,
-        status: err?.status,
-        response: err?.response
-      })
       const errorMessage = err?.message || err?.error || 'Failed to save profile to server'
       // Data is already saved locally, so return partial success
       // This ensures the user knows their data is safe even if server save fails
@@ -903,30 +857,15 @@ export function AppProvider({ children }) {
   // Admin: add a job (best-effort). If backend supports it, create and refresh list.
   const addJob = async (job) => {
     try {
-      console.log('addJob called with:', job)
-      console.log('Token available:', !!token)
-      console.log('Token value:', token ? token.substring(0, 20) + '...' : 'none')
-      console.log('BASE_URL:', import.meta.env?.VITE_API_URL || 'not set')
-      console.log('Making API request to /api/jobs')
-      
       if (!token) {
         console.error('No token available - user may not be logged in')
         return { success: false, error: 'You must be logged in to create a job. Please log in and try again.' }
       }
       
       const result = await apiRequest('/api/jobs', { method: 'POST', body: job, token })
-      console.log('API request successful:', result)
       await fetchJobs()
       return { success: true, data: result }
     } catch (err) {
-      console.error('Add job error:', err)
-      console.error('Error details:', {
-        message: err?.message,
-        status: err?.status,
-        data: err?.data,
-        cause: err?.cause
-      })
-      
       let errorMessage = 'Failed to create job'
       if (err?.status === 401 || err?.status === 403) {
         errorMessage = 'Authentication failed. Please log in again.'

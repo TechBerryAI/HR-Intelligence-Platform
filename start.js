@@ -136,12 +136,15 @@ function startBackend() {
 
 function startFrontend() {
   logStep(6, 6, 'Starting frontend (Vite)');
-  // On Windows, npm is usually npm.cmd; shell: true is needed so the system finds it (spawn npm ENOENT otherwise).
+  // On Windows use shell with single command string to avoid spawn deprecation (args + shell).
   const useShell = process.platform === 'win32';
-  frontendProcess = spawn('npm', ['run', 'dev'], {
+  const cmd = useShell ? 'npm run dev' : 'npm';
+  const args = useShell ? [] : ['run', 'dev'];
+  frontendProcess = spawn(cmd, args, {
     cwd: FRONTEND_DIR,
     stdio: 'inherit',
     shell: useShell,
+    env: process.env,
   });
   frontendProcess.on('error', (err) => {
     log('Frontend failed to start: ' + err.message, 'err');
@@ -193,7 +196,8 @@ async function waitForReady(maxWaitMs = 60000) {
 function openBrowser() {
   const url = BROWSER_URL;
   const cmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-  spawn(cmd, [url], { stdio: 'ignore', shell: true }).on('error', () => {});
+  const fullCmd = process.platform === 'win32' ? `start "" "${url}"` : `${cmd} "${url}"`;
+  spawn(fullCmd, [], { stdio: 'ignore', shell: true }).on('error', () => {});
   log('Opening browser: ' + url);
 }
 

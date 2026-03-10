@@ -162,6 +162,18 @@ def db_all(query: str, params: list | tuple = ()):
             return [dict(r) for r in rows] if rows else []
 
 
+def _split_sql_statements(sql: str):
+    """Split SQL by ; but keep DO $$ ... END $$; as a single statement."""
+    sql = sql.strip()
+    if not sql:
+        return []
+    # If file contains a DO $$ block, run it as a single statement (no split)
+    if 'DO $$' in sql or 'do $$' in sql.lower():
+        return [sql] if sql.endswith(';') else [sql + ';']
+    statements = [s.strip() for s in sql.split(';') if s.strip()]
+    return [s + ';' if not s.endswith(';') else s for s in statements]
+
+
 def run_migrations():
     """Run PostgreSQL schema from backend/schema_pg: 01_schema.sql then 02_*.sql, 03_*.sql, ... in order."""
     schema_dir = os.path.join(os.path.dirname(__file__), 'schema_pg')
@@ -179,13 +191,13 @@ def run_migrations():
                 continue
             lines.append(line)
         sql_clean = '\n'.join(lines)
-        # Split by ; but keep DO $$ ... $$ blocks together
-        statements = [s.strip() for s in sql_clean.split(';') if s.strip()]
+        # Split into statements; keep DO $$ ... END $$; blocks as one statement
+        statements = _split_sql_statements(sql_clean)
         with get_conn() as conn:
             with conn.cursor() as cursor:
                 for stmt in statements:
                     try:
-                        cursor.execute(stmt + ';')
+                        cursor.execute(stmt)
                     except Exception as e:
                         if 'already exists' not in str(e).lower() and 'duplicate' not in str(e).lower():
                             print(f"[DB] Migration warning in {os.path.basename(schema_file)}: {e}")

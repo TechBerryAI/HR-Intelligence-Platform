@@ -274,20 +274,7 @@ export function mapResumeTOONToForm(toon) {
     _skills: ensureStringArray(toon.skills),
     _summary: toon.summary || '',
   };
-  
-  console.log('DEBUG: mapResumeTOONToForm returning:', {
-    linkedinUrl: mappedData.linkedinUrl,
-    portfolioUrl: mappedData.portfolioUrl,
-    linkedinUrlLength: mappedData.linkedinUrl?.length,
-    portfolioUrlLength: mappedData.portfolioUrl?.length,
-    personLinkedin: person.linkedin,
-    personGithub: person.github,
-    personPortfolio: person.portfolio,
-    personWebsite: person.website,
-    personOtherUrls: person.otherUrls,
-    fullPerson: person
-  });
-  
+
   return mappedData;
 }
 
