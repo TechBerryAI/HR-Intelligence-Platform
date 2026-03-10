@@ -719,6 +719,14 @@ export function AppProvider({ children }) {
         body: { email, password },
       })
       if (data && data.token && data.user) {
+        // Super admin is exclusive: clear HR and applicant auth so only one session type is active.
+        // This prevents VM/local from showing HR dashboard when super admin is logged in (e.g. stale localStorage).
+        setAuth(defaultAuth)
+        setApplicantAuth(defaultApplicantAuth)
+        if (typeof window !== 'undefined') {
+          writeJson(STORAGE_KEYS.auth, defaultAuth)
+          writeJson(STORAGE_KEYS.applicantAuth, defaultApplicantAuth)
+        }
         tokenService.setToken(data.token)
         if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setToken(data.token)
