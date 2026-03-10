@@ -74,6 +74,16 @@ def require_candidate(f):
     return wrapper
 
 
+def require_super_admin(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        user = getattr(request, 'user', None)
+        if not user or user.get('role') != 'super_admin':
+            return jsonify({"error": "Super admin access required"}), 403
+        return f(*args, **kwargs)
+    return wrapper
+
+
 def optional_authenticate_token(f):
     """If Authorization Bearer is present, require valid JWT (401 on invalid/expired). If no header, set request.user = None."""
     @wraps(f)

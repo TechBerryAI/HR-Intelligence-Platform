@@ -24,9 +24,16 @@ const BulkResumeParser = lazy(() => import('./pages/admin/BulkResumeParser.jsx')
 const FAQ = lazy(() => import('./pages/FAQ.jsx'))
 const ContactUs = lazy(() => import('./pages/ContactUs.jsx'))
 const NotFound = lazy(() => import('./pages/NotFound.jsx'))
+const LoginSuperAdmin = lazy(() => import('./pages/LoginSuperAdmin.jsx'))
+const SuperAdminDashboard = lazy(() => import('./pages/super-admin/SuperAdminDashboard.jsx'))
+const SuperAdminAdmins = lazy(() => import('./pages/super-admin/SuperAdminAdmins.jsx'))
+const SuperAdminCandidates = lazy(() => import('./pages/super-admin/SuperAdminCandidates.jsx'))
+const SuperAdminJobs = lazy(() => import('./pages/super-admin/SuperAdminJobs.jsx'))
+const SuperAdminApplications = lazy(() => import('./pages/super-admin/SuperAdminApplications.jsx'))
 
 import AdminGuard from './guards/AdminGuard.jsx'
 import CandidateGuard from './guards/CandidateGuard.jsx'
+import SuperAdminGuard from './guards/SuperAdminGuard.jsx'
 
 function PrivateRoute({ children }) {
   const { auth } = useApp()
@@ -96,6 +103,48 @@ export default function App() {
                       <AdminGuard>
                         <BulkResumeParser />
                       </AdminGuard>
+                    }
+                  />
+                  {/* Super Admin — completely separate portal */}
+                  <Route path="/login/super-admin" element={<LoginSuperAdmin />} />
+                  <Route
+                    path="/super-admin"
+                    element={
+                      <SuperAdminGuard>
+                        <SuperAdminDashboard />
+                      </SuperAdminGuard>
+                    }
+                  />
+                  <Route
+                    path="/super-admin/admins"
+                    element={
+                      <SuperAdminGuard>
+                        <SuperAdminAdmins />
+                      </SuperAdminGuard>
+                    }
+                  />
+                  <Route
+                    path="/super-admin/candidates"
+                    element={
+                      <SuperAdminGuard>
+                        <SuperAdminCandidates />
+                      </SuperAdminGuard>
+                    }
+                  />
+                  <Route
+                    path="/super-admin/jobs"
+                    element={
+                      <SuperAdminGuard>
+                        <SuperAdminJobs />
+                      </SuperAdminGuard>
+                    }
+                  />
+                  <Route
+                    path="/super-admin/applications"
+                    element={
+                      <SuperAdminGuard>
+                        <SuperAdminApplications />
+                      </SuperAdminGuard>
                     }
                   />
                   <Route path="*" element={<NotFound />} />

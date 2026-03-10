@@ -1,18 +1,14 @@
 /**
- * Admin-only: Bulk Resume Parsing. Layout matches design: Configuration (left),
- * Select Folders + File Processing Status (right). Styled to match portal theme (dark, purple/blue accent).
+ * Admin-only: Bulk Resume Parsing. Select Folders + File Processing Status.
+ * Styled to match portal theme (dark, purple/blue accent).
  */
 import React, { useState, useRef, useEffect } from 'react'
 import { uploadBulkResumes, getBulkProgress, downloadBulkResult } from '../../services/bulkParsingService.js'
-import { BASE_URL } from '../../utils/api.js'
-import { checkBackendHealth } from '../../utils/healthCheck.js'
 
 const POLL_INTERVAL_MS = 500
 const ALLOWED_EXT = ['pdf', 'doc', 'docx']
 
 export default function BulkResumeParser() {
-  const [backendOk, setBackendOk] = useState(false)
-  const [timeoutMinutes, setTimeoutMinutes] = useState(60)
   const [inputFolderPath, setInputFolderPath] = useState('')
   const [inputFolderFound, setInputFolderFound] = useState(false)
   const [outputType, setOutputType] = useState('file')
@@ -30,16 +26,6 @@ export default function BulkResumeParser() {
 
   const fileInputRef = useRef(null)
   const folderInputRef = useRef(null)
-
-  useEffect(() => {
-    let cancelled = false
-    async function check() {
-      const ok = await checkBackendHealth(true)
-      if (!cancelled) setBackendOk(ok)
-    }
-    check()
-    return () => { cancelled = true }
-  }, [])
 
   const b64ToFile = (name, b64) => {
     const bin = atob(b64)
@@ -245,75 +231,7 @@ export default function BulkResumeParser() {
   return (
     <div className="min-h-screen text-gray-100" style={{ background: 'radial-gradient(ellipse at top, #1a1a2e 0%, #0a0a0f 50%, #000000 100%)' }}>
       <div className="max-w-6xl mx-auto p-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-6">
-          {/* Left: Configuration */}
-          <section className="glass-card rounded-xl p-5 h-fit">
-            <h2 className="text-lg font-bold text-white mb-4">Configuration</h2>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-zinc-300 mb-1">Backend URL</label>
-              <input
-                type="text"
-                readOnly
-                value={BASE_URL || 'http://localhost:8000'}
-                className="w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-gray-200 text-sm focus:outline-none focus:border-purple-500/50"
-              />
-            </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-zinc-300 mb-1">Timeout Settings</label>
-              <label className="block text-xs text-zinc-500 mb-1">Request Timeout (minutes)</label>
-              <input
-                type="number"
-                min={1}
-                value={timeoutMinutes}
-                onChange={(e) => setTimeoutMinutes(Number(e.target.value) || 60)}
-                className="w-full px-3 py-2 border border-white/10 rounded-lg bg-white/5 text-gray-200 text-sm focus:outline-none focus:border-purple-500/50"
-              />
-              <p className="text-xs text-zinc-500 mt-1">
-                Timeout {timeoutMinutes} minutes ({timeoutMinutes * 60} seconds)
-              </p>
-              <p className="text-xs text-zinc-500">
-                Maximum time to wait for processing to complete. Increase for large batches.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-zinc-300 mb-1">Backend Status</label>
-              <div
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
-                  backendOk ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-red-500/10 border-red-500/30 text-red-400'
-                }`}
-              >
-                {backendOk ? (
-                  <>
-                    <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fillRule="evenodd"
-                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    <span className="text-sm font-medium">Backend is running</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path
-                        fillRule="evenodd"
-                        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                    <span className="text-sm font-medium">Backend not reachable</span>
-                  </>
-                )}
-              </div>
-            </div>
-          </section>
-
-          {/* Right: Select Folders + Status */}
-          <div className="space-y-5">
+        <div className="space-y-5">
             <section className="glass-card rounded-xl p-5">
               <h2 className="text-lg font-bold text-white mb-4">Select Folders</h2>
 
@@ -599,12 +517,11 @@ export default function BulkResumeParser() {
                     You can append to an existing output by checking <strong>Append to existing output</strong>.
                   </p>
                   <p>
-                    Increase the <strong>Request Timeout</strong> in Configuration for large batches.
+                    Large batches may take longer; the request will wait for processing to complete.
                   </p>
                 </div>
               )}
             </section>
-          </div>
         </div>
 
         {error && (
