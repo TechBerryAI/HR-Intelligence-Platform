@@ -163,32 +163,78 @@ def db_all(query: str, params: list | tuple = ()):
 
 
 def run_migrations():
-    """Run PostgreSQL schema from backend/schema_pg/01_schema.sql."""
+    """Run PostgreSQL schema from backend/schema_pg: 01_schema.sql then 02_*.sql, 03_*.sql, ... in order."""
     schema_dir = os.path.join(os.path.dirname(__file__), 'schema_pg')
     if not os.path.isdir(schema_dir):
         return
-    schema_file = os.path.join(schema_dir, '01_schema.sql')
-    if not os.path.isfile(schema_file):
+    import glob
+    sql_files = sorted(glob.glob(os.path.join(schema_dir, '*.sql')))
+    for schema_file in sql_files:
+        with open(schema_file, 'r', encoding='utf-8') as f:
+            sql = f.read()
+        lines = []
+        for line in sql.splitlines():
+            stripped = line.strip()
+            if stripped.startswith('--') or not stripped:
+                continue
+            lines.append(line)
+        sql_clean = '\n'.join(lines)
+        # Split by ; but keep DO $$ ... $$ blocks together
+        statements = [s.strip() for s in sql_clean.split(';') if s.strip()]
+        with get_conn() as conn:
+            with conn.cursor() as cursor:
+                for stmt in statements:
+                    try:
+                        cursor.execute(stmt + ';')
+                    except Exception as e:
+                        if 'already exists' not in str(e).lower() and 'duplicate' not in str(e).lower():
+                            print(f"[DB] Migration warning in {os.path.basename(schema_file)}: {e}")
+                        conn.rollback()
+
+    # Ensure is_super_admin column exists on hr_signup (idempotent)
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = current_schema() AND table_name = 'hr_signup' AND column_name = 'is_super_admin'
+                """)
+                if cursor.fetchone() is None:
+                    cursor.execute("ALTER TABLE hr_signup ADD COLUMN is_super_admin BOOLEAN DEFAULT false")
+                    print("[DB] Added column hr_signup.is_super_admin")
+    except Exception as e:
+        print(f"[DB] Warning ensuring is_super_admin column: {e}")
+
+    # Seed default super admin user if not present (idempotent)
+    _seed_super_admin_if_missing()
+
+
+def _seed_super_admin_if_missing():
+    """Create default super admin in hr_signup if no user with that email exists. Uses env for credentials."""
+    seed_email = (os.getenv('SUPER_ADMIN_SEED_EMAIL') or 'unmesh.tari@techberry.com').strip().lower()
+    seed_password = (os.getenv('SUPER_ADMIN_SEED_PASSWORD') or 'Unmeshtari@123').strip()
+    seed_name = (os.getenv('SUPER_ADMIN_SEED_FULL_NAME') or 'Super Administrator').strip()
+    seed_company = (os.getenv('SUPER_ADMIN_SEED_COMPANY') or 'Techberry').strip()
+    if not seed_email or not seed_password:
         return
-    with open(schema_file, 'r', encoding='utf-8') as f:
-        sql = f.read()
-    lines = []
-    for line in sql.splitlines():
-        stripped = line.strip()
-        if stripped.startswith('--') or not stripped:
-            continue
-        lines.append(line)
-    sql_clean = '\n'.join(lines)
-    statements = [s.strip() for s in sql_clean.split(';') if s.strip()]
-    with get_conn() as conn:
-        with conn.cursor() as cursor:
-            for stmt in statements:
-                try:
-                    cursor.execute(stmt + ';')
-                except Exception as e:
-                    if 'already exists' not in str(e).lower() and 'duplicate' not in str(e).lower():
-                        print(f"[DB] Migration warning: {e}")
-                    conn.rollback()
+    try:
+        existing = db_get('SELECT hrid FROM hr_signup WHERE LOWER(email) = ?', (seed_email,))
+        if existing:
+            # Ensure existing user is marked super admin
+            db_run('UPDATE hr_signup SET is_super_admin = true WHERE LOWER(email) = ?', (seed_email,))
+            return
+        import bcrypt
+        password_hash = bcrypt.hashpw(seed_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        row = db_get('SELECT COALESCE(MAX(CAST(SUBSTRING(hrid FROM 5) AS INT)), 0) AS maxn FROM hr_signup WHERE hrid ~ ?', ('^HRID[0-9]+$',))
+        next_num = int(row['maxn']) + 1 if row and row.get('maxn') is not None else 1
+        hrid = f"HRID{next_num:03d}"
+        db_run(
+            'INSERT INTO hr_signup (hrid, full_name, email, company, password, is_super_admin) VALUES (?, ?, ?, ?, ?, true)',
+            (hrid, seed_name or seed_email, seed_email, seed_company or '-', password_hash),
+        )
+        print(f"[DB] Seeded super admin user: {seed_email}")
+    except Exception as e:
+        print(f"[DB] Warning seeding super admin: {e}")
 
 
 def init_db():

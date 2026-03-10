@@ -1,11 +1,11 @@
 """
 Super Admin blueprint — god-mode access for the system owner.
-Credentials are stored in .env (SUPER_ADMIN_EMAIL / SUPER_ADMIN_PASSWORD).
-No public signup; this account is seeded by the system operator.
+Super admin users are HR accounts in hr_signup with is_super_admin = true.
+No .env credentials; login uses same hr_signup table and password (bcrypt).
 """
 import os
-import secrets
 
+import bcrypt
 import jwt
 from flask import Blueprint, jsonify, request
 
@@ -18,13 +18,10 @@ JWT_SECRET = os.getenv(
     'JWT_SECRET',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE',
 )
-SUPER_ADMIN_EMAIL = (os.getenv('SUPER_ADMIN_EMAIL', 'superadmin@portal.com') or '').strip().lower()
-SUPER_ADMIN_PASSWORD = (os.getenv('SUPER_ADMIN_PASSWORD', 'SuperAdmin@123!') or '').strip()
-SUPER_ADMIN_NAME = (os.getenv('SUPER_ADMIN_NAME', 'Super Administrator') or '').strip()
 
 
 # ---------------------------------------------------------------------------
-# Auth
+# Auth (DB: hr_signup.is_super_admin = true)
 # ---------------------------------------------------------------------------
 
 @super_admin_bp.post('/login')
@@ -36,24 +33,35 @@ def super_admin_login():
     if not email or not password:
         return jsonify({'error': 'Email and password are required'}), 400
 
-    # Constant-time comparison to prevent timing attacks
-    email_ok = secrets.compare_digest(email, SUPER_ADMIN_EMAIL)
-    pass_ok = secrets.compare_digest(password, SUPER_ADMIN_PASSWORD)
-
-    if not email_ok or not pass_ok:
+    row = db_get(
+        'SELECT hrid, email, password, full_name, is_super_admin FROM hr_signup WHERE LOWER(email) = ?',
+        (email,),
+    )
+    if not row:
         return jsonify({'error': 'Invalid credentials'}), 401
 
-    identity = {'id': 'SUPER_ADMIN', 'email': SUPER_ADMIN_EMAIL, 'role': 'super_admin'}
+    stored = row.get('password') or ''
+    if not stored or not bcrypt.checkpw(password.encode('utf-8'), stored.encode('utf-8')):
+        return jsonify({'error': 'Invalid credentials'}), 401
+
+    is_super = row.get('is_super_admin')
+    if is_super is None:
+        is_super = False
+    if not is_super:
+        return jsonify({'error': 'Super admin access is only for designated accounts'}), 403
+
+    identity = {'id': 'SUPER_ADMIN', 'hrId': row['hrid'], 'email': row['email'], 'role': 'super_admin'}
     access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
     refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
+    name = (row.get('full_name') or '').strip() or row['email']
 
     return jsonify({
         'token': access_token,
         'refresh_token': refresh_token,
         'user': {
             'id': 'SUPER_ADMIN',
-            'email': SUPER_ADMIN_EMAIL,
-            'name': SUPER_ADMIN_NAME,
+            'email': row['email'],
+            'name': name,
             'role': 'super_admin',
         },
     })
