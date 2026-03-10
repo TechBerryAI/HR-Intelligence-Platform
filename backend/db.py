@@ -2,6 +2,8 @@
 PostgreSQL database adapter for HR Job Portal.
 Uses psycopg (v3); parameters use %s placeholders (callers may pass ? and they are converted).
 """
+from __future__ import annotations
+
 import os
 from contextlib import contextmanager
 from queue import Queue, Empty
