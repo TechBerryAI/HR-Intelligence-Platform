@@ -334,22 +334,11 @@ export default function ApplicantProfile() {
 	const onSave = async (e) => {
 		e.preventDefault()
 		e.stopPropagation()
-		
-		console.log('DEBUG: onSave called, form data:', {
-			fullName: form.fullName,
-			email: form.email,
-			experiencesCount: form.experiences?.length || 0,
-			educationCount: form.education?.length || 0,
-			hasResumeFile: !!form.resumeFile,
-			resumeFileName: form.resumeFileName
-		})
-		
+
 		try {
-			// Use ref so we never lose the current resume file when saving (same as View resume)
 			const profileToSave = { ...form, resumeFile: form.resumeFile ?? currentResumeFileRef.current }
 			const result = await saveApplicantProfile(profileToSave)
-			console.log('DEBUG: saveApplicantProfile result:', result)
-			
+
 			if (result.ok) {
 				clearDraftFromStorage()
 				if (result.warning) {
@@ -375,16 +364,9 @@ export default function ApplicantProfile() {
 					// Keep existing filename
 				}
 			} else {
-				console.error('DEBUG: Save failed, result:', result)
 				toast.push('Failed to save profile. Your data has been saved locally as backup.', { type: 'error', duration: 5000 })
 			}
 		} catch (error) {
-			console.error('DEBUG: Save error caught:', error)
-			console.error('DEBUG: Error details:', {
-				message: error?.message,
-				stack: error?.stack,
-				error: error
-			})
 			// Even if there's an error, data should be saved locally
 			setSaved('Profile saved locally')
 			toast.push('An error occurred while saving to server. Your data has been saved locally and will sync when you log in.', { type: 'warning', duration: 6000 })
@@ -1062,10 +1044,6 @@ export default function ApplicantProfile() {
 								type="submit"
 								variant="secondary"
 								icon={FiSave}
-								onClick={(e) => {
-									// Ensure the form submission is triggered
-									console.log('DEBUG: Save button clicked')
-								}}
 							>
 								Save
 							</PremiumButton>

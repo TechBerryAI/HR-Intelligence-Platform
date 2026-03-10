@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AppProvider, useApp } from './context/AppContext.jsx'
 import Navbar from './components/Navbar.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
@@ -41,15 +41,18 @@ function PrivateRoute({ children }) {
 }
 
 export default function App() {
+  const location = useLocation()
+  const isSuperAdminRoute = location.pathname.startsWith('/super-admin')
+
   return (
     <AppProvider>
       <ToastProvider>
         <ErrorBoundary>
           <ConnectionStatus />
           <div className="min-h-screen flex flex-col bg-zinc-950 text-gray-100">
-            <Navbar />
+            {!isSuperAdminRoute && <Navbar />}
             <ErrorToasts />
-            <main className="flex-1">
+            <main className={isSuperAdminRoute ? 'flex-1 flex flex-col min-h-screen' : 'flex-1'}>
               <Suspense fallback={<div className="p-6">Loading...</div>}>
                 <Routes>
                   <Route path="/" element={<Home />} />
@@ -151,7 +154,9 @@ export default function App() {
                 </Routes>
               </Suspense>
             </main>
-            <footer className="py-10 text-center text-sm text-zinc-500"> {new Date().getFullYear()} Job Portal</footer>
+            {!isSuperAdminRoute && (
+              <footer className="py-10 text-center text-sm text-zinc-500"> {new Date().getFullYear()} Job Portal</footer>
+            )}
           </div>
         </ErrorBoundary>
       </ToastProvider>
