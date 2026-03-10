@@ -223,19 +223,6 @@ export default function Navbar() {
                 )}
               </>
             )}
-            
-            {/* Super Admin — always visible pill button */}
-            {!isSuperAdminLoggedIn && (
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
-                onClick={() => navigate('/login/super-admin')}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-zinc-400 hover:text-white border border-zinc-700 hover:border-purple-500/60 hover:bg-purple-500/10 transition-all duration-200"
-              >
-                <FiShield className="w-3.5 h-3.5" />
-                Super Admin
-              </motion.button>
-            )}
 
             {/* Super Admin Dropdown (when logged in) */}
             {isSuperAdminLoggedIn && (
