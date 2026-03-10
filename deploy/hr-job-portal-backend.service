@@ -1,0 +1,27 @@
+# Systemd unit for HR Job Portal backend (Gunicorn)
+# Install: sudo cp deploy/hr-job-portal-backend.service /etc/systemd/system/
+#         sudo systemctl daemon-reload
+#         sudo systemctl enable hr-job-portal-backend
+#         sudo systemctl start hr-job-portal-backend
+#
+# Set APP_ROOT to your app directory (e.g. /var/www/hr-job-portal or /home/ubuntu/hr-job-portal)
+
+[Unit]
+Description=HR Job Portal Backend (Gunicorn)
+After=network.target postgresql.service
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/hr-job-portal/backend
+Environment="PATH=/var/www/hr-job-portal/backend/venv/bin"
+ExecStart=/var/www/hr-job-portal/backend/venv/bin/gunicorn -c gunicorn.conf.py app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

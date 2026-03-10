@@ -1,6 +1,6 @@
 """
 PostgreSQL database adapter for HR Job Portal.
-Uses psycopg2; parameters use %s placeholders (callers may pass ? and they are converted).
+Uses psycopg (v3); parameters use %s placeholders (callers may pass ? and they are converted).
 """
 import os
 from contextlib import contextmanager
@@ -32,17 +32,17 @@ POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '5'))
 CONNECTION_TIMEOUT = int(os.getenv('DB_CONNECTION_TIMEOUT', '10'))
 
 try:
-    import psycopg2
-    from psycopg2.extras import RealDictCursor
+    import psycopg
+    from psycopg.rows import dict_row
 except ImportError:
-    psycopg2 = None
-    RealDictCursor = None
+    psycopg = None
+    dict_row = None
 
 
 def _create_connection():
-    if psycopg2 is None:
-        raise RuntimeError("psycopg2 is required for PostgreSQL. Install with: pip install psycopg2-binary")
-    return psycopg2.connect(DATABASE_URL, connect_timeout=CONNECTION_TIMEOUT)
+    if psycopg is None:
+        raise RuntimeError("psycopg is required for PostgreSQL. Install with: pip install psycopg[binary]")
+    return psycopg.connect(DATABASE_URL, connect_timeout=CONNECTION_TIMEOUT)
 
 
 class ConnectionPool:
@@ -72,6 +72,7 @@ class ConnectionPool:
             try:
                 with conn.cursor() as cur:
                     cur.execute("SELECT 1")
+                    cur.fetchone()
                 return conn
             except Exception:
                 try:
@@ -122,7 +123,7 @@ def rows_to_dicts(cursor, rows):
 
 
 def _pg_query(query: str):
-    """Convert ? placeholders to %s for psycopg2."""
+    """Convert ? placeholders to %s for psycopg."""
     return query.replace("?", "%s")
 
 
@@ -146,7 +147,7 @@ def db_run(query: str, params: list | tuple = ()):
 def db_get(query: str, params: list | tuple = ()):
     query = _pg_query(query)
     with get_conn() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+        with conn.cursor(row_factory=dict_row) as cursor:
             cursor.execute(query, params)
             row = cursor.fetchone()
             return dict(row) if row else None
@@ -155,7 +156,7 @@ def db_get(query: str, params: list | tuple = ()):
 def db_all(query: str, params: list | tuple = ()):
     query = _pg_query(query)
     with get_conn() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+        with conn.cursor(row_factory=dict_row) as cursor:
             cursor.execute(query, params)
             rows = cursor.fetchall()
             return [dict(r) for r in rows] if rows else []

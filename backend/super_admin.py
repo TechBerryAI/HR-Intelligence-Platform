@@ -18,9 +18,9 @@ JWT_SECRET = os.getenv(
     'JWT_SECRET',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE',
 )
-SUPER_ADMIN_EMAIL = os.getenv('SUPER_ADMIN_EMAIL', 'superadmin@portal.com').strip().lower()
-SUPER_ADMIN_PASSWORD = os.getenv('SUPER_ADMIN_PASSWORD', 'SuperAdmin@123!')
-SUPER_ADMIN_NAME = os.getenv('SUPER_ADMIN_NAME', 'Super Administrator').strip()
+SUPER_ADMIN_EMAIL = (os.getenv('SUPER_ADMIN_EMAIL', 'superadmin@portal.com') or '').strip().lower()
+SUPER_ADMIN_PASSWORD = (os.getenv('SUPER_ADMIN_PASSWORD', 'SuperAdmin@123!') or '').strip()
+SUPER_ADMIN_NAME = (os.getenv('SUPER_ADMIN_NAME', 'Super Administrator') or '').strip()
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ SUPER_ADMIN_NAME = os.getenv('SUPER_ADMIN_NAME', 'Super Administrator').strip()
 def super_admin_login():
     data = request.get_json(force=True) or {}
     email = (data.get('email') or '').strip().lower()
-    password = data.get('password') or ''
+    password = (data.get('password') or '').strip()
 
     if not email or not password:
         return jsonify({'error': 'Email and password are required'}), 400
