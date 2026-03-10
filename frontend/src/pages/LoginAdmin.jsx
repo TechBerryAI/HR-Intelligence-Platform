@@ -3,31 +3,43 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
 
 export default function LoginAdmin() {
-	const { loginHR, auth } = useApp()
+	const { loginHR, loginSuperAdmin, auth, superAdminAuth } = useApp()
 	const navigate = useNavigate()
 	const [adminEmail, setAdminEmail] = useState('')
 	const [adminPassword, setAdminPassword] = useState('')
 	const [adminError, setAdminError] = useState('')
 
-	// Redirect to dashboard if already logged in
+	// Redirect to dashboard if already logged in as HR
 	useEffect(() => {
 		if (auth.isLoggedIn && auth.role === 'HR') {
 			navigate('/dashboard', { replace: true })
 		}
 	}, [auth.isLoggedIn, auth.role, navigate])
 
+	// Redirect to Super Admin if already logged in as Super Admin
+	useEffect(() => {
+		if (superAdminAuth?.isLoggedIn) {
+			navigate('/super-admin', { replace: true })
+		}
+	}, [superAdminAuth?.isLoggedIn, navigate])
+
 	const onAdminSubmit = async (e) => {
 		e.preventDefault()
 		setAdminError('')
+		// If credentials are Super Admin, log in as Super Admin and open Super Admin page
+		const superRes = await loginSuperAdmin(adminEmail.trim(), adminPassword)
+		if (superRes?.ok) {
+			navigate('/super-admin')
+			return
+		}
 		const res = await loginHR(adminEmail, adminPassword)
 		if (res.ok) navigate('/dashboard')
 		else setAdminError(res.message || 'Login failed')
 	}
 
 	// Don't render login form if already logged in (redirect will happen)
-	if (auth.isLoggedIn && auth.role === 'HR') {
-		return null
-	}
+	if (auth.isLoggedIn && auth.role === 'HR') return null
+	if (superAdminAuth?.isLoggedIn) return null
 
 	return (
 		<section className="relative min-h-[calc(100vh-180px)] flex items-center justify-center px-4 py-10 overflow-hidden">
