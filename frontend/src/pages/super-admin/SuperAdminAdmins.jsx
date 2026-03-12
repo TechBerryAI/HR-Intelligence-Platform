@@ -24,6 +24,7 @@ export default function SuperAdminAdmins() {
   const [createForm, setCreateForm] = useState({ email: '', fullName: '', company: '', password: '' })
   const [creating, setCreating] = useState(false)
   const isSuperAdmin = auth?.role === 'super_admin'
+  const isHeadHr = auth?.role === 'head_hr'
 
   const load = async () => {
     setLoading(true)
@@ -225,12 +226,14 @@ export default function SuperAdminAdmins() {
           <p className="mt-0.5 text-sm text-zinc-400">{admins.length} admin{admins.length !== 1 ? 's' : ''} registered</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 transition-colors border border-emerald-500/30"
-          >
-            <FiPlus className="w-4 h-4" /> Create Admin
-          </button>
+          {isHeadHr && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 transition-colors border border-emerald-500/30"
+            >
+              <FiPlus className="w-4 h-4" /> Create Admin
+            </button>
+          )}
           <button
             onClick={load}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition-colors border border-zinc-700"

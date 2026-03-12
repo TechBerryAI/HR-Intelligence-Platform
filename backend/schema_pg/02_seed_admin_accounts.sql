@@ -9,7 +9,7 @@ DECLARE
   super_name    text := 'Unmesh Tari';
   super_company text := 'Techberry Infotech Pvt. Ltd.';
   -- Head of HR (create/manage admins + HR features; login at /login/admin)
-  head_email   text := 'chetan.gore@techberryinfotech.com ';
+  head_email   text := 'chetan.gore@techberryinfotech.com';
   head_pass    text := 'P@ssw0rd';
   head_name    text := 'Chetan Gore';
   head_company text := 'Techberry Infotech Pvt. Ltd.';

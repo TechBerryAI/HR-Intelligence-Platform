@@ -24,7 +24,6 @@ const BulkResumeParser = lazy(() => import('./pages/admin/BulkResumeParser.jsx')
 const FAQ = lazy(() => import('./pages/FAQ.jsx'))
 const ContactUs = lazy(() => import('./pages/ContactUs.jsx'))
 const NotFound = lazy(() => import('./pages/NotFound.jsx'))
-const LoginSuperAdmin = lazy(() => import('./pages/LoginSuperAdmin.jsx'))
 const SuperAdminDashboard = lazy(() => import('./pages/super-admin/SuperAdminDashboard.jsx'))
 const SuperAdminAdmins = lazy(() => import('./pages/super-admin/SuperAdminAdmins.jsx'))
 const SuperAdminCandidates = lazy(() => import('./pages/super-admin/SuperAdminCandidates.jsx'))
@@ -108,8 +107,8 @@ export default function App() {
                       </AdminGuard>
                     }
                   />
-                  {/* Super Admin — completely separate portal */}
-                  <Route path="/login/super-admin" element={<LoginSuperAdmin />} />
+                  {/* All admins (Super Admin, Head of HR, HR) use /login/admin */}
+                  <Route path="/login/super-admin" element={<Navigate to="/login/admin" replace />} />
                   <Route
                     path="/super-admin"
                     element={

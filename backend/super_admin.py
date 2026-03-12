@@ -76,7 +76,7 @@ def super_admin_login():
 
 @super_admin_bp.get('/stats')
 @authenticate_token
-@require_super_admin
+@require_head_hr
 def get_stats():
     total_admins = db_get('SELECT COUNT(*) AS cnt FROM hr_signup', ())
     total_candidates = db_get('SELECT COUNT(*) AS cnt FROM candidate_signup', ())
@@ -172,7 +172,7 @@ def delete_admin(hrid):
 
 @super_admin_bp.get('/candidates')
 @authenticate_token
-@require_super_admin
+@require_head_hr
 def list_candidates():
     rows = db_all(
         '''SELECT cs.cid, cs.name, cs.email, cs.created_at,
@@ -207,7 +207,7 @@ def delete_candidate(cid):
 
 @super_admin_bp.get('/jobs')
 @authenticate_token
-@require_super_admin
+@require_head_hr
 def list_jobs():
     rows = db_all(
         '''SELECT j.jdid, j.title, j.company, j.location, j.salary,
@@ -242,7 +242,7 @@ def delete_job(jdid):
 
 @super_admin_bp.get('/applications')
 @authenticate_token
-@require_super_admin
+@require_head_hr
 def list_applications():
     rows = db_all(
         '''SELECT a.id, a.candidate_id, a.job_id, a.status,

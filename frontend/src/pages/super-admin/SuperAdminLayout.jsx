@@ -19,6 +19,7 @@ export default function SuperAdminLayout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const isHeadHr = auth?.isLoggedIn && auth?.role === 'head_hr'
   const displayEmail = isHeadHr ? auth?.email : superAdminAuth?.email
+  const displayName = isHeadHr ? (auth?.fullName || 'Head of HR') : (superAdminAuth?.name || 'Super Admin')
   const panelLabel = isHeadHr ? 'Head of HR' : 'Super Admin'
 
   const handleLogout = () => {
@@ -27,7 +28,7 @@ export default function SuperAdminLayout({ children }) {
       navigate('/login/admin')
     } else {
       logoutSuperAdmin()
-      navigate('/login/super-admin')
+      navigate('/login/admin')
     }
   }
 
@@ -45,7 +46,7 @@ export default function SuperAdminLayout({ children }) {
           <FiShield className="w-4 h-4" />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-bold text-white truncate">{panelLabel}</p>
+          <p className="text-sm font-bold text-white truncate">{displayName}</p>
           <p className="text-xs text-zinc-500 truncate">{displayEmail || ''}</p>
         </div>
       </div>

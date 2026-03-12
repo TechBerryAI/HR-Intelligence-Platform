@@ -47,7 +47,7 @@ export default function Navbar() {
   const handleSuperAdminLogout = () => {
     logoutSuperAdmin()
     setSuperAdminMenuOpen(false)
-    navigate('/login/super-admin')
+    navigate('/login/admin')
   }
 
   useEffect(() => {

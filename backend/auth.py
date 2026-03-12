@@ -499,9 +499,10 @@ def hr_login():
         if not email or not password:
             return jsonify({"error": "Email and password are required"}), 400
 
+        email_clean = email.strip().lower()
         signup_data = db_get(
-            'SELECT hrid, email, password, full_name, company, is_head_hr FROM hr_signup WHERE email = ?',
-            (email,)
+            'SELECT hrid, email, password, full_name, company, is_head_hr FROM hr_signup WHERE LOWER(TRIM(email)) = ?',
+            (email_clean,)
         )
         if not signup_data:
             record_login_attempt(email, 'HR', 'failed', ip_address, user_agent, 'User not found')
