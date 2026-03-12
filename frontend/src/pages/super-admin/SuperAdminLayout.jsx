@@ -14,13 +14,21 @@ const navItems = [
 ]
 
 export default function SuperAdminLayout({ children }) {
-  const { logoutSuperAdmin, superAdminAuth } = useApp()
+  const { logoutSuperAdmin, logout, auth, superAdminAuth } = useApp()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const isHeadHr = auth?.isLoggedIn && auth?.role === 'head_hr'
+  const displayEmail = isHeadHr ? auth?.email : superAdminAuth?.email
+  const panelLabel = isHeadHr ? 'Head of HR' : 'Super Admin'
 
   const handleLogout = () => {
-    logoutSuperAdmin()
-    navigate('/login/super-admin')
+    if (isHeadHr) {
+      logout()
+      navigate('/login/admin')
+    } else {
+      logoutSuperAdmin()
+      navigate('/login/super-admin')
+    }
   }
 
   const Sidebar = ({ mobile = false }) => (
@@ -37,8 +45,8 @@ export default function SuperAdminLayout({ children }) {
           <FiShield className="w-4 h-4" />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-bold text-white truncate">Super Admin</p>
-          <p className="text-xs text-zinc-500 truncate">{superAdminAuth?.email || ''}</p>
+          <p className="text-sm font-bold text-white truncate">{panelLabel}</p>
+          <p className="text-xs text-zinc-500 truncate">{displayEmail || ''}</p>
         </div>
       </div>
 
@@ -87,7 +95,7 @@ export default function SuperAdminLayout({ children }) {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
           <div className="relative z-50 flex flex-col w-64 h-full bg-zinc-900 border-r border-zinc-800">
             <div className="flex items-center justify-between px-4 py-4">
-              <span className="text-sm font-semibold text-white">Super Admin Panel</span>
+              <span className="text-sm font-semibold text-white">{panelLabel} Panel</span>
               <button onClick={() => setSidebarOpen(false)} className="text-zinc-400 hover:text-white">
                 <FiX className="w-5 h-5" />
               </button>
@@ -108,7 +116,7 @@ export default function SuperAdminLayout({ children }) {
             <FiMenu className="w-5 h-5" />
           </button>
           <span className="text-sm font-semibold text-white flex items-center gap-2">
-            <FiShield className="w-4 h-4" /> Super Admin Panel
+            <FiShield className="w-4 h-4" /> {panelLabel} Panel
           </span>
         </div>
 

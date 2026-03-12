@@ -219,36 +219,22 @@ def run_migrations():
     except Exception as e:
         print(f"[DB] Warning ensuring is_super_admin column: {e}")
 
-    # Seed default super admin user if not present (idempotent)
-    _seed_super_admin_if_missing()
-
-
-def _seed_super_admin_if_missing():
-    """Create default super admin in hr_signup if no user with that email exists. Uses env for credentials."""
-    seed_email = (os.getenv('SUPER_ADMIN_SEED_EMAIL') or 'unmesh.tari@techberry.com').strip().lower()
-    seed_password = (os.getenv('SUPER_ADMIN_SEED_PASSWORD') or 'Unmeshtari@123').strip()
-    seed_name = (os.getenv('SUPER_ADMIN_SEED_FULL_NAME') or 'Super Administrator').strip()
-    seed_company = (os.getenv('SUPER_ADMIN_SEED_COMPANY') or 'Techberry').strip()
-    if not seed_email or not seed_password:
-        return
+    # Ensure is_head_hr column exists on hr_signup (idempotent)
     try:
-        existing = db_get('SELECT hrid FROM hr_signup WHERE LOWER(email) = ?', (seed_email,))
-        if existing:
-            # Ensure existing user is marked super admin
-            db_run('UPDATE hr_signup SET is_super_admin = true WHERE LOWER(email) = ?', (seed_email,))
-            return
-        import bcrypt
-        password_hash = bcrypt.hashpw(seed_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        row = db_get('SELECT COALESCE(MAX(CAST(SUBSTRING(hrid FROM 5) AS INT)), 0) AS maxn FROM hr_signup WHERE hrid ~ ?', ('^HRID[0-9]+$',))
-        next_num = int(row['maxn']) + 1 if row and row.get('maxn') is not None else 1
-        hrid = f"HRID{next_num:03d}"
-        db_run(
-            'INSERT INTO hr_signup (hrid, full_name, email, company, password, is_super_admin) VALUES (?, ?, ?, ?, ?, true)',
-            (hrid, seed_name or seed_email, seed_email, seed_company or '-', password_hash),
-        )
-        print(f"[DB] Seeded super admin user: {seed_email}")
+        with get_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = current_schema() AND table_name = 'hr_signup' AND column_name = 'is_head_hr'
+                """)
+                if cursor.fetchone() is None:
+                    cursor.execute("ALTER TABLE hr_signup ADD COLUMN is_head_hr BOOLEAN DEFAULT false")
+                    print("[DB] Added column hr_signup.is_head_hr")
     except Exception as e:
-        print(f"[DB] Warning seeding super admin: {e}")
+        print(f"[DB] Warning ensuring is_head_hr column: {e}")
+
+    # Admin accounts (Super Admin, Head of HR) are seeded via script: python scripts/seed_admin_accounts.py
+    # Do not seed from .env here.
 
 
 def init_db():

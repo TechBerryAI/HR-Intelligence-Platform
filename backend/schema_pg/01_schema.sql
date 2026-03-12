@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS hr_signup (
     company VARCHAR(255) NOT NULL,
     password VARCHAR(255) NULL,
     is_super_admin BOOLEAN DEFAULT false,
+    is_head_hr BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

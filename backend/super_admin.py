@@ -10,7 +10,7 @@ import jwt
 from flask import Blueprint, jsonify, request
 
 from db import db_all, db_get, db_run
-from utils import authenticate_token, build_jwt_payload, require_super_admin
+from utils import authenticate_token, build_jwt_payload, require_head_hr, require_super_admin
 
 super_admin_bp = Blueprint('super_admin', __name__)
 
@@ -41,7 +41,10 @@ def super_admin_login():
         return jsonify({'error': 'Invalid credentials'}), 401
 
     stored = row.get('password') or ''
-    if not stored or not bcrypt.checkpw(password.encode('utf-8'), stored.encode('utf-8')):
+    if not stored:
+        return jsonify({'error': 'Invalid credentials'}), 401
+    stored_b = stored.encode('utf-8') if isinstance(stored, str) else stored
+    if not bcrypt.checkpw(password.encode('utf-8'), stored_b):
         return jsonify({'error': 'Invalid credentials'}), 401
 
     is_super = row.get('is_super_admin')
@@ -92,18 +95,60 @@ def get_stats():
 
 
 # ---------------------------------------------------------------------------
-# Admins (HR users)
+# Admins (HR users) — list/create allowed for Head of HR and Super Admin; delete Super Admin only
 # ---------------------------------------------------------------------------
 
 @super_admin_bp.get('/admins')
 @authenticate_token
-@require_super_admin
+@require_head_hr
 def list_admins():
     rows = db_all(
         'SELECT hrid, full_name, email, company, created_at FROM hr_signup ORDER BY created_at DESC',
         (),
     )
     return jsonify({'admins': rows})
+
+
+@super_admin_bp.post('/admins')
+@authenticate_token
+@require_head_hr
+def create_admin():
+    """Create a new HR/admin account (Head of HR or Super Admin only). Body: email, fullName, company, password."""
+    data = request.get_json(force=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    full_name = (data.get('fullName') or data.get('full_name') or '').strip()
+    company = (data.get('company') or '').strip()
+    password = (data.get('password') or '').strip()
+
+    if not email:
+        return jsonify({'error': 'Email is required'}), 400
+    if not password or len(password) < 6:
+        return jsonify({'error': 'Password is required and must be at least 6 characters'}), 400
+    if not full_name:
+        return jsonify({'error': 'Full name is required'}), 400
+    if not company:
+        return jsonify({'error': 'Company is required'}), 400
+
+    existing = db_get('SELECT hrid FROM hr_signup WHERE LOWER(email) = ?', (email,))
+    if existing:
+        return jsonify({'error': 'An admin with this email already exists'}), 400
+
+    try:
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        row = db_get('SELECT COALESCE(MAX(CAST(SUBSTRING(hrid FROM 5) AS INT)), 0) AS maxn FROM hr_signup WHERE hrid ~ ?', ('^HRID[0-9]+$',))
+        next_num = int(row['maxn']) + 1 if row and row.get('maxn') is not None else 1
+        hrid = f"HRID{next_num:03d}"
+        db_run(
+            'INSERT INTO hr_signup (hrid, full_name, email, company, password) VALUES (?, ?, ?, ?, ?)',
+            (hrid, full_name, email, company or '-', password_hash),
+        )
+        return jsonify({
+            'message': 'Admin account created successfully',
+            'admin': {'hrid': hrid, 'full_name': full_name, 'email': email, 'company': company or '-'},
+        }), 201
+    except Exception as e:
+        print(f'[SUPER ADMIN] Error creating admin: {e}')
+        return jsonify({'error': 'Failed to create admin'}), 500
 
 
 @super_admin_bp.delete('/admins/<hrid>')

@@ -500,19 +500,25 @@ def hr_login():
             return jsonify({"error": "Email and password are required"}), 400
 
         signup_data = db_get(
-            'SELECT hrid, email, password, full_name, company FROM hr_signup WHERE email = ?',
+            'SELECT hrid, email, password, full_name, company, is_head_hr FROM hr_signup WHERE email = ?',
             (email,)
         )
         if not signup_data:
             record_login_attempt(email, 'HR', 'failed', ip_address, user_agent, 'User not found')
             return jsonify({"error": "Invalid email or password"}), 401
 
-        if not bcrypt.checkpw(password.encode('utf-8'), signup_data['password'].encode('utf-8')):
+        stored = signup_data.get('password') or ''
+        if not stored:
+            record_login_attempt(email, 'HR', 'failed', ip_address, user_agent, 'Invalid password')
+            return jsonify({"error": "Invalid email or password"}), 401
+        stored_b = stored.encode('utf-8') if isinstance(stored, str) else stored
+        if not bcrypt.checkpw(password.encode('utf-8'), stored_b):
             record_login_attempt(email, 'HR', 'failed', ip_address, user_agent, 'Invalid password')
             return jsonify({"error": "Invalid email or password"}), 401
 
         user_id = signup_data['hrid']
-        identity = {"hrId": user_id, "email": signup_data['email'], "role": "HR"}
+        role = 'head_hr' if signup_data.get('is_head_hr') else 'HR'
+        identity = {"hrId": user_id, "email": signup_data['email'], "role": role}
         access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
         refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
 
@@ -548,7 +554,7 @@ def hr_login():
                 "email": signup_data['email'],
                 "fullName": signup_data['full_name'],
                 "company": signup_data['company'],
-                "role": "HR"
+                "role": role
             }
         })
     except Exception:

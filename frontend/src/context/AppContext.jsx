@@ -228,10 +228,11 @@ export function AppProvider({ children }) {
         tokenService.setToken(data.token)
         if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setUser(data.user)
-        const nextAuth = { isLoggedIn: true, role: 'HR', email: data.user.email || email }
+        const role = data.user.role || 'HR'
+        const nextAuth = { isLoggedIn: true, role, email: data.user.email || email, fullName: data.user.fullName, company: data.user.company }
         setAuth(nextAuth)
         writeJson(STORAGE_KEYS.auth, nextAuth)
-        return { ok: true }
+        return { ok: true, user: data.user }
       }
       return { ok: false, message: 'Invalid response from server' }
     } catch (err) {
