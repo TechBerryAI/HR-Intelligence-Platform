@@ -16,6 +16,51 @@ function ensureArray(value) {
 }
 
 /**
+ * Normalize a date value from parser/API to YYYY-MM for MonthYearPicker.
+ * Parser may return: year only ("2025"), "Jan 2025", "2025-01", or object with month/year.
+ * @param {*} value - Raw date (string, number, or { year, month } object)
+ * @returns {string} - "YYYY-MM" or ""
+ */
+function normalizeToYYYYMM(value) {
+  if (value == null || value === '') return '';
+  // Object form from parser e.g. { year: 2025, month: 3 } or { start_year, start_month }
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const y = value.year ?? value.start_year ?? value.end_year;
+    let m = value.month ?? value.start_month ?? value.end_month;
+    if (y != null) {
+      const yy = String(y).trim();
+      if (!/^\d{4}$/.test(yy)) return '';
+      let mm = '01';
+      if (m != null && m !== '') {
+        const num = Number(m);
+        if (!Number.isNaN(num) && num >= 1 && num <= 12) mm = String(num).padStart(2, '0');
+        else {
+          const monthNames = 'jan feb mar apr may jun jul aug sep oct nov dec'.split(' ');
+          const idx = monthNames.indexOf(String(m).toLowerCase().slice(0, 3));
+          if (idx >= 0) mm = String(idx + 1).padStart(2, '0');
+        }
+      }
+      return `${yy}-${mm}`;
+    }
+    return '';
+  }
+  const s = String(value).trim();
+  if (!s) return '';
+  // Already YYYY-MM
+  if (/^\d{4}-\d{2}$/.test(s)) return s;
+  // Year only (e.g. "2025") -> treat as January
+  if (/^\d{4}$/.test(s)) return `${s}-01`;
+  // Try parsing common formats (e.g. "Jan 2025", "January 2025", "2025-01")
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
+  }
+  return '';
+}
+
+/**
  * Normalize a value to an array of non-empty strings.
  * JD/LLM output can return qualifications, skills, or responsibilities as:
  * - array (expected), string (single or pipe/newline-separated), object, null/undefined.
@@ -124,12 +169,14 @@ export function mapResumeTOONToForm(toon) {
     if (edu == null || typeof edu !== 'object') {
       return { degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' };
     }
+    const rawStart = edu.start ?? edu.start_date ?? edu.from;
+    const rawEnd = edu.year ?? edu.end ?? edu.end_date ?? edu.to;
     return {
       degree: str(edu.degree),
       institution: str(edu.institution || edu.field),
       cgpa: str(edu.gpa || edu.cgpa),
-      startMonth: str(edu.start),
-      endMonth: str(edu.year || edu.end),
+      startMonth: normalizeToYYYYMM(rawStart),
+      endMonth: normalizeToYYYYMM(rawEnd),
     };
   });
 
@@ -137,12 +184,15 @@ export function mapResumeTOONToForm(toon) {
     if (exp == null || typeof exp !== 'object') {
       return { company: '', role: '', startMonth: '', endMonth: '', isCurrent: false };
     }
+    const rawStart = exp.from ?? exp.start ?? exp.start_date;
+    const rawEnd = exp.to ?? exp.end ?? exp.end_date;
+    const isPresent = exp.to === 'Present' || exp.to === 'present' || exp.isCurrent;
     return {
       company: str(exp.company),
       role: str(exp.title || exp.role),
-      startMonth: str(exp.from || exp.start),
-      endMonth: exp.to === 'Present' || exp.to === 'present' ? '' : str(exp.to || exp.end),
-      isCurrent: exp.to === 'Present' || exp.to === 'present' || exp.isCurrent || false,
+      startMonth: normalizeToYYYYMM(rawStart),
+      endMonth: isPresent ? '' : normalizeToYYYYMM(rawEnd),
+      isCurrent: !!isPresent,
     };
   });
 

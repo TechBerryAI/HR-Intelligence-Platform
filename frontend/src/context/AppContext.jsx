@@ -670,25 +670,31 @@ export function AppProvider({ children }) {
     if (!hasResume || !hasEducation) {
       return { ok: false, reason: 'profile_requirements_missing' }
     }
+    // Optimistic update: show "Applied" immediately
+    setApplicantApplications((prev) => {
+      const next = { ...prev, [jobId]: true, [String(jobId)]: true }
+      writeJson(STORAGE_KEYS.applicantApplications, next)
+      return next
+    })
     try {
       await apiRequest('/api/applications', {
         method: 'POST',
         body: { jobId },
         token
       })
-      setApplicantApplications((prev) => {
-        const next = { ...prev }
-        // Store as both number and string for compatibility
-        next[jobId] = true
-        next[String(jobId)] = true
-        writeJson(STORAGE_KEYS.applicantApplications, next)
-        return next
-      })
-      // Refresh applications from backend to ensure sync
-      setTimeout(() => fetchApplicantData(), 500)
+      // Sync applications list in background (no delay)
+      fetchApplicantData()
       return { ok: true }
     } catch (err) {
       console.error('Apply error:', err)
+      // Revert optimistic update on failure
+      setApplicantApplications((prev) => {
+        const next = { ...prev }
+        delete next[jobId]
+        delete next[String(jobId)]
+        writeJson(STORAGE_KEYS.applicantApplications, next)
+        return next
+      })
       return { ok: false, message: err?.message || 'Failed to apply' }
     }
   }

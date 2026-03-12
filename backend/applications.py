@@ -1,5 +1,6 @@
 import os
 import re
+import threading
 import requests
 from flask import Blueprint, request, jsonify
 from db import db_get, db_run, db_all, BACKEND, TRUE_SQL
@@ -8,6 +9,35 @@ from services.ats_service import match_candidate_to_job
 from toon import toon_loads_flex, toon_dumps
 
 applications_bp = Blueprint('applications', __name__)
+
+
+def _run_ats_and_update_application(candidate_id: str, job_id: str, parsed_resume: dict, parsed_jd: dict, app_id: str):
+    """Run ATS matching in background and update the application row. Does not block apply response."""
+    try:
+        ats_success, ats_result = match_candidate_to_job(
+            candidate_id, job_id, parsed_resume, parsed_jd, apply_id=app_id
+        )
+        if ats_success and ats_result:
+            json_out = ats_result.get('json_output') or {}
+            final_score = json_out.get('overall_match_score') or json_out.get('final_score')
+            decision = (json_out.get('decision') or '').lower()
+            rationale = json_out.get('final_reasoning') or json_out.get('rationale') or (ats_result.get('toon_output', '') or '')[:2000]
+            ats_analysis_toon = toon_dumps(ats_result) if isinstance(ats_result, dict) else None
+            _shortlisted = decision in ('shortlist', 'strong_match', 'partial_match')
+            shortlisted_val = _shortlisted if BACKEND == 'postgresql' else (1 if _shortlisted else 0)
+            status_after = 'shortlisted' if _shortlisted else 'applied'
+            db_run(
+                """
+                UPDATE applications SET match_score = ?, matching_percentage = ?, shortlisted = ?, ats_reasoning = ?, ats_analysis = ?, status = ?
+                WHERE candidate_id = ? AND job_id = ?
+                """,
+                (final_score, final_score, shortlisted_val, rationale, ats_analysis_toon, status_after, candidate_id, job_id)
+            )
+        else:
+            err = ats_result.get('error', 'Unknown ATS error') if isinstance(ats_result, dict) else str(ats_result)
+            print(f"[APPLY] ATS background run failed (non-blocking): {err}")
+    except Exception as e:
+        print(f"[APPLY] ATS background error: {e}")
 
 
 def _jd_toon_from_job_row(job):
@@ -274,45 +304,21 @@ def apply_job():
         app_id = str(app_row['id']) if app_row else None
         
         # ========================================================================
-        # ATS MATCHING - call HR-ATS-API internally (no duplicate logic)
+        # Return immediately; run ATS in background so apply feels instant
         # ========================================================================
-        ats_success, ats_result = match_candidate_to_job(
-            candidate_id, job_id, parsed_resume, parsed_jd, apply_id=app_id
+        thread = threading.Thread(
+            target=_run_ats_and_update_application,
+            args=(candidate_id, job_id, parsed_resume, parsed_jd, app_id),
+            daemon=True,
         )
+        thread.start()
         
-        if ats_success and ats_result:
-            json_out = ats_result.get('json_output') or {}
-            final_score = json_out.get('overall_match_score') or json_out.get('final_score')
-            decision = (json_out.get('decision') or '').lower()
-            rationale = json_out.get('final_reasoning') or json_out.get('rationale') or ats_result.get('toon_output', '')[:2000]
-            ats_analysis_toon = toon_dumps(ats_result) if isinstance(ats_result, dict) else None
-            _shortlisted = decision in ('shortlist', 'strong_match', 'partial_match')
-            shortlisted_val = _shortlisted if BACKEND == 'postgresql' else (1 if _shortlisted else 0)
-            status_after = 'shortlisted' if _shortlisted else 'applied'
-            db_run(
-                """
-                UPDATE applications SET match_score = ?, matching_percentage = ?, shortlisted = ?, ats_reasoning = ?, ats_analysis = ?, status = ?
-                WHERE candidate_id = ? AND job_id = ?
-                """,
-                (final_score, final_score, shortlisted_val, rationale, ats_analysis_toon, status_after, candidate_id, job_id)
-            )
-            # Shortlisted candidate data will later be sent to n8n (not implemented here)
-            return jsonify({
-                'message': 'Application submitted successfully',
-                'status': status_after,
-                'matchScore': final_score,
-                'shortlisted': bool(_shortlisted),
-            }), 201
-        else:
-            # ATS failed or not configured - application still created; log and return success
-            err = ats_result.get('error', 'Unknown ATS error') if isinstance(ats_result, dict) else str(ats_result)
-            print(f"[APPLY] ATS not run or failed (non-blocking): {err}")
-            return jsonify({
-                'message': 'Application submitted successfully',
-                'status': 'applied',
-                'matchScore': None,
-                'shortlisted': False,
-            }), 201
+        return jsonify({
+            'message': 'Application submitted successfully',
+            'status': 'applied',
+            'matchScore': None,
+            'shortlisted': False,
+        }), 201
         
     except Exception as e:
         print(f"[APPLY] ERROR in apply_job: {e}")
