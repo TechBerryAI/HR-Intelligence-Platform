@@ -32,6 +32,7 @@ export default function SuperAdminApplications() {
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [reportError, setReportError] = useState('')
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
 
@@ -85,7 +86,15 @@ export default function SuperAdminApplications() {
             <FiRefreshCw className="w-4 h-4" /> Refresh
           </button>
           <button
-            onClick={() => generateApplicationsPdf(filtered.length ? filtered : applications)}
+            onClick={() => {
+              setReportError('')
+              try {
+                generateApplicationsPdf(filtered.length ? filtered : applications)
+              } catch (e) {
+                console.error('PDF generation failed:', e)
+                setReportError(e?.message || 'Failed to generate PDF')
+              }
+            }}
             disabled={applications.length === 0}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
           >
@@ -93,6 +102,12 @@ export default function SuperAdminApplications() {
           </button>
         </div>
       </div>
+
+      {reportError && (
+        <div className="mb-4 px-4 py-2 rounded-lg bg-red-500/15 text-red-400 border border-red-500/30 text-sm">
+          {reportError}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
