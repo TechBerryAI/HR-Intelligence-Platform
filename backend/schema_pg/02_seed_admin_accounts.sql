@@ -1,6 +1,6 @@
 -- Add is_super_admin / is_head_hr columns if missing, then seed Super Admin and Head of HR.
--- Edit the DECLARE block below with your emails, passwords, names, and companies.
--- Passwords are hashed with bcrypt (pgcrypto). Run once per environment.
+-- Edit the DECLARE block below. Passwords are hashed with bcrypt (pgcrypto).
+-- Re-run this script anytime to sync passwords from the script to the DB (updates existing users too).
 DO $$
 DECLARE
   -- Super Admin (full system access; login at /login/super-admin)
@@ -23,16 +23,16 @@ BEGIN
     ALTER TABLE hr_signup ADD COLUMN is_head_hr BOOLEAN DEFAULT false;
   END IF;
 
-  IF EXISTS (SELECT 1 FROM hr_signup WHERE LOWER(email) = LOWER(super_email)) THEN
-    UPDATE hr_signup SET is_super_admin = true WHERE LOWER(email) = LOWER(super_email);
+  IF EXISTS (SELECT 1 FROM hr_signup WHERE LOWER(TRIM(email)) = LOWER(TRIM(super_email))) THEN
+    UPDATE hr_signup SET is_super_admin = true, password = crypt(super_pass, gen_salt('bf')) WHERE LOWER(TRIM(email)) = LOWER(TRIM(super_email));
   ELSE
     SELECT 'HRID' || LPAD((COALESCE(MAX(CAST(SUBSTRING(hrid FROM 5) AS INTEGER)), 0) + 1)::text, 3, '0') INTO next_hrid FROM hr_signup WHERE hrid ~ '^HRID[0-9]+$';
     INSERT INTO hr_signup (hrid, full_name, email, company, password, is_super_admin)
     VALUES (next_hrid, super_name, super_email, super_company, crypt(super_pass, gen_salt('bf')), true);
   END IF;
 
-  IF EXISTS (SELECT 1 FROM hr_signup WHERE LOWER(email) = LOWER(head_email)) THEN
-    UPDATE hr_signup SET is_head_hr = true WHERE LOWER(email) = LOWER(head_email);
+  IF EXISTS (SELECT 1 FROM hr_signup WHERE LOWER(TRIM(email)) = LOWER(TRIM(head_email))) THEN
+    UPDATE hr_signup SET is_head_hr = true, password = crypt(head_pass, gen_salt('bf')) WHERE LOWER(TRIM(email)) = LOWER(TRIM(head_email));
   ELSE
     SELECT 'HRID' || LPAD((COALESCE(MAX(CAST(SUBSTRING(hrid FROM 5) AS INTEGER)), 0) + 1)::text, 3, '0') INTO next_hrid FROM hr_signup WHERE hrid ~ '^HRID[0-9]+$';
     INSERT INTO hr_signup (hrid, full_name, email, company, password, is_head_hr)

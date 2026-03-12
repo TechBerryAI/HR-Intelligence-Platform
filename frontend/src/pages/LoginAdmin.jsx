@@ -9,13 +9,10 @@ export default function LoginAdmin() {
 	const [adminPassword, setAdminPassword] = useState('')
 	const [adminError, setAdminError] = useState('')
 
-	// Redirect to dashboard if already logged in as HR; to super-admin if Head of HR
+	// Redirect to dashboard if already logged in as HR or Head of HR
 	useEffect(() => {
-		if (auth.isLoggedIn && auth.role === 'HR') {
+		if (auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')) {
 			navigate('/dashboard', { replace: true })
-		}
-		if (auth.isLoggedIn && auth.role === 'head_hr') {
-			navigate('/super-admin', { replace: true })
 		}
 	}, [auth.isLoggedIn, auth.role, navigate])
 
@@ -36,10 +33,8 @@ export default function LoginAdmin() {
 			return
 		}
 		const res = await loginHR(adminEmail, adminPassword)
-		if (res.ok) {
-			const role = res.user?.role || auth.role
-			navigate(role === 'head_hr' ? '/super-admin' : '/dashboard')
-		} else setAdminError(res.message || 'Login failed')
+		if (res.ok) navigate('/dashboard')
+		else setAdminError(res.message || 'Login failed')
 	}
 
 	// Don't render login form if already logged in (redirect will happen)

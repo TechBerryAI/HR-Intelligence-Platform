@@ -36,7 +36,8 @@ import SuperAdminGuard from './guards/SuperAdminGuard.jsx'
 
 function PrivateRoute({ children }) {
   const { auth } = useApp()
-  return auth.isLoggedIn && auth.role === 'HR' ? children : <Navigate to="/login" replace />
+  const allowed = auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')
+  return allowed ? children : <Navigate to="/login" replace />
 }
 
 export default function App() {

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext.jsx'
+import { apiRequest } from '../utils/api.js'
+import { tokenService } from '../utils/tokenService.js'
 import JDUploadWithParsing from '../components/JDUploadWithParsing.jsx'
 import PremiumButton from '../components/PremiumButton.jsx'
 import PremiumInput from '../components/PremiumInput.jsx'
 import AnimatedContainer from '../components/AnimatedContainer.jsx'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiToggleLeft, FiToggleRight } from 'react-icons/fi'
+import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiToggleLeft, FiToggleRight, FiPlus, FiUsers } from 'react-icons/fi'
 
 // Helper function to format date for display
 const formatDisplayDate = (dateString) => {
@@ -19,7 +21,7 @@ const formatDisplayDate = (dateString) => {
 }
 
 export default function Dashboard() {
-  const { jobs, addJob, setJobEnabled, updateJob, user } = useApp()
+  const { jobs, addJob, setJobEnabled, updateJob, user, auth } = useApp()
   const [title, setTitle] = useState('')
   const [company, setCompany] = useState(user?.company || '')
   const [location, setLocation] = useState('')
@@ -39,6 +41,46 @@ export default function Dashboard() {
   const [editExperienceFrom, setEditExperienceFrom] = useState('')
   const [editExperienceTo, setEditExperienceTo] = useState('')
   const [editDescription, setEditDescription] = useState('')
+
+  const isHeadHr = auth?.role === 'head_hr'
+  const [showCreateAdmin, setShowCreateAdmin] = useState(false)
+  const [createAdminForm, setCreateAdminForm] = useState({ email: '', fullName: '', company: '', password: '' })
+  const [creatingAdmin, setCreatingAdmin] = useState(false)
+  const [createAdminToast, setCreateAdminToast] = useState(null)
+
+  const showCreateAdminToast = (msg, type = 'success') => {
+    setCreateAdminToast({ msg, type })
+    setTimeout(() => setCreateAdminToast(null), 3000)
+  }
+
+  const handleCreateAdmin = async (e) => {
+    e.preventDefault()
+    if (!createAdminForm.email?.trim() || !createAdminForm.fullName?.trim() || !createAdminForm.company?.trim() || !createAdminForm.password || createAdminForm.password.length < 6) {
+      showCreateAdminToast('Please fill all fields; password must be at least 6 characters', 'error')
+      return
+    }
+    setCreatingAdmin(true)
+    try {
+      const token = tokenService.getToken()
+      await apiRequest('/api/super-admin/admins', {
+        method: 'POST',
+        token,
+        body: {
+          email: createAdminForm.email.trim().toLowerCase(),
+          fullName: createAdminForm.fullName.trim(),
+          company: createAdminForm.company.trim(),
+          password: createAdminForm.password,
+        },
+      })
+      setShowCreateAdmin(false)
+      setCreateAdminForm({ email: '', fullName: '', company: '', password: '' })
+      showCreateAdminToast('Admin account created successfully')
+    } catch (err) {
+      showCreateAdminToast(err?.message || 'Failed to create admin', 'error')
+    } finally {
+      setCreatingAdmin(false)
+    }
+  }
 
   // Always ensure company field is set to user's company when user data loads
   useEffect(() => {
@@ -145,13 +187,111 @@ export default function Dashboard() {
 
       <div className="max-w-5xl mx-auto px-4 relative z-10">
         <AnimatedContainer animation="slideDown">
-          <div className="mb-8">
-            <h2 className="text-4xl font-bold bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent">
-              Job Posting Dashboard
-            </h2>
-            <p className="mt-2 text-zinc-400">Create and manage your job postings</p>
+          <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-4xl font-bold bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent">
+                Job Posting Dashboard
+              </h2>
+              <p className="mt-2 text-zinc-400">Create and manage your job postings</p>
+            </div>
+            {isHeadHr && (
+              <button
+                type="button"
+                onClick={() => setShowCreateAdmin(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/30 shadow-lg transition-colors"
+              >
+                <FiPlus className="w-4 h-4" />
+                Create Admin
+              </button>
+            )}
           </div>
         </AnimatedContainer>
+
+        {createAdminToast && (
+          <div
+            className={`fixed top-20 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-xl text-sm font-medium ${
+              createAdminToast.type === 'error'
+                ? 'bg-red-500/20 border border-red-500/30 text-red-300'
+                : 'bg-green-500/20 border border-green-500/30 text-green-300'
+            }`}
+          >
+            {createAdminToast.msg}
+          </div>
+        )}
+
+        {showCreateAdmin && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+            <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                <FiUsers className="w-5 h-5" /> Create Admin Account
+              </h3>
+              <p className="mt-1 text-sm text-zinc-400">New HR admin can log in and create jobs, manage candidates.</p>
+              <form onSubmit={handleCreateAdmin} className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={createAdminForm.email}
+                    onChange={(e) => setCreateAdminForm((f) => ({ ...f, email: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
+                    placeholder="hr@company.com"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Full name</label>
+                  <input
+                    type="text"
+                    value={createAdminForm.fullName}
+                    onChange={(e) => setCreateAdminForm((f) => ({ ...f, fullName: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
+                    placeholder="Jane Doe"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Company</label>
+                  <input
+                    type="text"
+                    value={createAdminForm.company}
+                    onChange={(e) => setCreateAdminForm((f) => ({ ...f, company: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
+                    placeholder="Acme Inc"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-zinc-400 mb-1">Password (min 6 characters)</label>
+                  <input
+                    type="password"
+                    value={createAdminForm.password}
+                    onChange={(e) => setCreateAdminForm((f) => ({ ...f, password: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
+                    placeholder="••••••••"
+                    minLength={6}
+                    required
+                  />
+                </div>
+                <div className="flex gap-3 justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowCreateAdmin(false); setCreateAdminForm({ email: '', fullName: '', company: '', password: '' }) }}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={creatingAdmin}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+                  >
+                    {creatingAdmin ? 'Creating…' : 'Create'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
         <AnimatedContainer animation="slideUp" delay={0.2}>
           <form onSubmit={onSubmit} className="glass-card rounded-3xl p-8 shadow-premium border border-white/10 space-y-6">

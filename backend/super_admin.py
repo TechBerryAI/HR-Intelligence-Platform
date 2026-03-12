@@ -34,7 +34,7 @@ def super_admin_login():
         return jsonify({'error': 'Email and password are required'}), 400
 
     row = db_get(
-        'SELECT hrid, email, password, full_name, is_super_admin FROM hr_signup WHERE LOWER(email) = ?',
+        'SELECT hrid, email, password, full_name, is_super_admin FROM hr_signup WHERE LOWER(TRIM(email)) = ?',
         (email,),
     )
     if not row:

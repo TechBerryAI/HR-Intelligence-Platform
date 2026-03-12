@@ -105,7 +105,7 @@ async function setupBackend() {
 
 async function setupFrontend() {
   logStep(4, 6, 'Setting up frontend (npm)');
-  // Always run npm install so dependencies (e.g. jspdf, jspdf-autotable) stay in sync after branch switch or clone (VM/local).
+  // Always run npm install so dependencies stay in sync. On Windows, shell: true is required to run npm (avoids spawn EINVAL).
   log('Installing frontend dependencies from package.json...');
   await runCmd('npm', ['install'], FRONTEND_DIR, process.env, process.platform === 'win32');
   log('Frontend setup complete');
