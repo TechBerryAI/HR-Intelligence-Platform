@@ -177,7 +177,7 @@ export default function Jobs() {
                     job={job}
                     isApplied={!!applicantApplications[job.id] || !!applicantApplications[String(job.id)]}
                     isSaved={!!applicantSavedJobs[job.id] || !!applicantSavedJobs[String(job.id)]}
-                    isAdmin={auth.role === 'HR' || auth.role === 'admin'}
+                    isAdmin={auth.role === 'HR' || auth.role === 'head_hr' || auth.role === 'admin'}
                     isApplying={applyingJobId === job.id}
                     onApply={async () => {
                       setApplyError('')
