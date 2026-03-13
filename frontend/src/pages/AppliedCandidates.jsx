@@ -190,14 +190,24 @@ export default function AppliedCandidates() {
           }).catch(() => null),
         ])
         if (!cancelled) {
-          setSelectedCandidate((prev) => (prev ? { ...prev, ...profile, status: viewedRes?.status === 'ok' ? 'profile_viewed' : prev.status } : prev))
-          // Update applications list so this candidate shows "Profile Viewed" and the candidate will see "Reviewed" on their side
-          if (viewedRes?.status === 'ok') {
+          setSelectedCandidate((prev) => {
+            if (!prev) return prev
+            const alreadyDecided = prev.shortlisted === true || prev.shortlisted === 1 ||
+              ['shortlisted', 'rejected', 'Shortlisted', 'Not Shortlisted'].includes(String(prev.status))
+            const viewedOk = viewedRes?.status === 'ok' && !viewedRes?.profile_update?.unchanged
+            const status = (viewedOk && !alreadyDecided) ? 'profile_viewed' : prev.status
+            const shortlisted = prev.shortlisted
+            return { ...prev, ...profile, status, shortlisted }
+          })
+          if (viewedRes?.status === 'ok' && !viewedRes?.profile_update?.unchanged) {
             setApplications((prevList) =>
               prevList.map((app) => {
                 const cid = app.candidateId ?? app.candidate_id ?? app.candidateID ?? app.cid
-                if (String(cid) === String(resolvedCandidateId)) return { ...app, status: 'profile_viewed' }
-                return app
+                if (String(cid) !== String(resolvedCandidateId)) return app
+                const alreadyDecided = app.shortlisted === true || app.shortlisted === 1 ||
+                  ['shortlisted', 'rejected'].includes(String(app.status || '').toLowerCase())
+                if (alreadyDecided) return app
+                return { ...app, status: 'profile_viewed' }
               })
             )
           }
@@ -636,7 +646,9 @@ export default function AppliedCandidates() {
               <div className="flex items-center gap-3">
                 {(() => {
                   const status = selectedCandidate.status || (selectedCandidate.shortlisted ? 'Shortlisted' : '')
-                  const canUpdate = !['shortlisted', 'rejected', 'Shortlisted', 'Not Shortlisted'].includes(String(status))
+                  const isShortlisted = selectedCandidate.shortlisted === true || selectedCandidate.shortlisted === 1
+                  const isRejected = ['rejected', 'Not Shortlisted'].includes(String(status))
+                  const canUpdate = !isShortlisted && !isRejected
                   return canUpdate ? (
                     <>
                       <button
@@ -655,8 +667,8 @@ export default function AppliedCandidates() {
                       </button>
                     </>
                   ) : (
-                    <span className="text-sm text-zinc-400 px-3 py-1 rounded-lg bg-zinc-800">
-                      {status === 'shortlisted' || status === 'Shortlisted' ? 'Shortlisted' : 'Not Shortlisted'}
+                    <span className={`text-sm font-medium px-3 py-1 rounded-lg ${isShortlisted ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
+                      {isShortlisted ? 'Shortlisted' : 'Rejected'}
                     </span>
                   )
                 })()}

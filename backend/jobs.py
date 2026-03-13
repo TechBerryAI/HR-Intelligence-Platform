@@ -448,9 +448,24 @@ def record_profile_viewed(job_id: str, candidate_id: str):
         job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
-        app = db_get('SELECT id FROM applications WHERE job_id = ? AND candidate_id = ?', (job_id, candidate_id))
+        app = db_get(
+            'SELECT id, status, shortlisted FROM applications WHERE job_id = ? AND candidate_id = ?',
+            (job_id, candidate_id)
+        )
         if not app:
             return jsonify({'error': 'Application not found'}), 404
+        current_status = (app.get('status') or '').lower()
+        is_shortlisted = app.get('shortlisted') in (True, 1, 't', 'true', '1')
+        if current_status == 'shortlisted' or current_status == 'rejected' or is_shortlisted:
+            return jsonify({
+                'status': 'ok',
+                'profile_update': {
+                    'application_id': str(app['id']),
+                    'status': 'Shortlisted' if (current_status == 'shortlisted' or is_shortlisted) else 'Rejected',
+                    'updated_at': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+                    'unchanged': True,
+                }
+            }), 200
         profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
         signup = db_get('SELECT email FROM candidate_signup WHERE cid = ?', (candidate_id,))
         app['full_name'] = (profile or {}).get('full_name') or ''
