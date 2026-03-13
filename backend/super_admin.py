@@ -371,19 +371,54 @@ def list_jobs():
     return jsonify({'jobs': rows})
 
 
-@super_admin_bp.delete('/jobs/<jdid>')
+@super_admin_bp.route('/jobs/<jdid>', methods=['GET', 'OPTIONS', 'DELETE'])
+@allow_options_no_auth
 @authenticate_token
-@require_super_admin
-def delete_job(jdid):
-    existing = db_get('SELECT jdid FROM jobs WHERE jdid = ?', (jdid,))
-    if not existing:
+def job_detail_or_delete(jdid):
+    """GET: full job details. OPTIONS: CORS preflight. DELETE: remove job (super_admin only)."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    if request.method == 'DELETE':
+        if getattr(request, 'user', {}).get('role') != 'super_admin':
+            return jsonify({'error': 'Forbidden'}), 403
+        existing = db_get('SELECT jdid FROM jobs WHERE jdid = ?', (jdid,))
+        if not existing:
+            return jsonify({'error': 'Job not found'}), 404
+        try:
+            db_run('DELETE FROM jobs WHERE jdid = ?', (jdid,))
+            return jsonify({'message': f'Job {jdid} deleted successfully'})
+        except Exception as e:
+            print(f'[SUPER ADMIN] Error deleting job {jdid}: {e}')
+            return jsonify({'error': 'Failed to delete job'}), 500
+    # GET
+    role = getattr(request, 'user', {}).get('role')
+    if role not in ('head_hr', 'super_admin'):
+        return jsonify({'error': 'Forbidden'}), 403
+    row = db_get(
+        '''SELECT j.jdid, j.title, j.company, j.location, j.salary,
+                  j.experience, j.description, j.enabled, j.posted_on, j.posted_by,
+                  h.full_name AS posted_by_name, h.email AS posted_by_email
+           FROM jobs j
+           LEFT JOIN hr_signup h ON h.hrid = j.posted_by
+           WHERE j.jdid = ?''',
+        (jdid,),
+    )
+    if not row:
         return jsonify({'error': 'Job not found'}), 404
-    try:
-        db_run('DELETE FROM jobs WHERE jdid = ?', (jdid,))
-        return jsonify({'message': f'Job {jdid} deleted successfully'})
-    except Exception as e:
-        print(f'[SUPER ADMIN] Error deleting job {jdid}: {e}')
-        return jsonify({'error': 'Failed to delete job'}), 500
+    return jsonify({
+        'jdid': row['jdid'],
+        'title': row.get('title'),
+        'company': row.get('company'),
+        'location': row.get('location'),
+        'salary': row.get('salary'),
+        'experience': row.get('experience'),
+        'description': row.get('description') or '',
+        'enabled': bool(row.get('enabled')),
+        'posted_on': row.get('posted_on'),
+        'posted_by': row.get('posted_by'),
+        'posted_by_name': row.get('posted_by_name'),
+        'posted_by_email': row.get('posted_by_email'),
+    })
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
 import SuperAdminLayout from './SuperAdminLayout.jsx'
@@ -11,6 +12,7 @@ function formatDate(ts) {
 }
 
 export default function SuperAdminJobs() {
+  const navigate = useNavigate()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -173,7 +175,14 @@ export default function SuperAdminJobs() {
               </thead>
               <tbody className="divide-y divide-zinc-800">
                 {filtered.map((job) => (
-                  <tr key={job.jdid} className="bg-zinc-900/30 hover:bg-zinc-800/40 transition-colors">
+                  <tr
+                    key={job.jdid}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate(`/super-admin/jobs/${encodeURIComponent(job.jdid)}`)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/super-admin/jobs/${encodeURIComponent(job.jdid)}`) } }}
+                    className="bg-zinc-900/30 hover:bg-zinc-800/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-rose-500/50"
+                  >
                     <td className="px-4 py-3 font-mono text-xs text-purple-400">{job.jdid}</td>
                     <td className="px-4 py-3 text-zinc-100 font-medium max-w-[180px] truncate">{job.title}</td>
                     <td className="px-4 py-3 text-zinc-400">{job.company}</td>
@@ -191,9 +200,9 @@ export default function SuperAdminJobs() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-zinc-500">{formatDate(job.posted_on)}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <button
-                        onClick={() => setConfirmDelete(job)}
+                        onClick={(e) => { e.stopPropagation(); setConfirmDelete(job) }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 transition-all"
                       >
                         <FiTrash2 className="w-3.5 h-3.5" /> Delete
