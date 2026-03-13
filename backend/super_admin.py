@@ -7,6 +7,7 @@ import os
 
 import bcrypt
 import jwt
+from functools import wraps
 from flask import Blueprint, jsonify, request
 
 from db import db_all, db_get, db_run
@@ -14,6 +15,17 @@ from toon import toon_loads_flex
 from utils import authenticate_token, build_jwt_payload, require_head_hr, require_super_admin
 
 super_admin_bp = Blueprint('super_admin', __name__)
+
+
+def allow_options_no_auth(f):
+    """Return 204 for OPTIONS (CORS preflight) without running auth."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if request.method == 'OPTIONS':
+            return '', 204
+        return f(*args, **kwargs)
+    return wrapper
+
 
 JWT_SECRET = os.getenv(
     'JWT_SECRET',
@@ -185,6 +197,143 @@ def list_candidates():
         (),
     )
     return jsonify({'candidates': rows})
+
+
+def _super_admin_profile_payload(cid):
+    """Build full profile payload for a candidate (profile + education + certs + experiences)."""
+    profile = db_get(
+        '''
+        SELECT cp.candidate_id, cp.full_name, cp.email, cp.phone,
+               cp.experience_level, cp.serving_notice, cp.notice_period, cp.last_working_day,
+               cp.linkedin_url, cp.portfolio_url, cp.current_location, cp.preferred_location,
+               cp.completed, cp.updated_at,
+               CASE WHEN cp.resume IS NOT NULL THEN 1 ELSE 0 END as has_resume,
+               cs.name AS signup_name, cs.created_at AS signup_created_at
+        FROM candidate_profiles cp
+        LEFT JOIN candidate_signup cs ON cs.cid = cp.candidate_id
+        WHERE cp.candidate_id = ?
+        ''',
+        (cid,),
+    )
+    if not profile:
+        return None
+    cgpa_col = '"cgpa/percentage"'  # PostgreSQL
+    education = db_all(
+        f'SELECT degree, institution, {cgpa_col} as cgpa, start_date, end_date FROM candidate_education WHERE candidate_id = ? ORDER BY degree',
+        (cid,),
+    )
+    certifications = db_all(
+        'SELECT certification, issuer, end_month FROM candidate_certifications WHERE candidate_id = ? ORDER BY certification',
+        (cid,),
+    )
+    experiences = db_all(
+        'SELECT company, role, start_date, end_date, present FROM candidate_experiences WHERE candidate_id = ? ORDER BY company',
+        (cid,),
+    )
+    return {
+        'candidate_id': cid,
+        'fullName': profile.get('full_name') or profile.get('signup_name') or '',
+        'email': profile.get('email') or '',
+        'phone': profile.get('phone') or '',
+        'experienceLevel': profile.get('experience_level') or '',
+        'servingNotice': profile.get('serving_notice') or '',
+        'noticePeriod': profile.get('notice_period') or '',
+        'lastWorkingDay': profile.get('last_working_day') or '',
+        'linkedinUrl': profile.get('linkedin_url') or '',
+        'portfolioUrl': profile.get('portfolio_url') or '',
+        'currentLocation': profile.get('current_location') or '',
+        'preferredLocation': profile.get('preferred_location') or '',
+        'completed': bool(profile.get('completed')),
+        'resumeFileName': 'resume.pdf' if profile.get('has_resume') else '',
+        'hasResume': bool(profile.get('has_resume')),
+        'joinedAt': profile.get('signup_created_at'),
+        'education': [
+            {'degree': r.get('degree') or '', 'institution': r.get('institution') or '', 'cgpa': r.get('cgpa') or '', 'startMonth': r.get('start_date') or '', 'endMonth': r.get('end_date') or ''}
+            for r in (education or [])
+        ],
+        'certifications': [
+            {'certification': r.get('certification') or '', 'issuer': r.get('issuer') or '', 'endMonth': r.get('end_month') or ''}
+            for r in (certifications or [])
+        ],
+        'experiences': [
+            {'company': r.get('company') or '', 'role': r.get('role') or '', 'startMonth': r.get('start_date') or '', 'endMonth': r.get('end_date') or '', 'isCurrent': (r.get('present') or '').lower() == 'yes'}
+            for r in (experiences or [])
+        ],
+    }
+
+
+@super_admin_bp.route('/candidates/<cid>', methods=['GET', 'OPTIONS'])
+@allow_options_no_auth
+@authenticate_token
+@require_head_hr
+def get_candidate(cid):
+    """Return full candidate profile for super-admin detail view."""
+    payload = _super_admin_profile_payload(cid)
+    if not payload:
+        signup = db_get('SELECT cid, name, email, created_at FROM candidate_signup WHERE cid = ?', (cid,))
+        if not signup:
+            return jsonify({'error': 'Candidate not found'}), 404
+        return jsonify({
+            'candidate_id': cid,
+            'fullName': signup.get('name') or '',
+            'email': signup.get('email') or '',
+            'phone': '',
+            'experienceLevel': '',
+            'servingNotice': '',
+            'noticePeriod': '',
+            'lastWorkingDay': '',
+            'linkedinUrl': '',
+            'portfolioUrl': '',
+            'currentLocation': '',
+            'preferredLocation': '',
+            'completed': False,
+            'resumeFileName': '',
+            'hasResume': False,
+            'joinedAt': signup.get('created_at'),
+            'education': [],
+            'certifications': [],
+            'experiences': [],
+        })
+    return jsonify(payload)
+
+
+def _resume_bytes(data):
+    if data is None:
+        return None
+    if isinstance(data, bytes):
+        return data
+    if isinstance(data, memoryview):
+        return data.tobytes()
+    if isinstance(data, bytearray):
+        return bytes(data)
+    try:
+        return bytes(data)
+    except (TypeError, ValueError):
+        return None
+
+
+@super_admin_bp.route('/candidates/<cid>/resume', methods=['GET', 'OPTIONS'])
+@allow_options_no_auth
+@authenticate_token
+@require_head_hr
+def get_candidate_resume(cid):
+    """Serve candidate resume PDF for super-admin."""
+    from flask import Response
+    profile = db_get('SELECT resume FROM candidate_profiles WHERE candidate_id = ?', (cid,))
+    if not profile or not profile.get('resume'):
+        return jsonify({'error': 'Resume not found'}), 404
+    data = _resume_bytes(profile.get('resume'))
+    if not data:
+        return jsonify({'error': 'Invalid resume data'}), 500
+    return Response(
+        data,
+        mimetype='application/pdf',
+        headers={
+            'Content-Disposition': f'inline; filename=resume_{cid}.pdf',
+            'Content-Type': 'application/pdf',
+            'X-Content-Type-Options': 'nosniff',
+        },
+    )
 
 
 @super_admin_bp.delete('/candidates/<cid>')
