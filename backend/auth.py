@@ -11,7 +11,7 @@ from helpers.otp_utils import generate_otp, is_valid_email, parse_otp_expiry, se
 from models import get_session
 from models.hr_auth import HRAuth
 from sessions_service import record_login_attempt
-from utils import build_jwt_payload
+from utils import build_jwt_payload, authenticate_token
 
 auth_bp = Blueprint('auth', __name__)
 HRAUTH_T = '"HRAuth"' if BACKEND == 'postgresql' else 'HRAuth'
@@ -560,6 +560,67 @@ def hr_login():
         })
     except Exception:
         return jsonify({"error": "Internal server error"}), 500
+
+
+@auth_bp.post('/change-password')
+@authenticate_token
+def hr_change_password():
+    """Change password for logged-in HR or Super Admin. Requires current password and new password."""
+    try:
+        user = getattr(request, 'user', None)
+        if not user or not user.get('hrId'):
+            return jsonify({'error': 'Access denied'}), 403
+        data = request.get_json(force=True) or {}
+        current_password = (data.get('currentPassword') or data.get('current_password') or '').strip()
+        new_password = (data.get('newPassword') or data.get('new_password') or '').strip()
+        if not current_password:
+            return jsonify({'error': 'Current password is required'}), 400
+        if len(new_password) < 6:
+            return jsonify({'error': 'New password must be at least 6 characters'}), 400
+        hrid = user['hrId']
+        signup_data = db_get(
+            'SELECT hrid, email, password, full_name FROM hr_signup WHERE hrid = ?',
+            (hrid,)
+        )
+        if not signup_data:
+            return jsonify({'error': 'Account not found'}), 404
+        stored = signup_data.get('password') or ''
+        if not stored:
+            return jsonify({'error': 'Invalid current password'}), 401
+        stored_b = stored.encode('utf-8') if isinstance(stored, str) else stored
+        if not bcrypt.checkpw(current_password.encode('utf-8'), stored_b):
+            return jsonify({'error': 'Current password is incorrect'}), 401
+        password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        email = signup_data['email']
+        try:
+            db_run('UPDATE hr_signup SET password = ? WHERE hrid = ?', (password_hash, hrid))
+        except Exception as db_err:
+            print(f"Error updating hr_signup password: {db_err}")
+            return jsonify({'error': 'Failed to update password'}), 500
+        with get_session() as session:
+            hr_auth = session.query(HRAuth).filter(HRAuth.email == email).first()
+            if hr_auth:
+                hr_auth.password_hash = password_hash
+                session.add(hr_auth)
+        hr_name = signup_data.get('full_name') or 'there'
+        try:
+            send_notification_email(
+                email,
+                "Your Job Portal password was changed",
+                (
+                    f"Hi {hr_name},\n\n"
+                    "This is a confirmation that the password for your Job Portal account was changed.\n"
+                    "If this wasn't you, please reset your password immediately or contact support."
+                ),
+            )
+        except Exception:
+            pass
+        return jsonify({'message': 'Password updated successfully'}), 200
+    except Exception as e:
+        print(f"Error in hr_change_password: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @auth_bp.post('/refresh')

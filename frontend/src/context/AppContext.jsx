@@ -280,6 +280,36 @@ export function AppProvider({ children }) {
     }
   }
 
+  const changePasswordApplicant = async ({ currentPassword, newPassword }) => {
+    const authToken = token || tokenService.getToken()
+    if (!authToken) return { ok: false, message: 'Not logged in' }
+    try {
+      await apiRequest('/api/candidate/change-password', {
+        method: 'POST',
+        token: authToken,
+        body: { currentPassword, newPassword },
+      })
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'Failed to change password' }
+    }
+  }
+
+  const changePasswordHr = async ({ currentPassword, newPassword }) => {
+    const authToken = token || tokenService.getToken()
+    if (!authToken) return { ok: false, message: 'Not logged in' }
+    try {
+      await apiRequest('/api/change-password', {
+        method: 'POST',
+        token: authToken,
+        body: { currentPassword, newPassword },
+      })
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'Failed to change password' }
+    }
+  }
+
   // Fetch applications, saved jobs, and profile from backend (single source of truth for profile).
   // Memoized so consumers (e.g. ApplicationStatus) don't re-run their useEffects on every state
   // update from this fetch (which would cause an infinite request loop).
@@ -967,6 +997,8 @@ export function AppProvider({ children }) {
     requestHrPasswordReset,
     verifyHrPasswordOtp,
     resetHrPassword,
+    changePasswordApplicant,
+    changePasswordHr,
     saveApplicantProfile,
     markApplicantProfileCompleted,
     applyToJobAsApplicant,

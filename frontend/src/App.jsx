@@ -32,6 +32,8 @@ const SuperAdminJobs = lazy(() => import('./pages/super-admin/SuperAdminJobs.jsx
 const SuperAdminJobDetail = lazy(() => import('./pages/super-admin/SuperAdminJobDetail.jsx'))
 const SuperAdminApplications = lazy(() => import('./pages/super-admin/SuperAdminApplications.jsx'))
 const SuperAdminApplicationDetail = lazy(() => import('./pages/super-admin/SuperAdminApplicationDetail.jsx'))
+const SuperAdminSettings = lazy(() => import('./pages/super-admin/SuperAdminSettings.jsx'))
+const Settings = lazy(() => import('./pages/Settings.jsx'))
 
 import AdminGuard from './guards/AdminGuard.jsx'
 import CandidateGuard from './guards/CandidateGuard.jsx'
@@ -73,6 +75,14 @@ export default function App() {
                       </CandidateGuard>
                     }
                   />
+                  <Route
+                    path="/settings/applicant"
+                    element={
+                      <CandidateGuard>
+                        <Settings />
+                      </CandidateGuard>
+                    }
+                  />
                   <Route path="/forgot-password/:variant" element={<ForgotPasswordRequest />} />
                   <Route path="/forgot-password/:variant/verify" element={<ForgotPasswordVerify />} />
                   <Route path="/forgot-password/:variant/reset" element={<ForgotPasswordReset />} />
@@ -100,6 +110,14 @@ export default function App() {
                     element={
                       <PrivateRoute>
                         <AppliedCandidates />
+                      </PrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/settings"
+                    element={
+                      <PrivateRoute>
+                        <Settings />
                       </PrivateRoute>
                     }
                   />
@@ -174,6 +192,14 @@ export default function App() {
                     element={
                       <SuperAdminGuard>
                         <SuperAdminApplicationDetail />
+                      </SuperAdminGuard>
+                    }
+                  />
+                  <Route
+                    path="/super-admin/settings"
+                    element={
+                      <SuperAdminGuard>
+                        <SuperAdminSettings />
                       </SuperAdminGuard>
                     }
                   />

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiBriefcase, FiUser, FiFileText, FiLogOut, FiUsers, FiHelpCircle, FiMessageCircle, FiBook, FiShield } from 'react-icons/fi'
+import { FiBriefcase, FiUser, FiFileText, FiLogOut, FiUsers, FiHelpCircle, FiMessageCircle, FiBook, FiShield, FiSettings } from 'react-icons/fi'
 
 export default function Navbar() {
   const { auth, applicantAuth, applicantProfile, logout, user, superAdminAuth } = useApp()
@@ -140,6 +140,14 @@ export default function Navbar() {
                               <FiFileText className="w-4 h-4" />
                               Bulk Resume Parser
                             </motion.button>
+                            <motion.button
+                              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
+                              onClick={() => { setHrMenuOpen(false); navigate('/settings') }}
+                            >
+                              <FiSettings className="w-4 h-4" />
+                              Settings
+                            </motion.button>
                             <div className="border-t border-white/10 my-1" />
                             <motion.button
                               whileHover={{ backgroundColor: 'rgba(239, 68, 68, 0.1)' }}
@@ -194,6 +202,14 @@ export default function Navbar() {
                             >
                               <FiFileText className="w-4 h-4" />
                               Application Status
+                            </motion.button>
+                            <motion.button
+                              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
+                              onClick={() => { setMenuOpen(false); navigate('/settings/applicant') }}
+                            >
+                              <FiSettings className="w-4 h-4" />
+                              Settings
                             </motion.button>
                             <div className="border-t border-white/10 my-1" />
                             <motion.button

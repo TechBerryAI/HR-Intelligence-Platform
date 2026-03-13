@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext.jsx'
 import {
-  FiGrid, FiUsers, FiUser, FiBriefcase, FiFileText, FiLogOut, FiMenu, FiX, FiShield,
+  FiGrid, FiUsers, FiUser, FiBriefcase, FiFileText, FiLogOut, FiMenu, FiX, FiShield, FiSettings,
 } from 'react-icons/fi'
 
 const navItems = [
@@ -11,6 +11,7 @@ const navItems = [
   { label: 'Candidates', path: '/super-admin/candidates', icon: FiUser },
   { label: 'Jobs', path: '/super-admin/jobs', icon: FiBriefcase },
   { label: 'Applications', path: '/super-admin/applications', icon: FiFileText },
+  { label: 'Settings', path: '/super-admin/settings', icon: FiSettings },
 ]
 
 export default function SuperAdminLayout({ children }) {

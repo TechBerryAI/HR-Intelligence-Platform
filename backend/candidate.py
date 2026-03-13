@@ -1,4 +1,5 @@
 import os
+import bcrypt
 from flask import Blueprint, request, jsonify, Response
 from db import db_get, db_run, db_all, BACKEND, NOW_SQL
 from utils import authenticate_token, require_candidate, require_hr
@@ -18,6 +19,39 @@ def candidate_logout():
             deactivate_session(token)
         return jsonify({'message': 'Logged out successfully'})
     except Exception:
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@candidate_bp.post('/change-password')
+@authenticate_token
+@require_candidate
+def candidate_change_password():
+    """Change password for logged-in candidate. Requires current password and new password."""
+    try:
+        data = request.get_json(force=True) or {}
+        current_password = (data.get('currentPassword') or data.get('current_password') or '').strip()
+        new_password = (data.get('newPassword') or data.get('new_password') or '').strip()
+        if not current_password:
+            return jsonify({'error': 'Current password is required'}), 400
+        if len(new_password) < 6:
+            return jsonify({'error': 'New password must be at least 6 characters'}), 400
+        candidate_id = request.user['id']
+        row = db_get('SELECT cid, email, password FROM candidate_signup WHERE cid = ?', (candidate_id,))
+        if not row:
+            return jsonify({'error': 'Account not found'}), 404
+        stored_hash = row.get('password') or ''
+        if not stored_hash:
+            return jsonify({'error': 'Invalid current password'}), 401
+        stored_b = stored_hash.encode('utf-8') if isinstance(stored_hash, str) else stored_hash
+        if not bcrypt.checkpw(current_password.encode('utf-8'), stored_b):
+            return jsonify({'error': 'Current password is incorrect'}), 401
+        password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        db_run('UPDATE candidate_signup SET password = ? WHERE cid = ?', (password_hash, candidate_id))
+        return jsonify({'message': 'Password updated successfully'}), 200
+    except Exception as e:
+        print(f"Error in candidate_change_password: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Internal server error'}), 500
 
 
