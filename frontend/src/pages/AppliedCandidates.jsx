@@ -7,6 +7,24 @@ import { tokenService } from '../utils/tokenService'
 import { getAvatarGradient } from '../utils/avatarColor'
 
 // Helper function to get score color and label (same as CandidateCard)
+const formatStatusLabel = (status) => {
+  if (!status) return 'Applied'
+  const s = String(status).toLowerCase()
+  if (s === 'profile_viewed') return 'Reviewed'
+  if (s === 'shortlisted') return 'Shortlisted'
+  if (s === 'rejected') return 'Rejected'
+  return status
+}
+
+// Badge styling for status (aligned with candidate My Applications: Applied / Reviewed / Shortlisted / Rejected)
+const getStatusBadgeClass = (status) => {
+  const s = String(status || '').toLowerCase()
+  if (s === 'profile_viewed') return 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+  if (s === 'shortlisted') return 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+  if (s === 'rejected') return 'bg-red-500/20 text-red-300 border-red-500/30'
+  return 'bg-green-500/20 text-green-300 border-green-500/30' // applied
+}
+
 const getScoreInfo = (score) => {
   if (score >= 80) return { color: 'text-green-400', bgColor: 'bg-green-900/30', ringColor: 'ring-green-700', label: 'Excellent Match' }
   if (score >= 70) return { color: 'text-emerald-400', bgColor: 'bg-emerald-900/30', ringColor: 'ring-emerald-700', label: 'Great Match' }
@@ -41,6 +59,7 @@ export default function AppliedCandidates() {
   const [resumeAction, setResumeAction] = useState({ isLoading: false, candidateKey: null })
   const [profileLoading, setProfileLoading] = useState(false)
   const [reasonCandidate, setReasonCandidate] = useState(null)
+  const [statusAction, setStatusAction] = useState({ loading: false, action: null })
 
   const resolvedCandidateId = useMemo(() => {
     if (!selectedCandidate) return null
@@ -133,19 +152,65 @@ export default function AppliedCandidates() {
     setReasonCandidate(null)
   }
 
+  const handleStatusAction = async (action) => {
+    if (!selectedJobId || !resolvedCandidateId || statusAction.loading) return
+    setStatusAction({ loading: true, action })
+    try {
+      await apiRequest(`/api/jobs/${encodeURIComponent(selectedJobId)}/applications/${encodeURIComponent(resolvedCandidateId)}/status`, {
+        method: 'PATCH',
+        body: { action },
+        token: tokenService.getToken(),
+      })
+      setSelectedCandidate((prev) => prev ? { ...prev, status: action === 'shortlist' ? 'Shortlisted' : 'Not Shortlisted', shortlisted: action === 'shortlist' } : prev)
+      const result = await fetchApplicationsForJob(selectedJobId)
+      if (result.ok) setApplications(result.data || [])
+    } catch (err) {
+      console.error('Status action failed:', err)
+      alert(err?.message || 'Failed to update status')
+    } finally {
+      setStatusAction({ loading: false, action: null })
+    }
+  }
+
   useEffect(() => {
-    if (!resolvedCandidateId) return
+    if (!resolvedCandidateId || !selectedJobId) return
 
     let cancelled = false
 
     const loadProfile = async () => {
       setProfileLoading(true)
       try {
-        const profile = await apiRequest(`/api/candidate/profile/${encodeURIComponent(resolvedCandidateId)}`, {
-          token: tokenService.getToken(),
-        })
+        const [profile, viewedRes] = await Promise.all([
+          apiRequest(`/api/candidate/profile/${encodeURIComponent(resolvedCandidateId)}`, {
+            token: tokenService.getToken(),
+          }),
+          apiRequest(`/api/jobs/${encodeURIComponent(selectedJobId)}/applications/${encodeURIComponent(resolvedCandidateId)}/viewed`, {
+            method: 'POST',
+            token: tokenService.getToken(),
+          }).catch(() => null),
+        ])
         if (!cancelled) {
-          setSelectedCandidate((prev) => (prev ? { ...prev, ...profile } : prev))
+          setSelectedCandidate((prev) => {
+            if (!prev) return prev
+            const alreadyDecided = prev.shortlisted === true || prev.shortlisted === 1 ||
+              ['shortlisted', 'rejected', 'Shortlisted', 'Not Shortlisted'].includes(String(prev.status))
+            const viewedOk = viewedRes?.status === 'ok' && !viewedRes?.profile_update?.unchanged
+            const status = (viewedOk && !alreadyDecided) ? 'profile_viewed' : prev.status
+            const shortlisted = prev.shortlisted
+            return { ...prev, ...profile, status, shortlisted }
+          })
+          if (viewedRes?.status === 'ok' && !viewedRes?.profile_update?.unchanged) {
+            setApplications((prevList) =>
+              prevList.map((app) => {
+                const cid = app.candidateId ?? app.candidate_id ?? app.candidateID ?? app.cid
+                if (String(cid) !== String(resolvedCandidateId)) return app
+                const alreadyDecided = app.shortlisted === true || app.shortlisted === 1 ||
+                  ['shortlisted', 'rejected'].includes(String(app.status || '').toLowerCase())
+                if (alreadyDecided) return app
+                return { ...app, status: 'profile_viewed' }
+              })
+            )
+          }
         }
       } catch (err) {
         console.error('Failed to fetch candidate profile', err)
@@ -159,7 +224,7 @@ export default function AppliedCandidates() {
     return () => {
       cancelled = true
     }
-  }, [resolvedCandidateId])
+  }, [resolvedCandidateId, selectedJobId])
 
   const closeModal = () => {
     setSelectedCandidate(null)
@@ -270,16 +335,19 @@ export default function AppliedCandidates() {
             {/* Job Dropdown */}
             <div className="mb-6">
               <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
+                <div className="min-w-0 flex-1">
                   <p className="text-xs uppercase tracking-[0.2em] text-zinc-500 font-semibold">Job Description</p>
                   <h2 className="text-lg font-semibold text-white mt-1">Select a job to view applicants</h2>
                 </div>
-                <div className="w-full sm:w-72">
+                <div className="w-full sm:min-w-[20rem] sm:w-96 flex-shrink-0">
                   <div className="relative rounded-xl bg-gradient-to-r from-zinc-900 via-zinc-800 to-zinc-900 border border-white/10 shadow-[0_12px_30px_rgba(0,0,0,0.45)]">
                     <select
                       value={selectedJobId || ''}
                       onChange={(e) => setSelectedJobId(e.target.value)}
-                      className="w-full appearance-none bg-transparent text-sm font-semibold tracking-wide text-white px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
+                      title={jobsWithApplications.find(j => j.id === selectedJobId)
+                        ? `JD #${selectedJobId} • ${jobsWithApplications.find(j => j.id === selectedJobId)?.title ?? ''}`
+                        : 'Select a job'}
+                      className="w-full appearance-none bg-transparent text-sm font-semibold tracking-wide text-white px-4 py-3 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
                     >
                       {jobsWithApplications.map(job => (
                         <option
@@ -293,7 +361,7 @@ export default function AppliedCandidates() {
                       ))}
                     </select>
                     <div className="pointer-events-none absolute inset-y-0 right-0 pr-4 flex items-center text-zinc-400">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 011.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
                       </svg>
                     </div>
@@ -510,12 +578,19 @@ export default function AppliedCandidates() {
                                       </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                      <span className={`text-xs font-medium ${scoreInfo.color}`}>{scoreInfo.label}</span>
+                                      <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium ${getStatusBadgeClass(candidate.status)}`}>
+                                        {formatStatusLabel(candidate.status)}
+                                      </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                       <div className="flex items-center gap-2">
                                         <button
-                                          onClick={() => handleViewReason(candidate)}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.preventDefault()
+                                            e.stopPropagation()
+                                            handleViewReason(candidate)
+                                          }}
                                           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-violet-500/20 hover:bg-violet-500/30 text-violet-300 text-sm font-medium transition-all duration-200 ring-1 ring-violet-500/40"
                                         >
                                           <span>Reason</span>
@@ -568,11 +643,41 @@ export default function AppliedCandidates() {
                   <p className="text-sm text-zinc-400">{selectedCandidate.email || ''}</p>
                 </div>
               </div>
-              <button onClick={closeModal} className="text-zinc-400 hover:text-white transition p-2 hover:bg-zinc-800 rounded-lg">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-3">
+                {(() => {
+                  const status = selectedCandidate.status || (selectedCandidate.shortlisted ? 'Shortlisted' : '')
+                  const isShortlisted = selectedCandidate.shortlisted === true || selectedCandidate.shortlisted === 1
+                  const isRejected = ['rejected', 'Not Shortlisted'].includes(String(status))
+                  const canUpdate = !isShortlisted && !isRejected
+                  return canUpdate ? (
+                    <>
+                      <button
+                        onClick={() => handleStatusAction('shortlist')}
+                        disabled={statusAction.loading}
+                        className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      >
+                        {statusAction.loading && statusAction.action === 'shortlist' ? 'Updating…' : 'Shortlist'}
+                      </button>
+                      <button
+                        onClick={() => handleStatusAction('reject')}
+                        disabled={statusAction.loading}
+                        className="px-4 py-2 rounded-lg bg-zinc-600 hover:bg-zinc-500 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      >
+                        {statusAction.loading && statusAction.action === 'reject' ? 'Updating…' : 'Reject'}
+                      </button>
+                    </>
+                  ) : (
+                    <span className={`text-sm font-medium px-3 py-1 rounded-lg ${isShortlisted ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
+                      {isShortlisted ? 'Shortlisted' : 'Rejected'}
+                    </span>
+                  )
+                })()}
+                <button onClick={closeModal} className="text-zinc-400 hover:text-white transition p-2 hover:bg-zinc-800 rounded-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <div className="p-6 space-y-6">
               {/* Match Score Badge */}
@@ -856,16 +961,24 @@ export default function AppliedCandidates() {
         </div>
       )}
 
-      {/* View Reason Modal - Decision-first: Header → Score Cards → Strengths → Gaps → Collapsible Reasoning */}
+      {/* View Reason Modal - Decision-first: Header → Verdict reason → Score Cards → Strengths → Gaps → Collapsible Detailed */}
       {reasonCandidate && (() => {
         const score = Math.round(Number(reasonCandidate.matchScore || reasonCandidate.score || 0))
-        const analysis = reasonCandidate.atsAnalysis || {}
-        const jsonOut = analysis.json_output || analysis
-        const breakdown = jsonOut.score_breakdown || {}
-        const rawStrengths = jsonOut.key_strengths || []
-        const rawGaps = jsonOut.key_gaps || []
-        const verdict = jsonOut.verdict || (jsonOut.decision || '').replace(/_/g, ' ')
-        const finalReasoning = jsonOut.final_reasoning || reasonCandidate.atsReasoning || 'No detailed reasoning available.'
+        const analysis = reasonCandidate.atsAnalysis != null && typeof reasonCandidate.atsAnalysis === 'object'
+          ? reasonCandidate.atsAnalysis
+          : {}
+        const jsonOut = analysis?.json_output ?? analysis
+        const breakdown = jsonOut?.score_breakdown ?? {}
+        const rawStrengths = Array.isArray(jsonOut?.key_strengths) ? jsonOut.key_strengths : []
+        const rawGaps = Array.isArray(jsonOut?.key_gaps) ? jsonOut.key_gaps : []
+        const verdict = (jsonOut?.verdict || (jsonOut?.decision || '').replace(/_/g, ' ') || '').trim()
+        const evalReport = jsonOut?.evaluation_report ?? {}
+        const skillsAnalysis = evalReport?.skills_analysis ?? {}
+        const mandatoryPct = jsonOut?.mandatory_skills_match_pct ?? skillsAnalysis?.mandatory_skills_match_pct
+        const decisionBullets = Array.isArray(evalReport?.final_decision_logic) ? evalReport.final_decision_logic : []
+        const experienceAssessment = evalReport?.experience_assessment ?? {}
+        const educationAssessment = evalReport?.education_certification_assessment
+        const finalReasoning = (jsonOut?.final_reasoning || jsonOut?.rationale || reasonCandidate?.atsReasoning || '').trim() || 'No detailed reasoning available.'
 
         // Score factors: name, breakdown key, weight % (matches backend)
         const SCORE_FACTORS = [
@@ -875,10 +988,30 @@ export default function AppliedCandidates() {
           { name: 'Location', key: 'location', weight: 5 },
         ]
 
-        // Parse list items into chips: "Label: A, B, C" → ["A", "B", "C"]; else one chip per item
+        // One-line precise verdict reason (no repetition of full reasoning)
+        const getVerdictReason = () => {
+          const isNotMatch = verdict && /not a match/i.test(verdict)
+          if (mandatoryPct != null && Number(mandatoryPct) < 60 && (skillsAnalysis.missing_mandatory_skills?.length > 0 || breakdown.skills === 0)) {
+            return `Mandatory skills match is ${Number(mandatoryPct)}% (below 60% threshold). Candidate does not meet required technical skills.`
+          }
+          if (isNotMatch) {
+            return `Overall score is ${score}%, below the required threshold for this role.`
+          }
+          if (verdict && /strong match/i.test(verdict)) {
+            return `Overall score is ${score}%. Candidate meets or exceeds key requirements.`
+          }
+          if (verdict && /potential match/i.test(verdict)) {
+            return `Overall score is ${score}%. Recommended for recruiter review.`
+          }
+          return finalReasoning.split(/\n/)[0]?.trim().slice(0, 200) || 'See detailed analysis below.'
+        }
+
+        // Parse list items into chips: "Label: A, B, C" → ["A", "B", "C"]; else one chip per item.
+        // Ensure items is always an array (API may return object or other shape).
         const toChips = (items) => {
           const out = []
-          items.forEach((item) => {
+          const arr = Array.isArray(items) ? items : (items && typeof items === 'object' ? Object.values(items) : [])
+          arr.forEach((item) => {
             const s = String(item).trim()
             if (!s) return
             const colon = s.indexOf(': ')
@@ -894,11 +1027,8 @@ export default function AppliedCandidates() {
         const strengthChips = toChips(rawStrengths)
         const gapChips = toChips(rawGaps)
 
-        // Primary reason: first 1–2 lines of final reasoning
-        const primaryReason = finalReasoning.split(/\n/).slice(0, 2).join(' ').trim() || finalReasoning.slice(0, 200)
-
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={closeReasonModal}>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={closeReasonModal}>
             <div className="bg-zinc-900 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto ring-1 ring-zinc-700 shadow-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="match-modal-title">
               <MatchHeader
                 score={score}
@@ -908,6 +1038,14 @@ export default function AppliedCandidates() {
                 onClose={closeReasonModal}
               />
               <div className="p-6 space-y-6">
+                {/* One-line verdict reason – precise, no repetition */}
+                <div className="rounded-xl bg-zinc-800/50 ring-1 ring-zinc-700/50 px-4 py-3">
+                  <p className="text-sm font-medium text-zinc-300 leading-snug">
+                    <span className="text-zinc-500 font-semibold uppercase tracking-wider text-xs">Why this verdict</span>
+                    <span className="block mt-1.5 text-white">{getVerdictReason()}</span>
+                  </p>
+                </div>
+
                 {/* Score breakdown – metric cards with progress bars */}
                 {(breakdown.skills != null || breakdown.experience != null || breakdown.education != null || breakdown.location != null) && (
                   <div>
@@ -935,35 +1073,41 @@ export default function AppliedCandidates() {
                 {/* Gaps – red chips */}
                 <ChipGroup title="Gaps" items={gapChips} variant="gap" id="gaps-label" />
 
-                {/* Detailed analysis – collapsed by default */}
+                {/* Detailed analysis – structured, no repetition */}
                 <CollapsibleSection label="Detailed Analysis">
-                  <div className="space-y-3 text-sm text-zinc-300">
-                    <p><span className="text-zinc-400">Overall score:</span> <span className="font-semibold text-white">{score}%</span></p>
-                    <p><span className="text-zinc-400">Summary:</span> {primaryReason}</p>
-                    {jsonOut.mandatory_skills_match_pct != null && (
-                      <p>
-                        <span className="text-zinc-400">Mandatory skills match:</span>{' '}
-                        <span className={jsonOut.mandatory_skills_match_pct >= 60 ? 'text-emerald-400' : 'text-amber-400'}>
-                          {Number(jsonOut.mandatory_skills_match_pct)}%
-                        </span>
-                        {jsonOut.mandatory_skills_match_pct < 60 && (
-                          <span className="text-amber-400 ml-1">(below 60% → Not a Match)</span>
-                        )}
-                      </p>
-                    )}
-                    {(jsonOut.evaluation_report?.skills_analysis?.missing_mandatory_skills?.length > 0 || jsonOut.evaluation_report?.skills_analysis?.missing_preferred_skills?.length > 0) && (
-                      <div className="pt-2 border-t border-zinc-600/50">
-                        {jsonOut.evaluation_report.skills_analysis.missing_mandatory_skills?.length > 0 && (
-                          <p className="text-zinc-400">Missing mandatory: {jsonOut.evaluation_report.skills_analysis.missing_mandatory_skills.join(', ')}</p>
-                        )}
-                        {jsonOut.evaluation_report.skills_analysis.missing_preferred_skills?.length > 0 && (
-                          <p className="text-zinc-400">Missing preferred: {jsonOut.evaluation_report.skills_analysis.missing_preferred_skills.join(', ')}</p>
-                        )}
+                  <div className="space-y-4 text-sm">
+                    {decisionBullets.length > 0 && (
+                      <div>
+                        <p className="text-zinc-500 font-semibold uppercase tracking-wider text-xs mb-2">Decision logic</p>
+                        <ul className="list-disc list-inside space-y-1 text-zinc-300">
+                          {decisionBullets.map((bullet, i) => (
+                            <li key={i} className="leading-relaxed">{bullet}</li>
+                          ))}
+                        </ul>
                       </div>
                     )}
-                    <div className="pt-2 border-t border-zinc-600/50">
-                      <p className="text-zinc-400 mb-1">Full reasoning:</p>
-                      <p className="leading-relaxed">{finalReasoning}</p>
+                    {(experienceAssessment.relevant_experience_summary || experienceAssessment.gaps_vs_role_expectations) && (
+                      <div className="pt-3 border-t border-zinc-600/50">
+                        <p className="text-zinc-500 font-semibold uppercase tracking-wider text-xs mb-2">Experience</p>
+                        <div className="space-y-1.5 text-zinc-300">
+                          {experienceAssessment.relevant_experience_summary && (
+                            <p><span className="text-zinc-400">Relevant:</span> {experienceAssessment.relevant_experience_summary}</p>
+                          )}
+                          {experienceAssessment.gaps_vs_role_expectations && (
+                            <p><span className="text-zinc-400">Gaps:</span> {experienceAssessment.gaps_vs_role_expectations}</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {educationAssessment != null && String(educationAssessment).trim() !== '' && (
+                      <div className="pt-3 border-t border-zinc-600/50">
+                        <p className="text-zinc-500 font-semibold uppercase tracking-wider text-xs mb-2">Education & certifications</p>
+                        <p className="text-zinc-300 leading-relaxed">{educationAssessment}</p>
+                      </div>
+                    )}
+                    <div className="pt-3 border-t border-zinc-600/50">
+                      <p className="text-zinc-500 font-semibold uppercase tracking-wider text-xs mb-2">Full reasoning</p>
+                      <p className="text-zinc-300 leading-relaxed whitespace-pre-wrap">{finalReasoning}</p>
                     </div>
                   </div>
                 </CollapsibleSection>

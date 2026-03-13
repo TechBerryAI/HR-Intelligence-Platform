@@ -11,6 +11,8 @@ import requests
 # Parsing API configuration
 PARSING_API_URL = os.getenv('PARSING_API_URL', 'http://localhost:4000')
 PARSING_API_KEY = os.getenv('PARSING_API_KEY', 'your-api-key-here')
+# Max PDF pages to extract (0 = all). Limits long PDFs for faster parsing; 25 is plenty for resumes.
+PDF_MAX_PAGES = max(0, int(os.getenv('PDF_MAX_PAGES', '0')))
 
 
 def extract_text_from_pdf_via_api(file_data: bytes, filename: str) -> str:
@@ -68,9 +70,11 @@ def extract_text_from_pdf(file_data: bytes) -> str:
     try:
         pdf_file = io.BytesIO(file_data)
         pdf_reader = PyPDF2.PdfReader(pdf_file)
-        
+        pages = pdf_reader.pages
+        if PDF_MAX_PAGES:
+            pages = pages[:PDF_MAX_PAGES]
         text_parts = []
-        for page_num, page in enumerate(pdf_reader.pages):
+        for page_num, page in enumerate(pages):
             try:
                 text = page.extract_text()
                 if text and text.strip():
@@ -78,7 +82,6 @@ def extract_text_from_pdf(file_data: bytes) -> str:
             except Exception as e:
                 print(f"[WARN] Failed to extract text from page {page_num + 1}: {str(e)}")
                 continue
-        
         extracted_text = '\n\n'.join(text_parts)
         
         # If we got very little text, it might be an image-based PDF

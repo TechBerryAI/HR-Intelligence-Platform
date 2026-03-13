@@ -1,11 +1,12 @@
 """
-Utility functions for file parsing workflow
+Utility functions for file parsing workflow. TOON is the exclusive format for parsed data.
 """
 import hashlib
 import os
 import uuid
-import json
 from typing import Dict, Any, Optional, Tuple
+
+from toon import toon_dumps, toon_loads_flex
 import requests
 from datetime import datetime
 
@@ -225,7 +226,7 @@ def store_parsed_resume(
     from db import db_run
     
     parsed_id = str(uuid.uuid4())
-    toon_json = json.dumps(toon)
+    toon_text = toon_dumps(toon)
     
     db_run(
         """
@@ -233,7 +234,7 @@ def store_parsed_resume(
         (id, raw_file_id, candidate_id, toon, full_text, confidence, model_version)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (parsed_id, raw_file_id, candidate_id, toon_json, full_text, confidence, model_version)
+        (parsed_id, raw_file_id, candidate_id, toon_text, full_text, confidence, model_version)
     )
     
     return parsed_id
@@ -256,7 +257,7 @@ def store_parsed_jd(
     from db import db_run
     
     parsed_id = str(uuid.uuid4())
-    toon_json = json.dumps(toon)
+    toon_text = toon_dumps(toon)
     
     db_run(
         """
@@ -264,7 +265,7 @@ def store_parsed_jd(
         (id, raw_file_id, job_id, toon, full_text, confidence, model_version)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (parsed_id, raw_file_id, job_id, toon_json, full_text, confidence, model_version)
+        (parsed_id, raw_file_id, job_id, toon_text, full_text, confidence, model_version)
     )
     
     return parsed_id
@@ -300,7 +301,7 @@ def get_cached_parsing_result(
         return {
             'parsed_id': result['id'],
             'raw_file_id': result['raw_file_id'],
-            'toon': json.loads(result['toon']),
+            'toon': toon_loads_flex(result['toon']),
             'confidence': result['confidence'],
             'model_version': result['model_version'],
             'is_cached': True

@@ -1,19 +1,20 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import bcrypt
 import jwt
 from flask import Blueprint, request, jsonify
 
-from db import db_get, db_run
+from db import db_get, db_run, BACKEND
 from helpers.email_utils import send_notification_email
-from helpers.otp_utils import generate_otp, is_valid_email, parse_otp_expiry, send_email_otp
+from helpers.otp_utils import generate_otp, is_valid_email, parse_otp_expiry, send_email_otp, utc_now_aware, normalize_to_utc_aware
 from models import get_session
 from models.hr_auth import HRAuth
-from sessions_service import get_recent_failed_attempts, record_login_attempt
+from sessions_service import record_login_attempt
 from utils import build_jwt_payload
 
 auth_bp = Blueprint('auth', __name__)
+HRAUTH_T = '"HRAuth"' if BACKEND == 'postgresql' else 'HRAuth'
 
 JWT_SECRET = os.getenv('JWT_SECRET', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE')
 
@@ -43,8 +44,8 @@ def hr_signup():
 
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         otp = generate_otp()
-        expiry = datetime.utcnow() + timedelta(minutes=5)
-        
+        # Use timezone-aware UTC so PostgreSQL TIMESTAMPTZ stores/compares correctly
+        expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
         print(f"[HR SIGNUP] Generated OTP for {email}: {otp}")
 
         # Store in HRAuth temporarily until OTP verification
@@ -88,7 +89,7 @@ def hr_signup():
 
         # Verify what was actually stored in the database
         try:
-            stored_hr = db_get('SELECT otp FROM HRAuth WHERE email = ?', (email,))
+            stored_hr = db_get('SELECT otp FROM ' + HRAUTH_T + ' WHERE email = ?', (email,))
             if stored_hr:
                 print(f"[HR SIGNUP] OTP in database after save: {stored_hr.get('otp')}")
             else:
@@ -140,8 +141,8 @@ def verify_hr_otp():
                 print(f"Invalid OTP for HR. Expected={stored_otp}, Got={input_otp}")
                 return jsonify({'error': 'Invalid OTP.'}), 400
             
-            # Check OTP expiry - ensure it's a datetime object before comparison
-            current_time = datetime.utcnow()
+            # Check OTP expiry (PG returns timezone-aware; use aware UTC for comparison)
+            current_time = utc_now_aware()
             otp_expiry_raw = hr_auth.otp_expiry
             
             # Convert otp_expiry to datetime object if needed
@@ -197,13 +198,12 @@ def verify_hr_otp():
             if not otp_expiry or not isinstance(otp_expiry, datetime):
                 print(f"Invalid OTP expiry for HR. Raw value: {otp_expiry_raw}, Type: {type(otp_expiry_raw)}")
                 return jsonify({'error': 'Invalid OTP expiry. Please request a new OTP.'}), 400
-            
-            try:
-                if otp_expiry < current_time:
-                    return jsonify({'error': 'OTP expired. Please request a new OTP.'}), 400
-            except TypeError as te:
-                print(f"TypeError comparing OTP expiry: {te}, expiry={otp_expiry}, current={current_time}")
-                return jsonify({'error': 'Invalid OTP expiry format. Please request a new OTP.'}), 400
+            otp_expiry_utc = normalize_to_utc_aware(otp_expiry)
+            # 30s grace after nominal expiry to avoid clock skew
+            grace = timedelta(seconds=30)
+            if otp_expiry_utc and current_time > (otp_expiry_utc + grace):
+                print(f"[VERIFY OTP] Expired: now_utc={current_time}, expiry_utc={otp_expiry_utc}")
+                return jsonify({'error': 'OTP expired. Please request a new OTP.'}), 400
 
             # Mark as verified
             hr_auth.mark_verified()
@@ -314,9 +314,9 @@ def resend_hr_otp():
             if hr_auth.is_verified:
                 return jsonify({'error': 'Account already verified. Please login.'}), 400
 
-            # Generate new OTP
+            # Generate new OTP (timezone-aware UTC for TIMESTAMPTZ)
             otp = generate_otp()
-            expiry = datetime.utcnow() + timedelta(minutes=5)
+            expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
 
             hr_auth.otp = otp
             hr_auth.otp_expiry = expiry
@@ -352,7 +352,7 @@ def hr_forgot_password():
             return jsonify({'error': 'Account not found for this email.'}), 404
 
         otp = generate_otp()
-        expiry = datetime.utcnow() + timedelta(minutes=10)
+        expiry = datetime.now(timezone.utc) + timedelta(minutes=10)
 
         with get_session() as session:
             hr_auth = session.query(HRAuth).filter(HRAuth.email == email).first()
@@ -403,7 +403,11 @@ def hr_verify_reset_otp():
                 return jsonify({'error': 'Invalid OTP.'}), 400
 
             expiry = parse_otp_expiry(hr_auth.otp_expiry)
-            if not expiry or expiry < datetime.utcnow():
+            if not expiry:
+                return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+            expiry_utc = normalize_to_utc_aware(expiry)
+            now = utc_now_aware()
+            if expiry_utc and now > (expiry_utc + timedelta(seconds=30)):
                 return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
 
         return jsonify({'message': 'OTP verified. You may set a new password.'}), 200
@@ -445,7 +449,10 @@ def hr_reset_password():
                 return jsonify({'error': 'Invalid OTP.'}), 400
 
             expiry = parse_otp_expiry(hr_auth.otp_expiry)
-            if not expiry or expiry < datetime.utcnow():
+            if not expiry:
+                return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+            expiry_utc = normalize_to_utc_aware(expiry)
+            if expiry_utc and utc_now_aware() > expiry_utc:
                 return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
 
             password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -492,25 +499,27 @@ def hr_login():
         if not email or not password:
             return jsonify({"error": "Email and password are required"}), 400
 
-        failed_attempts = get_recent_failed_attempts(email, 'HR', 15)
-        if failed_attempts >= 5:
-            record_login_attempt(email, 'HR', 'failed', ip_address, user_agent, 'Too many failed attempts')
-            return jsonify({"error": "Too many failed login attempts. Please try again later."}), 429
-
+        email_clean = email.strip().lower()
         signup_data = db_get(
-            'SELECT hrid, email, password, full_name, company FROM hr_signup WHERE email = ?',
-            (email,)
+            'SELECT hrid, email, password, full_name, company, is_head_hr FROM hr_signup WHERE LOWER(TRIM(email)) = ?',
+            (email_clean,)
         )
         if not signup_data:
             record_login_attempt(email, 'HR', 'failed', ip_address, user_agent, 'User not found')
             return jsonify({"error": "Invalid email or password"}), 401
 
-        if not bcrypt.checkpw(password.encode('utf-8'), signup_data['password'].encode('utf-8')):
+        stored = signup_data.get('password') or ''
+        if not stored:
+            record_login_attempt(email, 'HR', 'failed', ip_address, user_agent, 'Invalid password')
+            return jsonify({"error": "Invalid email or password"}), 401
+        stored_b = stored.encode('utf-8') if isinstance(stored, str) else stored
+        if not bcrypt.checkpw(password.encode('utf-8'), stored_b):
             record_login_attempt(email, 'HR', 'failed', ip_address, user_agent, 'Invalid password')
             return jsonify({"error": "Invalid email or password"}), 401
 
         user_id = signup_data['hrid']
-        identity = {"hrId": user_id, "email": signup_data['email'], "role": "HR"}
+        role = 'head_hr' if signup_data.get('is_head_hr') else 'HR'
+        identity = {"hrId": user_id, "email": signup_data['email'], "role": role}
         access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
         refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
 
@@ -546,7 +555,7 @@ def hr_login():
                 "email": signup_data['email'],
                 "fullName": signup_data['full_name'],
                 "company": signup_data['company'],
-                "role": "HR"
+                "role": role
             }
         })
     except Exception:

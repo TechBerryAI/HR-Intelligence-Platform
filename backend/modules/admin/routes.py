@@ -4,7 +4,7 @@ All routes require HR role via require_hr middleware.
 """
 from flask import Blueprint, request, jsonify, Response
 from werkzeug.utils import secure_filename
-from db import db_get, db_all
+from db import db_get, db_all, BACKEND, TRUE_SQL
 from utils import authenticate_token, require_hr
 from services.bulk_parsing_service import (
     upload_files as bulk_upload,
@@ -106,10 +106,10 @@ def job_matches():
         '''
         SELECT j.jdid, j.title, j.company, j.location, j.enabled,
                (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid) as application_count,
-               (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid AND a.shortlisted = 1) as shortlisted_count
+               (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid AND a.shortlisted = ''' + TRUE_SQL + ''') as shortlisted_count
         FROM jobs j
         WHERE j.posted_by = ?
-        ORDER BY j.created_at DESC
+        ORDER BY j.posted_on DESC
         ''',
         (hr_id,),
     )

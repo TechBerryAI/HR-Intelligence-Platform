@@ -40,10 +40,10 @@ function logStep(step, total, label) {
   console.log(`[start] [${timestamp()}] Step ${step}/${total}: ${label}`);
 }
 
-/** Run command without shell to avoid Node DEP0190 (args not escaped with shell). */
-function runCmd(cmd, args, cwd = ROOT, env = process.env) {
+/** Run command. useShell: on Windows set true for npm (npm.cmd). */
+function runCmd(cmd, args, cwd = ROOT, env = process.env, useShell = false) {
   return new Promise((resolve, reject) => {
-    const c = spawn(cmd, args, { cwd, env, stdio: 'inherit', shell: false });
+    const c = spawn(cmd, args, { cwd, env, stdio: 'inherit', shell: useShell });
     c.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`Exit ${code}`))));
   });
 }
@@ -80,7 +80,7 @@ function setupEnv() {
       process.exit(1);
     }
     fs.copyFileSync(BACKEND_ENV_EXAMPLE, BACKEND_ENV);
-    log('Created backend/.env from template. Configure MSSQL_USER and MSSQL_PASSWORD in backend/.env');
+    log('Created backend/.env from template. Configure POSTGRES_* or DATABASE_URL in backend/.env');
   } else {
     log('backend/.env exists');
   }
@@ -105,14 +105,9 @@ async function setupBackend() {
 
 async function setupFrontend() {
   logStep(4, 6, 'Setting up frontend (npm)');
-  const nodeModules = path.join(FRONTEND_DIR, 'node_modules');
-  if (!fs.existsSync(nodeModules)) {
-    log('Installing frontend dependencies (npm install)...');
-    await runCmd('npm', ['install'], FRONTEND_DIR);
-    log('Frontend dependencies installed');
-  } else {
-    log('Frontend node_modules present (run "npm install" in frontend/ to update)');
-  }
+  // Always run npm install so dependencies stay in sync. On Windows, shell: true is required to run npm (avoids spawn EINVAL).
+  log('Installing frontend dependencies from package.json...');
+  await runCmd('npm', ['install'], FRONTEND_DIR, process.env, process.platform === 'win32');
   log('Frontend setup complete');
 }
 
@@ -136,12 +131,15 @@ function startBackend() {
 
 function startFrontend() {
   logStep(6, 6, 'Starting frontend (Vite)');
-  // On Windows, npm is usually npm.cmd; shell: true is needed so the system finds it (spawn npm ENOENT otherwise).
+  // On Windows use shell with single command string to avoid spawn deprecation (args + shell).
   const useShell = process.platform === 'win32';
-  frontendProcess = spawn('npm', ['run', 'dev'], {
+  const cmd = useShell ? 'npm run dev' : 'npm';
+  const args = useShell ? [] : ['run', 'dev'];
+  frontendProcess = spawn(cmd, args, {
     cwd: FRONTEND_DIR,
     stdio: 'inherit',
     shell: useShell,
+    env: process.env,
   });
   frontendProcess.on('error', (err) => {
     log('Frontend failed to start: ' + err.message, 'err');
@@ -193,7 +191,8 @@ async function waitForReady(maxWaitMs = 60000) {
 function openBrowser() {
   const url = BROWSER_URL;
   const cmd = process.platform === 'win32' ? 'start' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-  spawn(cmd, [url], { stdio: 'ignore', shell: true }).on('error', () => {});
+  const fullCmd = process.platform === 'win32' ? `start "" "${url}"` : `${cmd} "${url}"`;
+  spawn(fullCmd, [], { stdio: 'ignore', shell: true }).on('error', () => {});
   log('Opening browser: ' + url);
 }
 

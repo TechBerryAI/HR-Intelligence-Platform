@@ -6,8 +6,9 @@ from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-# Load environment variables first
-load_dotenv()
+# Load .env from backend directory so mail/db config is found regardless of CWD
+_backend_dir = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(_backend_dir, '.env'))
 
 # Validate environment variables before proceeding
 from env_validator import EnvValidator
@@ -47,20 +48,33 @@ app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'true').lower() == 'true'
 app.config['MAIL_USE_SSL'] = os.getenv('MAIL_USE_SSL', 'false').lower() == 'true'
 app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')
-app.config['MAIL_DEFAULT_SENDER'] = os.getenv('MAIL_DEFAULT_SENDER', app.config.get('MAIL_USERNAME'))
+_raw_sender = (os.getenv('MAIL_DEFAULT_SENDER') or '').strip() or app.config.get('MAIL_USERNAME')
+app.config['MAIL_DEFAULT_SENDER'] = (_raw_sender.strip('"').strip("'") if _raw_sender else None) or app.config.get('MAIL_USERNAME')
 app.config['MAIL_SUPPRESS_SEND'] = os.getenv('MAIL_SUPPRESS_SEND', 'false').lower() == 'true'
+# Timeout for SMTP send (seconds); Flask-Mail has no built-in timeout
+app.config['MAIL_TIMEOUT'] = int(os.getenv('MAIL_TIMEOUT', '25'))
+# Optional: retries for transient SMTP failures
+app.config['MAIL_SEND_RETRIES'] = int(os.getenv('MAIL_SEND_RETRIES', '3'))
+
+# Validate mail config at startup when sending is enabled (catch MAIL_USERNAME=display name)
+if not app.config['MAIL_SUPPRESS_SEND'] and app.config.get('MAIL_USERNAME'):
+    un = app.config['MAIL_USERNAME'].strip()
+    if '@' not in un or '.' not in un.split('@')[-1]:
+        print("[MAIL] WARNING: MAIL_USERNAME should be the full email address (e.g. user@gmail.com), not a label. Current value may cause SMTP auth to fail.")
 # Disable strict slashes to prevent redirects that break CORS preflight
 app.url_map.strict_slashes = False
 
 cors_origins = _build_allowed_origins()
 print(f"[CORS] Allowed origins: {cors_origins}")
 
-# Simple and effective CORS configuration - allow all origins in development
+# CORS: use the explicit origin list so Flask-CORS reflects the actual Origin header.
+# browsers block credentialed requests (credentials: 'include') when the server
+# responds with Access-Control-Allow-Origin: * — a specific list is required.
 CORS(
     app,
     resources={
         r"/*": {
-            "origins": "*",
+            "origins": cors_origins,
             "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
             "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
             "expose_headers": ["Content-Type", "Authorization"],
@@ -71,19 +85,33 @@ CORS(
 )
 
 mail.init_app(app)
+# Log mail status at startup so we can see if .env was loaded when run from different CWD
+if app.config.get('MAIL_SUPPRESS_SEND') or not app.config.get('MAIL_USERNAME') or not app.config.get('MAIL_PASSWORD'):
+    print("[MAIL] Suppressed or missing creds — emails will NOT be sent. Check backend/.env and MAIL_USERNAME/MAIL_PASSWORD.")
+else:
+    print("[MAIL] Configured — sending enabled (server=%s, user=%s)" % (app.config['MAIL_SERVER'], app.config['MAIL_USERNAME']))
 init_models()
 
 from db import init_db  # noqa: E402
 from auth import auth_bp  # noqa: E402
-from jobs import jobs_bp  # noqa: E402
+try:
+    from jobs import jobs_bp  # noqa: E402
+except ImportError as e:
+    import traceback
+    print("[STARTUP] Failed to import jobs_bp from jobs. This usually means an import inside jobs.py (or its dependencies) failed.")
+    if getattr(e, '__cause__', None):
+        traceback.print_exception(type(e.__cause__), e.__cause__, e.__cause__.__traceback__)
+    else:
+        traceback.print_exc()
+    raise
 from candidate import candidate_bp  # noqa: E402
 from applications import applications_bp  # noqa: E402
 from sessions_routes import sessions_bp  # noqa: E402
-from routes.candidate_auth import candidate_auth_bp  # noqa: E402
 from routes.simple_candidate_auth import simple_candidate_auth_bp  # noqa: E402
 from parsing_routes import parsing_bp  # noqa: E402
 from support import support_bp  # noqa: E402
 from modules.admin.routes import admin_bp  # noqa: E402
+from super_admin import super_admin_bp  # noqa: E402
 
 # Database initialization - DO IT AT STARTUP, NOT LAZY
 # Lazy loading was causing 10+ second delays on first API call
@@ -92,6 +120,7 @@ try:
     init_db()
     print("[DB] Database initialized successfully")
 except Exception as e:
+    err_msg = str(e)
     print(f"[DB ERROR] Failed to initialize database: {e}")
     import traceback
     traceback.print_exc()
@@ -144,9 +173,7 @@ def test_cors():
 
 app.register_blueprint(auth_bp, url_prefix='/api')
 app.register_blueprint(jobs_bp, url_prefix='/api/jobs')
-# Use simple_candidate_auth (no SQLAlchemy conflicts) instead of candidate_auth
 app.register_blueprint(simple_candidate_auth_bp, url_prefix='/api/candidate')
-# app.register_blueprint(candidate_auth_bp, url_prefix='/api/candidate')  # Disabled - causes timeout
 app.register_blueprint(candidate_bp, url_prefix='/api/candidate')
 app.register_blueprint(applications_bp, url_prefix='/api/applications')
 app.register_blueprint(sessions_bp, url_prefix='/api/sessions')
@@ -154,6 +181,8 @@ app.register_blueprint(parsing_bp, url_prefix='/api')
 app.register_blueprint(support_bp, url_prefix='/api/support')
 # Admin-only: bulk resume parsing (proxy to Bulk-Resume-Parser), job matches (ATS results)
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
+# Super Admin: system-level god mode (separate credentials, separate route)
+app.register_blueprint(super_admin_bp, url_prefix='/api/super-admin')
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '3000'))

@@ -98,7 +98,11 @@ export default function CandidateCard({ candidate, onViewDetails, onViewReason }
       <div className="mt-4 pt-4 border-t border-zinc-700/50 flex gap-2">
         <button
           type="button"
-          onClick={() => onViewReason?.(candidate)}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            onViewReason?.(candidate)
+          }}
           className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-violet-500/25 hover:bg-violet-500/35 text-violet-200 font-medium text-sm transition-colors ring-1 ring-violet-500/30"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 shrink-0">

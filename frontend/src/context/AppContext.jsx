@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { apiRequest, setUnauthorizedHandler, setOnTokensRefreshed } from '../utils/api'
 import { tokenService } from '../utils/tokenService'
 import { checkBackendHealth } from '../utils/healthCheck'
@@ -9,6 +9,7 @@ const AppContext = createContext(null)
 const STORAGE_KEYS = {
   auth: 'authState',
   applicantAuth: 'applicantAuthState',
+  superAdminAuth: 'superAdminAuthState',
   applicantProfile: 'applicantProfileState',
   applicantApplications: 'applicantApplicationsState',
   applicantSavedJobs: 'applicantSavedJobsState',
@@ -51,6 +52,7 @@ export function AppProvider({ children }) {
 
   const defaultAuth = { isLoggedIn: false, role: null, email: '' }
   const defaultApplicantAuth = { isLoggedIn: false, email: '' }
+  const defaultSuperAdminAuth = { isLoggedIn: false, email: '' }
   const defaultApplicantProfile = {
     experienceLevel: '',
     servingNotice: '',
@@ -72,6 +74,7 @@ export function AppProvider({ children }) {
 
   const [auth, setAuth] = useState(() => readJson(STORAGE_KEYS.auth, defaultAuth))
   const [applicantAuth, setApplicantAuth] = useState(() => readJson(STORAGE_KEYS.applicantAuth, defaultApplicantAuth))
+  const [superAdminAuth, setSuperAdminAuth] = useState(() => readJson(STORAGE_KEYS.superAdminAuth, defaultSuperAdminAuth))
   const [token, setToken] = useState('')
   const [user, setUser] = useState(() => readJson(STORAGE_KEYS.user, null))
   const [authLoading, setAuthLoading] = useState(false)
@@ -144,6 +147,11 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
+    writeJson(STORAGE_KEYS.superAdminAuth, superAdminAuth)
+  }, [superAdminAuth])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
     writeJson(STORAGE_KEYS.applicantProfile, applicantProfile)
   }, [applicantProfile])
 
@@ -176,6 +184,10 @@ export function AppProvider({ children }) {
       })
       setApplicantAuth((prev) => {
         const stored = readJson(STORAGE_KEYS.applicantAuth, defaultApplicantAuth)
+        return JSON.stringify(prev) === JSON.stringify(stored) ? prev : stored
+      })
+      setSuperAdminAuth((prev) => {
+        const stored = readJson(STORAGE_KEYS.superAdminAuth, defaultSuperAdminAuth)
         return JSON.stringify(prev) === JSON.stringify(stored) ? prev : stored
       })
       setApplicantProfile((prev) => {
@@ -216,10 +228,11 @@ export function AppProvider({ children }) {
         tokenService.setToken(data.token)
         if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setUser(data.user)
-        const nextAuth = { isLoggedIn: true, role: 'HR', email: data.user.email || email }
+        const role = data.user.role || 'HR'
+        const nextAuth = { isLoggedIn: true, role, email: data.user.email || email, fullName: data.user.fullName, company: data.user.company }
         setAuth(nextAuth)
         writeJson(STORAGE_KEYS.auth, nextAuth)
-        return { ok: true }
+        return { ok: true, user: data.user }
       }
       return { ok: false, message: 'Invalid response from server' }
     } catch (err) {
@@ -267,22 +280,39 @@ export function AppProvider({ children }) {
     }
   }
 
-  // Fetch applications and saved jobs from backend
-  const fetchApplicantData = async () => {
-    if (!applicantAuth.isLoggedIn || !token) return
+  // Fetch applications, saved jobs, and profile from backend (single source of truth for profile).
+  // Memoized so consumers (e.g. ApplicationStatus) don't re-run their useEffects on every state
+  // update from this fetch (which would cause an infinite request loop).
+  const fetchApplicantData = useCallback(async () => {
+    const authToken = token || tokenService.getToken()
+    if (!applicantAuth.isLoggedIn || !authToken) return
     try {
-      const applications = await apiRequest('/api/applications', { method: 'GET', token }).catch(() => [])
-      
-      // Convert applications array to map
+      const profileRes = await apiRequest('/api/candidate/profile', { method: 'GET', token: authToken }).catch(() => null)
+      if (profileRes && typeof profileRes === 'object' && !profileRes.error) {
+        const hasServerProfile =
+          (profileRes.fullName && profileRes.fullName.trim()) ||
+          (profileRes.email && profileRes.email.trim()) ||
+          (profileRes.resumeFileName && profileRes.resumeFileName.trim()) ||
+          (Array.isArray(profileRes.education) && profileRes.education.length > 0) ||
+          (Array.isArray(profileRes.experiences) && profileRes.experiences.length > 0) ||
+          (Array.isArray(profileRes.certifications) && profileRes.certifications.length > 0)
+        if (hasServerProfile) {
+          setApplicantProfile(profileRes)
+          writeJson(STORAGE_KEYS.applicantProfile, profileRes)
+        }
+      }
+
+      const applications = await apiRequest('/api/applications', { method: 'GET', token: authToken }).catch(() => [])
       const applicationsMap = {}
       if (Array.isArray(applications)) {
         applications.forEach(app => {
-          // Handle both jobId and job.id formats from backend
           const jobId = app.jobId || (app.job && app.job.id) || app.job_id
           if (jobId) {
-            // Store as both number and string for compatibility
-            applicationsMap[jobId] = true
-            applicationsMap[String(jobId)] = true
+            const status = app.status || 'applied'
+            const shortlisted = !!app.shortlisted
+            const entry = { status, shortlisted }
+            applicationsMap[jobId] = entry
+            applicationsMap[String(jobId)] = entry
           }
         })
       }
@@ -291,7 +321,7 @@ export function AppProvider({ children }) {
     } catch (err) {
       console.error('Fetch applicant data error:', err)
     }
-  }
+  }, [token, applicantAuth.isLoggedIn])
 
   const loginApplicant = async (idOrEmail, password) => {
     setAuthError('')
@@ -310,19 +340,43 @@ export function AppProvider({ children }) {
         setApplicantAuth(nextApplicantAuth)
         writeJson(STORAGE_KEYS.applicantAuth, nextApplicantAuth)
         
-        // Load profile from backend if available
-        if (data.user.profile) {
-          setApplicantProfile(data.user.profile)
-          writeJson(STORAGE_KEYS.applicantProfile, data.user.profile)
+        // Use profile from login response if full (has fullName or education); otherwise fetch full profile from API
+        const loginProfile = data.user.profile
+        const hasFullProfile = loginProfile && (
+          (loginProfile.fullName || loginProfile.email) &&
+          (Array.isArray(loginProfile.education) || Array.isArray(loginProfile.experiences))
+        )
+        if (hasFullProfile) {
+          setApplicantProfile(loginProfile)
+          writeJson(STORAGE_KEYS.applicantProfile, loginProfile)
         } else {
           setApplicantProfile((p) => {
             const nextProfile = { ...p, email: data.user.email || idOrEmail }
             writeJson(STORAGE_KEYS.applicantProfile, nextProfile)
             return nextProfile
           })
+          // Fetch full profile from backend (includes saved resume) so data persists after server restart / login
+          try {
+            const fullProfile = await apiRequest('/api/candidate/profile', {
+              method: 'GET',
+              token: data.token
+            })
+            const hasAnyProfile =
+              (fullProfile && fullProfile.fullName && fullProfile.fullName.trim()) ||
+              (fullProfile && fullProfile.email && fullProfile.email.trim()) ||
+              (fullProfile && fullProfile.resumeFileName && fullProfile.resumeFileName.trim()) ||
+              (fullProfile && Array.isArray(fullProfile.education) && fullProfile.education.length > 0) ||
+              (fullProfile && Array.isArray(fullProfile.experiences) && fullProfile.experiences.length > 0)
+            if (hasAnyProfile) {
+              setApplicantProfile(fullProfile)
+              writeJson(STORAGE_KEYS.applicantProfile, fullProfile)
+            }
+          } catch (err) {
+            console.warn('Could not fetch profile after login:', err)
+          }
         }
-        
-        // Fetch applications and saved jobs
+
+        // Fetch applications and saved jobs (and re-fetch profile so resume is never missed)
         setTimeout(() => fetchApplicantData(), 100)
         
         return { ok: true }
@@ -490,16 +544,6 @@ export function AppProvider({ children }) {
   }
 
   const saveApplicantProfile = async (profile) => {
-    console.log('DEBUG: saveApplicantProfile called')
-    console.log('DEBUG: applicantAuth.isLoggedIn:', applicantAuth.isLoggedIn)
-    console.log('DEBUG: profile data:', {
-      fullName: profile.fullName,
-      email: profile.email,
-      experiences: profile.experiences?.length || 0,
-      education: profile.education?.length || 0,
-      certifications: profile.certifications?.length || 0
-    })
-    
     // Always save to localStorage first as backup - this ensures data is never lost
     const profileForStorage = { ...profile }
     // Don't store file object in localStorage
@@ -509,54 +553,34 @@ export function AppProvider({ children }) {
     const nextLocal = { ...applicantProfile, ...profileForStorage }
     setApplicantProfile(nextLocal)
     writeJson(STORAGE_KEYS.applicantProfile, nextLocal)
-    console.log('DEBUG: Saved to localStorage:', nextLocal)
-    
+
     if (!applicantAuth.isLoggedIn) {
-      // Save locally only if not logged in
-      console.log('DEBUG: User not logged in, saving locally only')
       return { ok: true, savedLocally: true }
     }
-    
-    // User is logged in, try to save to server
+
     if (!token) {
-      console.warn('DEBUG: User logged in but no token available, saving locally only')
       return { ok: true, savedLocally: true, warning: 'Not authenticated. Saved locally only.' }
     }
-    
+
     try {
-      // Check if there's a resume file to upload
       const resumeFile = profile.resumeFile
       const hasFile = resumeFile && resumeFile instanceof File
-      
-      console.log('DEBUG: saveApplicantProfile - resumeFile:', resumeFile)
-      console.log('DEBUG: saveApplicantProfile - hasFile:', hasFile)
-      console.log('DEBUG: saveApplicantProfile - profile keys:', Object.keys(profile))
-      console.log('DEBUG: saveApplicantProfile - experiences:', profile.experiences)
-      console.log('DEBUG: saveApplicantProfile - education:', profile.education)
-      console.log('DEBUG: saveApplicantProfile - certifications:', profile.certifications)
-      
+
       let body
       if (hasFile) {
-        console.log('DEBUG: Using FormData for file upload')
-        // Use FormData for file upload
         const formData = new FormData()
         formData.append('resume', resumeFile)
-        console.log('DEBUG: Added resume file to FormData, size:', resumeFile.size)
-        // Add other fields as JSON strings if they're arrays/objects, or as regular form fields
         Object.keys(profile).forEach(key => {
-          if (key === 'resumeFile') return // Skip the file object itself
+          if (key === 'resumeFile') return
           const value = profile[key]
           if (Array.isArray(value) || (typeof value === 'object' && value !== null)) {
             formData.append(key, JSON.stringify(value))
-            console.log(`DEBUG: Added ${key} as JSON string:`, JSON.stringify(value).substring(0, 100))
           } else if (value !== null && value !== undefined) {
             formData.append(key, value)
           }
         })
         body = formData
-        console.log('DEBUG: FormData created with keys:', Array.from(formData.keys()))
       } else {
-        console.log('DEBUG: Using JSON (no file)')
         // Use JSON for regular updates (without file)
         body = { ...profile }
         delete body.resumeFile // Remove file object from JSON
@@ -564,29 +588,20 @@ export function AppProvider({ children }) {
         if (!body.experiences) body.experiences = []
         if (!body.education) body.education = []
         if (!body.certifications) body.certifications = []
-        console.log('DEBUG: JSON body being sent:', JSON.stringify(body, null, 2).substring(0, 500))
       }
-      
-      console.log('DEBUG: Making API request to /api/candidate/profile')
+
       const response = await apiRequest('/api/candidate/profile', {
         method: 'POST',
         body: body,
         token
-      }).catch(err => {
-        console.error('DEBUG: API request failed:', err)
-        throw err
       })
-      
-      console.log('DEBUG: Save API response:', response)
-      
-      // Fetch updated profile from server to get latest resume info
+
       try {
         const updatedProfile = await apiRequest('/api/candidate/profile', {
           method: 'GET',
           token
         })
         if (updatedProfile) {
-          console.log('DEBUG: Fetched updated profile:', updatedProfile)
           // Merge updated profile with current profile data
           const next = { ...applicantProfile, ...profileForStorage, ...updatedProfile }
           // Don't store file object in localStorage
@@ -606,13 +621,6 @@ export function AppProvider({ children }) {
       // If we got here, the save succeeded but fetch failed
       return { ok: true, savedLocally: true }
     } catch (err) {
-      console.error('DEBUG: Save profile error:', err)
-      console.error('DEBUG: Error details:', {
-        message: err?.message,
-        error: err?.error,
-        status: err?.status,
-        response: err?.response
-      })
       const errorMessage = err?.message || err?.error || 'Failed to save profile to server'
       // Data is already saved locally, so return partial success
       // This ensures the user knows their data is safe even if server save fails
@@ -659,25 +667,32 @@ export function AppProvider({ children }) {
     if (!hasResume || !hasEducation) {
       return { ok: false, reason: 'profile_requirements_missing' }
     }
+    // Optimistic update: show "Applied" immediately
+    const newEntry = { status: 'applied', shortlisted: false }
+    setApplicantApplications((prev) => {
+      const next = { ...prev, [jobId]: newEntry, [String(jobId)]: newEntry }
+      writeJson(STORAGE_KEYS.applicantApplications, next)
+      return next
+    })
     try {
       await apiRequest('/api/applications', {
         method: 'POST',
         body: { jobId },
         token
       })
-      setApplicantApplications((prev) => {
-        const next = { ...prev }
-        // Store as both number and string for compatibility
-        next[jobId] = true
-        next[String(jobId)] = true
-        writeJson(STORAGE_KEYS.applicantApplications, next)
-        return next
-      })
-      // Refresh applications from backend to ensure sync
-      setTimeout(() => fetchApplicantData(), 500)
+      // Sync applications list in background (no delay)
+      fetchApplicantData()
       return { ok: true }
     } catch (err) {
       console.error('Apply error:', err)
+      // Revert optimistic update on failure
+      setApplicantApplications((prev) => {
+        const next = { ...prev }
+        delete next[jobId]
+        delete next[String(jobId)]
+        writeJson(STORAGE_KEYS.applicantApplications, next)
+        return next
+      })
       return { ok: false, message: err?.message || 'Failed to apply' }
     }
   }
@@ -700,9 +715,55 @@ export function AppProvider({ children }) {
     })
   }
 
+  const loginSuperAdmin = async (email, password) => {
+    setAuthError('')
+    setAuthLoading(true)
+    try {
+      const data = await apiRequest('/api/super-admin/login', {
+        method: 'POST',
+        body: { email, password },
+      })
+      if (data && data.token && data.user) {
+        // Super admin is exclusive: clear HR and applicant auth so only one session type is active.
+        // This prevents VM/local from showing HR dashboard when super admin is logged in (e.g. stale localStorage).
+        setAuth(defaultAuth)
+        setApplicantAuth(defaultApplicantAuth)
+        if (typeof window !== 'undefined') {
+          writeJson(STORAGE_KEYS.auth, defaultAuth)
+          writeJson(STORAGE_KEYS.applicantAuth, defaultApplicantAuth)
+        }
+        tokenService.setToken(data.token)
+        if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
+        setToken(data.token)
+        setUser(data.user)
+        const nextAuth = { isLoggedIn: true, email: data.user.email, name: data.user.name }
+        setSuperAdminAuth(nextAuth)
+        writeJson(STORAGE_KEYS.superAdminAuth, nextAuth)
+        return { ok: true }
+      }
+      return { ok: false, message: 'Invalid response from server' }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'Login failed' }
+    } finally {
+      setAuthLoading(false)
+    }
+  }
+
+  const logoutSuperAdmin = () => {
+    setSuperAdminAuth(defaultSuperAdminAuth)
+    setToken('')
+    tokenService.clear()
+    setUser(null)
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(STORAGE_KEYS.superAdminAuth)
+      window.localStorage.removeItem(STORAGE_KEYS.user)
+    }
+  }
+
   const logout = () => {
     setAuth(defaultAuth)
     setApplicantAuth(defaultApplicantAuth)
+    setSuperAdminAuth(defaultSuperAdminAuth)
     setApplicantProfile(defaultApplicantProfile)
     setApplicantApplications({})
     setApplicantSavedJobs({})
@@ -712,6 +773,7 @@ export function AppProvider({ children }) {
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(STORAGE_KEYS.auth)
       window.localStorage.removeItem(STORAGE_KEYS.applicantAuth)
+      window.localStorage.removeItem(STORAGE_KEYS.superAdminAuth)
       window.localStorage.removeItem(STORAGE_KEYS.applicantProfile)
       window.localStorage.removeItem(STORAGE_KEYS.applicantApplications)
       window.localStorage.removeItem(STORAGE_KEYS.applicantSavedJobs)
@@ -733,7 +795,13 @@ export function AppProvider({ children }) {
       })
       return { ok: true, data: data.applications || data || [] }
     } catch (err) {
-      console.error('Fetch applications error:', err)
+      // 404 = job not found or no access: show empty candidates instead of error
+      if (err?.status === 404) {
+        return { ok: true, data: [] }
+      }
+      if (import.meta.env?.DEV) {
+        console.error('Fetch applications error:', err)
+      }
       return { ok: false, message: err?.message || 'Failed to fetch applications' }
     }
   }
@@ -755,16 +823,13 @@ export function AppProvider({ children }) {
     }
   }
 
-  // Fetch jobs from backend
+  // Fetch jobs from backend. Always send token when available so HR sees only their jobs (backend filters by posted_by).
   const fetchJobs = async () => {
     setJobsLoading(true)
     setJobsError('')
     try {
-      // Only call protected /api/jobs/all when we have a token; avoids 401 -> logout cascade
-      const authToken = auth.isLoggedIn ? (token || tokenService.getToken()) : undefined
-      const useProtected = auth.isLoggedIn && auth.role === 'HR' && !!authToken
-      const endpoint = useProtected ? '/api/jobs/all' : '/api/jobs'
-      const data = await apiRequest(endpoint, { method: 'GET', token: authToken })
+      const authToken = token || tokenService.getToken()
+      const data = await apiRequest('/api/jobs', { method: 'GET', token: authToken })
       if (Array.isArray(data)) setJobs(data)
       else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)
       else setJobs([])
@@ -805,30 +870,15 @@ export function AppProvider({ children }) {
   // Admin: add a job (best-effort). If backend supports it, create and refresh list.
   const addJob = async (job) => {
     try {
-      console.log('addJob called with:', job)
-      console.log('Token available:', !!token)
-      console.log('Token value:', token ? token.substring(0, 20) + '...' : 'none')
-      console.log('BASE_URL:', import.meta.env?.VITE_API_URL || 'not set')
-      console.log('Making API request to /api/jobs')
-      
       if (!token) {
         console.error('No token available - user may not be logged in')
         return { success: false, error: 'You must be logged in to create a job. Please log in and try again.' }
       }
       
       const result = await apiRequest('/api/jobs', { method: 'POST', body: job, token })
-      console.log('API request successful:', result)
       await fetchJobs()
       return { success: true, data: result }
     } catch (err) {
-      console.error('Add job error:', err)
-      console.error('Error details:', {
-        message: err?.message,
-        status: err?.status,
-        data: err?.data,
-        cause: err?.cause
-      })
-      
       let errorMessage = 'Failed to create job'
       if (err?.status === 401 || err?.status === 403) {
         errorMessage = 'Authentication failed. Please log in again.'
@@ -897,6 +947,9 @@ export function AppProvider({ children }) {
     authLoading,
     authError,
     loginHR,
+    superAdminAuth,
+    loginSuperAdmin,
+    logoutSuperAdmin,
     applicantAuth,
     applicantProfile,
     applicantApplications,
@@ -925,7 +978,7 @@ export function AppProvider({ children }) {
     fetchApplicationsForJob,
     fetchAllApplications,
     backendHealthy,
-  }), [jobs, jobsLoading, jobsError, auth, authLoading, authError, applicantAuth, applicantProfile, applicantApplications, applicantSavedJobs, user, token, backendHealthy])
+  }), [jobs, jobsLoading, jobsError, auth, authLoading, authError, superAdminAuth, applicantAuth, applicantProfile, applicantApplications, applicantSavedJobs, user, token, backendHealthy])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

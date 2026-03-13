@@ -1,12 +1,27 @@
 import random
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+
+
+def utc_now_aware() -> datetime:
+    """Return current UTC time as timezone-aware (for comparing with PG timestamptz)."""
+    return datetime.now(timezone.utc)
+
+
+def normalize_to_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
+    """Convert a datetime to timezone-aware UTC. Handles naive (from MSSQL) and aware (from PostgreSQL)."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 from flask import current_app
 from flask_mail import Message
 
 from extensions import mail
+from helpers.mail_send import send_with_timeout_and_retries
 
 GMAIL_REGEX = re.compile(r'^[A-Za-z0-9._%+-]+@gmail\.com$', re.IGNORECASE)
 # General email regex: accepts any email with @ symbol and valid domain
@@ -83,12 +98,13 @@ def send_email_otp(recipient: str, otp: str, user_type: str = "Candidate") -> bo
         )
         print(f"[SEND_EMAIL_OTP] Sending email to {recipient} with OTP: {otp}")
         msg = Message(subject=subject, recipients=[recipient], body=body)
-        mail.send(msg)
-        print(f"[SEND_EMAIL_OTP] Email sent successfully to {recipient}")
-        return True
+        ok = send_with_timeout_and_retries(msg)
+        if ok:
+            print(f"[SEND_EMAIL_OTP] Email sent successfully to {recipient}")
+        return ok
     except Exception as exc:
         if current_app:
-            current_app.logger.error("Failed to send email OTP: %s", exc)
+            current_app.logger.error("Failed to send email OTP: %s", exc, exc_info=True)
         else:
             print(f"[SEND_EMAIL_OTP] Failed to send email OTP: {exc}")
         return False

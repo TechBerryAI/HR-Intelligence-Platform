@@ -2,10 +2,10 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiBriefcase, FiUser, FiFileText, FiLogOut, FiUsers, FiHelpCircle, FiMessageCircle, FiBook } from 'react-icons/fi'
+import { FiBriefcase, FiUser, FiFileText, FiLogOut, FiUsers, FiHelpCircle, FiMessageCircle, FiBook, FiShield } from 'react-icons/fi'
 
 export default function Navbar() {
-  const { auth, applicantAuth, applicantProfile, logout, user } = useApp()
+  const { auth, applicantAuth, applicantProfile, logout, user, superAdminAuth } = useApp()
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [hrMenuOpen, setHrMenuOpen] = useState(false)
@@ -17,8 +17,9 @@ export default function Navbar() {
   const activeClass = ({ isActive }) =>
     isActive ? 'text-white font-semibold' : 'text-zinc-300 hover:text-white transition-colors'
 
-  const isHrLoggedIn = auth.isLoggedIn && auth.role === 'HR'
+  const isHrLoggedIn = auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')
   const isApplicantLoggedIn = applicantAuth.isLoggedIn && !isHrLoggedIn
+  const isSuperAdminLoggedIn = superAdminAuth?.isLoggedIn
 
   const applicantInitials = (() => {
     const name = applicantProfile?.completed && applicantProfile?.fullName ? applicantProfile.fullName : ''
@@ -85,7 +86,7 @@ export default function Navbar() {
                 Jobs
               </motion.span>
             </NavLink>
-            {!isHrLoggedIn && !isApplicantLoggedIn ? (
+            {!isHrLoggedIn && !isApplicantLoggedIn && !isSuperAdminLoggedIn ? (
               <>
                 <NavLink to="/login" className={activeClass}>
                   <motion.span whileHover={{ scale: 1.05 }} className="inline-block">
@@ -211,7 +212,21 @@ export default function Navbar() {
                 )}
               </>
             )}
-            
+
+            {/* Super Admin: direct link to Overview (no dropdown) */}
+            {isSuperAdminLoggedIn && (
+              <Link to="/super-admin">
+                <motion.span
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 shadow-glow transition-all duration-200 inline-block"
+                >
+                  <FiShield className="w-3.5 h-3.5" />
+                  Super Admin
+                </motion.span>
+              </Link>
+            )}
+
             {/* Support Dropdown - Always at the end */}
             <div className="relative" ref={supportMenuRef}>
               <motion.button

@@ -15,13 +15,15 @@ venv.bak/
 .venv/
 virtualenv/
 
-# Python Cache
+# Python Cache (do not commit)
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.pyc
 *.pyo
 *.pyd
+.mypy_cache/
 
 # Python Build
 build/

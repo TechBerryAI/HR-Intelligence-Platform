@@ -52,13 +52,15 @@ def authenticate_token(f):
 
 
 def require_hr(f):
+    """Allow HR and Head of HR (head_hr has same job/candidate access as HR, plus admin management)."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         print(f"[HR CHECK] Checking HR access for {request.method} {request.path}")
         user = getattr(request, 'user', None)
         print(f"[HR CHECK] User: {user}")
-        if not user or user.get('role') != 'HR':
-            print(f"[HR CHECK] Access denied - role: {user.get('role') if user else 'none'}")
+        role = user.get('role') if user else None
+        if not user or role not in ('HR', 'head_hr'):
+            print(f"[HR CHECK] Access denied - role: {role if user else 'none'}")
             return jsonify({"error": "HR access required"}), 403
         print("[HR CHECK] HR access granted")
         return f(*args, **kwargs)
@@ -70,5 +72,48 @@ def require_candidate(f):
     def wrapper(*args, **kwargs):
         if not getattr(request, 'user', None) or request.user.get('role') != 'candidate':
             return jsonify({"error": "Candidate access required"}), 403
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def require_super_admin(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        user = getattr(request, 'user', None)
+        if not user or user.get('role') != 'super_admin':
+            return jsonify({"error": "Super admin access required"}), 403
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def require_head_hr(f):
+    """Head of HR or super admin can access."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        user = getattr(request, 'user', None)
+        role = user.get('role') if user else None
+        if not user or role not in ('head_hr', 'super_admin'):
+            return jsonify({"error": "Head of HR or super admin access required"}), 403
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def optional_authenticate_token(f):
+    """If Authorization Bearer is present, require valid JWT (401 on invalid/expired). If no header, set request.user = None."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else None
+        request.user = None
+        if token:
+            try:
+                user = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+                if user.get('type') == 'refresh':
+                    return jsonify({"error": "Invalid or expired token"}), 401
+                request.user = user
+            except jwt.ExpiredSignatureError:
+                return jsonify({"error": "Invalid or expired token"}), 401
+            except Exception:
+                return jsonify({"error": "Invalid or expired token"}), 401
         return f(*args, **kwargs)
     return wrapper

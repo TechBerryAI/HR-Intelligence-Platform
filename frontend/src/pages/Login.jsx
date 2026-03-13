@@ -368,18 +368,6 @@ export default function Login() {
 											<FiArrowRight className="w-4 h-4 relative z-10 group-hover/btn:translate-x-1 transition-transform" />
 										</motion.button>
 									</Link>
-
-									<motion.p
-										initial={{ opacity: 0 }}
-										animate={{ opacity: 1 }}
-										transition={{ delay: 1.0 }}
-										className="mt-4 text-center text-xs text-zinc-500"
-									>
-										Don't have an account?{' '}
-										<Link to="/signup/admin" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
-											Sign up
-										</Link>
-									</motion.p>
 								</div>
 							</motion.div>
 						</div>

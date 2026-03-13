@@ -1,10 +1,25 @@
-import json
 import re
+from datetime import datetime
 from flask import Blueprint, request, jsonify
-from db import db_all, db_get, db_run
-from utils import authenticate_token, require_hr
+from db import db_all, db_get, db_run, BACKEND, TRUE_SQL, FALSE_SQL
+from utils import authenticate_token, require_hr, optional_authenticate_token
+from toon import toon_loads_flex
 
 jobs_bp = Blueprint('jobs', __name__)
+
+
+def _send_notification(hr_action, candidate_name, candidate_email, job_title, company_name, application_id, timestamp):
+    """Lazy import so jobs_bp loads even if notification service or its deps (flask_mail, etc.) fail."""
+    from services.candidate_notification_service import send_and_get_output
+    return send_and_get_output(
+        hr_action=hr_action,
+        candidate_name=candidate_name,
+        candidate_email=candidate_email,
+        job_title=job_title,
+        company_name=company_name,
+        application_id=application_id,
+        timestamp=timestamp,
+    )
 
 
 def _resume_bytes(data):
@@ -42,23 +57,39 @@ def generate_jdid_from_title(title):
         # Take first letter of each word, up to reasonable length
         prefix = ''.join(words[:5])  # Max 5 letters for prefix
     
-    # Find the last jdid with this prefix
-    # Handle both old INT jdid and new NVARCHAR jdid
-    existing = db_get(
-        '''
-        SELECT TOP 1 jdid 
-        FROM jobs 
-        WHERE jdid LIKE ?
-        ORDER BY 
-          CASE 
-            WHEN ISNUMERIC(SUBSTRING(jdid, LEN(?) + 1, 10)) = 1 
-            THEN CAST(SUBSTRING(jdid, LEN(?) + 1, 10) AS INT)
-            ELSE 0
-          END DESC,
-          jdid DESC
-        ''',
-        (f'{prefix}%', prefix, prefix)
-    )
+    # Find the last jdid with this prefix (e.g. DA001, SD002)
+    if BACKEND == "postgresql":
+        # PostgreSQL: use SUBSTRING and ~ for numeric suffix
+        existing = db_get(
+            '''
+            SELECT jdid FROM jobs
+            WHERE jdid LIKE ?
+            ORDER BY
+              CASE WHEN SUBSTRING(jdid FROM LENGTH(?) + 1) ~ '^[0-9]+$'
+                THEN CAST(SUBSTRING(jdid FROM LENGTH(?) + 1) AS INT)
+                ELSE 0
+              END DESC NULLS LAST,
+              jdid DESC
+            LIMIT 1
+            ''',
+            (f'{prefix}%', prefix, prefix)
+        )
+    else:
+        existing = db_get(
+            '''
+            SELECT TOP 1 jdid
+            FROM jobs
+            WHERE jdid LIKE ?
+            ORDER BY
+              CASE
+                WHEN ISNUMERIC(SUBSTRING(jdid, LEN(?) + 1, 10)) = 1
+                THEN CAST(SUBSTRING(jdid, LEN(?) + 1, 10) AS INT)
+                ELSE 0
+              END DESC,
+              jdid DESC
+            ''',
+            (f'{prefix}%', prefix, prefix)
+        )
     
     if existing and existing.get('jdid'):
         try:
@@ -84,17 +115,42 @@ def generate_jdid_from_title(title):
 
 
 @jobs_bp.get('/')
+@optional_authenticate_token
 def get_jobs_public():
+    """List jobs. If authenticated as HR, return only jobs posted by that HR. Otherwise return enabled jobs (public)."""
     try:
-        jobs = db_all(
-            '''
-            SELECT j.*, hs.company as company_name
-            FROM jobs j
-            LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-            WHERE j.enabled = 1
-            ORDER BY j.posted_on DESC
-            '''
-        )
+        user = getattr(request, 'user', None)
+        if user and user.get('role') == 'HR' and user.get('hrId'):
+            # Admin: only jobs posted by this HR
+            jobs = db_all(
+                '''
+                SELECT j.*, hs.company as company_name
+                FROM jobs j
+                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+                WHERE j.posted_by = ?
+                ORDER BY j.posted_on DESC
+                ''',
+                (user.get('hrId'),)
+            )
+            # Optionally restrict to jobs whose company matches JWT; if that would hide all, show all (avoid data mismatch hiding jobs)
+            hr_company = (user.get('company') or '').strip()
+            if hr_company:
+                hr_company_lower = hr_company.lower()
+                filtered = [j for j in jobs if (j.get('company') or '').strip().lower() == hr_company_lower]
+                if len(filtered) > 0 or len(jobs) == 0:
+                    jobs = filtered
+                # else: keep full list so HR still sees their jobs
+        else:
+            # Public / candidate: only enabled jobs (treat NULL enabled as visible)
+            jobs = db_all(
+                '''
+                SELECT j.*, hs.company as company_name
+                FROM jobs j
+                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+                WHERE (j.enabled = ''' + TRUE_SQL + ''' OR j.enabled IS NULL)
+                ORDER BY j.posted_on DESC
+                '''
+            )
         formatted = [
             {
                 'id': j['jdid'],
@@ -149,7 +205,9 @@ def get_jobs_all():
 
 
 @jobs_bp.get('/<string:job_id>')
+@optional_authenticate_token
 def get_job(job_id: str):
+    """Get one job. HR sees only their own; candidates/public see enabled jobs only."""
     try:
         job = db_get(
             '''
@@ -161,6 +219,15 @@ def get_job(job_id: str):
         )
         if not job:
             return jsonify({'error': 'Job not found'}), 404
+        user = getattr(request, 'user', None)
+        if user and user.get('role') == 'HR':
+            # HR may only view/edit jobs they posted
+            if job.get('posted_by') != user.get('hrId'):
+                return jsonify({'error': 'Job not found or access denied'}), 404
+        else:
+            # Candidate/public: only enabled jobs
+            if not job.get('enabled'):
+                return jsonify({'error': 'Job not found'}), 404
         return jsonify({
             'id': job['jdid'],
             'title': job['title'],
@@ -184,8 +251,9 @@ def get_job_applications(job_id: str):
         # Verify job belongs to HR user
         job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
         if not job:
-            return jsonify({'error': 'Job not found or access denied'}), 404
-        
+            # Return 200 with empty list so UI shows "No candidates" instead of errors; avoids 404 in terminal
+            return jsonify({'applications': []}), 200
+
         # Get applications with candidate details (include ATS: match_score, shortlisted, ats_reasoning, ats_analysis)
         applications = db_all(
             '''
@@ -228,8 +296,9 @@ def get_job_applications(job_id: str):
             candidate_id = app['candidate_id']
             
             # Get education
+            _cgpa_col = '"cgpa/percentage"' if BACKEND == "postgresql" else "[cgpa/percentage]"
             education = db_all(
-                'SELECT degree, institution, [cgpa/percentage] as cgpa, start_date, end_date FROM candidate_education WHERE candidate_id = ?',
+                'SELECT degree, institution, ' + _cgpa_col + ' as cgpa, start_date, end_date FROM candidate_education WHERE candidate_id = ?',
                 (candidate_id,)
             )
             
@@ -267,12 +336,7 @@ def get_job_applications(job_id: str):
             score_display = match_score if match_score is not None else matching_pct
             
             ats_analysis_raw = app.get('ats_analysis')
-            ats_analysis = None
-            if ats_analysis_raw:
-                try:
-                    ats_analysis = json.loads(ats_analysis_raw) if isinstance(ats_analysis_raw, str) else ats_analysis_raw
-                except (TypeError, ValueError):
-                    pass
+            ats_analysis = toon_loads_flex(ats_analysis_raw) if ats_analysis_raw else None
             formatted_apps.append({
                 'id': app['id'],
                 'candidateId': app['candidate_id'],
@@ -388,6 +452,113 @@ def get_candidate_resume(job_id: str, candidate_id: str):
         return jsonify({'error': 'Internal server error'}), 500
 
 
+@jobs_bp.post('/<string:job_id>/applications/<string:candidate_id>/viewed')
+@authenticate_token
+@require_hr
+def record_profile_viewed(job_id: str, candidate_id: str):
+    """Record that HR viewed this candidate's profile for this job. Sends email and updates status."""
+    try:
+        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        if not job:
+            return jsonify({'error': 'Job not found or access denied'}), 404
+        app = db_get(
+            'SELECT id, status, shortlisted FROM applications WHERE job_id = ? AND candidate_id = ?',
+            (job_id, candidate_id)
+        )
+        if not app:
+            return jsonify({'error': 'Application not found'}), 404
+        current_status = (app.get('status') or '').lower()
+        is_shortlisted = app.get('shortlisted') in (True, 1, 't', 'true', '1')
+        if current_status == 'shortlisted' or current_status == 'rejected' or is_shortlisted:
+            return jsonify({
+                'status': 'ok',
+                'profile_update': {
+                    'application_id': str(app['id']),
+                    'status': 'Shortlisted' if (current_status == 'shortlisted' or is_shortlisted) else 'Rejected',
+                    'updated_at': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+                    'unchanged': True,
+                }
+            }), 200
+        profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
+        signup = db_get('SELECT email FROM candidate_signup WHERE cid = ?', (candidate_id,))
+        app['full_name'] = (profile or {}).get('full_name') or ''
+        app['email'] = (profile or {}).get('email') or (signup or {}).get('email') or ''
+        ts = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        status_db = 'profile_viewed'
+        if app['email']:
+            out = _send_notification(
+                hr_action='PROFILE_VIEWED',
+                candidate_name=app.get('full_name') or '',
+                candidate_email=app['email'],
+                job_title=job.get('title') or '',
+                company_name=job.get('company') or '',
+                application_id=app['id'],
+                timestamp=ts,
+            )
+            status_db = out['profile_update']['status_db']
+        db_run(
+            'UPDATE applications SET status = ? WHERE id = ?',
+            (status_db, app['id'])
+        )
+        return jsonify({'status': 'ok', 'profile_update': {'application_id': str(app['id']), 'status': 'Profile Viewed', 'updated_at': ts}}), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        print(f"Error in record_profile_viewed: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@jobs_bp.patch('/<string:job_id>/applications/<string:candidate_id>/status')
+@authenticate_token
+@require_hr
+def update_application_status(job_id: str, candidate_id: str):
+    """Shortlist or reject candidate. Body: { "action": "shortlist" | "reject" }."""
+    try:
+        data = request.get_json(force=True) or {}
+        action = (data.get('action') or '').strip().lower()
+        if action not in ('shortlist', 'reject'):
+            return jsonify({'error': 'action must be "shortlist" or "reject"'}), 400
+        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        if not job:
+            return jsonify({'error': 'Job not found or access denied'}), 404
+        app = db_get('SELECT id FROM applications WHERE job_id = ? AND candidate_id = ?', (job_id, candidate_id))
+        if not app:
+            return jsonify({'error': 'Application not found'}), 404
+        profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
+        signup = db_get('SELECT email FROM candidate_signup WHERE cid = ?', (candidate_id,))
+        app['full_name'] = (profile or {}).get('full_name') or ''
+        app['email'] = (profile or {}).get('email') or (signup or {}).get('email') or ''
+        if not app['email']:
+            return jsonify({'error': 'Candidate email not found; cannot send notification'}), 400
+        hr_action = 'SHORTLISTED' if action == 'shortlist' else 'NOT_SHORTLISTED'
+        ts = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        out = _send_notification(
+            hr_action=hr_action,
+            candidate_name=app.get('full_name') or '',
+            candidate_email=app.get('email') or '',
+            job_title=job.get('title') or '',
+            company_name=job.get('company') or '',
+            application_id=app['id'],
+            timestamp=ts,
+        )
+        _sl = action == 'shortlist'
+        _sl_val = _sl if BACKEND == 'postgresql' else (1 if _sl else 0)
+        db_run(
+            'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
+            (out['profile_update']['status_db'], _sl_val, app['id'])
+        )
+        return jsonify({'status': 'ok', 'profile_update': out['profile_update']}), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        print(f"Error in update_application_status: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error'}), 500
+
+
 @jobs_bp.post('/')
 @authenticate_token
 @require_hr
@@ -435,11 +606,13 @@ def create_job():
         
         description = (data.get('description') or '').strip()
         
-        # Get company from HR profile if not provided
-        if not company and request.user.get('hrId'):
-            hr_profile = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (request.user.get('hrId'),))
-            if hr_profile:
-                company = hr_profile.get('company') or ''
+        # Company is always taken from the HR account — not from request body (keeps it unchangeable)
+        hr_id = request.user.get('hrId')
+        if hr_id:
+            hr_profile = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (hr_id,))
+            if hr_profile and (hr_profile.get('company') or '').strip():
+                company = (hr_profile.get('company') or '').strip()
+            # else keep company from request only if HR has no company set (e.g. legacy)
         
         if not title or not company or not location or not description:
             missing_fields = []
@@ -461,12 +634,13 @@ def create_job():
         print(f"Prepared job data: jdid={jdid}, title={title}, company={company}, location={location}, hr_id={hr_id}")
         print("Executing INSERT query...")
         
+        _enabled_val = True if BACKEND == 'postgresql' else 1
         result = db_run(
             '''
             INSERT INTO jobs (jdid, title, company, location, salary, experience, description, posted_by, enabled)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
-            (jdid, title, company, location, salary, experience, description, hr_id)
+            (jdid, title, company, location, salary, experience, description, hr_id, _enabled_val)
         )
         print(f"INSERT result: {result}")
         
@@ -573,8 +747,12 @@ def update_job(job_id: str):
             if new_jdid != job_id:
                 # Update applications table
                 db_run('UPDATE applications SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
-                # Update saved_jobs table
-                db_run('UPDATE saved_jobs SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
+                # saved_jobs table was removed in migrations; skip if present
+                if BACKEND != "postgresql":
+                    try:
+                        db_run('UPDATE saved_jobs SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
+                    except Exception:
+                        pass
 
         # Update job with new jdid if it changed
         db_run(
@@ -616,7 +794,8 @@ def toggle_job(job_id: str):
         job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
-        db_run('UPDATE jobs SET enabled = ? WHERE jdid = ?', (1 if enabled else 0, job_id))
+        _enabled = (True, False) if BACKEND == 'postgresql' else (1, 0)
+        db_run('UPDATE jobs SET enabled = ? WHERE jdid = ?', (_enabled[0] if enabled else _enabled[1], job_id))
         return jsonify({'message': 'Job status updated', 'enabled': enabled})
     except Exception:
         return jsonify({'error': 'Internal server error'}), 500

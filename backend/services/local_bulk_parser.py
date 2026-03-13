@@ -16,8 +16,8 @@ _local_jobs_lock = threading.Lock()
 
 ALLOWED_EXT = {'pdf', 'doc', 'docx'}
 
-# Parallel workers for bulk parse (default 12 for speed; set BULK_PARSE_MAX_WORKERS lower if hitting API rate limits)
-BULK_PARSE_MAX_WORKERS = max(1, min(24, int(os.getenv('BULK_PARSE_MAX_WORKERS', '12'))))
+# Parallel workers for bulk parse. With 4 Grok keys, 6–8 balances speed and rate limits; increase if you have more keys.
+BULK_PARSE_MAX_WORKERS = max(1, min(24, int(os.getenv('BULK_PARSE_MAX_WORKERS', '6'))))
 
 
 def _flatten_toon(toon: dict, filename: str) -> dict:

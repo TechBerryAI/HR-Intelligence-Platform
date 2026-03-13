@@ -7,16 +7,25 @@ import bcrypt
 import jwt
 from flask import Blueprint, jsonify, request
 from datetime import datetime, timedelta
-from db import db_get, db_run, db_all
+from db import db_get, db_run, db_all, BACKEND, NOW_SQL, TRUE_SQL
 from helpers.otp_utils import (
     generate_otp,
     is_valid_email,
     send_email_otp,
-    parse_otp_expiry
+    parse_otp_expiry,
+    utc_now_aware,
+    normalize_to_utc_aware,
 )
+
+
+def _otp_expiry_utc():
+    """OTP valid for 5 minutes from now, as timezone-aware UTC (so PG stores correct instant)."""
+    return utc_now_aware() + timedelta(minutes=5)
 from utils import build_jwt_payload
 
 simple_candidate_auth_bp = Blueprint('simple_candidate_auth', __name__)
+# PostgreSQL requires quoted identifiers for mixed-case table names
+CAUTH_T = '"CandidateAuth"' if BACKEND == 'postgresql' else 'CandidateAuth'
 
 JWT_SECRET = os.getenv(
     'JWT_SECRET',
@@ -49,16 +58,16 @@ def candidate_signup():
         
         email = email_input
         
-        # Generate OTP and expiry
+        # Generate OTP and expiry (use aware UTC so PostgreSQL stores correct instant)
         otp = generate_otp()
-        expiry = datetime.utcnow() + timedelta(minutes=5)
+        expiry = _otp_expiry_utc()
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         
         print(f"[CANDIDATE SIGNUP] Generated OTP for {email}: {otp}")
         
         # Check if candidate already exists in CandidateAuth table
         existing = db_get(
-            'SELECT id, is_verified FROM CandidateAuth WHERE email = ?',
+            'SELECT id, is_verified FROM ' + CAUTH_T + ' WHERE email = ?',
             (email,)
         )
         
@@ -68,24 +77,21 @@ def candidate_signup():
             
             # Update existing unverified record with new OTP
             db_run(
-                '''UPDATE CandidateAuth 
-                   SET name = ?, password_hash = ?, otp = ?, otp_expiry = ?, updated_at = SYSUTCDATETIME()
-                   WHERE email = ?''',
+                'UPDATE ' + CAUTH_T + ' SET name = ?, password_hash = ?, otp = ?, otp_expiry = ?, updated_at = ' + NOW_SQL + ' WHERE email = ?',
                 (name, password_hash, otp, expiry, email)
             )
             print(f"[CANDIDATE SIGNUP] Updated existing unverified account for: {email} with OTP: {otp}")
         else:
-            # Insert new candidate auth record
+            # Insert new candidate auth record (is_verified: boolean in PG, bit in MSSQL - use param)
             db_run(
-                '''INSERT INTO CandidateAuth (name, email, password_hash, otp, otp_expiry, is_verified, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, 0, SYSUTCDATETIME(), SYSUTCDATETIME())''',
-                (name, email, password_hash, otp, expiry)
+                'INSERT INTO ' + CAUTH_T + ' (name, email, password_hash, otp, otp_expiry, is_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ' + NOW_SQL + ', ' + NOW_SQL + ')',
+                (name, email, password_hash, otp, expiry, False if BACKEND == 'postgresql' else 0)
             )
             print(f"[CANDIDATE SIGNUP] Created new candidate auth for: {email} with OTP: {otp}")
         
         # Verify what was actually stored in the database
         try:
-            stored_candidate = db_get('SELECT otp FROM CandidateAuth WHERE email = ?', (email,))
+            stored_candidate = db_get('SELECT otp FROM ' + CAUTH_T + ' WHERE email = ?', (email,))
             if stored_candidate:
                 print(f"[CANDIDATE SIGNUP] OTP in database after save: {stored_candidate.get('otp')}")
             else:
@@ -125,7 +131,7 @@ def verify_candidate_otp():
         
         # Get candidate from CandidateAuth
         candidate = db_get(
-            'SELECT id, name, email, password_hash, otp, otp_expiry, is_verified FROM CandidateAuth WHERE email = ?',
+            'SELECT id, name, email, password_hash, otp, otp_expiry, is_verified FROM ' + CAUTH_T + ' WHERE email = ?',
             (email,)
         )
         
@@ -140,15 +146,19 @@ def verify_candidate_otp():
         if not stored_otp or stored_otp != otp:
             return jsonify({'error': 'Invalid OTP. Please try again.'}), 400
         
-        # Check expiry
+        # Check expiry (PG returns timezone-aware timestamps; use aware UTC for comparison)
         otp_expiry = parse_otp_expiry(candidate.get('otp_expiry'))
-        if not otp_expiry or datetime.utcnow() > otp_expiry:
+        if not otp_expiry:
+            return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+        now_utc = utc_now_aware()
+        otp_expiry_utc = normalize_to_utc_aware(otp_expiry)
+        if now_utc > otp_expiry_utc:
             return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
         
-        # Mark as verified in CandidateAuth
+        # Mark as verified in CandidateAuth (is_verified: boolean in PG)
         db_run(
-            'UPDATE CandidateAuth SET is_verified = 1, otp = NULL, otp_expiry = NULL, updated_at = SYSUTCDATETIME() WHERE email = ?',
-            (email,)
+            'UPDATE ' + CAUTH_T + ' SET is_verified = ?, otp = NULL, otp_expiry = NULL, updated_at = ' + NOW_SQL + ' WHERE email = ?',
+            (True if BACKEND == 'postgresql' else 1, email)
         )
         
         # Create or update candidate_signup record
@@ -173,10 +183,10 @@ def verify_candidate_otp():
             )
             
             # Fetch the newly created cid
-            new_signup = db_get(
-                'SELECT TOP 1 cid FROM candidate_signup WHERE email = ? ORDER BY created_at DESC',
-                (email,)
-            )
+            if BACKEND == "postgresql":
+                new_signup = db_get('SELECT cid FROM candidate_signup WHERE email = ? ORDER BY created_at DESC LIMIT 1', (email,))
+            else:
+                new_signup = db_get('SELECT TOP 1 cid FROM candidate_signup WHERE email = ? ORDER BY created_at DESC', (email,))
             
             if not new_signup:
                 return jsonify({'error': 'Account creation failed. Please try again.'}), 500
@@ -211,7 +221,7 @@ def resend_candidate_otp():
         
         # Get candidate from CandidateAuth
         candidate = db_get(
-            'SELECT id, email, is_verified FROM CandidateAuth WHERE email = ?',
+            'SELECT id, email, is_verified FROM ' + CAUTH_T + ' WHERE email = ?',
             (email,)
         )
         
@@ -221,13 +231,13 @@ def resend_candidate_otp():
         if candidate.get('is_verified'):
             return jsonify({'error': 'Account already verified. Please login.'}), 400
         
-        # Generate new OTP
+        # Generate new OTP (use aware UTC so PostgreSQL stores correct instant)
         otp = generate_otp()
-        expiry = datetime.utcnow() + timedelta(minutes=5)
+        expiry = _otp_expiry_utc()
         
         # Update OTP in database
         db_run(
-            'UPDATE CandidateAuth SET otp = ?, otp_expiry = ?, updated_at = SYSUTCDATETIME() WHERE email = ?',
+            'UPDATE ' + CAUTH_T + ' SET otp = ?, otp_expiry = ?, updated_at = ' + NOW_SQL + ' WHERE email = ?',
             (otp, expiry, email)
         )
         
@@ -328,64 +338,4 @@ def simple_candidate_login():
         print(f"[LOGIN ERROR] {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': 'Login failed. Please try again.'}), 500
-
-
-@simple_candidate_auth_bp.get('/profile')
-def get_candidate_profile():
-    """Get candidate profile - simple version"""
-    try:
-        # Get token from Authorization header
-        auth_header = request.headers.get('Authorization', '')
-        if not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'Unauthorized'}), 401
-        
-        token = auth_header.replace('Bearer ', '')
-        
-        try:
-            payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
-            cid = payload.get('id')
-        except jwt.ExpiredSignatureError:
-            return jsonify({'error': 'Token expired'}), 401
-        except jwt.InvalidTokenError:
-            return jsonify({'error': 'Invalid token'}), 401
-        
-        # Get candidate info
-        candidate = db_get(
-            'SELECT cid, name, email FROM candidate_signup WHERE cid = ?',
-            (cid,)
-        )
-        
-        if not candidate:
-            return jsonify({'error': 'Candidate not found'}), 404
-        
-        # Get profile
-        profile = db_get(
-            'SELECT * FROM candidate_profiles WHERE candidate_id = ?',
-            (cid,)
-        )
-        
-        result = {
-            'id': candidate['cid'],
-            'name': candidate['name'],
-            'email': candidate['email'],
-            'role': 'candidate'
-        }
-        
-        if profile:
-            result['profile'] = {
-                'phone': profile.get('phone'),
-                'location': profile.get('location'),
-                'bio': profile.get('bio'),
-                'skills': profile.get('skills'),
-                'experience_years': profile.get('experience_years'),
-            }
-        
-        return jsonify(result), 200
-        
-    except Exception as e:
-        print(f"[PROFILE ERROR] {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Failed to get profile'}), 500
-
+        return jsonify({'error': 'An unexpected error occurred during login. Please contact support if the issue persists.'}), 500

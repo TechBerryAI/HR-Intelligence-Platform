@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiUser, FiMail, FiAlertCircle, FiMessageSquare, FiCheckCircle, FiSend } from 'react-icons/fi'
+import { FiUser, FiMail, FiAlertCircle, FiMessageSquare, FiMessageCircle, FiCheckCircle, FiSend, FiZap, FiLock } from 'react-icons/fi'
 import PremiumInput from '../components/PremiumInput.jsx'
 import PremiumButton from '../components/PremiumButton.jsx'
 import { useToast } from '../components/Toast.jsx'
@@ -330,19 +330,25 @@ export default function ContactUs() {
             className="mt-8 grid md:grid-cols-3 gap-4"
           >
             <div className="glass-card p-4 rounded-xl border border-white/10 text-center">
-              <div className="text-2xl mb-2">⚡</div>
+              <div className="flex justify-center mb-2">
+                <FiZap className="w-8 h-8 text-amber-400" aria-hidden />
+              </div>
               <h3 className="text-sm font-semibold text-white mb-1">Quick Response</h3>
               <p className="text-xs text-zinc-400">We typically respond within 24 hours</p>
             </div>
             
             <div className="glass-card p-4 rounded-xl border border-white/10 text-center">
-              <div className="text-2xl mb-2">🔒</div>
+              <div className="flex justify-center mb-2">
+                <FiLock className="w-8 h-8 text-amber-400" aria-hidden />
+              </div>
               <h3 className="text-sm font-semibold text-white mb-1">Privacy First</h3>
               <p className="text-xs text-zinc-400">Your information is kept secure</p>
             </div>
             
             <div className="glass-card p-4 rounded-xl border border-white/10 text-center">
-              <div className="text-2xl mb-2">💬</div>
+              <div className="flex justify-center mb-2">
+                <FiMessageCircle className="w-8 h-8 text-purple-400" aria-hidden />
+              </div>
               <h3 className="text-sm font-semibold text-white mb-1">Friendly Support</h3>
               <p className="text-xs text-zinc-400">We're here to help you succeed</p>
             </div>

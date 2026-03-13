@@ -1,16 +1,28 @@
 """
-LLM Service for Resume and JD Parsing
+LLM Service for Resume and JD Parsing. Output format is TOON (Token-Oriented Object Notation).
 Supports X.AI Grok (multi-key rotation), OpenAI, and Anthropic
 """
 import os
-import json
 import time
 import requests
 from typing import Dict, Any, Literal, Optional
 
+from toon import toon_loads_flex
+
+# Reuse a session for connection keep-alive (faster repeated calls)
+_session: Optional[requests.Session] = None
+
+def _get_session() -> requests.Session:
+    global _session
+    if _session is None:
+        _session = requests.Session()
+    return _session
+
 # Load configuration
 LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'xai')  # xai, openai, anthropic
-XAI_MODEL = os.getenv('XAI_MODEL', 'grok-4-fast-reasoning')  # Default to fast reasoning model
+XAI_MODEL = os.getenv('XAI_MODEL', 'grok-4-fast-reasoning')  # Fast model for parsing
+LLM_REQUEST_TIMEOUT = int(os.getenv('LLM_REQUEST_TIMEOUT', '45'))  # Lower = faster fail; 45s suits grok-4-fast
+LLM_MAX_INPUT_CHARS = int(os.getenv('LLM_MAX_INPUT_CHARS', '0'))  # 0 = no trim; set e.g. 18000 to speed very long docs
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
 
@@ -26,6 +38,8 @@ def call_llm(prompt: str, doc_type: Literal['resume', 'jd']) -> Dict[str, Any]:
     Returns:
         Parsed TOON format as dict
     """
+    if LLM_MAX_INPUT_CHARS and len(prompt) > LLM_MAX_INPUT_CHARS:
+        prompt = prompt[:LLM_MAX_INPUT_CHARS] + "\n\n[Document truncated for length. Extract from above.]"
     if LLM_PROVIDER == 'xai':
         return call_xai_grok(prompt, doc_type)
     elif LLM_PROVIDER == 'openai':
@@ -37,7 +51,7 @@ def call_llm(prompt: str, doc_type: Literal['resume', 'jd']) -> Dict[str, Any]:
 
 
 def call_xai_grok(prompt: str, doc_type: str, service_id: str = "parsing") -> Dict[str, Any]:
-    """Call X.AI Grok API with multi-key rotation and cooldown on failure."""
+    """Call X.AI Grok API with multi-key rotation and cooldown on failure. Optimized for grok-4-fast-reasoning."""
     from llm_key_manager import get_key_for_service, report_result
 
     url = "https://api.x.ai/v1/chat/completions"
@@ -47,10 +61,9 @@ def call_xai_grok(prompt: str, doc_type: str, service_id: str = "parsing") -> Di
             {"role": "system", "content": get_system_prompt(doc_type)},
             {"role": "user", "content": prompt},
         ],
-        "temperature": 0.3,
-        "max_tokens": 2000,
+        "temperature": 0.2,
+        "max_tokens": 2048,
     }
-    # Try up to N distinct keys (one attempt per key)
     keys_tried = 0
     last_error: Optional[str] = None
     key_count = 0
@@ -60,6 +73,7 @@ def call_xai_grok(prompt: str, doc_type: str, service_id: str = "parsing") -> Di
     except Exception:
         key_count = 0
     max_keys_to_try = key_count if key_count else 1
+    timeout = max(15, min(120, LLM_REQUEST_TIMEOUT))
 
     while keys_tried < max_keys_to_try:
         key_slot = get_key_for_service(service_id)
@@ -73,7 +87,8 @@ def call_xai_grok(prompt: str, doc_type: str, service_id: str = "parsing") -> Di
         }
         t0 = time.perf_counter()
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=90)
+            session = _get_session()
+            response = session.post(url, headers=headers, json=payload, timeout=timeout)
             latency_ms = (time.perf_counter() - t0) * 1000
             if response.ok:
                 report_result(slot_id, True, response.status_code, latency_ms)
@@ -203,103 +218,61 @@ def call_anthropic(prompt: str, doc_type: str) -> Dict[str, Any]:
 
 
 def get_system_prompt(doc_type: str) -> str:
-    """Get system prompt for LLM based on document type"""
+    """Get system prompt for LLM. Required output format is TOON (Token-Oriented Object Notation)."""
     if doc_type == 'resume':
-        return """You are an expert resume parser. Extract ALL information from the resume including EVERY URL you find. Look carefully for LinkedIn, GitHub, portfolio, personal website, Twitter, and any other URLs. Return ONLY a valid JSON object in this exact format:
+        return """You are an expert resume parser. Extract ALL information from the resume including EVERY URL. Return ONLY valid TOON (Token-Oriented Object Notation): one key-value per line, key: value, nested keys with dots, scalar lists with pipe. Example:
 
-{
-  "type": "resume",
-  "person": {
-    "name": "Full Name",
-    "email": "email@example.com",
-    "phone": "+1234567890",
-    "linkedin": "https://linkedin.com/in/username or empty string if not found",
-    "github": "https://github.com/username or empty string if not found",
-    "portfolio": "https://portfolio.example.com or empty string if not found",
-    "website": "https://personal-website.com or empty string if not found",
-    "twitter": "https://twitter.com/username or empty string if not found",
-    "otherUrls": ["https://other-url.com"] or empty array if none found
-  },
-  "summary": "Professional summary",
-  "skills": ["skill1", "skill2"],
-  "experience": [
-    {
-      "title": "Job Title",
-      "company": "Company Name",
-      "from": "2020-01",
-      "to": "2023-12",
-      "years": 3.9
-    }
-  ],
-  "education": [
-    {
-      "degree": "Bachelor of Science",
-      "field": "Computer Science",
-      "institution": "University Name",
-      "start": "2016",
-      "year": "2020"
-    }
-  ],
-  "certifications": ["cert1", "cert2"],
-  "total_experience_years": 3.9
-}
+type: resume
+person.name: Full Name
+person.email: email@example.com
+person.phone: +1234567890
+person.location: City, State/Country
+person.linkedin: https://linkedin.com/in/username
+person.github: 
+person.portfolio: 
+person.website: 
+person.twitter: 
+person.otherUrls[0]:
+summary: Professional summary
+skills: skill1|skill2
+experience.0.title: Job Title
+experience.0.company: Company Name
+experience.0.from: 2020-01
+experience.0.to: 2023-12
+experience.0.years: 3.9
+education.0.degree: Bachelor of Science
+education.0.field: Computer Science
+education.0.institution: University Name
+education.0.year: 2020
+certifications: cert1|cert2
+total_experience_years: 3.9
 
-CRITICAL INSTRUCTIONS FOR URL EXTRACTION:
-- Search the ENTIRE resume text for ANY URLs (http://, https://, www., linkedin.com, github.com, etc.)
-- Extract LinkedIn URLs into "linkedin" field (even if format is linkedin.com/in/username without https://)
-- Extract GitHub URLs into "github" field
-- Extract portfolio/personal website URLs into "portfolio" or "website" fields
-- Extract Twitter URLs into "twitter" field
-- Put any other URLs found into "otherUrls" array
-- If a URL doesn't have http:// or https://, add https:// prefix
-- DO NOT skip URLs - extract EVERY URL you find in the resume
-- If no URLs are found, use empty strings and empty arrays
-
-Return ONLY the JSON object, no markdown, no explanations."""
+CRITICAL: Extract EVERY URL (LinkedIn, GitHub, portfolio, website, Twitter) into the person fields; use empty string if not found. Extract location/city/address (e.g. Mumbai, Bangalore, Delhi NCR, City - Country) into person.location. Use pipe (|) for lists of strings. Return ONLY the TOON block, no markdown, no explanations. You may also return valid JSON and it will be accepted."""
     
     else:  # jd
-        return """You are an expert job description parser. Extract information from the job description and return ONLY a valid JSON object in this exact format:
+        return """You are an expert job description parser. Extract information and return ONLY valid TOON (Token-Oriented Object Notation): one key-value per line, key: value, lists with pipe. Example:
 
-{
-  "type": "job_description",
-  "title": "Job Title",
-  "company": "Company Name",
-  "location": "City, Country",
-  "salary_range": "50000-80000",
-  "min_experience_years": 2,
-  "max_experience_years": 5,
-  "skills": ["skill1", "skill2"],
-  "responsibilities": ["resp1", "resp2"],
-  "qualifications": ["qual1", "qual2"],
-  "keywords": ["keyword1", "keyword2"]
-}
+type: job_description
+title: Job Title
+company: Company Name
+location: City, Country
+salary_range: 50000-80000
+min_experience_years: 2
+max_experience_years: 5
+skills: skill1|skill2
+responsibilities: resp1|resp2
+qualifications: qual1|qual2
+keywords: keyword1|keyword2
 
-CRITICAL: Extract the COMPANY NAME from the job description. Look for:
-- Company name in header/footer
-- Phrases like "Company:", "About [Company]", "We are [Company]", "Join [Company]"
-- Company name mentioned in the job description text
-- If company name is not found, use empty string
-
-Return ONLY the JSON object, no markdown, no explanations."""
+CRITICAL: Extract the COMPANY NAME. Return ONLY the TOON block, no markdown. You may also return valid JSON and it will be accepted."""
 
 
 def parse_llm_response(content: str) -> Dict[str, Any]:
-    """Parse LLM response and extract JSON"""
-    # Remove markdown code blocks if present
-    content = content.strip()
-    if content.startswith('```json'):
-        content = content[7:]
-    elif content.startswith('```'):
-        content = content[3:]
-    if content.endswith('```'):
-        content = content[:-3]
-    
-    content = content.strip()
-    
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse LLM response as JSON: {e}\nContent: {content[:200]}")
+    """Parse LLM response as TOON or legacy JSON into a dict."""
+    parsed = toon_loads_flex(content)
+    if not parsed:
+        raise ValueError("Failed to parse LLM response as TOON or JSON")
+    return parsed
 
 
 def classify_document(text: str) -> Literal['resume', 'jd', 'unknown']:

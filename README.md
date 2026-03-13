@@ -18,8 +18,7 @@ Full-stack HR Job Portal with candidate management, job posting, and AI-powered 
 # 1. Copy environment template (or start.js will do it)
 cp backend/.env.example backend/.env
 
-# 2. Edit backend/.env with YOUR SQL Server credentials
-# Set: MSSQL_USER and MSSQL_PASSWORD
+# 2. Edit backend/.env with PostgreSQL credentials (POSTGRES_* or DATABASE_URL)
 
 # 3. Run the application (from repo root, in your IDE terminal)
 node start.js
@@ -61,12 +60,7 @@ Opens automatically in your browser at http://localhost:5173 when ready.
 |-------------|---------|---------------|
 | Python | 3.8+ | `python --version` |
 | Node.js | 16+ | `node --version` |
-| SQL Server | 2017+ | Local or remote instance |
-| ODBC Driver | Any | `Get-OdbcDriver \| Where-Object { $_.Name -like '*SQL*' }` |
-
-**Database Options:**
-- 💻 **Local SQL Server** - SQL Server Express (free) or full version
-- ☁️ **Cloud SQL** - Azure SQL Database, AWS RDS for SQL Server
+| PostgreSQL | 12+ | Local or cloud (e.g. Supabase, Neon, RDS) |
 
 ## Configuration
 
@@ -76,14 +70,14 @@ Opens automatically in your browser at http://localhost:5173 when ready.
 copy backend\.env.example backend\.env
 ```
 
-Edit `backend/.env` - only these 2 values need to change:
+Edit `backend/.env` — set PostgreSQL connection:
 
 ```env
-MSSQL_USER=YOUR_SQL_USERNAME      # Your SQL Server login
-MSSQL_PASSWORD=YOUR_SQL_PASSWORD  # Your SQL Server password
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your_postgres_password
 ```
 
-Everything else has working defaults.
+Or use `DATABASE_URL=postgresql://user:password@host:5432/JobPortal`. Other vars have defaults.
 
 ### Optional: Email Configuration
 
@@ -201,35 +195,15 @@ Auto-created on first run:
 
 The backend validates your configuration on startup. If you see errors:
 ```powershell
-# Run validation standalone
 cd backend
 python env_validator.py
 ```
-
-### ODBC Driver Not Found
-
-```powershell
-# Check installed drivers
-Get-OdbcDriver | Where-Object { $_.Name -like '*SQL*' }
-
-# Download ODBC Driver 17 from Microsoft:
-# https://aka.ms/downloadmsodbcsql
-```
-
-Update `MSSQL_ODBC_DRIVER` in `.env` to match an installed driver.
+Set `DATABASE_URL` or `POSTGRES_USER` and `POSTGRES_PASSWORD` in `backend/.env`.
 
 ### Database Connection Failed
 
-```powershell
-# Check SQL Server service is running
-Get-Service MSSQLSERVER
-
-# Start if needed
-Start-Service MSSQLSERVER
-
-# Test connection
-Test-NetConnection localhost -Port 1433
-```
+Ensure PostgreSQL is running and credentials in `backend/.env` are correct. Test with:
+`psql -h localhost -U postgres -d JobPortal -c "SELECT 1"`
 
 ### Port in Use
 

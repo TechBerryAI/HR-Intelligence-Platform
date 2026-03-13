@@ -1,33 +1,48 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
+import { useAsyncAction } from '../hooks/useAsyncAction.js'
 
 export default function LoginAdmin() {
-	const { loginHR, auth } = useApp()
+	const { loginHR, loginSuperAdmin, auth, superAdminAuth } = useApp()
 	const navigate = useNavigate()
+	const { run, loading } = useAsyncAction()
 	const [adminEmail, setAdminEmail] = useState('')
 	const [adminPassword, setAdminPassword] = useState('')
 	const [adminError, setAdminError] = useState('')
 
-	// Redirect to dashboard if already logged in
+	// Redirect to dashboard if already logged in as HR or Head of HR
 	useEffect(() => {
-		if (auth.isLoggedIn && auth.role === 'HR') {
+		if (auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')) {
 			navigate('/dashboard', { replace: true })
 		}
 	}, [auth.isLoggedIn, auth.role, navigate])
 
-	const onAdminSubmit = async (e) => {
+	// Redirect to Super Admin if already logged in as Super Admin
+	useEffect(() => {
+		if (superAdminAuth?.isLoggedIn) {
+			navigate('/super-admin', { replace: true })
+		}
+	}, [superAdminAuth?.isLoggedIn, navigate])
+
+	const onAdminSubmit = (e) => {
 		e.preventDefault()
 		setAdminError('')
-		const res = await loginHR(adminEmail, adminPassword)
-		if (res.ok) navigate('/dashboard')
-		else setAdminError(res.message || 'Login failed')
+		run(async () => {
+			const superRes = await loginSuperAdmin(adminEmail.trim(), adminPassword)
+			if (superRes?.ok) {
+				navigate('/super-admin')
+				return
+			}
+			const res = await loginHR(adminEmail, adminPassword)
+			if (res.ok) navigate('/dashboard')
+			else setAdminError(res.message || 'Login failed')
+		})
 	}
 
 	// Don't render login form if already logged in (redirect will happen)
-	if (auth.isLoggedIn && auth.role === 'HR') {
-		return null
-	}
+	if (auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')) return null
+	if (superAdminAuth?.isLoggedIn) return null
 
 	return (
 		<section className="relative min-h-[calc(100vh-180px)] flex items-center justify-center px-4 py-10 overflow-hidden">
@@ -74,13 +89,23 @@ export default function LoginAdmin() {
 							</div>
 							<button
 								type="submit"
-								className="mt-6 w-full rounded-lg bg-white text-black hover:bg-zinc-100 active:bg-zinc-200 font-medium py-2.5 transition-colors duration-200 shadow-sm hover:shadow"
+								disabled={loading}
+								className="mt-6 w-full rounded-lg bg-white text-black hover:bg-zinc-100 active:bg-zinc-200 font-medium py-2.5 transition-colors duration-200 shadow-sm hover:shadow disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:bg-white"
 							>
-								Login
+								{loading ? (
+									<span className="inline-flex items-center gap-2">
+										<svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+											<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+											<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+										</svg>
+										Signing in…
+									</span>
+								) : (
+									'Login'
+								)}
 							</button>
-							<div className="mt-3 flex items-center justify-between text-sm">
+							<div className="mt-3 text-sm">
 								<Link to="/forgot-password/admin" className="text-zinc-400 hover:text-zinc-200 transition-colors">Forgot Password?</Link>
-								<a href="/signup/admin" className="text-white font-medium hover:underline">Don't have an account? Sign up</a>
 							</div>
 							{/* Admin login should be backed by backend; demo credentials removed. */}
 						</form>

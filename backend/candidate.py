@@ -1,9 +1,12 @@
-from flask import Blueprint, request, jsonify
-from db import db_get, db_run, db_all
+import os
+from flask import Blueprint, request, jsonify, Response
+from db import db_get, db_run, db_all, BACKEND, NOW_SQL
 from utils import authenticate_token, require_candidate, require_hr
 from matching import calculate_matching_percentage
 
 candidate_bp = Blueprint('candidate', __name__)
+# Column name for cgpa/percentage: PostgreSQL uses double-quoted identifier
+CGPA_COL = '"cgpa/percentage"' if BACKEND == "postgresql" else "[cgpa/percentage]"
 
 @candidate_bp.post('/logout')
 def candidate_logout():
@@ -137,10 +140,7 @@ def save_profile():
             if resume_binary is not None and len(resume_binary) > 0:
                 print(f"DEBUG: Updating profile with resume binary ({len(resume_binary)} bytes)")
                 try:
-                    # Use pyodbc.Binary to ensure proper binary handling
-                    import pyodbc
-                    resume_param = pyodbc.Binary(resume_binary) if resume_binary else None
-                    print(f"DEBUG: Using pyodbc.Binary wrapper: {type(resume_param)}")
+                    resume_param = resume_binary if BACKEND == "postgresql" else (__import__("pyodbc").Binary(resume_binary) if resume_binary else None)
                     result = db_run(
                         '''
                         UPDATE candidate_profiles SET
@@ -150,7 +150,7 @@ def save_profile():
                           current_location = ?, preferred_location = ?,
                           resume = ?,
                           completed = ?,
-                          updated_at = SYSUTCDATETIME()
+                          updated_at = ''' + NOW_SQL + '''
                         WHERE candidate_id = ?
                         ''',
                         (
@@ -159,13 +159,13 @@ def save_profile():
                             data.get('linkedinUrl'), data.get('portfolioUrl'),
                             data.get('currentLocation'), data.get('preferredLocation'),
                             resume_param,
-                            1 if data.get('completed') else 0,
+                            (True if data.get('completed') else False) if BACKEND == 'postgresql' else (1 if data.get('completed') else 0),
                             candidate_id
                         )
                     )
                     print(f"DEBUG: Resume updated successfully. Rows affected: {result.get('changes', 0)}")
                     # Verify the update
-                    verify = db_get('SELECT LEN(resume) as resume_size FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
+                    verify = db_get('SELECT ' + ('LENGTH(resume)' if BACKEND == 'postgresql' else 'LEN(resume)') + ' as resume_size FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
                     if verify:
                         print(f"DEBUG: Verification - Resume size in DB: {verify.get('resume_size', 'NULL')}")
                 except Exception as e:
@@ -184,7 +184,7 @@ def save_profile():
                       linkedin_url = ?, portfolio_url = ?,
                       current_location = ?, preferred_location = ?,
                       completed = ?,
-                      updated_at = SYSUTCDATETIME()
+                      updated_at = ''' + NOW_SQL + '''
                     WHERE candidate_id = ?
                     ''',
                     (
@@ -192,17 +192,14 @@ def save_profile():
                         data.get('experienceLevel'), data.get('servingNotice'), data.get('noticePeriod'), data.get('lastWorkingDay'),
                         data.get('linkedinUrl'), data.get('portfolioUrl'),
                         data.get('currentLocation'), data.get('preferredLocation'),
-                        1 if data.get('completed') else 0,
+                        (True if data.get('completed') else False) if BACKEND == 'postgresql' else (1 if data.get('completed') else 0),
                         candidate_id
                     )
                 )
         else:
             print(f"DEBUG: Creating new profile with resume binary ({len(resume_binary) if resume_binary else 0} bytes)")
             try:
-                # Use pyodbc.Binary to ensure proper binary handling
-                import pyodbc
-                resume_param = pyodbc.Binary(resume_binary) if resume_binary else None
-                print(f"DEBUG: Using pyodbc.Binary wrapper: {type(resume_param)}")
+                resume_param = resume_binary if BACKEND == "postgresql" else (__import__("pyodbc").Binary(resume_binary) if resume_binary else None)
                 result = db_run(
                     '''
                     INSERT INTO candidate_profiles (
@@ -221,12 +218,12 @@ def save_profile():
                         data.get('linkedinUrl'), data.get('portfolioUrl'),
                         data.get('currentLocation'), data.get('preferredLocation'),
                         resume_param,
-                        1 if data.get('completed') else 0
+                        (True if data.get('completed') else False) if BACKEND == 'postgresql' else (1 if data.get('completed') else 0)
                     )
                 )
                 print(f"DEBUG: Profile created successfully. Rows affected: {result.get('changes', 0)}")
                 # Verify the insert
-                verify = db_get('SELECT LEN(resume) as resume_size FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
+                verify = db_get('SELECT ' + ('LENGTH(resume)' if BACKEND == 'postgresql' else 'LEN(resume)') + ' as resume_size FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
                 if verify:
                     print(f"DEBUG: Verification - Resume size in DB: {verify.get('resume_size', 'NULL')}")
             except Exception as e:
@@ -247,10 +244,7 @@ def save_profile():
             if not degree and not institution and not cgpa and not start_date and not end_date:
                 continue
             db_run(
-                '''
-                INSERT INTO candidate_education (candidate_id, degree, institution, [cgpa/percentage], start_date, end_date)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ''',
+                'INSERT INTO candidate_education (candidate_id, degree, institution, ' + CGPA_COL + ', start_date, end_date) VALUES (?, ?, ?, ?, ?, ?)',
                 (candidate_id, degree, institution, cgpa, start_date, end_date)
             )
         # Refresh certification records
@@ -327,11 +321,27 @@ def save_profile():
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
 
 
+def _read_resume_from_storage_url(storage_url: str) -> bytes | None:
+    """Read file bytes from a file:// storage URL (local path)."""
+    if not storage_url or not str(storage_url).strip().startswith('file://'):
+        return None
+    path = str(storage_url).replace('file://', '').lstrip('/')
+    if os.name == 'nt' and path.startswith('/'):
+        path = path[1:]
+    if not os.path.isfile(path):
+        return None
+    try:
+        with open(path, 'rb') as f:
+            return f.read()
+    except Exception:
+        return None
+
+
 @candidate_bp.get('/resume')
 @authenticate_token
 @require_candidate
 def get_resume():
-    """Download the candidate's resume"""
+    """Download the candidate's resume (from profile or latest upload before save)."""
     try:
         candidate_id = request.user['id']
         profile = db_get(
@@ -342,34 +352,43 @@ def get_resume():
             ''',
             (candidate_id,)
         )
-        if not profile or not profile.get('resume'):
-            return jsonify({'error': 'Resume not found'}), 404
-        
-        from flask import Response
-        resume_data = _resume_bytes(profile.get('resume'))
-        if resume_data:
-            return Response(
-                resume_data,
-                mimetype='application/pdf',
-                headers={
-                    'Content-Disposition': 'attachment; filename=resume.pdf',
-                    'Content-Type': 'application/pdf'
-                }
+        resume_data = None
+        filename = 'resume.pdf'
+        if profile and profile.get('resume'):
+            resume_data = _resume_bytes(profile.get('resume'))
+        if not resume_data:
+            # Fallback: serve latest uploaded resume from parse flow (raw_files) so "View" works before profile save
+            raw = db_get(
+                '''
+                SELECT storage_url, original_filename
+                FROM raw_files
+                WHERE uploader_id = ? AND uploader_role = 'candidate'
+                ORDER BY created_at DESC
+                LIMIT 1
+                ''',
+                (candidate_id,)
             )
-        else:
-            return jsonify({'error': 'Invalid resume data'}), 500
+            if raw and raw.get('storage_url'):
+                resume_data = _read_resume_from_storage_url(raw.get('storage_url'))
+                if raw.get('original_filename'):
+                    filename = raw.get('original_filename') or filename
+        if not resume_data:
+            return jsonify({'error': 'Resume not found'}), 404
+        return Response(
+            resume_data,
+            mimetype='application/pdf',
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"',
+                'Content-Type': 'application/pdf'
+            }
+        )
     except Exception as e:
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
 
 
 def parse_profile(profile: dict) -> dict:
     education_rows = db_all(
-        '''
-        SELECT degree, institution, [cgpa/percentage] as cgpa, start_date, end_date
-        FROM candidate_education
-        WHERE candidate_id = ?
-        ORDER BY degree
-        ''',
+        'SELECT degree, institution, ' + CGPA_COL + ' as cgpa, start_date, end_date FROM candidate_education WHERE candidate_id = ? ORDER BY degree',
         (profile.get('candidate_id'),)
     ) if profile.get('candidate_id') else []
     formatted_education = [
@@ -430,7 +449,7 @@ def parse_profile(profile: dict) -> dict:
         'portfolioUrl': profile.get('portfolio_url') or '',
         'currentLocation': profile.get('current_location') or '',
         'preferredLocation': profile.get('preferred_location') or '',
-        'resumeFileName': 'resume.pdf' if profile.get('has_resume') or profile.get('resume') else '',
+        'resumeFileName': _resume_filename(profile),
         'education': formatted_education,
         'certifications': formatted_certifications,
         'experiences': formatted_experiences,
@@ -458,9 +477,22 @@ def get_profile_admin(candidate_id: str):
         )
         if not profile:
             return jsonify({'error': 'Profile not found'}), 404
+
         return jsonify(parse_profile(profile))
     except Exception as e:
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
+
+
+def _resume_filename(profile: dict) -> str:
+    """Return resume file name if profile has a resume stored (handles different DB column types)."""
+    if not profile:
+        return ''
+    has_resume = profile.get('has_resume')
+    if has_resume is not None and has_resume != '' and has_resume != 0:
+        return 'resume.pdf'
+    if profile.get('resume') is not None:
+        return 'resume.pdf'
+    return ''
 
 
 def _resume_bytes(data):

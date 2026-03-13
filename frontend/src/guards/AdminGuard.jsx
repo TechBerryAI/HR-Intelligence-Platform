@@ -6,7 +6,7 @@ import { useApp } from '../context/AppContext.jsx'
 
 export default function AdminGuard({ children }) {
   const { auth } = useApp()
-  if (!auth.isLoggedIn || auth.role !== 'HR') {
+  if (!auth.isLoggedIn || (auth.role !== 'HR' && auth.role !== 'head_hr')) {
     return <Navigate to="/login/admin" replace />
   }
   return children

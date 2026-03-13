@@ -11,12 +11,21 @@ export default function MonthYearPicker({
 }) {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState({ top: 0, left: 0 })
+  // Normalize value to YYYY-MM (year-only e.g. "2025" -> "2025-01" so month is never undefined)
+  const normalizedValue = (() => {
+    if (!value || typeof value !== 'string') return value || ''
+    const v = value.trim()
+    if (/^\d{4}-\d{2}$/.test(v)) return v
+    if (/^\d{4}$/.test(v)) return `${v}-01`
+    return v
+  })()
+
   const [year, setYear] = useState(() => {
-    if (value && /^\d{4}-\d{2}$/.test(value)) return parseInt(value.slice(0, 4), 10)
+    if (normalizedValue && /^\d{4}-\d{2}$/.test(normalizedValue)) return parseInt(normalizedValue.slice(0, 4), 10)
     return new Date().getFullYear()
   })
   const [month, setMonth] = useState(() => {
-    if (value && /^\d{4}-\d{2}$/.test(value)) return parseInt(value.slice(5, 7), 10)
+    if (normalizedValue && /^\d{4}-\d{2}$/.test(normalizedValue)) return parseInt(normalizedValue.slice(5, 7), 10)
     return new Date().getMonth() + 1
   })
 
@@ -57,22 +66,23 @@ export default function MonthYearPicker({
   }, [open])
 
   useEffect(() => {
-    if (value && /^\d{4}-\d{2}$/.test(value)) {
-      const vYear = parseInt(value.slice(0, 4), 10)
-      const vMonth = parseInt(value.slice(5, 7), 10)
+    if (normalizedValue && /^\d{4}-\d{2}$/.test(normalizedValue)) {
+      const vYear = parseInt(normalizedValue.slice(0, 4), 10)
+      const vMonth = parseInt(normalizedValue.slice(5, 7), 10)
       if (vYear !== year) setYear(vYear)
       if (vMonth !== month) setMonth(vMonth)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value])
+  }, [value, normalizedValue])
 
   const display = useMemo(() => {
-    if (!value) return ''
+    if (!normalizedValue) return ''
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-    const mm = parseInt(value.slice(5, 7), 10)
-    const yy = value.slice(0, 4)
+    const mm = parseInt(normalizedValue.slice(5, 7), 10)
+    const yy = normalizedValue.slice(0, 4)
+    if (Number.isNaN(mm) || mm < 1 || mm > 12) return yy || ''
     return `${months[mm - 1]} ${yy}`
-  }, [value])
+  }, [normalizedValue])
 
   const years = useMemo(() => {
     const list = []
@@ -147,7 +157,7 @@ export default function MonthYearPicker({
                   key={m}
                   type="button"
                   onClick={() => commit(year, m)}
-                  className={`px-3 py-2 rounded border text-sm ${m === month && year === parseInt((value||'').slice(0,4)||'0',10) ? 'border-white/60 bg-zinc-800 text-white' : 'border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800'}`}
+                  className={`px-3 py-2 rounded border text-sm ${m === month && year === parseInt((normalizedValue||'').slice(0,4)||'0',10) ? 'border-white/60 bg-zinc-800 text-white' : 'border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800'}`}
                 >
                   {new Date(2000, m - 1).toLocaleString('en-US', { month: 'short' })}
                 </button>
