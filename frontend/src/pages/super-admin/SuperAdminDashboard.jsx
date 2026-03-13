@@ -1,14 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext.jsx'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
 import SuperAdminLayout from './SuperAdminLayout.jsx'
-import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiDownload } from 'react-icons/fi'
-import {
-  generateAdminsPdf, generateCandidatesPdf, generateJobsPdf,
-  generateApplicationsPdf, generateFullSystemPdf,
-} from '../../utils/pdfReportUtils.js'
+import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart } from 'react-icons/fi'
 
 function StatCard({ icon: Icon, label, value, accent, onClick }) {
   return (
@@ -44,22 +40,43 @@ function StatCard({ icon: Icon, label, value, accent, onClick }) {
   )
 }
 
+function BarRow({ label, count, total, colorClass }) {
+  const pct = total > 0 ? Math.round((count / total) * 100) : 0
+  return (
+    <div className="flex items-center gap-3 py-1.5">
+      <span className="text-sm text-zinc-300 w-24 flex-shrink-0 capitalize">{label}</span>
+      <div className="flex-1 h-6 rounded-md bg-zinc-800 overflow-hidden">
+        <div
+          className={`h-full rounded-md transition-all duration-500 ${colorClass}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-sm text-zinc-400 tabular-nums w-10 text-right">{count}</span>
+    </div>
+  )
+}
+
 export default function SuperAdminDashboard() {
   const { superAdminAuth } = useApp()
   const navigate = useNavigate()
   const [stats, setStats] = useState(null)
+  const [applications, setApplications] = useState([])
+  const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [reportLoading, setReportLoading] = useState({})
-  const [fullPdfLoading, setFullPdfLoading] = useState(false)
-  const [reportToast, setReportToast] = useState(null)
 
   useEffect(() => {
     const load = async () => {
       try {
         const token = tokenService.getToken()
-        const data = await apiRequest('/api/super-admin/stats', { method: 'GET', token })
-        setStats(data)
+        const [statsRes, appsRes, jobsRes] = await Promise.all([
+          apiRequest('/api/super-admin/stats', { method: 'GET', token }),
+          apiRequest('/api/super-admin/applications', { method: 'GET', token }),
+          apiRequest('/api/super-admin/jobs', { method: 'GET', token }),
+        ])
+        setStats(statsRes)
+        setApplications(appsRes.applications || [])
+        setJobs(jobsRes.jobs || [])
       } catch (err) {
         setError(err?.message || 'Failed to load stats')
       } finally {
@@ -69,93 +86,69 @@ export default function SuperAdminDashboard() {
     load()
   }, [])
 
-  const showReportToast = (msg, type = 'success') => {
-    setReportToast({ msg, type })
-    setTimeout(() => setReportToast(null), 3000)
-  }
+  const analytics = useMemo(() => {
+    const apps = applications
+    const total = apps.length
+    const byStatus = { applied: 0, shortlisted: 0, rejected: 0, pending: 0, reviewed: 0 }
+    let scoreSum = 0
+    let scoreCount = 0
+    const scoreBuckets = { high: 0, medium: 0, low: 0 }
+    const byJob = {}
 
-  const REPORT_META = {
-    admins:       { url: '/api/super-admin/admins',       key: 'admins',       title: 'HR Admins Report' },
-    candidates:   { url: '/api/super-admin/candidates',   key: 'candidates',   title: 'Candidates Report' },
-    jobs:         { url: '/api/super-admin/jobs',         key: 'jobs',         title: 'Jobs Report' },
-    applications: { url: '/api/super-admin/applications', key: 'applications', title: 'Applications Report' },
-  }
+    apps.forEach((a) => {
+      const status = a.shortlisted ? 'shortlisted' : (a.status || 'applied').toLowerCase()
+      byStatus[status] = (byStatus[status] || 0) + 1
+      const jobId = a.job_id || a.jobId
+      if (jobId) {
+        if (!byJob[jobId]) byJob[jobId] = { count: 0, shortlisted: 0, scoreSum: 0, scoreN: 0 }
+        byJob[jobId].count += 1
+        if (a.shortlisted) byJob[jobId].shortlisted += 1
+        const score = a.match_score != null ? Number(a.match_score) : null
+        if (score != null && !Number.isNaN(score)) {
+          byJob[jobId].scoreSum += score
+          byJob[jobId].scoreN += 1
+        }
+      }
+      const score = a.match_score != null ? Number(a.match_score) : null
+      if (score != null && !Number.isNaN(score)) {
+        scoreSum += score
+        scoreCount += 1
+        if (score >= 60) scoreBuckets.high += 1
+        else if (score >= 30) scoreBuckets.medium += 1
+        else scoreBuckets.low += 1
+      }
+    })
 
-  const handleDownloadReport = async (type) => {
-    setReportLoading((p) => ({ ...p, [type]: true }))
-    try {
-      const token = tokenService.getToken()
-      const { url, key, title } = REPORT_META[type]
-      const data = await apiRequest(url, { method: 'GET', token })
-      const rows = data[key] || []
-      PDF_GENERATORS[type](rows)
-      showReportToast(`${title} downloaded`)
-    } catch (err) {
-      showReportToast(err?.message || 'Failed to generate report', 'error')
-    } finally {
-      setReportLoading((p) => ({ ...p, [type]: false }))
-    }
-  }
+    const jobTitleById = {}
+    jobs.forEach((j) => { jobTitleById[j.jdid] = j.title || j.jdid })
+    const topJobs = Object.entries(byJob)
+      .map(([id, data]) => ({
+        id,
+        title: jobTitleById[id] || id,
+        count: data.count,
+        shortlisted: data.shortlisted,
+        avgScore: data.scoreN > 0 ? Math.round((data.scoreSum / data.scoreN) * 10) / 10 : null,
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6)
 
-  const fetchAllData = async () => {
-    const token = tokenService.getToken()
-    const [a, c, j, ap] = await Promise.all([
-      apiRequest('/api/super-admin/admins',       { method: 'GET', token }),
-      apiRequest('/api/super-admin/candidates',   { method: 'GET', token }),
-      apiRequest('/api/super-admin/jobs',         { method: 'GET', token }),
-      apiRequest('/api/super-admin/applications', { method: 'GET', token }),
-    ])
+    const avgScore = scoreCount > 0 ? Math.round((scoreSum / scoreCount) * 10) / 10 : null
+    const shortlistedCount = byStatus.shortlisted || 0
+    const shortlistRate = total > 0 ? Math.round((shortlistedCount / total) * 100) : 0
+
     return {
-      admins:       a.admins       || [],
-      candidates:   c.candidates   || [],
-      jobs:         j.jobs         || [],
-      applications: ap.applications || [],
+      byStatus,
+      total,
+      avgScore,
+      scoreBuckets,
+      scoreCount,
+      topJobs,
+      shortlistRate,
     }
-  }
-
-  const handleDownloadFullPdf = async () => {
-    setFullPdfLoading(true)
-    try {
-      const all = await fetchAllData()
-      generateFullSystemPdf(all)
-      showReportToast('Full system PDF report downloaded')
-    } catch (err) {
-      showReportToast(err?.message || 'Failed to generate PDF', 'error')
-    } finally {
-      setFullPdfLoading(false)
-    }
-  }
-
-  const PDF_GENERATORS = {
-    admins:       (data) => generateAdminsPdf(data),
-    candidates:   (data) => generateCandidatesPdf(data),
-    jobs:         (data) => generateJobsPdf(data),
-    applications: (data) => generateApplicationsPdf(data),
-  }
-
-  const reportCards = [
-    { type: 'admins',       label: 'HR Admins Report',      desc: 'ID, name, email, company, joined date',             icon: FiUsers },
-    { type: 'candidates',   label: 'Candidates Report',     desc: 'Profile, contact, experience, completion status',   icon: FiUser },
-    { type: 'jobs',         label: 'Jobs Report',           desc: 'Title, company, location, status, posted by',       icon: FiBriefcase },
-    { type: 'applications', label: 'Applications Report',   desc: 'Candidate, job, match score, status, applied date', icon: FiFileText },
-  ]
+  }, [applications, jobs])
 
   return (
     <SuperAdminLayout>
-      {/* Report toast */}
-      {reportToast && (
-        <div
-          className={`fixed top-20 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-xl text-sm font-medium transition-all ${
-            reportToast.type === 'error'
-              ? 'bg-red-500/20 border border-red-500/30 text-red-300'
-              : 'bg-green-500/20 border border-green-500/30 text-green-300'
-          }`}
-        >
-          {reportToast.type !== 'error' && <FiDownload className="w-4 h-4" />}
-          {reportToast.msg}
-        </div>
-      )}
-
       {/* Page header */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white">System Overview</h1>
@@ -228,71 +221,115 @@ export default function SuperAdminDashboard() {
         </div>
       )}
 
-      {/* Quick links */}
-      <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-        <h2 className="text-sm font-semibold text-zinc-300 mb-4">Quick Actions</h2>
-        <div className="flex flex-wrap gap-3">
-          {[
-            { label: 'Manage Admins', path: '/super-admin/admins' },
-            { label: 'View Candidates', path: '/super-admin/candidates' },
-            { label: 'View All Jobs', path: '/super-admin/jobs' },
-            { label: 'View Applications', path: '/super-admin/applications' },
-          ].map(({ label, path }) => (
-            <button
-              key={path}
-              onClick={() => navigate(path)}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition-all border bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10 hover:text-white hover:border-white/20"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {/* Reports section */}
-      <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-        <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
-          <div>
-            <h2 className="text-sm font-semibold text-zinc-300 flex items-center gap-2">
-              <FiDownload className="w-4 h-4" /> Download Reports
-            </h2>
-            <p className="text-xs text-zinc-500 mt-0.5">
-              PDF reports — title, metadata, summary statistics &amp; formatted tables
-            </p>
-          </div>
-          <button
-            onClick={handleDownloadFullPdf}
-            disabled={fullPdfLoading}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
-          >
-            {fullPdfLoading ? <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" /></svg> : <FiDownload className="w-4 h-4" />}
-            Full PDF Report
-          </button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-          {reportCards.map(({ type, label, desc, icon: Icon }) => (
-            <div
-              key={type}
-              className="flex flex-col gap-3 rounded-xl bg-zinc-900 border border-zinc-800 hover:border-zinc-700 p-4 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-zinc-800 grid place-items-center text-zinc-400">
-                  <Icon className="w-4 h-4" />
-                </div>
-                <p className="text-sm font-medium text-zinc-200">{label}</p>
+      {/* Analytics */}
+      {!loading && (
+        <div className="mt-10 space-y-6">
+          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+            <FiBarChart2 className="w-5 h-5 text-purple-400" /> Analytics
+          </h2>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Application status breakdown */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
+              <h3 className="text-sm font-semibold text-zinc-300 flex items-center gap-2 mb-4">
+                <FiPieChart className="w-4 h-4" /> Applications by status
+              </h3>
+              <div className="space-y-1">
+                {[
+                  { key: 'shortlisted', label: 'Shortlisted', color: 'bg-green-500' },
+                  { key: 'applied', label: 'Applied', color: 'bg-blue-500' },
+                  { key: 'pending', label: 'Pending', color: 'bg-amber-500' },
+                  { key: 'reviewed', label: 'Reviewed', color: 'bg-purple-500' },
+                  { key: 'rejected', label: 'Rejected', color: 'bg-red-500' },
+                ].map(({ key, label, color }) => (
+                  <BarRow
+                    key={key}
+                    label={label}
+                    count={analytics.byStatus[key] || 0}
+                    total={analytics.total}
+                    colorClass={color}
+                  />
+                ))}
               </div>
-              <p className="text-xs text-zinc-500 leading-relaxed flex-1">{desc}</p>
-              <button
-                onClick={() => handleDownloadReport(type)}
-                disabled={!!reportLoading[type]}
-                className="mt-auto w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-              >
-                {reportLoading[type] ? <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" /></svg> : <FiDownload className="w-3 h-3" />}
-                Download PDF
-              </button>
+              {analytics.total === 0 && (
+                <p className="text-sm text-zinc-500 py-4">No applications yet</p>
+              )}
             </div>
-          ))}
+
+            {/* Match score & shortlist rate */}
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
+              <h3 className="text-sm font-semibold text-zinc-300 mb-4">Match score & shortlist rate</h3>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="rounded-xl bg-zinc-800/50 p-4 border border-zinc-700/50">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider">Avg. match score</p>
+                  <p className="text-2xl font-bold text-white mt-1 tabular-nums">
+                    {analytics.avgScore != null ? `${analytics.avgScore}%` : '—'}
+                  </p>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    {analytics.scoreCount} with score
+                  </p>
+                </div>
+                <div className="rounded-xl bg-zinc-800/50 p-4 border border-zinc-700/50">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider">Shortlist rate</p>
+                  <p className="text-2xl font-bold text-green-400 mt-1 tabular-nums">{analytics.shortlistRate}%</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">of applications</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Score distribution</p>
+                <div className="flex gap-2">
+                  <div className="flex-1 rounded-lg overflow-hidden bg-zinc-800 h-8 flex">
+                    <div
+                      className="bg-red-500/80 transition-all duration-500"
+                      style={{ width: `${analytics.scoreCount ? (analytics.scoreBuckets.low / analytics.scoreCount) * 100 : 0}%` }}
+                    />
+                    <div
+                      className="bg-amber-500/80 transition-all duration-500"
+                      style={{ width: `${analytics.scoreCount ? (analytics.scoreBuckets.medium / analytics.scoreCount) * 100 : 0}%` }}
+                    />
+                    <div
+                      className="bg-green-500/80 transition-all duration-500"
+                      style={{ width: `${analytics.scoreCount ? (analytics.scoreBuckets.high / analytics.scoreCount) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-4 mt-2 text-xs text-zinc-500">
+                  <span><span className="inline-block w-2 h-2 rounded bg-red-500/80 mr-1" /> Low (&lt;30%)</span>
+                  <span><span className="inline-block w-2 h-2 rounded bg-amber-500/80 mr-1" /> Medium (30–60%)</span>
+                  <span><span className="inline-block w-2 h-2 rounded bg-green-500/80 mr-1" /> High (60%+)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Job-level insight: applications, shortlisted, avg match */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
+            <h3 className="text-sm font-semibold text-zinc-300 mb-1">Job-level insight</h3>
+            <p className="text-xs text-zinc-500 mb-4">Applications, shortlisted count, and average match score per job. Click a job to view its full description.</p>
+            {analytics.topJobs.length > 0 ? (
+              <div className="space-y-2">
+                {analytics.topJobs.map(({ id, title, count, shortlisted, avgScore }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => navigate(`/super-admin/jobs/${encodeURIComponent(id)}`)}
+                    className="w-full flex flex-wrap items-center gap-x-4 gap-y-1 py-3 px-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50 hover:border-purple-500/30 hover:bg-zinc-800 transition-colors text-left"
+                  >
+                    <span className="text-sm font-medium text-zinc-200 truncate flex-1 min-w-0">{title || id}</span>
+                    <span className="text-xs text-zinc-400 tabular-nums">
+                      <span className="text-zinc-300">{count}</span> applied
+                      {shortlisted > 0 && <span className="text-green-400 ml-2">{shortlisted} shortlisted</span>}
+                      {avgScore != null && <span className="text-purple-400 ml-2">avg {avgScore}% match</span>}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-500 py-4">No applications yet</p>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </SuperAdminLayout>
   )
 }
