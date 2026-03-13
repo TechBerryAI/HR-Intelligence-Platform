@@ -94,7 +94,16 @@ init_models()
 
 from db import init_db  # noqa: E402
 from auth import auth_bp  # noqa: E402
-from jobs import jobs_bp  # noqa: E402
+try:
+    from jobs import jobs_bp  # noqa: E402
+except ImportError as e:
+    import traceback
+    print("[STARTUP] Failed to import jobs_bp from jobs. This usually means an import inside jobs.py (or its dependencies) failed.")
+    if getattr(e, '__cause__', None):
+        traceback.print_exception(type(e.__cause__), e.__cause__, e.__cause__.__traceback__)
+    else:
+        traceback.print_exc()
+    raise
 from candidate import candidate_bp  # noqa: E402
 from applications import applications_bp  # noqa: E402
 from sessions_routes import sessions_bp  # noqa: E402

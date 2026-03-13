@@ -4,9 +4,22 @@ from flask import Blueprint, request, jsonify
 from db import db_all, db_get, db_run, BACKEND, TRUE_SQL, FALSE_SQL
 from utils import authenticate_token, require_hr, optional_authenticate_token
 from toon import toon_loads_flex
-from services.candidate_notification_service import send_and_get_output
 
 jobs_bp = Blueprint('jobs', __name__)
+
+
+def _send_notification(hr_action, candidate_name, candidate_email, job_title, company_name, application_id, timestamp):
+    """Lazy import so jobs_bp loads even if notification service or its deps (flask_mail, etc.) fail."""
+    from services.candidate_notification_service import send_and_get_output
+    return send_and_get_output(
+        hr_action=hr_action,
+        candidate_name=candidate_name,
+        candidate_email=candidate_email,
+        job_title=job_title,
+        company_name=company_name,
+        application_id=application_id,
+        timestamp=timestamp,
+    )
 
 
 def _resume_bytes(data):
@@ -473,7 +486,7 @@ def record_profile_viewed(job_id: str, candidate_id: str):
         ts = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
         status_db = 'profile_viewed'
         if app['email']:
-            out = send_and_get_output(
+            out = _send_notification(
                 hr_action='PROFILE_VIEWED',
                 candidate_name=app.get('full_name') or '',
                 candidate_email=app['email'],
@@ -521,7 +534,7 @@ def update_application_status(job_id: str, candidate_id: str):
             return jsonify({'error': 'Candidate email not found; cannot send notification'}), 400
         hr_action = 'SHORTLISTED' if action == 'shortlist' else 'NOT_SHORTLISTED'
         ts = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-        out = send_and_get_output(
+        out = _send_notification(
             hr_action=hr_action,
             candidate_name=app.get('full_name') or '',
             candidate_email=app.get('email') or '',
