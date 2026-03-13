@@ -2,9 +2,17 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
+import { useAsyncAction } from '../../hooks/useAsyncAction.js'
 import SuperAdminLayout from './SuperAdminLayout.jsx'
 import { FiTrash2, FiRefreshCw, FiBriefcase, FiSearch, FiDownload } from 'react-icons/fi'
 import { generateJobsPdf } from '../../utils/pdfReportUtils.js'
+
+const Spinner = () => (
+  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+  </svg>
+)
 
 function formatDate(ts) {
   if (!ts) return '—'
@@ -13,6 +21,8 @@ function formatDate(ts) {
 
 export default function SuperAdminJobs() {
   const navigate = useNavigate()
+  const { run: runRefresh, loading: refreshLoading } = useAsyncAction()
+  const { run: runReport, loading: reportLoading } = useAsyncAction()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -117,17 +127,20 @@ export default function SuperAdminJobs() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={load}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition-colors border border-zinc-700"
+            onClick={() => runRefresh(load)}
+            disabled={refreshLoading}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition-colors border border-zinc-700 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <FiRefreshCw className="w-4 h-4" /> Refresh
+            {refreshLoading ? <Spinner /> : <FiRefreshCw className="w-4 h-4" />}
+            {refreshLoading ? 'Refreshing…' : 'Refresh'}
           </button>
           <button
-            onClick={() => generateJobsPdf(filtered.length ? filtered : jobs)}
-            disabled={jobs.length === 0}
+            onClick={() => runReport(() => { generateJobsPdf(filtered.length ? filtered : jobs) })}
+            disabled={jobs.length === 0 || reportLoading}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
           >
-            <FiDownload className="w-4 h-4" /> Download Report
+            {reportLoading ? <Spinner /> : <FiDownload className="w-4 h-4" />}
+            {reportLoading ? 'Preparing…' : 'Download Report'}
           </button>
         </div>
       </div>

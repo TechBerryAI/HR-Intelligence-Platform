@@ -10,10 +10,19 @@ import { getAvatarGradient } from '../utils/avatarColor'
 const formatStatusLabel = (status) => {
   if (!status) return 'Applied'
   const s = String(status).toLowerCase()
-  if (s === 'profile_viewed') return 'Profile Viewed'
+  if (s === 'profile_viewed') return 'Reviewed'
   if (s === 'shortlisted') return 'Shortlisted'
-  if (s === 'rejected') return 'Not Shortlisted'
+  if (s === 'rejected') return 'Rejected'
   return status
+}
+
+// Badge styling for status (aligned with candidate My Applications: Applied / Reviewed / Shortlisted / Rejected)
+const getStatusBadgeClass = (status) => {
+  const s = String(status || '').toLowerCase()
+  if (s === 'profile_viewed') return 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+  if (s === 'shortlisted') return 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+  if (s === 'rejected') return 'bg-red-500/20 text-red-300 border-red-500/30'
+  return 'bg-green-500/20 text-green-300 border-green-500/30' // applied
 }
 
 const getScoreInfo = (score) => {
@@ -171,7 +180,7 @@ export default function AppliedCandidates() {
     const loadProfile = async () => {
       setProfileLoading(true)
       try {
-        const [profile, _viewed] = await Promise.all([
+        const [profile, viewedRes] = await Promise.all([
           apiRequest(`/api/candidate/profile/${encodeURIComponent(resolvedCandidateId)}`, {
             token: tokenService.getToken(),
           }),
@@ -181,7 +190,17 @@ export default function AppliedCandidates() {
           }).catch(() => null),
         ])
         if (!cancelled) {
-          setSelectedCandidate((prev) => (prev ? { ...prev, ...profile } : prev))
+          setSelectedCandidate((prev) => (prev ? { ...prev, ...profile, status: viewedRes?.status === 'ok' ? 'profile_viewed' : prev.status } : prev))
+          // Update applications list so this candidate shows "Profile Viewed" and the candidate will see "Reviewed" on their side
+          if (viewedRes?.status === 'ok') {
+            setApplications((prevList) =>
+              prevList.map((app) => {
+                const cid = app.candidateId ?? app.candidate_id ?? app.candidateID ?? app.cid
+                if (String(cid) === String(resolvedCandidateId)) return { ...app, status: 'profile_viewed' }
+                return app
+              })
+            )
+          }
         }
       } catch (err) {
         console.error('Failed to fetch candidate profile', err)
@@ -549,7 +568,9 @@ export default function AppliedCandidates() {
                                       </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                      <span className="text-xs font-medium text-zinc-300">{formatStatusLabel(candidate.status)}</span>
+                                      <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium ${getStatusBadgeClass(candidate.status)}`}>
+                                        {formatStatusLabel(candidate.status)}
+                                      </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                       <div className="flex items-center gap-2">

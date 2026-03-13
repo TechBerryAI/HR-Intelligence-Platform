@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
+import { useAsyncAction } from '../hooks/useAsyncAction.js'
 
 export default function LoginAdmin() {
 	const { loginHR, loginSuperAdmin, auth, superAdminAuth } = useApp()
 	const navigate = useNavigate()
+	const { run, loading } = useAsyncAction()
 	const [adminEmail, setAdminEmail] = useState('')
 	const [adminPassword, setAdminPassword] = useState('')
 	const [adminError, setAdminError] = useState('')
@@ -23,18 +25,19 @@ export default function LoginAdmin() {
 		}
 	}, [superAdminAuth?.isLoggedIn, navigate])
 
-	const onAdminSubmit = async (e) => {
+	const onAdminSubmit = (e) => {
 		e.preventDefault()
 		setAdminError('')
-		// If credentials are Super Admin, log in as Super Admin and open Super Admin page
-		const superRes = await loginSuperAdmin(adminEmail.trim(), adminPassword)
-		if (superRes?.ok) {
-			navigate('/super-admin')
-			return
-		}
-		const res = await loginHR(adminEmail, adminPassword)
-		if (res.ok) navigate('/dashboard')
-		else setAdminError(res.message || 'Login failed')
+		run(async () => {
+			const superRes = await loginSuperAdmin(adminEmail.trim(), adminPassword)
+			if (superRes?.ok) {
+				navigate('/super-admin')
+				return
+			}
+			const res = await loginHR(adminEmail, adminPassword)
+			if (res.ok) navigate('/dashboard')
+			else setAdminError(res.message || 'Login failed')
+		})
 	}
 
 	// Don't render login form if already logged in (redirect will happen)
@@ -86,9 +89,20 @@ export default function LoginAdmin() {
 							</div>
 							<button
 								type="submit"
-								className="mt-6 w-full rounded-lg bg-white text-black hover:bg-zinc-100 active:bg-zinc-200 font-medium py-2.5 transition-colors duration-200 shadow-sm hover:shadow"
+								disabled={loading}
+								className="mt-6 w-full rounded-lg bg-white text-black hover:bg-zinc-100 active:bg-zinc-200 font-medium py-2.5 transition-colors duration-200 shadow-sm hover:shadow disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:bg-white"
 							>
-								Login
+								{loading ? (
+									<span className="inline-flex items-center gap-2">
+										<svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+											<circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+											<path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+										</svg>
+										Signing in…
+									</span>
+								) : (
+									'Login'
+								)}
 							</button>
 							<div className="mt-3 text-sm">
 								<Link to="/forgot-password/admin" className="text-zinc-400 hover:text-zinc-200 transition-colors">Forgot Password?</Link>

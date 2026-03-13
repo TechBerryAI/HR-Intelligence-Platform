@@ -15,10 +15,20 @@ export default function ApplicationStatus() {
 
   const appliedJobs = useMemo(() => {
     return jobs.filter(j => {
-      // Check both number and string keys
       return applicantApplications[j.id] || applicantApplications[String(j.id)]
     })
   }, [jobs, applicantApplications])
+
+  // Derive display status for candidate: applied | reviewed | shortlisted | rejected (handles legacy true as 'applied')
+  const getApplicationDisplayStatus = (jobId) => {
+    const v = applicantApplications[jobId] ?? applicantApplications[String(jobId)]
+    if (!v) return 'applied'
+    if (v === true) return 'applied'
+    if (v.shortlisted) return 'shortlisted'
+    if (v.status === 'profile_viewed') return 'reviewed'
+    if (v.status === 'rejected') return 'rejected'
+    return 'applied'
+  }
 
   const savedJobs = useMemo(() => {
     return jobs.filter(j => {
@@ -75,6 +85,7 @@ export default function ApplicationStatus() {
                 key={job.id}
                 job={job}
                 isApplied={!!applicantApplications[job.id] || !!applicantApplications[String(job.id)]}
+                applicationStatus={getApplicationDisplayStatus(job.id)}
                 isSaved={!!applicantSavedJobs[job.id] || !!applicantSavedJobs[String(job.id)]}
                 onApply={async () => {
                   // Only allow applying from saved jobs tab

@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext.jsx'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
 import SuperAdminLayout from './SuperAdminLayout.jsx'
-import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart } from 'react-icons/fi'
+import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiRefreshCw } from 'react-icons/fi'
 
 function StatCard({ icon: Icon, label, value, accent, onClick }) {
   return (
@@ -63,46 +63,73 @@ export default function SuperAdminDashboard() {
   const [applications, setApplications] = useState([])
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const token = tokenService.getToken()
-        const [statsRes, appsRes, jobsRes] = await Promise.all([
-          apiRequest('/api/super-admin/stats', { method: 'GET', token }),
-          apiRequest('/api/super-admin/applications', { method: 'GET', token }),
-          apiRequest('/api/super-admin/jobs', { method: 'GET', token }),
-        ])
-        setStats(statsRes)
-        setApplications(appsRes.applications || [])
-        setJobs(jobsRes.jobs || [])
-      } catch (err) {
-        setError(err?.message || 'Failed to load stats')
-      } finally {
-        setLoading(false)
-      }
+  const load = React.useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true)
+    try {
+      setError('')
+      const token = tokenService.getToken()
+      const [statsRes, appsRes, jobsRes] = await Promise.all([
+        apiRequest('/api/super-admin/stats', { method: 'GET', token }),
+        apiRequest('/api/super-admin/applications', { method: 'GET', token }),
+        apiRequest('/api/super-admin/jobs', { method: 'GET', token }),
+      ])
+      setStats(statsRes)
+      setApplications(appsRes.applications || [])
+      setJobs(jobsRes.jobs || [])
+    } catch (err) {
+      setError(err?.message || 'Failed to load stats')
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
     }
-    load()
   }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  // Refresh when user returns to the tab so dashboard is always up to date
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') load(true)
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [load])
 
   const analytics = useMemo(() => {
     const apps = applications
     const total = apps.length
-    const byStatus = { applied: 0, shortlisted: 0, rejected: 0, pending: 0, reviewed: 0 }
+    const byStatus = { applied: 0, shortlisted: 0, rejected: 0, reviewed: 0 }
     let scoreSum = 0
     let scoreCount = 0
     const scoreBuckets = { high: 0, medium: 0, low: 0 }
     const byJob = {}
 
+    // Normalize DB status to dashboard keys (no "pending" - we only use applied, reviewed, shortlisted, rejected)
+    const normalizeStatus = (a) => {
+      if (a.shortlisted === true || a.shortlisted === 1) return 'shortlisted'
+      const raw = String(a.status ?? a.Status ?? 'applied').toLowerCase().trim()
+      if (raw === 'profile_viewed') return 'reviewed'
+      if (raw === 'rejected' || raw === 'not_shortlisted') return 'rejected'
+      if (raw === 'shortlisted') return 'shortlisted'
+      if (raw === 'reviewed') return 'reviewed'
+      return 'applied'
+    }
+
     apps.forEach((a) => {
-      const status = a.shortlisted ? 'shortlisted' : (a.status || 'applied').toLowerCase()
+      const status = normalizeStatus(a)
       byStatus[status] = (byStatus[status] || 0) + 1
       const jobId = a.job_id || a.jobId
       if (jobId) {
-        if (!byJob[jobId]) byJob[jobId] = { count: 0, shortlisted: 0, scoreSum: 0, scoreN: 0 }
+        if (!byJob[jobId]) byJob[jobId] = { count: 0, shortlisted: 0, reviewed: 0, rejected: 0, scoreSum: 0, scoreN: 0 }
         byJob[jobId].count += 1
         if (a.shortlisted) byJob[jobId].shortlisted += 1
+        if (status === 'reviewed') byJob[jobId].reviewed += 1
+        if (status === 'rejected') byJob[jobId].rejected += 1
         const score = a.match_score != null ? Number(a.match_score) : null
         if (score != null && !Number.isNaN(score)) {
           byJob[jobId].scoreSum += score
@@ -127,6 +154,8 @@ export default function SuperAdminDashboard() {
         title: jobTitleById[id] || id,
         count: data.count,
         shortlisted: data.shortlisted,
+        reviewed: data.reviewed || 0,
+        rejected: data.rejected || 0,
         avgScore: data.scoreN > 0 ? Math.round((data.scoreSum / data.scoreN) * 10) / 10 : null,
       }))
       .sort((a, b) => b.count - a.count)
@@ -150,12 +179,23 @@ export default function SuperAdminDashboard() {
   return (
     <SuperAdminLayout>
       {/* Page header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white">System Overview</h1>
-        <p className="mt-1 text-sm text-zinc-400">
-          Full-access dashboard — logged in as{' '}
-          <span className="text-zinc-200 font-medium">{superAdminAuth?.email}</span>
-        </p>
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">System Overview</h1>
+          <p className="mt-1 text-sm text-zinc-400">
+            Full-access dashboard — logged in as{' '}
+            <span className="text-zinc-200 font-medium">{superAdminAuth?.email}</span>
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => load(true)}
+          disabled={refreshing || loading}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl border border-zinc-600 hover:border-zinc-500 bg-zinc-800/60 hover:bg-zinc-700/60 text-zinc-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <FiRefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          {refreshing ? 'Refreshing…' : 'Refresh'}
+        </button>
       </div>
 
       {error && (
@@ -238,7 +278,6 @@ export default function SuperAdminDashboard() {
                 {[
                   { key: 'shortlisted', label: 'Shortlisted', color: 'bg-green-500' },
                   { key: 'applied', label: 'Applied', color: 'bg-blue-500' },
-                  { key: 'pending', label: 'Pending', color: 'bg-amber-500' },
                   { key: 'reviewed', label: 'Reviewed', color: 'bg-purple-500' },
                   { key: 'rejected', label: 'Rejected', color: 'bg-red-500' },
                 ].map(({ key, label, color }) => (
@@ -308,7 +347,7 @@ export default function SuperAdminDashboard() {
             <p className="text-xs text-zinc-500 mb-4">Applications, shortlisted count, and average match score per job. Click a job to view its full description.</p>
             {analytics.topJobs.length > 0 ? (
               <div className="space-y-2">
-                {analytics.topJobs.map(({ id, title, count, shortlisted, avgScore }) => (
+                {analytics.topJobs.map(({ id, title, count, shortlisted, reviewed, rejected, avgScore }) => (
                   <button
                     key={id}
                     type="button"
@@ -318,7 +357,9 @@ export default function SuperAdminDashboard() {
                     <span className="text-sm font-medium text-zinc-200 truncate flex-1 min-w-0">{title || id}</span>
                     <span className="text-xs text-zinc-400 tabular-nums">
                       <span className="text-zinc-300">{count}</span> applied
+                      {(reviewed || 0) > 0 && <span className="text-amber-400 ml-2">{reviewed} reviewed</span>}
                       {shortlisted > 0 && <span className="text-green-400 ml-2">{shortlisted} shortlisted</span>}
+                      {(rejected || 0) > 0 && <span className="text-red-400 ml-2">{rejected} rejected</span>}
                       {avgScore != null && <span className="text-purple-400 ml-2">avg {avgScore}% match</span>}
                     </span>
                   </button>

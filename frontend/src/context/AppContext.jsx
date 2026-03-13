@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { apiRequest, setUnauthorizedHandler, setOnTokensRefreshed } from '../utils/api'
 import { tokenService } from '../utils/tokenService'
 import { checkBackendHealth } from '../utils/healthCheck'
@@ -280,17 +280,15 @@ export function AppProvider({ children }) {
     }
   }
 
-  // Fetch applications, saved jobs, and profile from backend (single source of truth for profile)
-  const fetchApplicantData = async () => {
+  // Fetch applications, saved jobs, and profile from backend (single source of truth for profile).
+  // Memoized so consumers (e.g. ApplicationStatus) don't re-run their useEffects on every state
+  // update from this fetch (which would cause an infinite request loop).
+  const fetchApplicantData = useCallback(async () => {
     const authToken = token || tokenService.getToken()
     if (!applicantAuth.isLoggedIn || !authToken) return
     try {
-      // Fetch profile from backend - this is the canonical source after login
       const profileRes = await apiRequest('/api/candidate/profile', { method: 'GET', token: authToken }).catch(() => null)
       if (profileRes && typeof profileRes === 'object' && !profileRes.error) {
-        // Only replace local profile when server actually has saved data. This prevents
-        // overwriting the user's filled form with an empty default when the server
-        // has no profile row yet (e.g. save failed or they hadn't saved to server).
         const hasServerProfile =
           (profileRes.fullName && profileRes.fullName.trim()) ||
           (profileRes.email && profileRes.email.trim()) ||
@@ -305,17 +303,16 @@ export function AppProvider({ children }) {
       }
 
       const applications = await apiRequest('/api/applications', { method: 'GET', token: authToken }).catch(() => [])
-      
-      // Convert applications array to map
       const applicationsMap = {}
       if (Array.isArray(applications)) {
         applications.forEach(app => {
-          // Handle both jobId and job.id formats from backend
           const jobId = app.jobId || (app.job && app.job.id) || app.job_id
           if (jobId) {
-            // Store as both number and string for compatibility
-            applicationsMap[jobId] = true
-            applicationsMap[String(jobId)] = true
+            const status = app.status || 'applied'
+            const shortlisted = !!app.shortlisted
+            const entry = { status, shortlisted }
+            applicationsMap[jobId] = entry
+            applicationsMap[String(jobId)] = entry
           }
         })
       }
@@ -324,7 +321,7 @@ export function AppProvider({ children }) {
     } catch (err) {
       console.error('Fetch applicant data error:', err)
     }
-  }
+  }, [token, applicantAuth.isLoggedIn])
 
   const loginApplicant = async (idOrEmail, password) => {
     setAuthError('')
@@ -671,8 +668,9 @@ export function AppProvider({ children }) {
       return { ok: false, reason: 'profile_requirements_missing' }
     }
     // Optimistic update: show "Applied" immediately
+    const newEntry = { status: 'applied', shortlisted: false }
     setApplicantApplications((prev) => {
-      const next = { ...prev, [jobId]: true, [String(jobId)]: true }
+      const next = { ...prev, [jobId]: newEntry, [String(jobId)]: newEntry }
       writeJson(STORAGE_KEYS.applicantApplications, next)
       return next
     })

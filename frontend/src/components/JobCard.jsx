@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiMapPin, FiClock, FiCheck, FiBookmark, FiX } from 'react-icons/fi'
+import { FiMapPin, FiClock, FiCheck, FiBookmark, FiX, FiEye, FiAward, FiSlash } from 'react-icons/fi'
 
 // Helper function to format date for display
 const formatDisplayDate = (dateString) => {
@@ -13,9 +13,35 @@ const formatDisplayDate = (dateString) => {
   }
 }
 
-export default function JobCard({ job, onApply, isApplied = false, isSaved = false, onToggleSave, isAdmin = false }) {
+// applicationStatus: 'applied' | 'reviewed' | 'shortlisted' | 'rejected' (for candidate My Applications)
+const STATUS_BADGES = {
+  applied: {
+    label: 'Applied',
+    Icon: FiCheck,
+    className: 'bg-green-500/20 text-green-300 border-green-500/30',
+  },
+  reviewed: {
+    label: 'Reviewed',
+    Icon: FiEye,
+    className: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  },
+  shortlisted: {
+    label: 'Shortlisted',
+    Icon: FiAward,
+    className: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+  },
+  rejected: {
+    label: 'Rejected',
+    Icon: FiSlash,
+    className: 'bg-red-500/20 text-red-300 border-red-500/30',
+  },
+}
+
+export default function JobCard({ job, onApply, isApplied = false, applicationStatus = 'applied', isSaved = false, onToggleSave, isAdmin = false }) {
   const isDisabled = job.enabled === false
   const [showDescriptionModal, setShowDescriptionModal] = useState(false)
+  const statusConfig = STATUS_BADGES[applicationStatus] || STATUS_BADGES.applied
+  const StatusIcon = statusConfig.Icon
 
   useEffect(() => {
     if (!showDescriptionModal) return
@@ -56,10 +82,10 @@ export default function JobCard({ job, onApply, isApplied = false, isSaved = fal
               <motion.span
                 initial={{ scale: 0 }}
                 animate={{ scale: 1 }}
-                className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full bg-green-500/20 text-green-300 border border-green-500/30"
+                className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border ${statusConfig.className}`}
               >
-                <FiCheck className="w-3 h-3" />
-                Applied
+                <StatusIcon className="w-3 h-3" />
+                {statusConfig.label}
               </motion.span>
             )}
             {!isApplied && isSaved && (
@@ -121,7 +147,7 @@ export default function JobCard({ job, onApply, isApplied = false, isSaved = fal
                   : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-glow'
               }`}
             >
-              {isApplied ? 'Applied' : 'Apply Now'}
+              {isApplied ? statusConfig.label : 'Apply Now'}
             </motion.button>
           )}
           {!isAdmin && onToggleSave && !isApplied && (

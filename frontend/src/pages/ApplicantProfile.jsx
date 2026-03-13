@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
 import { useToast } from '../components/Toast.jsx'
+import { useAsyncAction } from '../hooks/useAsyncAction.js'
 import MonthYearPicker from '../components/MonthYearPicker.jsx'
 import ResumeUploadWithParsing from '../components/ResumeUploadWithParsing.jsx'
 import PremiumInput from '../components/PremiumInput.jsx'
@@ -45,6 +46,8 @@ export default function ApplicantProfile() {
 	const navigate = useNavigate()
 	const location = useLocation()
 	const toast = useToast()
+	const { run: runSave, loading: saveLoading } = useAsyncAction()
+	const { run: runComplete, loading: completeLoading } = useAsyncAction()
   const firstErrorRef = useRef(null)
   const fileInputRef = useRef(null)
   const validationSummaryRef = useRef(null)
@@ -477,7 +480,14 @@ export default function ApplicantProfile() {
 							<p className="mt-2 text-sm text-zinc-400">We'll use this info when you apply to jobs</p>
 						</motion.div>
 
-						<form onSubmit={onSave} noValidate className="mt-8 space-y-8">
+						<form
+								onSubmit={(e) => {
+									e.preventDefault()
+									runSave(() => onSave(e))
+								}}
+								noValidate
+								className="mt-8 space-y-8"
+							>
 							{saved && (
 								<motion.div
 									initial={{ opacity: 0, scale: 0.95 }}
@@ -1044,16 +1054,23 @@ export default function ApplicantProfile() {
 								type="submit"
 								variant="secondary"
 								icon={FiSave}
+								loading={saveLoading}
+								disabled={saveLoading || completeLoading}
 							>
-								Save
+								{saveLoading ? 'Saving…' : 'Save'}
 							</PremiumButton>
 								<PremiumButton
 									type="button"
-									onClick={onComplete}
+									onClick={(e) => {
+										e.preventDefault()
+										runComplete(() => onComplete(e))
+									}}
 									variant="primary"
 									icon={FiCheck}
+									loading={completeLoading}
+									disabled={saveLoading || completeLoading}
 								>
-									Save & Complete
+									{completeLoading ? 'Saving & completing…' : 'Save & Complete'}
 								</PremiumButton>
 							</motion.div>
 						</form>
