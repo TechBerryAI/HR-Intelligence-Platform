@@ -244,4 +244,4 @@ When using `node start.js`, press **Ctrl+C** in the same terminal to stop both b
 
 ## License
 
-MIT License
+Proprietary. This project is owned by TechBerry InfoTech Pvt. Ltd. and is not open source. See [LICENSE](LICENSE) for full terms.
