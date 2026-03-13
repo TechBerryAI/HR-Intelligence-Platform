@@ -1,8 +1,30 @@
 import os
+import re
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import request, jsonify
 import jwt
+
+# Password strength: min 8 chars, at least one uppercase, one lowercase, one digit, one special character
+PASSWORD_MIN_LENGTH = 8
+
+
+def validate_password_strength(password):
+    """
+    Validate password meets strength requirements.
+    Returns (True, None) if valid, else (False, error_message).
+    """
+    if not password or len(password) < PASSWORD_MIN_LENGTH:
+        return False, f'Password must be at least {PASSWORD_MIN_LENGTH} characters.'
+    if not re.search(r'[A-Z]', password):
+        return False, 'Password must contain at least one uppercase letter.'
+    if not re.search(r'[a-z]', password):
+        return False, 'Password must contain at least one lowercase letter.'
+    if not re.search(r'\d', password):
+        return False, 'Password must contain at least one number.'
+    if not re.search(r'[!@#$%^&*()_+\-=\[\]{};\':"\\|,.<>\/?`~]', password):
+        return False, 'Password must contain at least one special character (e.g. !@#$%^&*).'
+    return True, None
 
 JWT_SECRET = os.getenv('JWT_SECRET', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE')
 # Access token lifetime; default 1 hour. Refresh replaces it automatically so user stays logged in.

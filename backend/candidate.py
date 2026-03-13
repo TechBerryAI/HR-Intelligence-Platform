@@ -2,7 +2,7 @@ import os
 import bcrypt
 from flask import Blueprint, request, jsonify, Response
 from db import db_get, db_run, db_all, BACKEND, NOW_SQL
-from utils import authenticate_token, require_candidate, require_hr
+from utils import authenticate_token, require_candidate, require_hr, validate_password_strength
 from matching import calculate_matching_percentage
 
 candidate_bp = Blueprint('candidate', __name__)
@@ -33,8 +33,9 @@ def candidate_change_password():
         new_password = (data.get('newPassword') or data.get('new_password') or '').strip()
         if not current_password:
             return jsonify({'error': 'Current password is required'}), 400
-        if len(new_password) < 6:
-            return jsonify({'error': 'New password must be at least 6 characters'}), 400
+        ok, err = validate_password_strength(new_password)
+        if not ok:
+            return jsonify({'error': err}), 400
         candidate_id = request.user['id']
         row = db_get('SELECT cid, email, password FROM candidate_signup WHERE cid = ?', (candidate_id,))
         if not row:

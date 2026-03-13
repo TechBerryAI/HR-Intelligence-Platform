@@ -4,6 +4,7 @@ import { tokenService } from '../../utils/tokenService.js'
 import { useApp } from '../../context/AppContext.jsx'
 import { useAsyncAction } from '../../hooks/useAsyncAction.js'
 import SuperAdminLayout from './SuperAdminLayout.jsx'
+import PasswordInput from '../../components/PasswordInput.jsx'
 import { FiTrash2, FiRefreshCw, FiUsers, FiSearch, FiDownload, FiPlus, FiArrowUp, FiArrowDown } from 'react-icons/fi'
 import { generateAdminsPdf } from '../../utils/pdfReportUtils.js'
 
@@ -175,11 +176,10 @@ export default function SuperAdminAdmins() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-zinc-400 mb-1">Password (min 6 characters)</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={createForm.password}
                   onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
+                  className="px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
                   placeholder="••••••••"
                   minLength={6}
                   required

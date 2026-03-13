@@ -3,7 +3,8 @@ import { useApp } from '../context/AppContext.jsx'
 import PremiumInput from '../components/PremiumInput.jsx'
 import PremiumButton from '../components/PremiumButton.jsx'
 import { motion } from 'framer-motion'
-import { FiSettings, FiShield, FiLock, FiCheck, FiAlertCircle } from 'react-icons/fi'
+import { FiSettings, FiShield, FiLock, FiCheck, FiAlertCircle, FiX } from 'react-icons/fi'
+import { PASSWORD_RULES, isPasswordStrong } from '../utils/passwordValidation.js'
 
 export default function Settings() {
   const { applicantAuth, auth, superAdminAuth, changePasswordApplicant, changePasswordHr } = useApp()
@@ -16,6 +17,10 @@ export default function Settings() {
   const isApplicant = applicantAuth?.isLoggedIn && !auth?.isLoggedIn && !superAdminAuth?.isLoggedIn
   const changePassword = isApplicant ? changePasswordApplicant : changePasswordHr
 
+  const newPasswordValid = isPasswordStrong(newPassword)
+  const confirmMatches = newPassword && newPassword === confirmPassword
+  const canSubmit = currentPassword.trim() && newPasswordValid && confirmMatches && !loading
+
   const handleChangePassword = async (e) => {
     e.preventDefault()
     setMessage({ type: '', text: '' })
@@ -23,12 +28,8 @@ export default function Settings() {
       setMessage({ type: 'error', text: 'Please enter your current password.' })
       return
     }
-    if (!newPassword.trim()) {
-      setMessage({ type: 'error', text: 'Please enter a new password.' })
-      return
-    }
-    if (newPassword.length < 6) {
-      setMessage({ type: 'error', text: 'New password must be at least 6 characters.' })
+    if (!newPasswordValid) {
+      setMessage({ type: 'error', text: 'New password must meet all requirements below.' })
       return
     }
     if (newPassword !== confirmPassword) {
@@ -77,9 +78,24 @@ export default function Settings() {
             <FiLock className="w-4 h-4" />
             Change password
           </h3>
-          <p className="text-sm text-zinc-500 mb-5">
-            Enter your current password and choose a new one. Use at least 6 characters.
+          <p className="text-sm text-zinc-500 mb-4">
+            Enter your current password and choose a new one. The new password must meet all requirements below.
           </p>
+          <ul className="mb-5 space-y-2">
+            {PASSWORD_RULES.map(({ id, label, test }) => {
+              const pass = test(newPassword)
+              return (
+                <li key={id} className="flex items-center gap-2 text-sm">
+                  {pass ? (
+                    <FiCheck className="w-4 h-4 text-green-400 flex-shrink-0" aria-hidden />
+                  ) : (
+                    <FiX className="w-4 h-4 text-zinc-500 flex-shrink-0" aria-hidden />
+                  )}
+                  <span className={pass ? 'text-zinc-300' : 'text-zinc-500'}>{label}</span>
+                </li>
+              )
+            })}
+          </ul>
           {message.text && (
             <motion.div
               initial={{ opacity: 0, y: -6 }}
@@ -113,7 +129,7 @@ export default function Settings() {
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="At least 6 characters"
+              placeholder="Meet all requirements above"
               autoComplete="new-password"
               icon={FiLock}
             />
@@ -130,7 +146,7 @@ export default function Settings() {
               type="submit"
               variant="primary"
               loading={loading}
-              disabled={loading}
+              disabled={!canSubmit}
             >
               {loading ? 'Updating…' : 'Update password'}
             </PremiumButton>

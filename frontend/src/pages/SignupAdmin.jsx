@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import PasswordInput from '../components/PasswordInput.jsx'
 import { useApp } from '../context/AppContext.jsx'
 import { useNavigate } from 'react-router-dom'
 
@@ -106,12 +107,11 @@ export default function SignupAdmin() {
                                 </div>
                                 <label className="block text-sm font-medium text-zinc-300 mt-4">Password</label>
                                 <div className="mt-1 relative">
-                                    <span className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-zinc-500">
+                                    <span className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-zinc-500 z-10">
                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="1.5" /><path d="M8 11V8a4 4 0 118 0v3" stroke="currentColor" strokeWidth="1.5" /></svg>
                                     </span>
-                                    <input
-                                        type="password"
-                                        className="w-full bg-transparent border-0 border-b border-zinc-700 pl-7 pr-3 py-2.5 text-gray-100 placeholder:text-zinc-500 focus:outline-none focus:ring-0 focus:border-white"
+                                    <PasswordInput
+                                        className="bg-transparent border-0 border-b border-zinc-700 pl-7 py-2.5 text-gray-100 placeholder:text-zinc-500 focus:outline-none focus:ring-0 focus:border-white"
                                         placeholder="••••••••"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}

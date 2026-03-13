@@ -1,8 +1,10 @@
 import React, { forwardRef, useState } from 'react';
 import { motion } from 'framer-motion';
+import { FiEye, FiEyeOff } from 'react-icons/fi';
 
 /**
- * Premium input component with autofill animation support
+ * Premium input component with autofill animation support.
+ * When type="password", shows an eye icon to toggle visibility.
  */
 const PremiumInput = forwardRef(({ 
   label,
@@ -14,9 +16,15 @@ const PremiumInput = forwardRef(({
   wrapperClassName = '',
   as = 'input',
   children,
+  type: typeProp = 'text',
+  showPasswordToggle = true,
   ...props 
 }, ref) => {
   const [isFocused, setIsFocused] = useState(false);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const isPassword = typeProp === 'password';
+  const inputType = isPassword && showPasswordToggle && passwordVisible ? 'text' : typeProp;
+  const showToggle = isPassword && showPasswordToggle;
   const Component = as === 'select' ? 'select' : as === 'textarea' ? 'textarea' : 'input';
 
   return (
@@ -50,15 +58,28 @@ const PremiumInput = forwardRef(({
               ref={ref}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
+              type={as === 'textarea' ? undefined : inputType}
               className={`
                 premium-input w-full
                 ${Icon ? 'pl-11' : 'pl-3'}
+                ${showToggle ? 'pr-11' : ''}
                 ${error ? 'border-red-500 focus:border-red-400' : ''}
                 ${isAutofilled ? 'autofill-animation border-purple-500' : ''}
                 ${className}
               `}
               {...props}
             />
+            {showToggle && (
+              <button
+                type="button"
+                onClick={() => setPasswordVisible((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 z-10 text-zinc-500 hover:text-zinc-300 focus:outline-none focus:text-white transition-colors p-1 rounded"
+                tabIndex={-1}
+                aria-label={passwordVisible ? 'Hide password' : 'Show password'}
+              >
+                {passwordVisible ? <FiEyeOff className="w-5 h-5" /> : <FiEye className="w-5 h-5" />}
+              </button>
+            )}
           </motion.div>
         ) : (
           <Component

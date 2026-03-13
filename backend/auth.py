@@ -11,7 +11,7 @@ from helpers.otp_utils import generate_otp, is_valid_email, parse_otp_expiry, se
 from models import get_session
 from models.hr_auth import HRAuth
 from sessions_service import record_login_attempt
-from utils import build_jwt_payload, authenticate_token
+from utils import build_jwt_payload, authenticate_token, validate_password_strength
 
 auth_bp = Blueprint('auth', __name__)
 HRAUTH_T = '"HRAuth"' if BACKEND == 'postgresql' else 'HRAuth'
@@ -429,8 +429,9 @@ def hr_reset_password():
 
         if not email or not otp:
             return jsonify({'error': 'Email and OTP are required.'}), 400
-        if len(new_password) < 6:
-            return jsonify({'error': 'Password must be at least 6 characters.'}), 400
+        ok, err = validate_password_strength(new_password)
+        if not ok:
+            return jsonify({'error': err}), 400
         if new_password != confirm_password:
             return jsonify({'error': 'Passwords do not match.'}), 400
 
@@ -575,8 +576,9 @@ def hr_change_password():
         new_password = (data.get('newPassword') or data.get('new_password') or '').strip()
         if not current_password:
             return jsonify({'error': 'Current password is required'}), 400
-        if len(new_password) < 6:
-            return jsonify({'error': 'New password must be at least 6 characters'}), 400
+        ok, err = validate_password_strength(new_password)
+        if not ok:
+            return jsonify({'error': err}), 400
         hrid = user['hrId']
         signup_data = db_get(
             'SELECT hrid, email, password, full_name FROM hr_signup WHERE hrid = ?',

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
+import PasswordInput from '../components/PasswordInput.jsx'
 
 export default function LoginApplicant() {
 	const navigate = useNavigate()
@@ -57,12 +58,11 @@ export default function LoginApplicant() {
 							</div>
 							<label className="block text-sm font-medium text-zinc-300 mt-4">Password</label>
 							<div className="mt-1 relative">
-								<span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
+								<span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 z-10">
 									<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 11V8a4 4 0 118 0v3" stroke="currentColor" strokeWidth="1.5"/></svg>
 								</span>
-								<input
-									type="password"
-									className="w-full bg-transparent border-0 border-b border-zinc-700 pl-10 pr-3 py-2.5 text-gray-100 placeholder:text-zinc-500 focus:outline-none focus:ring-0 focus:border-white"
+								<PasswordInput
+									className="bg-transparent border-0 border-b border-zinc-700 pl-10 py-2.5 text-gray-100 placeholder:text-zinc-500 focus:outline-none focus:ring-0 focus:border-white"
 									placeholder="••••••••"
 									value={applicantPassword}
 									onChange={(e) => setApplicantPassword(e.target.value)}

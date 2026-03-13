@@ -1,6 +1,9 @@
 import React, { useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
+import PasswordInput from '../components/PasswordInput.jsx'
+import { PASSWORD_RULES, isPasswordStrong } from '../utils/passwordValidation.js'
+import { FiCheck, FiX } from 'react-icons/fi'
 
 export default function ForgotPasswordReset() {
   const { variant = 'applicant' } = useParams()
@@ -19,12 +22,24 @@ export default function ForgotPasswordReset() {
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
+  const newPasswordValid = isPasswordStrong(newPassword)
+  const confirmMatches = newPassword && newPassword === confirmPassword
+  const canSubmit = email && otp && newPasswordValid && confirmMatches && !loading
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setStatus('')
     setError('')
     if (!email || !otp) {
       setError('Missing verification data. Please restart the reset process.')
+      return
+    }
+    if (!newPasswordValid) {
+      setError('New password must meet all requirements below.')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.')
       return
     }
     setLoading(true)
@@ -70,27 +85,37 @@ export default function ForgotPasswordReset() {
 
             {email && otp && (
               <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+                <p className="text-xs text-zinc-400">New password must meet all of the following:</p>
+                <ul className="space-y-1.5">
+                  {PASSWORD_RULES.map(({ id, label, test }) => {
+                    const pass = test(newPassword)
+                    return (
+                      <li key={id} className="flex items-center gap-2 text-xs">
+                        {pass ? <FiCheck className="w-3.5 h-3.5 text-green-400 flex-shrink-0" /> : <FiX className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />}
+                        <span className={pass ? 'text-zinc-300' : 'text-zinc-500'}>{label}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-400">New Password</label>
-                  <input
-                    type="password"
-                    className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-white focus:outline-none"
-                    placeholder="Enter new password"
+                  <PasswordInput
+                    className="mt-1 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-white focus:outline-none"
+                    placeholder="Meet all requirements above"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    minLength={6}
+                    minLength={8}
                     required
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-400">Confirm Password</label>
-                  <input
-                    type="password"
-                    className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-white focus:outline-none"
+                  <PasswordInput
+                    className="mt-1 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-white focus:outline-none"
                     placeholder="Confirm new password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    minLength={6}
+                    minLength={8}
                     required
                   />
                 </div>
@@ -101,7 +126,7 @@ export default function ForgotPasswordReset() {
                 <button
                   type="submit"
                   className="w-full rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-100 disabled:opacity-60"
-                  disabled={loading || !newPassword || !confirmPassword}
+                  disabled={!canSubmit}
                 >
                   {loading ? 'Updating...' : 'Reset Password'}
                 </button>
