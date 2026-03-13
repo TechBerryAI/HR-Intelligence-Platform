@@ -8,7 +8,7 @@ import { motion } from 'framer-motion'
 import { FiAlertCircle, FiRefreshCw } from 'react-icons/fi'
 
 export default function Jobs() {
-  const { jobs, applicantAuth, applicantProfile, jobsError, jobsLoading, fetchJobs, applicantApplications, applicantSavedJobs, toggleSaveJob, applyToJobAsApplicant, auth } = useApp()
+  const { jobs, applicantAuth, applicantProfile, jobsError, jobsLoading, fetchJobs, applicantApplications, applicantSavedJobs, toggleSaveJob, applyToJobAsApplicant, auth, superAdminAuth } = useApp()
   const location = useLocation()
   const navigate = useNavigate()
   const params = new URLSearchParams(location.search)
@@ -177,7 +177,7 @@ export default function Jobs() {
                     job={job}
                     isApplied={!!applicantApplications[job.id] || !!applicantApplications[String(job.id)]}
                     isSaved={!!applicantSavedJobs[job.id] || !!applicantSavedJobs[String(job.id)]}
-                    isAdmin={auth.role === 'HR' || auth.role === 'head_hr' || auth.role === 'admin'}
+                    isAdmin={!!(auth.role === 'HR' || auth.role === 'head_hr' || auth.role === 'admin' || superAdminAuth?.isLoggedIn)}
                     isApplying={applyingJobId === job.id}
                     onApply={async () => {
                       setApplyError('')
