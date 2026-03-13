@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
 import SuperAdminLayout from './SuperAdminLayout.jsx'
@@ -29,6 +30,7 @@ function StatusBadge({ status }) {
 }
 
 export default function SuperAdminApplications() {
+  const navigate = useNavigate()
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -165,7 +167,14 @@ export default function SuperAdminApplications() {
               </thead>
               <tbody className="divide-y divide-zinc-800">
                 {filtered.map((app) => (
-                  <tr key={app.id} className="bg-zinc-900/30 hover:bg-zinc-800/40 transition-colors">
+                  <tr
+                    key={app.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate(`/super-admin/applications/${app.id}`)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/super-admin/applications/${app.id}`) } }}
+                    className="bg-zinc-900/30 hover:bg-zinc-800/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-rose-500/50"
+                  >
                     <td className="px-4 py-3 text-zinc-600 text-xs font-mono">#{app.id}</td>
                     <td className="px-4 py-3">
                       <p className="text-zinc-100 font-medium">{app.candidate_name || '—'}</p>

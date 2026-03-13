@@ -29,6 +29,7 @@ const SuperAdminAdmins = lazy(() => import('./pages/super-admin/SuperAdminAdmins
 const SuperAdminCandidates = lazy(() => import('./pages/super-admin/SuperAdminCandidates.jsx'))
 const SuperAdminJobs = lazy(() => import('./pages/super-admin/SuperAdminJobs.jsx'))
 const SuperAdminApplications = lazy(() => import('./pages/super-admin/SuperAdminApplications.jsx'))
+const SuperAdminApplicationDetail = lazy(() => import('./pages/super-admin/SuperAdminApplicationDetail.jsx'))
 
 import AdminGuard from './guards/AdminGuard.jsx'
 import CandidateGuard from './guards/CandidateGuard.jsx'
@@ -147,6 +148,14 @@ export default function App() {
                     element={
                       <SuperAdminGuard>
                         <SuperAdminApplications />
+                      </SuperAdminGuard>
+                    }
+                  />
+                  <Route
+                    path="/super-admin/applications/:id"
+                    element={
+                      <SuperAdminGuard>
+                        <SuperAdminApplicationDetail />
                       </SuperAdminGuard>
                     }
                   />

@@ -10,6 +10,7 @@ import jwt
 from flask import Blueprint, jsonify, request
 
 from db import db_all, db_get, db_run
+from toon import toon_loads_flex
 from utils import authenticate_token, build_jwt_payload, require_head_hr, require_super_admin
 
 super_admin_bp = Blueprint('super_admin', __name__)
@@ -258,3 +259,51 @@ def list_applications():
         (),
     )
     return jsonify({'applications': rows})
+
+
+@super_admin_bp.route('/applications/<int:app_id>', methods=['OPTIONS'])
+def options_application(app_id):
+    """Allow CORS preflight for GET /applications/<id> (no auth on preflight)."""
+    return '', 204
+
+
+@super_admin_bp.get('/applications/<int:app_id>')
+@authenticate_token
+@require_head_hr
+def get_application(app_id):
+    """Return one application with full ATS analysis for super-admin detail view."""
+    row = db_get(
+        '''SELECT a.id, a.candidate_id, a.job_id, a.status,
+                  a.applied_at, a.match_score, a.shortlisted,
+                  a.ats_reasoning, a.ats_analysis,
+                  cs.name AS candidate_name, cs.email AS candidate_email,
+                  j.title AS job_title, j.company AS job_company,
+                  h.full_name AS hr_name
+           FROM applications a
+           LEFT JOIN candidate_signup cs ON cs.cid = a.candidate_id
+           LEFT JOIN jobs j ON j.jdid = a.job_id
+           LEFT JOIN hr_signup h ON h.hrid = j.posted_by
+           WHERE a.id = ?''',
+        (app_id,),
+    )
+    if not row:
+        return jsonify({'error': 'Application not found'}), 404
+    ats_raw = row.get('ats_analysis')
+    ats_analysis = toon_loads_flex(ats_raw) if ats_raw else None
+    payload = {
+        'id': row['id'],
+        'candidate_id': row['candidate_id'],
+        'job_id': row['job_id'],
+        'status': row['status'],
+        'applied_at': row['applied_at'],
+        'match_score': float(row['match_score']) if row.get('match_score') is not None else None,
+        'shortlisted': bool(row.get('shortlisted')),
+        'ats_reasoning': row.get('ats_reasoning'),
+        'ats_analysis': ats_analysis,
+        'candidate_name': row.get('candidate_name'),
+        'candidate_email': row.get('candidate_email'),
+        'job_title': row.get('job_title'),
+        'job_company': row.get('job_company'),
+        'hr_name': row.get('hr_name'),
+    }
+    return jsonify(payload)
