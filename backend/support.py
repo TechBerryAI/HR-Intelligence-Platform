@@ -1,12 +1,17 @@
 """
 Support Routes - Handle help and support requests
 """
+import os
 from flask import Blueprint, request, jsonify
 from db import db_run, db_get, db_all, BACKEND, NOW_SQL
-from datetime import datetime
+from helpers.email_utils import send_notification_email
+from helpers.email_templates import support_request_html
 
 support_bp = Blueprint('support', __name__)
 SUPPORT_TABLE = "support_requests" if BACKEND == "postgresql" else "dbo.support_requests"
+
+# Email where Contact Us and internal feedback notifications are sent (can override via env)
+SUPPORT_NOTIFICATION_EMAIL = os.getenv('SUPPORT_NOTIFICATION_EMAIL', 'techberryaiteam@gmail.com')
 
 
 @support_bp.route('/submit', methods=['POST'])
@@ -69,7 +74,27 @@ def submit_support_request():
             """
         result = db_run(query, (name, email, user_id, user_type, subject, message, priority))
         request_id = result.get('lastID')
-        
+
+        # Notify AI Team / support inbox (do not fail request if email fails)
+        try:
+            email_subject = f"[Support Request] {subject}"
+            email_body = (
+                f"Name: {name}\n"
+                f"Email: {email}\n"
+                f"User type: {user_type}\n"
+                f"Priority: {priority}\n"
+                f"Request ID: #{request_id}\n\n"
+                f"Message:\n{message}"
+            )
+            html = support_request_html(name, email, user_type, priority, request_id, message)
+            ok = send_notification_email(
+                SUPPORT_NOTIFICATION_EMAIL, email_subject, email_body, html=html
+            )
+            if not ok:
+                print(f"[SUPPORT] Notification email to {SUPPORT_NOTIFICATION_EMAIL} may have failed (check mail config)")
+        except Exception as mail_err:
+            print(f"[SUPPORT] Could not send notification email: {mail_err}")
+
         return jsonify({
             "success": True,
             "message": "Support request submitted successfully",

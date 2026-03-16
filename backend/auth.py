@@ -7,6 +7,11 @@ from flask import Blueprint, request, jsonify
 
 from db import db_get, db_run, BACKEND
 from helpers.email_utils import send_notification_email
+from helpers.email_templates import (
+    welcome_hr_html,
+    password_changed_html,
+    login_alert_html,
+)
 from helpers.otp_utils import generate_otp, is_valid_email, parse_otp_expiry, send_email_otp, utc_now_aware, normalize_to_utc_aware
 from models import get_session
 from models.hr_auth import HRAuth
@@ -258,15 +263,13 @@ def verify_hr_otp():
         user_agent = request.headers.get('User-Agent')
         record_login_attempt(hr_data['email'], 'HR', 'success', ip_address, user_agent)
 
-        send_notification_email(
-            hr_data['email'],
-            "Welcome to Job Portal",
-            (
-                f"Hi {hr_data['full_name']},\n\n"
-                "Your HR account has been verified and is ready to use. You can now log in to manage jobs and applicants.\n\n"
-                "If you did not initiate this signup, please contact support immediately."
-            )
+        body = (
+            f"Hi {hr_data['full_name']},\n\n"
+            "Your HR account has been verified and is ready to use. You can now log in to manage jobs and applicants.\n\n"
+            "If you did not initiate this signup, please contact support immediately."
         )
+        html = welcome_hr_html(hr_data['full_name'])
+        send_notification_email(hr_data['email'], "Welcome to Job Portal", body, html=html)
 
         return jsonify({
             "message": "Account verified and created successfully",
@@ -470,15 +473,13 @@ def hr_reset_password():
             traceback.print_exc()
             return jsonify({'error': 'Failed to update password. Please try again.'}), 500
 
-        send_notification_email(
-            email,
-            "Your Job Portal password was changed",
-            (
-                f"Hi {hr_name or 'there'},\n\n"
-                "This is a confirmation that the password for your Job Portal HR account was just changed.\n"
-                "If this wasn't you, please reset your password immediately or contact support."
-            )
+        body = (
+            f"Hi {hr_name or 'there'},\n\n"
+            "This is a confirmation that the password for your Job Portal HR account was just changed.\n"
+            "If this wasn't you, please reset your password immediately or contact support."
         )
+        html = password_changed_html(hr_name or 'there')
+        send_notification_email(email, "Your Job Portal password was changed", body, html=html)
 
         return jsonify({'message': 'Password updated successfully. You can now login.'}), 200
     except Exception as e:
@@ -536,16 +537,25 @@ def hr_login():
         # Skip email if user has logged in from this IP/device before (including signup)
         if is_new_device:
             # This is a new device/IP - send notification
+            login_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+            body = (
+                f"Hi {signup_data['full_name'] or 'there'},\n\n"
+                f"We noticed a login to your Job Portal HR account on {login_time}\n"
+                f"IP Address: {ip_address or 'Unavailable'}\n"
+                f"Device: {user_agent or 'Unavailable'}\n\n"
+                "If this was you, no action is needed. If you did not sign in, please reset your password immediately."
+            )
+            html = login_alert_html(
+                signup_data['full_name'] or 'there',
+                ip_address or 'Unavailable',
+                user_agent or 'Unavailable',
+                login_time,
+            )
             send_notification_email(
                 signup_data['email'],
                 "New login to your Job Portal HR account",
-                (
-                    f"Hi {signup_data['full_name'] or 'there'},\n\n"
-                    f"We noticed a login to your Job Portal HR account on {datetime.utcnow():%Y-%m-%d %H:%M:%S} UTC.\n"
-                    f"IP Address: {ip_address or 'Unavailable'}\n"
-                    f"Device: {user_agent or 'Unavailable'}\n\n"
-                    "If this was you, no action is needed. If you did not sign in, please reset your password immediately."
-                )
+                body,
+                html=html,
             )
 
         return jsonify({
@@ -606,15 +616,13 @@ def hr_change_password():
                 session.add(hr_auth)
         hr_name = signup_data.get('full_name') or 'there'
         try:
-            send_notification_email(
-                email,
-                "Your Job Portal password was changed",
-                (
-                    f"Hi {hr_name},\n\n"
-                    "This is a confirmation that the password for your Job Portal account was changed.\n"
-                    "If this wasn't you, please reset your password immediately or contact support."
-                ),
+            body = (
+                f"Hi {hr_name},\n\n"
+                "This is a confirmation that the password for your Job Portal account was changed.\n"
+                "If this wasn't you, please reset your password immediately or contact support."
             )
+            html = password_changed_html(hr_name)
+            send_notification_email(email, "Your Job Portal password was changed", body, html=html)
         except Exception:
             pass
         return jsonify({'message': 'Password updated successfully'}), 200

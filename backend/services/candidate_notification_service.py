@@ -7,6 +7,7 @@ Per the ATS spec: PROFILE_VIEWED, SHORTLISTED, NOT_SHORTLISTED.
 
 from typing import Tuple
 from helpers.email_utils import send_notification_email
+from helpers.email_templates import candidate_notification_html
 
 # Status display labels (spec)
 STATUS_LABELS = {
@@ -28,7 +29,7 @@ def _build_email_profile_viewed(
     candidate_email: str,
     job_title: str,
     company_name: str,
-) -> Tuple[str, str]:
+) -> Tuple[str, str, str]:
     """Email for PROFILE_VIEWED: inform candidate their profile has been reviewed."""
     subject = "Your profile has been reviewed"
     name = (candidate_name or '').strip() or 'there'
@@ -38,7 +39,15 @@ def _build_email_profile_viewed(
         "The hiring team will contact you if they wish to move forward with your application.\n\n"
         "— Job Portal Team"
     )
-    return subject, body
+    html = candidate_notification_html(
+        candidate_name, job_title, company_name,
+        "Your profile has been reviewed",
+        [
+            "Your profile has been reviewed for this role.",
+            "The hiring team will contact you if they wish to move forward with your application.",
+        ],
+    )
+    return subject, body, html
 
 
 def _build_email_shortlisted(
@@ -46,7 +55,7 @@ def _build_email_shortlisted(
     candidate_email: str,
     job_title: str,
     company_name: str,
-) -> Tuple[str, str]:
+) -> Tuple[str, str, str]:
     """Email for SHORTLISTED: inform candidate they are shortlisted; next steps will follow."""
     subject = "You have been shortlisted"
     name = (candidate_name or '').strip() or 'there'
@@ -56,7 +65,15 @@ def _build_email_shortlisted(
         "The hiring team will reach out with next steps in the coming days.\n\n"
         "— Job Portal Team"
     )
-    return subject, body
+    html = candidate_notification_html(
+        candidate_name, job_title, company_name,
+        "You have been shortlisted",
+        [
+            "You have been shortlisted for this role.",
+            "The hiring team will reach out with next steps in the coming days.",
+        ],
+    )
+    return subject, body, html
 
 
 def _build_email_not_shortlisted(
@@ -64,7 +81,7 @@ def _build_email_not_shortlisted(
     candidate_email: str,
     job_title: str,
     company_name: str,
-) -> Tuple[str, str]:
+) -> Tuple[str, str, str]:
     """Email for NOT_SHORTLISTED: inform candidate they were not selected."""
     subject = "Update on your application"
     name = (candidate_name or '').strip() or 'there'
@@ -75,7 +92,16 @@ def _build_email_not_shortlisted(
         "We encourage you to apply for other roles that match your experience.\n\n"
         "— Job Portal Team"
     )
-    return subject, body
+    html = candidate_notification_html(
+        candidate_name, job_title, company_name,
+        "Update on your application",
+        [
+            "Thank you for your interest in this role.",
+            "After careful consideration, we have decided to move forward with other candidates for this position.",
+            "We encourage you to apply for other roles that match your experience.",
+        ],
+    )
+    return subject, body, html
 
 
 def process_hr_action(
@@ -93,17 +119,17 @@ def process_hr_action(
     """
     hr_action = (hr_action or '').strip().upper()
     if hr_action == 'PROFILE_VIEWED':
-        subject, body = _build_email_profile_viewed(
+        subject, body, html = _build_email_profile_viewed(
             candidate_name, candidate_email, job_title, company_name
         )
         status = 'profile_viewed'
     elif hr_action == 'SHORTLISTED':
-        subject, body = _build_email_shortlisted(
+        subject, body, html = _build_email_shortlisted(
             candidate_name, candidate_email, job_title, company_name
         )
         status = 'shortlisted'
     elif hr_action == 'NOT_SHORTLISTED':
-        subject, body = _build_email_not_shortlisted(
+        subject, body, html = _build_email_not_shortlisted(
             candidate_name, candidate_email, job_title, company_name
         )
         status = 'rejected'
@@ -116,6 +142,7 @@ def process_hr_action(
             "to": candidate_email,
             "subject": subject,
             "body": body,
+            "html": html,
         },
         "profile_update": {
             "application_id": str(application_id),
@@ -146,5 +173,6 @@ def send_and_get_output(
         out["email"]["to"],
         out["email"]["subject"],
         out["email"]["body"],
+        html=out["email"].get("html"),
     )
     return out

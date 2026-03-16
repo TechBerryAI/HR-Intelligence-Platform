@@ -12,7 +12,10 @@ export function ToastProvider({ children }) {
     return id
   }, [remove])
 
-  const value = useMemo(() => ({ push, remove }), [push, remove])
+  const success = useCallback((message, opts) => push(message, { ...opts, type: 'success' }), [push])
+  const error = useCallback((message, opts) => push(message, { ...opts, type: 'error' }), [push])
+
+  const value = useMemo(() => ({ push, remove, success, error }), [push, remove, success, error])
 
   return (
     <ToastContext.Provider value={value}>

@@ -110,6 +110,7 @@ from sessions_routes import sessions_bp  # noqa: E402
 from routes.simple_candidate_auth import simple_candidate_auth_bp  # noqa: E402
 from parsing_routes import parsing_bp  # noqa: E402
 from support import support_bp  # noqa: E402
+from feedback_routes import feedback_bp  # noqa: E402
 from modules.admin.routes import admin_bp  # noqa: E402
 from super_admin import super_admin_bp  # noqa: E402
 
@@ -179,6 +180,7 @@ app.register_blueprint(applications_bp, url_prefix='/api/applications')
 app.register_blueprint(sessions_bp, url_prefix='/api/sessions')
 app.register_blueprint(parsing_bp, url_prefix='/api')
 app.register_blueprint(support_bp, url_prefix='/api/support')
+app.register_blueprint(feedback_bp, url_prefix='/api/feedback')
 # Admin-only: bulk resume parsing (proxy to Bulk-Resume-Parser), job matches (ATS results)
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
 # Super Admin: system-level god mode (separate credentials, separate route)
