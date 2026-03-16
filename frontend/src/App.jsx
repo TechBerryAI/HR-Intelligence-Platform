@@ -21,8 +21,10 @@ const ApplicantProfile = lazy(() => import('./pages/ApplicantProfile.jsx'))
 const ApplicationStatus = lazy(() => import('./pages/ApplicationStatus.jsx'))
 const AppliedCandidates = lazy(() => import('./pages/AppliedCandidates.jsx'))
 const BulkResumeParser = lazy(() => import('./pages/admin/BulkResumeParser.jsx'))
+const FeedbackAdmin = lazy(() => import('./pages/admin/FeedbackAdmin.jsx'))
 const FAQ = lazy(() => import('./pages/FAQ.jsx'))
 const ContactUs = lazy(() => import('./pages/ContactUs.jsx'))
+const HRMSTestingFeedback = lazy(() => import('./pages/HRMSTestingFeedback.jsx'))
 const NotFound = lazy(() => import('./pages/NotFound.jsx'))
 const SuperAdminDashboard = lazy(() => import('./pages/super-admin/SuperAdminDashboard.jsx'))
 const SuperAdminAdmins = lazy(() => import('./pages/super-admin/SuperAdminAdmins.jsx'))
@@ -64,6 +66,7 @@ export default function App() {
                   <Route path="/jobs" element={<Jobs />} />
                   <Route path="/support/faq" element={<FAQ />} />
                   <Route path="/support/contact" element={<ContactUs />} />
+                  <Route path="/support/hrms-feedback" element={<HRMSTestingFeedback />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/login/applicant" element={<LoginApplicant />} />
                   <Route path="/login/admin" element={<LoginAdmin />} />
@@ -126,6 +129,14 @@ export default function App() {
                     element={
                       <AdminGuard>
                         <BulkResumeParser />
+                      </AdminGuard>
+                    }
+                  />
+                  <Route
+                    path="/admin/feedback"
+                    element={
+                      <AdminGuard>
+                        <FeedbackAdmin />
                       </AdminGuard>
                     }
                   />

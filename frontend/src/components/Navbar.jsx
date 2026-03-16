@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiBriefcase, FiUser, FiFileText, FiLogOut, FiUsers, FiHelpCircle, FiMessageCircle, FiBook, FiShield, FiSettings } from 'react-icons/fi'
+import { FiBriefcase, FiUser, FiFileText, FiLogOut, FiUsers, FiHelpCircle, FiMessageCircle, FiMessageSquare, FiBook, FiShield, FiSettings } from 'react-icons/fi'
 
 export default function Navbar() {
   const { auth, applicantAuth, applicantProfile, logout, user, superAdminAuth } = useApp()
@@ -143,6 +143,14 @@ export default function Navbar() {
                             <motion.button
                               whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
                               className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
+                              onClick={() => { setHrMenuOpen(false); navigate('/admin/feedback') }}
+                            >
+                              <FiMessageSquare className="w-4 h-4" />
+                              Feedback (Admin)
+                            </motion.button>
+                            <motion.button
+                              whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
                               onClick={() => { setHrMenuOpen(false); navigate('/settings') }}
                             >
                               <FiSettings className="w-4 h-4" />
@@ -279,6 +287,14 @@ export default function Navbar() {
                       >
                         <FiMessageCircle className="w-4 h-4" />
                         Contact Us
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ backgroundColor: 'rgba(255, 255, 255, 0.05)' }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 flex items-center gap-3"
+                        onClick={() => { setSupportMenuOpen(false); navigate('/support/hrms-feedback') }}
+                      >
+                        <FiMessageSquare className="w-4 h-4" />
+                        HRMS Testing Feedback
                       </motion.button>
                     </div>
                   </motion.div>
