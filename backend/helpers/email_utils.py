@@ -7,9 +7,15 @@ from extensions import mail
 from helpers.mail_send import send_with_timeout_and_retries
 
 
-def send_notification_email(recipient: Optional[str], subject: str, body: str) -> bool:
+def send_notification_email(
+    recipient: Optional[str],
+    subject: str,
+    body: str,
+    html: Optional[str] = None,
+) -> bool:
     """
-    Send a generic notification email (signup confirmation, password change, login alert, etc.).
+    Send a notification email. Uses plain text body; if html is provided,
+    sends multipart (plain + HTML) so clients show the HTML version.
     Returns True when the email was queued/simulated successfully.
     """
     if not recipient:
@@ -27,6 +33,8 @@ def send_notification_email(recipient: Optional[str], subject: str, body: str) -
             return True
 
         msg = Message(subject=subject, recipients=[recipient], body=body)
+        if html:
+            msg.html = html
         if not send_with_timeout_and_retries(msg):
             if current_app:
                 current_app.logger.error("Notification email send failed after retries (to=%s)", recipient)

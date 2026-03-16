@@ -8,6 +8,7 @@ import uuid
 from flask import Blueprint, request, jsonify, current_app
 from db import db_run, db_get, db_all, BACKEND, NOW_SQL
 from helpers.email_utils import send_notification_email
+from helpers.email_templates import hrms_feedback_html
 
 feedback_bp = Blueprint('feedback', __name__)
 FEEDBACK_TABLE = "employee_feedback" if BACKEND == "postgresql" else "dbo.employee_feedback"
@@ -165,7 +166,18 @@ def submit_feedback():
         if row:
             subject = f"[HRMS FEEDBACK] {feedback_type} - {module or 'General'}"
             body = _build_email_body(row)
-            send_notification_email(recipient, subject, body)
+            html = hrms_feedback_html(
+                row.get('employee_name'),
+                row.get('employee_id'),
+                row.get('department'),
+                row.get('feedback_type'),
+                row.get('module'),
+                row.get('severity'),
+                row.get('description') or '',
+                row.get('created_at'),
+                row.get('screenshot_path'),
+            )
+            send_notification_email(recipient, subject, body, html=html)
 
         return jsonify({
             "success": True,

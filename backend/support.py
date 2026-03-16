@@ -5,6 +5,7 @@ import os
 from flask import Blueprint, request, jsonify
 from db import db_run, db_get, db_all, BACKEND, NOW_SQL
 from helpers.email_utils import send_notification_email
+from helpers.email_templates import support_request_html
 
 support_bp = Blueprint('support', __name__)
 SUPPORT_TABLE = "support_requests" if BACKEND == "postgresql" else "dbo.support_requests"
@@ -85,7 +86,10 @@ def submit_support_request():
                 f"Request ID: #{request_id}\n\n"
                 f"Message:\n{message}"
             )
-            ok = send_notification_email(SUPPORT_NOTIFICATION_EMAIL, email_subject, email_body)
+            html = support_request_html(name, email, user_type, priority, request_id, message)
+            ok = send_notification_email(
+                SUPPORT_NOTIFICATION_EMAIL, email_subject, email_body, html=html
+            )
             if not ok:
                 print(f"[SUPPORT] Notification email to {SUPPORT_NOTIFICATION_EMAIL} may have failed (check mail config)")
         except Exception as mail_err:

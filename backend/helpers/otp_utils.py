@@ -18,10 +18,9 @@ def normalize_to_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
     return dt.astimezone(timezone.utc)
 
 from flask import current_app
-from flask_mail import Message
 
-from extensions import mail
-from helpers.mail_send import send_with_timeout_and_retries
+from helpers.email_utils import send_notification_email
+from helpers.email_templates import otp_html
 
 GMAIL_REGEX = re.compile(r'^[A-Za-z0-9._%+-]+@gmail\.com$', re.IGNORECASE)
 # General email regex: accepts any email with @ symbol and valid domain
@@ -96,9 +95,9 @@ def send_email_otp(recipient: str, otp: str, user_type: str = "Candidate") -> bo
             f"If you did not request this OTP, please ignore this email.\n\n"
             f"Regards,\nJob Portal Team"
         )
+        html = otp_html(otp, user_type)
         print(f"[SEND_EMAIL_OTP] Sending email to {recipient} with OTP: {otp}")
-        msg = Message(subject=subject, recipients=[recipient], body=body)
-        ok = send_with_timeout_and_retries(msg)
+        ok = send_notification_email(recipient, subject, body, html=html)
         if ok:
             print(f"[SEND_EMAIL_OTP] Email sent successfully to {recipient}")
         return ok
