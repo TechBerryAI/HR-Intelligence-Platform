@@ -161,28 +161,21 @@ export default function HRMSTestingFeedback() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-slate-50 py-10">
+      <div className="max-w-2xl mx-auto px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
           className="text-center mb-8"
         >
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.15, type: 'spring', stiffness: 200, damping: 15 }}
-            className="inline-block mb-3"
-          >
-            <div className="w-16 h-16 mx-auto rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 flex items-center justify-center shadow-lg">
-              <FiMessageSquare className="w-8 h-8 text-white" />
-            </div>
-          </motion.div>
-          <h1 className="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-white to-zinc-300 bg-clip-text text-transparent mb-2">
+          <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-blue-100 flex items-center justify-center">
+            <FiMessageSquare className="w-8 h-8 text-blue-600" />
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">
             HRMS Testing Feedback
           </h1>
-          <p className="text-zinc-400 text-sm sm:text-base">
+          <p className="text-slate-500 text-sm sm:text-base">
             Report bugs, suggest features, or share general feedback to help improve HRMS.
           </p>
         </motion.div>
@@ -191,7 +184,7 @@ export default function HRMSTestingFeedback() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
-          className="glass-card rounded-2xl p-6 sm:p-8 border border-white/10"
+          className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm"
         >
           <AnimatePresence mode="wait">
             {submitted ? (
