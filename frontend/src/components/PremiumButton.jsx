@@ -19,12 +19,12 @@ export default function PremiumButton({
   const baseClasses = 'relative overflow-hidden font-semibold transition-all duration-300 flex items-center justify-center gap-2';
   
   const variants = {
-    primary: 'bg-primary dark:bg-accent-blue hover:opacity-90 text-white shadow-md',
-    secondary: 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700',
-    outline: 'border-2 border-primary dark:border-accent-blue text-primary dark:text-accent-blue hover:bg-slate-100 dark:hover:bg-slate-800',
-    ghost: 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800',
-    success: 'bg-emerald-600 hover:bg-emerald-500 text-white',
-    danger: 'bg-red-600 hover:bg-red-500 text-white',
+    primary: 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-glow',
+    secondary: 'bg-gradient-to-r from-zinc-800 to-zinc-700 border border-zinc-600 hover:border-zinc-500 text-white',
+    outline: 'border-2 border-purple-500 text-purple-400 hover:bg-purple-500/10 hover:border-purple-400',
+    ghost: 'text-zinc-300 hover:bg-white/5 hover:text-white',
+    success: 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white',
+    danger: 'bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white',
   };
   
   const sizes = {

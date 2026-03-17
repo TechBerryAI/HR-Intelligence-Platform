@@ -1,8 +1,7 @@
 import React, { useState } from 'react'
 import PasswordInput from '../components/PasswordInput.jsx'
 import { useApp } from '../context/AppContext.jsx'
-import { useNavigate, Link } from 'react-router-dom'
-import AuthPageLayout from '../components/AuthPageLayout.jsx'
+import { useNavigate } from 'react-router-dom'
 
 export default function SignupAdmin() {
     const { signupHR, verifyHROTP, resendHROTP } = useApp()
@@ -49,67 +48,158 @@ export default function SignupAdmin() {
     }
 
     return (
-        <AuthPageLayout
-            title={step === 1 ? 'Create HR account' : 'Verify your email'}
-            subtitle={step === 1 ? 'Manage job postings and candidates.' : `We sent a code to ${email}. Enter it below.`}
-        >
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 shadow-premium p-6 sm:p-8">
-                <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-                    {step === 1 ? 'Sign Up as Admin' : 'Verify Your Email'}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    {step === 1 ? 'Create an HR/Admin account to manage jobs' : `We sent a verification code to ${email}. Please enter it below.`}
-                </p>
-                {step === 1 ? (
-                    <form onSubmit={onSubmit} className="mt-6 space-y-4">
-                        {error && <div className="rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 px-4 py-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Full Name (Admin)</label>
-                            <input className="input-premium" placeholder="Your name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Company</label>
-                            <input className="input-premium" placeholder="Company name" value={company} onChange={(e) => setCompany(e.target.value)} required />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Work Email</label>
-                            <input type="email" className="input-premium" placeholder="hr@company.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Password</label>
-                            <PasswordInput className="input-premium" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
-                        </div>
-                        <button type="submit" disabled={submitting} className="w-full rounded-xl bg-emerald-600 text-white font-semibold py-3 shadow-md hover:bg-emerald-500 transition-colors disabled:opacity-70">
-                            {submitting ? 'Sending OTP...' : 'Send Verification Code'}
-                        </button>
-                        <p className="text-center text-sm text-slate-500 dark:text-slate-400">
-                            <Link to="/login" className="text-primary dark:text-accent-blue hover:underline">← Back to login</Link>
-                        </p>
-                    </form>
-                ) : (
-                    <form onSubmit={onVerifyOTP} className="mt-6 space-y-4">
-                        {error && <div className="rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 px-4 py-3 text-sm text-red-700 dark:text-red-300">{error}</div>}
-                        <div>
-                            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Enter OTP</label>
-                            <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} className="input-premium text-center text-2xl tracking-widest font-mono" placeholder="000000" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} required autoFocus />
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">Check your email for the 6-digit code</p>
-                        <button type="submit" disabled={submitting || otp.length !== 6} className="w-full rounded-xl bg-emerald-600 text-white font-semibold py-3 shadow-md hover:bg-emerald-500 transition-colors disabled:opacity-70">
-                            {submitting ? 'Verifying...' : 'Verify & Create Account'}
-                        </button>
-                        <div className="flex gap-2">
-                            <button type="button" onClick={async () => { setError(''); setResending(true); try { const res = await resendHROTP({ email }); if (res.ok) { setError(''); alert('OTP resent successfully! Please check your email.'); } else { setError(res.message || 'Failed to resend OTP'); } } catch (err) { setError(err?.message || 'Failed to resend OTP'); } finally { setResending(false); } }} disabled={resending} className="flex-1 text-sm text-accent-blue hover:underline disabled:opacity-50">
-                                {resending ? 'Resending...' : 'Resend OTP'}
-                            </button>
-                            <button type="button" onClick={() => setStep(1)} className="flex-1 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300">
-                                ← Back to signup
-                            </button>
-                        </div>
-                        {created && <div className="mt-3 text-sm text-emerald-600 dark:text-emerald-400">Account created successfully! Redirecting to dashboard...</div>}
-                    </form>
-                )}
+        <section className="relative min-h-[calc(100vh-180px)] flex items-center justify-center px-4 py-10 overflow-hidden">
+            {/* Decorative background graphics */}
+            <div className="pointer-events-none absolute inset-0">
+                <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
+                <div className="absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
+                <div className="absolute inset-0 opacity-[0.07]" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)', backgroundSize: '24px 24px' }} />
             </div>
-        </AuthPageLayout>
+
+            <div className="w-full max-w-xl relative">
+                <div className="rounded-2xl bg-gradient-to-br from-zinc-900/90 via-zinc-900/70 to-zinc-900/50 p-[1px] shadow-2xl">
+                    <div className="rounded-2xl bg-zinc-950/70 backdrop-blur-md p-6 sm:p-8">
+                        <h2 className="text-2xl font-semibold text-white">
+                            {step === 1 ? 'Sign Up as Admin' : 'Verify Your Email'}
+                        </h2>
+                        <p className="mt-1 text-sm text-zinc-400">
+                            {step === 1 
+                                ? 'Create an HR/Admin account to manage jobs'
+                                : `We sent a verification code to ${email}. Please enter it below.`}
+                        </p>
+                        {step === 1 ? (
+                            <form onSubmit={onSubmit} className="mt-6">
+                                {error && <div className="mb-3 text-sm text-red-400">{error}</div>}
+                                <label className="block text-sm font-medium text-zinc-300">Full Name (Admin)</label>
+                                <input
+                                    className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-900 text-gray-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-600/70 focus:border-emerald-600/70"
+                                    placeholder="Your name"
+                                    value={fullName}
+                                    onChange={(e) => setFullName(e.target.value)}
+                                    required
+                                />
+                                <label className="block text-sm font-medium text-zinc-300 mt-4">Company</label>
+                                <div className="mt-1 relative">
+                                    <span className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-zinc-500">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5" /><path d="M8 7h2M8 11h2M8 15h2M14 7h2M14 11h2M14 15h2" stroke="currentColor" strokeWidth="1.5" /></svg>
+                                    </span>
+                                    <input
+                                        className="w-full bg-transparent border-0 border-b border-zinc-700 pl-7 pr-3 py-2.5 text-gray-100 placeholder:text-zinc-500 focus:outline-none focus:ring-0 focus:border-white"
+                                        placeholder="Company name"
+                                        value={company}
+                                        onChange={(e) => setCompany(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <label className="block text-sm font-medium text-zinc-300 mt-4">Work Email</label>
+                                <div className="mt-1 relative">
+                                    <span className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-zinc-500">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 6h16v12H4V6z" stroke="currentColor" strokeWidth="1.5" /><path d="M4 7l8 6 8-6" stroke="currentColor" strokeWidth="1.5" /></svg>
+                                    </span>
+                                    <input
+                                        type="email"
+                                        className="w-full bg-transparent border-0 border-b border-zinc-700 pl-7 pr-3 py-2.5 text-gray-100 placeholder:text-zinc-500 focus:outline-none focus:ring-0 focus:border-white"
+                                        placeholder="hr@company.com"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <label className="block text-sm font-medium text-zinc-300 mt-4">Password</label>
+                                <div className="mt-1 relative">
+                                    <span className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-zinc-500 z-10">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="1.5" /><path d="M8 11V8a4 4 0 118 0v3" stroke="currentColor" strokeWidth="1.5" /></svg>
+                                    </span>
+                                    <PasswordInput
+                                        className="bg-transparent border-0 border-b border-zinc-700 pl-7 py-2.5 text-gray-100 placeholder:text-zinc-500 focus:outline-none focus:ring-0 focus:border-white"
+                                        placeholder="••••••••"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        required
+                                        minLength={6}
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={submitting}
+                                    className={`mt-6 w-full ${submitting ? 'bg-zinc-300' : 'bg-white hover:bg-zinc-100'} text-black font-medium py-2.5 rounded-lg transition-colors shadow-sm hover:shadow`}
+                                >
+                                    {submitting ? 'Sending OTP...' : 'Send Verification Code'}
+                                </button>
+                            </form>
+                        ) : (
+                            <form onSubmit={onVerifyOTP} className="mt-6">
+                                {error && <div className="mb-3 text-sm text-red-400">{error}</div>}
+                                <label className="block text-sm font-medium text-zinc-300">Enter OTP</label>
+                                <div className="mt-1 relative">
+                                    <span className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 text-zinc-500">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                            <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" stroke="currentColor" strokeWidth="1.5"/>
+                                        </svg>
+                                    </span>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        maxLength={6}
+                                        className="w-full bg-transparent border-0 border-b border-zinc-700 pl-7 pr-3 py-2.5 text-gray-100 placeholder:text-zinc-500 focus:outline-none focus:ring-0 focus:border-white text-center text-2xl tracking-widest font-mono"
+                                        placeholder="000000"
+                                        value={otp}
+                                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                        required
+                                        autoFocus
+                                    />
+                                </div>
+                                <p className="mt-2 text-xs text-zinc-500">Check your email for the 6-digit code</p>
+                                <button
+                                    type="submit"
+                                    disabled={submitting || otp.length !== 6}
+                                    className={`mt-6 w-full ${(submitting || otp.length !== 6) ? 'bg-zinc-300' : 'bg-white hover:bg-zinc-100'} text-black font-medium py-2.5 rounded-lg transition-colors shadow-sm hover:shadow`}
+                                >
+                                    {submitting ? 'Verifying...' : 'Verify & Create Account'}
+                                </button>
+                                <div className="mt-3 flex gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            setError('')
+                                            setResending(true)
+                                            try {
+                                                const res = await resendHROTP({ email })
+                                                if (res.ok) {
+                                                    setError('')
+                                                    alert('OTP resent successfully! Please check your email.')
+                                                } else {
+                                                    setError(res.message || 'Failed to resend OTP')
+                                                }
+                                            } catch (err) {
+                                                setError(err?.message || 'Failed to resend OTP')
+                                            } finally {
+                                                setResending(false)
+                                            }
+                                        }}
+                                        disabled={resending}
+                                        className={`flex-1 text-sm ${resending ? 'text-zinc-500' : 'text-blue-400 hover:text-blue-300'} transition-colors underline`}
+                                    >
+                                        {resending ? 'Resending...' : 'Resend OTP'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setStep(1)}
+                                        className="flex-1 text-sm text-zinc-400 hover:text-white transition-colors"
+                                    >
+                                        ← Back to signup
+                                    </button>
+                                </div>
+                                {created && (
+                                    <div className="mt-3 text-sm text-green-400">Account created successfully! Redirecting to dashboard...</div>
+                                )}
+                            </form>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </section>
     )
 }
 

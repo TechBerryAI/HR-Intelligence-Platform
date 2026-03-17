@@ -49,33 +49,58 @@ export default function Jobs() {
   }, [jobsError, fetchJobs])
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10 bg-slate-50 min-h-screen">
-      <AnimatedContainer animation="slideDown">
-        <h2 className="text-3xl font-bold text-slate-900">Latest Jobs</h2>
-        <p className="mt-1 text-slate-500">Discover your next career opportunity</p>
-      </AnimatedContainer>
-
-      {jobsError && (
+    <section className="py-8 relative min-h-screen">
+      {/* Animated background */}
+      <div className="pointer-events-none absolute inset-0">
         <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-5"
-        >
+          animate={{
+            scale: [1, 1.1, 1],
+            opacity: [0.1, 0.2, 0.1],
+          }}
+          transition={{ duration: 15, repeat: Infinity }}
+          className="absolute top-40 left-20 h-96 w-96 rounded-full bg-purple-500/20 blur-3xl"
+        />
+        <motion.div
+          animate={{
+            scale: [1.1, 1, 1.1],
+            opacity: [0.1, 0.2, 0.1],
+          }}
+          transition={{ duration: 18, repeat: Infinity }}
+          className="absolute bottom-40 right-20 h-96 w-96 rounded-full bg-blue-500/20 blur-3xl"
+        />
+      </div>
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+        <AnimatedContainer animation="slideDown">
+          <h2 className="text-4xl font-bold bg-gradient-to-r from-white to-zinc-400 bg-clip-text text-transparent">
+            Latest Jobs
+          </h2>
+          <p className="mt-2 text-zinc-400">Discover your next career opportunity</p>
+        </AnimatedContainer>
+
+        {jobsError && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 glass-card border-2 border-red-500/30 bg-red-500/10 rounded-2xl p-5"
+          >
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-3">
-                <FiAlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <FiAlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-red-700 font-medium">Unable to load jobs</p>
-                  <p className="text-sm text-red-600 mt-1">Please check your connection and try again</p>
+                  <p className="text-red-300 font-medium">Unable to load jobs</p>
+                  <p className="text-sm text-red-400 mt-1">Please check your connection and try again</p>
                 </div>
               </div>
               <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={fetchJobs}
                 disabled={jobsLoading}
                 className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
-                  jobsLoading ? 'bg-slate-300 text-slate-500 cursor-not-allowed' : 'bg-red-600 hover:bg-red-500 text-white shadow-md'
+                  jobsLoading 
+                    ? 'bg-red-900/40 text-red-300 cursor-not-allowed' 
+                    : 'bg-red-600 hover:bg-red-500 text-white shadow-glow-sm'
                 }`}
               >
                 <FiRefreshCw className={`w-4 h-4 ${jobsLoading ? 'animate-spin' : ''}`} />
@@ -95,18 +120,18 @@ export default function Jobs() {
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mt-6 rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-4 flex items-start justify-between gap-4"
+            className="mt-6 glass-card border-2 border-amber-500/30 bg-amber-500/10 rounded-2xl p-4 flex items-start justify-between gap-4"
           >
             <div className="flex items-start gap-3">
-              <FiAlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <FiAlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-amber-800 dark:text-amber-200 font-medium">Could not apply</p>
-                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">{applyError}</p>
+                <p className="text-amber-200 font-medium">Could not apply</p>
+                <p className="text-sm text-amber-300/90 mt-1">{applyError}</p>
                 {(applyError.includes('profile') || applyError.includes('resume') || applyError.includes('education')) && (
                   <button
                     type="button"
                     onClick={() => { setApplyError(''); navigate('/profile/applicant') }}
-                    className="mt-2 text-sm font-medium text-amber-700 dark:text-amber-300 hover:underline"
+                    className="mt-2 text-sm font-medium text-amber-300 hover:text-amber-200 underline"
                   >
                     Complete profile →
                   </button>
@@ -116,7 +141,7 @@ export default function Jobs() {
             <button
               type="button"
               onClick={() => setApplyError('')}
-              className="text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 text-sm px-2"
+              className="text-amber-400 hover:text-amber-300 text-sm px-2"
               aria-label="Dismiss"
             >
               ×
@@ -127,17 +152,17 @@ export default function Jobs() {
         <div className="mt-8">
           {filtered.length === 0 ? (
             <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 p-12 text-center shadow-card"
+              className="glass-card rounded-2xl p-12 text-center"
             >
-              <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                <svg className="w-10 h-10 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-20 h-20 mx-auto mb-4 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-full flex items-center justify-center">
+                <svg className="w-10 h-10 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-2">No jobs found</h3>
-              <p className="text-slate-500 dark:text-slate-400">Try adjusting your search criteria</p>
+              <h3 className="text-xl font-semibold text-white mb-2">No jobs found</h3>
+              <p className="text-zinc-400">Try adjusting your search criteria</p>
             </motion.div>
           ) : (
             <div className="grid gap-4">
@@ -194,5 +219,6 @@ export default function Jobs() {
           )}
         </div>
       </div>
+    </section>
   )
 }
