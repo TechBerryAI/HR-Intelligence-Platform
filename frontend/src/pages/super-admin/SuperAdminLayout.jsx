@@ -38,21 +38,19 @@ export default function SuperAdminLayout({ children }) {
       className={
         mobile
           ? 'flex flex-col h-full'
-          : 'hidden lg:flex flex-col w-60 min-h-screen bg-zinc-900/60 border-r border-zinc-800 backdrop-blur-sm'
+          : 'hidden lg:flex flex-col w-60 min-h-screen bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700'
       }
     >
-      {/* Brand */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-zinc-800">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 text-white grid place-items-center shadow-lg flex-shrink-0">
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-slate-200 dark:border-slate-700">
+        <div className="w-9 h-9 rounded-xl bg-primary dark:bg-accent-blue text-white grid place-items-center flex-shrink-0">
           <FiShield className="w-4 h-4" />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-bold text-white truncate">{displayName}</p>
-          <p className="text-xs text-zinc-500 truncate">{displayEmail || ''}</p>
+          <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{displayName}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{displayEmail || ''}</p>
         </div>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5">
         {navItems.map(({ label, path, icon: Icon, end }) => (
           <NavLink
@@ -61,10 +59,10 @@ export default function SuperAdminLayout({ children }) {
             end={end}
             onClick={() => setSidebarOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
                 isActive
-                  ? 'bg-white/10 text-white border border-white/15'
-                  : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800'
+                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-600'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50'
               }`
             }
           >
@@ -74,11 +72,10 @@ export default function SuperAdminLayout({ children }) {
         ))}
       </nav>
 
-      {/* Logout */}
-      <div className="px-3 pb-5 border-t border-zinc-800 pt-3">
+      <div className="px-3 pb-5 border-t border-slate-200 dark:border-slate-700 pt-3">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all duration-150"
+          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-150"
         >
           <FiLogOut className="w-4 h-4" />
           Logout
@@ -88,17 +85,16 @@ export default function SuperAdminLayout({ children }) {
   )
 
   return (
-    <div className="flex flex-1 min-h-0">
+    <div className="flex flex-1 min-h-0 bg-slate-50 dark:bg-slate-900">
       <Sidebar />
 
-      {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-          <div className="relative z-50 flex flex-col w-64 h-full bg-zinc-900 border-r border-zinc-800">
-            <div className="flex items-center justify-between px-4 py-4">
-              <span className="text-sm font-semibold text-white">{panelLabel} Panel</span>
-              <button onClick={() => setSidebarOpen(false)} className="text-zinc-400 hover:text-white">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
+          <div className="relative z-50 flex flex-col w-64 h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between px-4 py-4 border-b border-slate-200 dark:border-slate-700">
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">{panelLabel} Panel</span>
+              <button onClick={() => setSidebarOpen(false)} className="text-slate-500 hover:text-slate-700 dark:hover:text-white p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
                 <FiX className="w-5 h-5" />
               </button>
             </div>
@@ -107,17 +103,12 @@ export default function SuperAdminLayout({ children }) {
         </div>
       )}
 
-      {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile topbar */}
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900/50">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-zinc-400 hover:text-white transition-colors"
-          >
+        <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80">
+          <button onClick={() => setSidebarOpen(true)} className="text-slate-500 hover:text-slate-700 dark:hover:text-white p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
             <FiMenu className="w-5 h-5" />
           </button>
-          <span className="text-sm font-semibold text-white flex items-center gap-2">
+          <span className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
             <FiShield className="w-4 h-4" /> {panelLabel} Panel
           </span>
         </div>

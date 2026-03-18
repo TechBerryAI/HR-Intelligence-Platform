@@ -56,11 +56,11 @@ export default function App() {
       <ToastProvider>
         <ErrorBoundary>
           <ConnectionStatus />
-          <div className="min-h-screen flex flex-col bg-zinc-950 text-gray-100">
+          <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
             {!isSuperAdminRoute && <Navbar />}
             <ErrorToasts />
             <main className={isSuperAdminRoute ? 'flex-1 flex flex-col min-h-screen' : 'flex-1'}>
-              <Suspense fallback={<div className="p-6">Loading...</div>}>
+              <Suspense fallback={<div className="max-w-7xl mx-auto px-6 py-10"><div className="h-10 w-48 rounded-xl bg-slate-200 animate-pulse" /></div>}>
                 <Routes>
                   <Route path="/" element={<Home />} />
                   <Route path="/jobs" element={<Jobs />} />
@@ -219,7 +219,9 @@ export default function App() {
               </Suspense>
             </main>
             {!isSuperAdminRoute && (
-              <footer className="py-10 text-center text-sm text-zinc-500"> {new Date().getFullYear()} Job Portal</footer>
+              <footer className="py-8 text-center text-sm text-slate-500 border-t border-slate-200">
+                © {new Date().getFullYear()} Job Portal
+              </footer>
             )}
           </div>
         </ErrorBoundary>

@@ -7,8 +7,10 @@ import PasswordInput from '../components/PasswordInput.jsx'
 import PremiumButton from '../components/PremiumButton.jsx'
 import PremiumInput from '../components/PremiumInput.jsx'
 import AnimatedContainer from '../components/AnimatedContainer.jsx'
+import { StatCard, Card, CardHeader, CardTitle, CardContent, Modal } from '../components/ui/index.js'
+import { PageContainer } from '../components/PageContainer.jsx'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiToggleLeft, FiToggleRight, FiPlus, FiUsers } from 'react-icons/fi'
+import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiPlus, FiUsers, FiLayers } from 'react-icons/fi'
 
 // Helper function to format date for display
 const formatDisplayDate = (dateString) => {
@@ -164,42 +166,21 @@ export default function Dashboard() {
     }
   }
 
-  return (
-    <section className="py-10 relative min-h-screen">
-      {/* Animated background */}
-      <div className="pointer-events-none absolute inset-0">
-        <motion.div 
-          animate={{
-            scale: [1, 1.2, 1],
-            opacity: [0.2, 0.4, 0.2],
-          }}
-          transition={{ duration: 10, repeat: Infinity }}
-          className="absolute top-20 left-20 h-96 w-96 rounded-full bg-purple-500/20 blur-3xl" 
-        />
-        <motion.div 
-          animate={{
-            scale: [1.2, 1, 1.2],
-            opacity: [0.2, 0.4, 0.2],
-          }}
-          transition={{ duration: 12, repeat: Infinity }}
-          className="absolute bottom-20 right-20 h-96 w-96 rounded-full bg-blue-500/20 blur-3xl" 
-        />
-      </div>
+  const activeJobs = jobs.filter((j) => j.enabled !== false).length
 
-      <div className="max-w-5xl mx-auto px-4 relative z-10">
-        <AnimatedContainer animation="slideDown">
-          <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h2 className="text-4xl font-bold bg-gradient-to-r from-white via-purple-200 to-blue-200 bg-clip-text text-transparent">
-                Job Posting Dashboard
-              </h2>
-              <p className="mt-2 text-zinc-400">Create and manage your job postings</p>
-            </div>
+  return (
+    <PageContainer className="max-w-5xl">
+      <AnimatedContainer animation="slideDown">
+        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-3xl font-bold text-slate-900">Job Posting Dashboard</h2>
+            <p className="mt-1 text-slate-500">Create and manage your job postings</p>
+          </div>
             {isHeadHr && (
               <button
                 type="button"
                 onClick={() => setShowCreateAdmin(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 border border-emerald-500/30 shadow-lg transition-colors"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-md transition-colors"
               >
                 <FiPlus className="w-4 h-4" />
                 Create Admin
@@ -208,111 +189,111 @@ export default function Dashboard() {
           </div>
         </AnimatedContainer>
 
+        {/* Stat cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
+          <StatCard title="Total jobs" value={jobs.length} icon={FiBriefcase} />
+          <StatCard title="Active" value={activeJobs} subtitle="Currently visible" icon={FiLayers} />
+        </div>
+
         {createAdminToast && (
           <div
-            className={`fixed top-20 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-xl text-sm font-medium ${
+            className={`fixed top-20 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-md text-sm font-medium border ${
               createAdminToast.type === 'error'
-                ? 'bg-red-500/20 border border-red-500/30 text-red-300'
-                : 'bg-green-500/20 border border-green-500/30 text-green-300'
+                ? 'bg-red-50 border-red-200 text-red-700'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-700'
             }`}
           >
             {createAdminToast.msg}
           </div>
         )}
 
-        {showCreateAdmin && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-            <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                <FiUsers className="w-5 h-5" /> Create Admin Account
-              </h3>
-              <p className="mt-1 text-sm text-zinc-400">New HR admin can log in and create jobs, manage candidates.</p>
-              <form onSubmit={handleCreateAdmin} className="mt-4 space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={createAdminForm.email}
-                    onChange={(e) => setCreateAdminForm((f) => ({ ...f, email: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
-                    placeholder="hr@company.com"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Full name</label>
-                  <input
-                    type="text"
-                    value={createAdminForm.fullName}
-                    onChange={(e) => setCreateAdminForm((f) => ({ ...f, fullName: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
-                    placeholder="Jane Doe"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Company</label>
-                  <input
-                    type="text"
-                    value={createAdminForm.company}
-                    onChange={(e) => setCreateAdminForm((f) => ({ ...f, company: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
-                    placeholder="Acme Inc"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">Password (min 6 characters)</label>
-                  <PasswordInput
-                    value={createAdminForm.password}
-                    onChange={(e) => setCreateAdminForm((f) => ({ ...f, password: e.target.value }))}
-                    className="px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
-                    placeholder="••••••••"
-                    minLength={6}
-                    required
-                  />
-                </div>
-                <div className="flex gap-3 justify-end pt-2">
-                  <button
-                    type="button"
-                    onClick={() => { setShowCreateAdmin(false); setCreateAdminForm({ email: '', fullName: '', company: '', password: '' }) }}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={creatingAdmin}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-colors"
-                  >
-                    {creatingAdmin ? 'Creating…' : 'Create'}
-                  </button>
-                </div>
-              </form>
+        <Modal open={showCreateAdmin} onClose={() => { setShowCreateAdmin(false); setCreateAdminForm({ email: '', fullName: '', company: '', password: '' }) }} title="Create Admin Account" size="md">
+          <p className="text-sm text-slate-500 mb-6">New HR admin can log in and create jobs, manage candidates.</p>
+          <form onSubmit={handleCreateAdmin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+              <input
+                type="email"
+                value={createAdminForm.email}
+                onChange={(e) => setCreateAdminForm((f) => ({ ...f, email: e.target.value }))}
+                className="input-premium"
+                placeholder="hr@company.com"
+                required
+              />
             </div>
-          </div>
-        )}
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Full name</label>
+              <input
+                type="text"
+                value={createAdminForm.fullName}
+                onChange={(e) => setCreateAdminForm((f) => ({ ...f, fullName: e.target.value }))}
+                className="input-premium"
+                placeholder="Jane Doe"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Company</label>
+              <input
+                type="text"
+                value={createAdminForm.company}
+                onChange={(e) => setCreateAdminForm((f) => ({ ...f, company: e.target.value }))}
+                className="input-premium"
+                placeholder="Acme Inc"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Password (min 6 characters)</label>
+              <PasswordInput
+                value={createAdminForm.password}
+                onChange={(e) => setCreateAdminForm((f) => ({ ...f, password: e.target.value }))}
+                className="input-premium"
+                placeholder="••••••••"
+                minLength={6}
+                required
+              />
+            </div>
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => { setShowCreateAdmin(false); setCreateAdminForm({ email: '', fullName: '', company: '', password: '' }) }}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={creatingAdmin}
+                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+              >
+                {creatingAdmin ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          </form>
+        </Modal>
 
         <AnimatedContainer animation="slideUp" delay={0.2}>
-          <form onSubmit={onSubmit} className="glass-card rounded-3xl p-8 shadow-premium border border-white/10 space-y-6">
+          <Card className="p-8 space-y-6">
+          <form onSubmit={onSubmit} className="space-y-6">
             {success && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="glass-card border-2 border-green-500/30 bg-green-500/10 px-5 py-4 rounded-xl flex items-center gap-3"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-5 py-4 rounded-xl flex items-center gap-3"
               >
-                <FiCheck className="w-5 h-5 text-green-400 flex-shrink-0" />
-                <span className="text-sm font-medium text-green-300">{success}</span>
+                <FiCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{success}</span>
               </motion.div>
             )}
             {error && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="glass-card border-2 border-red-500/30 bg-red-500/10 px-5 py-4 rounded-xl flex items-center gap-3"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-5 py-4 rounded-xl flex items-center gap-3"
               >
-                <FiAlertCircle className="w-5 h-5 text-red-400 flex-shrink-0" />
-                <span className="text-sm font-medium text-red-300">{error}</span>
+                <FiAlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
+                <span className="text-sm font-medium text-red-700 dark:text-red-300">{error}</span>
               </motion.div>
             )}
 
@@ -400,44 +381,41 @@ export default function Dashboard() {
               </PremiumButton>
             </div>
           </form>
+          </Card>
         </AnimatedContainer>
 
         {/* Jobs list */}
         <AnimatedContainer animation="fadeIn" delay={0.4}>
-          <div className="mt-12">
-            <h3 className="text-2xl font-bold text-white mb-6">Your Job Posts</h3>
+          <div className="mt-10">
+            <h3 className="text-xl font-semibold text-slate-900 dark:text-white mb-6">Your Job Posts</h3>
             <div className="grid gap-4">
               {jobs.length === 0 ? (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="glass-card p-8 rounded-2xl text-center"
-                >
-                  <div className="w-16 h-16 mx-auto mb-4 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full flex items-center justify-center">
-                    <FiBriefcase className="w-8 h-8 text-white" />
+                <Card className="p-8 text-center">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+                    <FiBriefcase className="w-8 h-8 text-slate-500 dark:text-slate-400" />
                   </div>
-                  <p className="text-zinc-400">No jobs yet. Create one above.</p>
-                </motion.div>
+                  <p className="text-slate-500 dark:text-slate-400">No jobs yet. Create one above.</p>
+                </Card>
               ) : (
                 jobs.map((job, index) => {
                   const isDisabled = job.enabled === false
                   return (
                     <motion.div
                       key={job.id}
-                      initial={{ opacity: 0, y: 20 }}
+                      initial={{ opacity: 0, y: 12 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
-                      className={`glass-card rounded-2xl p-6 border transition-all duration-300 hover:shadow-premium ${
-                        isDisabled ? 'border-zinc-800 opacity-60' : 'border-white/10 hover:border-purple-500/30'
+                      className={`rounded-2xl p-6 border bg-white dark:bg-slate-800/80 transition-all duration-300 shadow-card dark:shadow-premium-dark ${
+                        isDisabled ? 'border-slate-200 dark:border-slate-700 opacity-60' : 'border-slate-200 dark:border-slate-700 hover:shadow-card-hover'
                       }`}
                     >
                       {/* Toggle switch */}
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex-1">
-                          <h4 className={`text-xl font-bold ${isDisabled ? 'text-zinc-500' : 'text-white'}`}>
+                          <h4 className={`text-lg font-semibold ${isDisabled ? 'text-slate-400' : 'text-slate-900 dark:text-white'}`}>
                             {job.title}
                           </h4>
-                          <p className={`text-sm ${isDisabled ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                          <p className={`text-sm ${isDisabled ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                             {job.company}
                           </p>
                         </div>
@@ -448,7 +426,7 @@ export default function Dashboard() {
                             whileTap={{ scale: 0.95 }}
                             className="inline-flex items-center gap-2 cursor-pointer select-none"
                           >
-                            <span className={`text-xs font-medium ${job.enabled === false ? 'text-zinc-500' : 'text-emerald-400'}`}>
+                            <span className={`text-xs font-medium ${job.enabled === false ? 'text-slate-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
                               {job.enabled === false ? 'Disabled' : 'Enabled'}
                             </span>
                             <input
@@ -458,7 +436,7 @@ export default function Dashboard() {
                               onChange={(e) => setJobEnabled(job.id, e.target.checked)}
                             />
                             <div className={`relative w-11 h-6 rounded-full transition-colors ${
-                              job.enabled === false ? 'bg-zinc-700' : 'bg-emerald-500'
+                              job.enabled === false ? 'bg-slate-300 dark:bg-slate-600' : 'bg-emerald-500'
                             }`}>
                               <motion.div
                                 animate={{ x: job.enabled === false ? 2 : 22 }}
@@ -479,7 +457,7 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      <div className={`flex flex-wrap items-center gap-4 text-sm mb-4 ${isDisabled ? 'text-zinc-600' : 'text-zinc-400'}`}>
+                      <div className={`flex flex-wrap items-center gap-4 text-sm mb-4 ${isDisabled ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
                         <div className="flex items-center gap-1">
                           <FiMapPin className="w-4 h-4" />
                           <span>{job.location}</span>
@@ -506,7 +484,7 @@ export default function Dashboard() {
                       </div>
 
                       {job.description && (
-                        <p className={`text-sm ${isDisabled ? 'text-zinc-600' : 'text-zinc-300'} line-clamp-3`}>
+                        <p className={`text-sm ${isDisabled ? 'text-slate-400' : 'text-slate-600 dark:text-slate-300'} line-clamp-3`}>
                           {job.description}
                         </p>
                       )}
@@ -517,7 +495,6 @@ export default function Dashboard() {
             </div>
           </div>
         </AnimatedContainer>
-      </div>
 
       {/* Edit Modal */}
       <AnimatePresence>
@@ -528,36 +505,36 @@ export default function Dashboard() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[200] flex items-center justify-center p-4"
           >
-            <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={handleEditCancel} />
+            <div className="absolute inset-0 bg-slate-900/50 dark:bg-black/60 backdrop-blur-sm" onClick={handleEditCancel} />
             
             <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              initial={{ scale: 0.96, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-2xl glass-card rounded-3xl border border-white/10 shadow-premium overflow-hidden"
+              exit={{ scale: 0.96, opacity: 0, y: 10 }}
+              className="relative w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-premium overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gradient-to-r from-purple-600/20 to-blue-600/20">
-                <h3 className="text-xl font-bold text-white">Edit Job Post</h3>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
+                <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Edit Job Post</h3>
                 <motion.button
-                  whileHover={{ scale: 1.1, rotate: 90 }}
-                  whileTap={{ scale: 0.9 }}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={handleEditCancel}
-                  className="p-2 text-zinc-400 hover:text-white transition-colors"
+                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 >
                   <FiX className="w-5 h-5" />
                 </motion.button>
               </div>
 
-              <form onSubmit={handleEditSubmit} className="px-6 py-6 space-y-6 max-h-[70vh] overflow-y-auto">
+              <form onSubmit={handleEditSubmit} className="px-6 py-6 space-y-6 max-h-[70vh] overflow-y-auto bg-white dark:bg-slate-800">
                 {success && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="glass-card border-2 border-green-500/30 bg-green-500/10 px-4 py-3 rounded-xl flex items-center gap-2"
+                    className="border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-4 py-3 rounded-xl flex items-center gap-2"
                   >
-                    <FiCheck className="w-4 h-4 text-green-400" />
-                    <span className="text-sm text-green-300">{success}</span>
+                    <FiCheck className="w-4 h-4 text-emerald-600" />
+                    <span className="text-sm text-emerald-700 dark:text-emerald-300">{success}</span>
                   </motion.div>
                 )}
 
@@ -634,6 +611,6 @@ export default function Dashboard() {
           </motion.div>
         )}
       </AnimatePresence>
-    </section>
+    </PageContainer>
   )
 }

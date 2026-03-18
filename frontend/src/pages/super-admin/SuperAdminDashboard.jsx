@@ -10,32 +10,32 @@ function StatCard({ icon: Icon, label, value, accent, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`group text-left w-full rounded-2xl border bg-zinc-900/60 p-5 hover:bg-zinc-800/60 transition-all duration-200 ${
+      className={`group text-left w-full rounded-2xl border bg-white dark:bg-slate-800/80 p-5 shadow-card hover:shadow-card-hover transition-all duration-200 ${
         accent === 'purple'
-          ? 'border-purple-500/20 hover:border-purple-500/40'
-          : 'border-zinc-800 hover:border-zinc-700'
+          ? 'border-primary/20 dark:border-accent-blue/30 hover:border-primary/40 dark:hover:border-accent-blue/50'
+          : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
       }`}
     >
       <div className="flex items-start justify-between">
         <div
           className={`w-10 h-10 rounded-xl grid place-items-center ${
             accent === 'purple'
-              ? 'bg-purple-500/15 text-purple-400'
+              ? 'bg-primary/10 dark:bg-accent-blue/20 text-primary dark:text-accent-blue'
               : accent === 'blue'
-              ? 'bg-blue-500/15 text-blue-400'
+              ? 'bg-accent-blue/10 text-accent-blue'
               : accent === 'green'
-              ? 'bg-green-500/15 text-green-400'
+              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
               : accent === 'rose'
-              ? 'bg-rose-500/15 text-rose-400'
-              : 'bg-zinc-700/50 text-zinc-400'
+              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+              : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
           }`}
         >
           <Icon className="w-5 h-5" />
         </div>
-        <FiTrendingUp className="w-4 h-4 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
+        <FiTrendingUp className="w-4 h-4 text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors" />
       </div>
-      <p className="mt-4 text-3xl font-bold text-white tabular-nums">{value ?? '—'}</p>
-      <p className="mt-1 text-sm text-zinc-400">{label}</p>
+      <p className="mt-4 text-3xl font-bold text-slate-900 dark:text-white tabular-nums">{value ?? '—'}</p>
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{label}</p>
     </button>
   )
 }
@@ -44,14 +44,14 @@ function BarRow({ label, count, total, colorClass }) {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0
   return (
     <div className="flex items-center gap-3 py-1.5">
-      <span className="text-sm text-zinc-300 w-24 flex-shrink-0 capitalize">{label}</span>
-      <div className="flex-1 h-6 rounded-md bg-zinc-800 overflow-hidden">
+      <span className="text-sm text-slate-600 dark:text-slate-300 w-24 flex-shrink-0 capitalize">{label}</span>
+      <div className="flex-1 h-6 rounded-md bg-slate-200 dark:bg-slate-700 overflow-hidden">
         <div
           className={`h-full rounded-md transition-all duration-500 ${colorClass}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-sm text-zinc-400 tabular-nums w-10 text-right">{count}</span>
+      <span className="text-sm text-slate-500 dark:text-slate-400 tabular-nums w-10 text-right">{count}</span>
     </div>
   )
 }
