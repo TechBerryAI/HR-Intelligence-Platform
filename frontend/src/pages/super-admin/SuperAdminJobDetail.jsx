@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
 import SuperAdminLayout from './SuperAdminLayout.jsx'
+import JobDescriptionView from '../../components/JobDescriptionView.jsx'
 import { FiArrowLeft, FiBriefcase, FiMapPin, FiDollarSign, FiUser, FiCalendar } from 'react-icons/fi'
 
 function formatDate(ts) {
@@ -149,8 +150,12 @@ export default function SuperAdminJobDetail() {
 
         <div className={sectionClass}>
           <h2 className={labelClass}>Job description</h2>
-          <div className="mt-3 text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
-            {job.description || 'No description provided.'}
+          <div className="mt-3">
+            <JobDescriptionView
+              description={job.description}
+              titleClassName="text-zinc-400"
+              textClassName="text-zinc-300"
+            />
           </div>
         </div>
       </div>

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiMapPin, FiClock, FiCheck, FiBookmark, FiX, FiEye, FiAward, FiSlash } from 'react-icons/fi'
+import { FiMapPin, FiClock, FiCheck, FiBookmark, FiX, FiEye, FiAward, FiSlash, FiBriefcase } from 'react-icons/fi'
+import { Badge, Card, CardContent, Button } from './ui/index.js'
+import { extractRequiredSkillsFromDescription } from '@/lib/jobDescription.js'
+import JobDescriptionView from './JobDescriptionView.jsx'
 
-// Helper function to format date for display
 const formatDisplayDate = (dateString) => {
   if (!dateString) return ''
   try {
@@ -13,35 +15,28 @@ const formatDisplayDate = (dateString) => {
   }
 }
 
-// applicationStatus: 'applied' | 'reviewed' | 'shortlisted' | 'rejected' (for candidate My Applications)
 const STATUS_BADGES = {
-  applied: {
-    label: 'Applied',
-    Icon: FiCheck,
-    className: 'bg-green-500/20 text-green-300 border-green-500/30',
-  },
-  reviewed: {
-    label: 'Reviewed',
-    Icon: FiEye,
-    className: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-  },
-  shortlisted: {
-    label: 'Shortlisted',
-    Icon: FiAward,
-    className: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-  },
-  rejected: {
-    label: 'Rejected',
-    Icon: FiSlash,
-    className: 'bg-red-500/20 text-red-300 border-red-500/30',
-  },
+  applied: { label: 'Applied', Icon: FiCheck, variant: 'success' },
+  reviewed: { label: 'Reviewed', Icon: FiEye, variant: 'warning' },
+  shortlisted: { label: 'Shortlisted', Icon: FiAward, variant: 'accent' },
+  rejected: { label: 'Rejected', Icon: FiSlash, variant: 'danger' },
 }
 
-export default function JobCard({ job, onApply, isApplied = false, applicationStatus = 'applied', isSaved = false, onToggleSave, isAdmin = false }) {
+export default function JobCard({ job, onApply, isApplied = false, applicationStatus = 'applied', isSaved = false, onToggleSave, isAdmin = false, isApplying = false, matchScore }) {
   const isDisabled = job.enabled === false
   const [showDescriptionModal, setShowDescriptionModal] = useState(false)
   const statusConfig = STATUS_BADGES[applicationStatus] || STATUS_BADGES.applied
   const StatusIcon = statusConfig.Icon
+
+  // Required skills: prefer **Required Skills:** block from description (Grok format), else job.skills, else regex
+  const fromBlock = extractRequiredSkillsFromDescription(job.description || '')
+  const rawFallback = job.skills || (job.description && job.description.match(/\b(React|JavaScript|Python|Node|AWS|SQL|TypeScript|Java|Go|Rust|ExaCC|ExaData|RAC|RMAN|Dataguard|OCI|ASM|Oracle)\b/gi)) || []
+  const rawSkills = fromBlock.length > 0 ? fromBlock : rawFallback
+  const skills = [...new Map(rawSkills.map((s) => {
+    const key = (typeof s === 'string' ? s : String(s)).trim()
+    const normalized = key.toLowerCase()
+    return [normalized, key]
+  })).values()]
 
   useEffect(() => {
     if (!showDescriptionModal) return
@@ -52,209 +47,193 @@ export default function JobCard({ job, onApply, isApplied = false, applicationSt
 
   const openModal = (e) => {
     if (isDisabled) return
-    if (e.target.closest('button')) return // don't open when clicking Apply / Bookmark
+    if (e.target.closest('button')) return
     setShowDescriptionModal(true)
   }
 
   return (
     <>
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileHover={!isDisabled ? { y: -4, transition: { duration: 0.2 } } : {}}
-      onClick={openModal}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(e) } }}
-      className={`group glass-card rounded-2xl p-6 border transition-all duration-300 cursor-pointer ${
-        isDisabled
-          ? 'border-zinc-800 opacity-50 pointer-events-none'
-          : 'border-white/10 hover:border-purple-500/30 hover:shadow-premium'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
-            <h3 className={`text-xl font-bold transition ${isDisabled ? 'text-zinc-500' : 'text-white'}`}>
-              {job.title}
-            </h3>
-            {isApplied && (
-              <motion.span
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className={`inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border ${statusConfig.className}`}
-              >
-                <StatusIcon className="w-3 h-3" />
-                {statusConfig.label}
-              </motion.span>
-            )}
-            {!isApplied && isSaved && (
-              <motion.span
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30"
-              >
-                <FiBookmark className="w-3 h-3" />
-                Saved
-              </motion.span>
-            )}
-          </div>
-          
-          <p className={`text-sm mb-3 ${isDisabled ? 'text-zinc-500' : 'text-zinc-400'}`}>
-            {job.company}
-          </p>
-          
-          <div className={`flex flex-wrap items-center gap-4 text-sm ${isDisabled ? 'text-zinc-600' : 'text-zinc-400'}`}>
-            <div className="flex items-center gap-1.5">
-              <FiMapPin className="w-4 h-4" />
-              <span>{job.location}</span>
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        whileHover={!isDisabled ? { y: -2, transition: { duration: 0.2 } } : {}}
+        onClick={openModal}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(e) } }}
+        className={isDisabled ? 'opacity-60 pointer-events-none' : 'cursor-pointer'}
+      >
+        <Card className={`p-6 transition shadow-sm hover:shadow-md ${isDisabled ? '' : 'hover:border-slate-300'}`}>
+          <CardContent className="p-0 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500">
+                    <FiBriefcase className="w-6 h-6" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className={`text-lg font-semibold truncate ${isDisabled ? 'text-slate-400' : 'text-slate-900'}`}>
+                        {job.title}
+                      </h3>
+                      {matchScore != null && <Badge variant="blue">{matchScore}% match</Badge>}
+                      {isApplied && (
+                        <Badge variant={statusConfig.variant} className="inline-flex items-center gap-1">
+                          <StatusIcon className="w-3 h-3" /> {statusConfig.label}
+                        </Badge>
+                      )}
+                      {!isApplied && isSaved && (
+                        <Badge variant="blue" className="inline-flex items-center gap-1">
+                          <FiBookmark className="w-3 h-3 fill-current" /> Saved
+                        </Badge>
+                      )}
+                    </div>
+                    <p className={`text-sm mt-0.5 ${isDisabled ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {job.company}
+                    </p>
+                  </div>
+                </div>
+
+                <div className={`flex flex-wrap items-center gap-4 mt-3 text-sm ${isDisabled ? 'text-slate-400' : 'text-slate-500'}`}>
+              <span className="flex items-center gap-1.5">
+                <FiMapPin className="w-4 h-4 flex-shrink-0" />
+                {job.location}
+              </span>
+              {job.salary && <span>{job.salary}</span>}
+              {(job.experienceFrom != null || job.experienceTo != null) && (
+                <span className="flex items-center gap-1.5">
+                  <FiClock className="w-4 h-4 flex-shrink-0" />
+                  {[job.experienceFrom, job.experienceTo].filter(Boolean).join('–')} yrs
+                </span>
+              )}
             </div>
-            {job.salary && (
-              <div className="flex items-center gap-1.5">
-                <span>{job.salary}</span>
-              </div>
-            )}
-            {(job.experienceFrom || job.experienceTo) && (
-              <div className="flex items-center gap-1.5">
-                <FiClock className="w-4 h-4" />
-                <span>
-                  {job.experienceFrom ?? ''}{(job.experienceFrom || job.experienceTo) ? '-' : ''}{job.experienceTo ?? ''} yrs
+
+            {job.postedOn && (
+              <div className={`mt-2 text-xs ${isDisabled ? 'text-slate-400' : 'text-slate-500'}`}>
+                <span className="flex items-center gap-1.5">
+                  <FiClock className="w-3 h-3" />
+                  Posted {formatDisplayDate(job.postedOn)}
                 </span>
               </div>
             )}
-          </div>
-          
-          {job.postedOn && (
-            <div className={`mt-3 text-xs ${isDisabled ? 'text-zinc-600' : 'text-zinc-500'}`}>
-              <div className="flex items-center gap-1.5">
-                <FiClock className="w-3 h-3" />
-                <span>Posted on {formatDisplayDate(job.postedOn)}</span>
-              </div>
-            </div>
-          )}
-        </div>
-        
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          {!isAdmin && (
-            <motion.button
-              disabled={isDisabled || isApplied}
-              onClick={onApply}
-              whileHover={!isDisabled && !isApplied ? { scale: 1.05 } : {}}
-              whileTap={!isDisabled && !isApplied ? { scale: 0.95 } : {}}
-              className={`text-sm font-semibold px-5 py-2.5 rounded-xl transition-all duration-300 ${
-                isDisabled || isApplied 
-                  ? 'bg-zinc-700 text-zinc-500 cursor-not-allowed' 
-                  : 'bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white shadow-glow'
-              }`}
-            >
-              {isApplied ? statusConfig.label : 'Apply Now'}
-            </motion.button>
-          )}
-          {!isAdmin && onToggleSave && !isApplied && (
-            <motion.button
-              type="button"
-              onClick={onToggleSave}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className={`p-2.5 rounded-xl border-2 transition-all duration-300 ${
-                isSaved 
-                  ? 'border-green-500/50 text-green-400 bg-green-500/10' 
-                  : 'border-zinc-700 text-zinc-400 hover:border-purple-500/50 hover:text-purple-400 bg-white/5'
-              }`}
-              title={isSaved ? 'Unsave job' : 'Save job'}
-            >
-              <FiBookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
-            </motion.button>
-          )}
-          {!isAdmin && onToggleSave && isApplied && (
-            <button
-              type="button"
-              disabled
-              className="p-2.5 rounded-xl border-2 border-zinc-800 text-zinc-600 cursor-not-allowed"
-              title="Already applied"
-            >
-              <FiBookmark className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-      
-      {job.description && (
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className={`mt-4 text-sm line-clamp-2 ${isDisabled ? 'text-zinc-600' : 'text-zinc-300'}`}
-        >
-          {job.description}
-        </motion.p>
-      )}
-    </motion.div>
 
-    <AnimatePresence>
-      {showDescriptionModal && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
-          onClick={() => setShowDescriptionModal(false)}
-        >
+            {skills.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {skills.slice(0, 8).map((skill, i) => (
+                  <Badge key={i} variant="secondary" className="text-xs font-medium">
+                    {skill}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            {!isAdmin && (
+              <Button
+                disabled={isDisabled || isApplied}
+                onClick={onApply}
+                size="sm"
+                className={isDisabled || isApplied ? 'opacity-60 cursor-not-allowed' : ''}
+              >
+                {isApplying ? 'Applying…' : isApplied ? statusConfig.label : 'Apply Now'}
+              </Button>
+            )}
+            {!isAdmin && onToggleSave && !isApplied && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={onToggleSave}
+                className={isSaved ? 'border-blue-200 bg-blue-50 text-blue-600' : ''}
+                title={isSaved ? 'Unsave job' : 'Save job'}
+              >
+                <FiBookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : ''}`} />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {job.description && (
+          <p className={`mt-4 text-sm line-clamp-2 ${isDisabled ? 'text-slate-400' : 'text-slate-600'}`}>
+            {job.description}
+          </p>
+        )}
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      <AnimatePresence>
+        {showDescriptionModal && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ type: 'tween', duration: 0.2 }}
-            className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl border border-white/10 bg-zinc-900/95 shadow-2xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+            onClick={() => setShowDescriptionModal(false)}
           >
-            <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-white/10">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-xl font-bold text-white">{job.title}</h3>
-                  <p className="text-sm text-zinc-400 mt-1">{job.company}</p>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ type: 'tween', duration: 0.2 }}
+              className="relative w-full max-w-2xl max-h-[85vh] flex flex-col rounded-2xl bg-white border border-slate-200 shadow-lg overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-slate-200">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="text-xl font-semibold text-slate-900">{job.title}</h3>
+                    <p className="text-sm text-slate-500 mt-1">{job.company}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowDescriptionModal(false)}
+                    className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                    aria-label="Close"
+                  >
+                    <FiX className="w-5 h-5" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowDescriptionModal(false)}
-                  className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
-                  aria-label="Close"
-                >
-                  <FiX className="w-5 h-5" />
-                </button>
+                <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-slate-500">
+                  {job.location && (
+                    <span className="flex items-center gap-1.5">
+                      <FiMapPin className="w-4 h-4" /> {job.location}
+                    </span>
+                  )}
+                  {job.salary && <span>{job.salary}</span>}
+                  {(job.experienceFrom != null || job.experienceTo != null) && (
+                    <span className="flex items-center gap-1.5">
+                      <FiClock className="w-4 h-4" />
+                      {[job.experienceFrom, job.experienceTo].filter(Boolean).join('–')} yrs
+                    </span>
+                  )}
+                  {job.postedOn && (
+                    <span className="flex items-center gap-1.5">
+                      <FiClock className="w-3 h-3" /> Posted {formatDisplayDate(job.postedOn)}
+                    </span>
+                  )}
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-zinc-400">
-                {job.location && (
-                  <span className="flex items-center gap-1.5">
-                    <FiMapPin className="w-4 h-4" />
-                    {job.location}
-                  </span>
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                {skills.length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-sm font-semibold text-slate-700 mb-2">Required skills</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {skills.map((skill, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs font-medium">
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
                 )}
-                {job.salary && <span>{job.salary}</span>}
-                {(job.experienceFrom || job.experienceTo) && (
-                  <span className="flex items-center gap-1.5">
-                    <FiClock className="w-4 h-4" />
-                    {job.experienceFrom ?? ''}{(job.experienceFrom || job.experienceTo) ? '-' : ''}{job.experienceTo ?? ''} yrs
-                  </span>
-                )}
-                {job.postedOn && (
-                  <span className="flex items-center gap-1.5">
-                    <FiClock className="w-3 h-3" />
-                    Posted on {formatDisplayDate(job.postedOn)}
-                  </span>
-                )}
+                <JobDescriptionView description={job.description} textClassName="text-slate-600" />
               </div>
-            </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5">
-              <h4 className="text-sm font-semibold text-zinc-300 mb-2">Full description</h4>
-              <div className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">
-                {job.description || 'No description provided.'}
-              </div>
-            </div>
+            </motion.div>
           </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+        )}
+      </AnimatePresence>
     </>
   )
 }
