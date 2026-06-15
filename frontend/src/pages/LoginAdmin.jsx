@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext.jsx'
 import { useAsyncAction } from '../hooks/useAsyncAction.js'
 import PasswordInput from '../components/PasswordInput.jsx'
 import AuthPageLayout from '../components/AuthPageLayout.jsx'
+import { Input } from '../components/ui/Input.jsx'
 
 export default function LoginAdmin() {
   const { loginHR, loginSuperAdmin, auth, superAdminAuth } = useApp()
@@ -57,21 +58,21 @@ export default function LoginAdmin() {
               {adminError}
             </div>
           )}
-          <div>
+          <div className="w-full">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email</label>
-            <input
+            <Input
               type="email"
-              className="input-premium"
+              className="input-premium h-12 min-h-[3rem] text-base"
               placeholder="hr@company.com"
               value={adminEmail}
               onChange={(e) => setAdminEmail(e.target.value)}
               required
             />
           </div>
-          <div>
+          <div className="w-full">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Password</label>
             <PasswordInput
-              className="input-premium"
+              className="input-premium h-12 min-h-[3rem] text-base"
               placeholder="••••••••"
               value={adminPassword}
               onChange={(e) => setAdminPassword(e.target.value)}

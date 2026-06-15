@@ -28,14 +28,18 @@ from models import init_models
 def _build_allowed_origins():
     env_origins = os.getenv('FRONTEND_URLS') or os.getenv('FRONTEND_URL')
     if env_origins:
-        return [origin.strip() for origin in env_origins.split(',') if origin.strip()]
-    origins = ['http://localhost:5173', 'http://127.0.0.1:5173']
-    try:
-        local_ip = socket.gethostbyname(socket.gethostname())
-        if local_ip and local_ip != '127.0.0.1':
-            origins.append(f'http://{local_ip}:5173')
-    except OSError:
-        pass
+        origins = [origin.strip() for origin in env_origins.split(',') if origin.strip()]
+    else:
+        origins = ['http://localhost:5173', 'http://127.0.0.1:5173']
+        try:
+            local_ip = socket.gethostbyname(socket.gethostname())
+            if local_ip and local_ip != '127.0.0.1':
+                origins.append(f'http://{local_ip}:5173')
+        except OSError:
+            pass
+    # Dev: Vite may use 5174+ if 5173 is busy — allow localhost on any port
+    if os.getenv('FLASK_DEBUG', 'false').lower() == 'true':
+        origins.extend([r'http://localhost:\d+', r'http://127.0.0.1:\d+'])
     return origins
 
 

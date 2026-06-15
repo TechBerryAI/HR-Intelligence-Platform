@@ -8,7 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawn, execSync: nodeExecSync } = require('child_process');
+const { spawn, spawnSync, execSync: nodeExecSync } = require('child_process');
 const http = require('http');
 
 const ROOT = path.resolve(__dirname);
@@ -219,6 +219,14 @@ async function main() {
 
   checkEnv();
   setupEnv();
+
+  const preflight = spawnSync('node', [path.join(ROOT, 'scripts', 'db-preflight.js')], {
+    encoding: 'utf8',
+    stdio: ['inherit', 'pipe', 'inherit'],
+  });
+  if (preflight.stdout) process.stdout.write(preflight.stdout);
+  if (preflight.status !== 0) process.exit(1);
+
   await setupBackend();
   await setupFrontend();
 

@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "0.0.0.0",
     port: 5173,
+    strictPort: true,
     proxy: {
       // Optional: Proxy API requests during development
       // Uncomment if you want to use proxy instead of CORS

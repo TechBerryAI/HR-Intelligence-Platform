@@ -8,7 +8,7 @@ import { FiEye, FiEyeOff } from 'react-icons/fi'
 export default function PasswordInput({ className = '', style, ...props }) {
   const [visible, setVisible] = useState(false)
   return (
-    <div className="relative">
+    <div className="relative w-full">
       <input
         type={visible ? 'text' : 'password'}
         className={`w-full pr-10 ${className}`.trim()}
