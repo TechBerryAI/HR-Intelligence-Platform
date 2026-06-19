@@ -1,2 +1,2 @@
 /** Full-screen hero background on the landing / home page */
-export const HERO_VIDEO_SRC = '/demo/website-hero.mp4'
+export const HERO_VIDEO_SRC = '/videos/website-hero.mp4'

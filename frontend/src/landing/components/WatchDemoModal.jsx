@@ -3,8 +3,6 @@ import Modal from '../../components/ui/Modal.jsx'
 
 import { HERO_VIDEO_SRC } from '../constants/heroVideo.js'
 
-const DEMO_VIDEO_SRC = HERO_VIDEO_SRC
-
 export default function WatchDemoModal({ open, onClose }) {
   return (
     <Modal open={open} onClose={onClose} title="Platform Demo" size="xl">
@@ -17,7 +15,7 @@ export default function WatchDemoModal({ open, onClose }) {
           playsInline
           preload="metadata"
         >
-          <source src={DEMO_VIDEO_SRC} type="video/mp4" />
+          <source src={HERO_VIDEO_SRC} type="video/mp4" />
           Your browser does not support the video tag.
         </video>
       </div>
