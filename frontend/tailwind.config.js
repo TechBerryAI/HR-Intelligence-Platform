@@ -9,6 +9,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Plus Jakarta Sans', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        display: ['Sora', 'Plus Jakarta Sans', 'sans-serif'],
       },
       colors: {
         primary: {
@@ -64,6 +65,8 @@ export default {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'fade-in': 'fadeIn 0.4s ease-out',
         'slide-up': 'slideUp 0.5s ease-out',
+        'hologram': 'hologramPulse 3s ease-in-out infinite',
+        'coreGlow': 'coreGlow 2.5s ease-in-out infinite',
       },
       keyframes: {
         float: {
@@ -77,6 +80,14 @@ export default {
         slideUp: {
           '0%': { transform: 'translateY(12px)', opacity: '0' },
           '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        hologramPulse: {
+          '0%, 100%': { opacity: '0.6', filter: 'blur(0px)' },
+          '50%': { opacity: '1', filter: 'blur(1px)' },
+        },
+        coreGlow: {
+          '0%, 100%': { boxShadow: '0 0 40px rgba(59,130,246,0.3)' },
+          '50%': { boxShadow: '0 0 80px rgba(34,211,238,0.5)' },
         },
       },
     },

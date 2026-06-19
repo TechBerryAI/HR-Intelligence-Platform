@@ -50,6 +50,8 @@ function PrivateRoute({ children }) {
 export default function App() {
   const location = useLocation()
   const isSuperAdminRoute = location.pathname.startsWith('/super-admin')
+  const isLandingRoute = location.pathname === '/'
+  const hideChrome = isSuperAdminRoute || isLandingRoute
 
   return (
     <AppProvider>
@@ -57,9 +59,9 @@ export default function App() {
         <ErrorBoundary>
           <ConnectionStatus />
           <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
-            {!isSuperAdminRoute && <Navbar />}
+            {!hideChrome && <Navbar />}
             <ErrorToasts />
-            <main className={isSuperAdminRoute ? 'flex-1 flex flex-col min-h-screen' : 'flex-1'}>
+            <main className={hideChrome ? 'flex-1 flex flex-col min-h-screen' : 'flex-1'}>
               <Suspense fallback={<div className="max-w-7xl mx-auto px-6 py-10"><div className="h-10 w-48 rounded-xl bg-slate-200 animate-pulse" /></div>}>
                 <Routes>
                   <Route path="/" element={<Home />} />
@@ -218,7 +220,7 @@ export default function App() {
                 </Routes>
               </Suspense>
             </main>
-            {!isSuperAdminRoute && (
+            {!hideChrome && (
               <footer className="py-8 text-center text-sm text-slate-500 border-t border-slate-200">
                 © {new Date().getFullYear()} Job Portal
               </footer>

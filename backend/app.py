@@ -121,12 +121,15 @@ from super_admin import super_admin_bp  # noqa: E402
 # Database initialization - DO IT AT STARTUP, NOT LAZY
 # Lazy loading was causing 10+ second delays on first API call
 print("[DB] Initializing database at startup...")
+_db_host = os.getenv('POSTGRES_HOST', os.getenv('PGHOST', 'localhost'))
+_db_port = os.getenv('POSTGRES_PORT', os.getenv('PGPORT', '5432'))
+_db_name = os.getenv('POSTGRES_DB', os.getenv('PGDATABASE', 'postgres'))
+print(f"[DB] Target: {_db_host}:{_db_port}/{_db_name}")
 try:
     init_db()
     print("[DB] Database initialized successfully")
 except Exception as e:
-    err_msg = str(e)
-    print(f"[DB ERROR] Failed to initialize database: {e}")
+    print(f"[DB ERROR] Failed to initialize database ({_db_host}:{_db_port}/{_db_name}): {e}")
     import traceback
     traceback.print_exc()
 

@@ -277,6 +277,17 @@ def simple_candidate_login():
         )
         
         if not candidate:
+            hr_account = db_get(
+                'SELECT hrid FROM hr_signup WHERE LOWER(TRIM(email)) = ?',
+                (email,)
+            )
+            if hr_account:
+                print(f"[LOGIN] HR account used on candidate login: {email}")
+                return jsonify({
+                    'error': 'This email is registered as HR/Admin, not as a job applicant. Please sign in at HR / Admin Login.',
+                    'code': 'hr_account',
+                    'loginPath': '/login/admin',
+                }), 401
             print(f"[LOGIN] No candidate found for: {email}")
             return jsonify({'error': 'Invalid credentials'}), 401
         

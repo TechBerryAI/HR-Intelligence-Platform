@@ -30,6 +30,12 @@ if not DATABASE_URL:
     safe_pass = quote_plus(POSTGRES_PASSWORD)
     DATABASE_URL = f"postgresql://{safe_user}:{safe_pass}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
+DB_TARGET = (
+    f"{os.getenv('POSTGRES_HOST', os.getenv('PGHOST', 'localhost'))}:"
+    f"{os.getenv('POSTGRES_PORT', os.getenv('PGPORT', '5432'))}/"
+    f"{os.getenv('POSTGRES_DB', os.getenv('PGDATABASE', 'postgres'))}"
+)
+
 POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '5'))
 CONNECTION_TIMEOUT = int(os.getenv('DB_CONNECTION_TIMEOUT', '10'))
 
@@ -67,7 +73,7 @@ class ConnectionPool:
                             conn = self._create_connection()
                             self.pool.put(conn)
                         except Exception as e:
-                            print(f"[DB WARNING] Could not pre-populate connection: {e}")
+                            print(f"[DB WARNING] Could not pre-populate connection to {DB_TARGET}: {e}")
                 self._initialized = True
         try:
             conn = self.pool.get(timeout=timeout)

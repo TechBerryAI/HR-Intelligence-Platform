@@ -336,7 +336,7 @@ export default function Dashboard() {
                 placeholder="₹15-25 LPA"
               />
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                   Experience Range (years)
                 </label>
                 <div className="grid grid-cols-2 gap-3">
@@ -564,7 +564,7 @@ export default function Dashboard() {
                     placeholder="₹15-25 LPA"
                   />
                   <div>
-                    <label className="block text-sm font-medium text-zinc-300 mb-2">
+                    <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
                       Experience Range (years)
                     </label>
                     <div className="grid grid-cols-2 gap-3">
