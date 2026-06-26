@@ -1,0 +1,7 @@
+id: resume_parser_v2
+version: "2.0.0"
+status: active
+template_file: null
+variables:
+  - input
+description: Resume parsing prompt v2 (template not yet implemented).

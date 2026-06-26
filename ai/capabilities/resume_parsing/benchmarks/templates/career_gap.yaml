@@ -1,0 +1,25 @@
+# Benchmark Template: Career Gap
+
+profile: career_gap
+capability: resume_parsing
+schema_id: resume_v1
+
+input:
+  format: text
+  placeholder: "[DOCUMENT_TEXT_PLACEHOLDER]"
+
+expected_output_shape:
+  experience:
+    min_items: 2
+    note: Non-contiguous date ranges expected
+
+quality_gates:
+  confidence_min: 0.65
+  schema_valid: true
+  cross_field_warnings_expected:
+    - experience_dates_order
+
+evaluation_focus:
+  - gap_not_filled_with_fabricated_roles
+  - total_experience_years_excludes_gap
+  - present_token_on_return_role

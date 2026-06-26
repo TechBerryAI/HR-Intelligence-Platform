@@ -1,0 +1,22 @@
+# Default configuration for Dataset Inspector v1.
+# Override via --config or CLI flags.
+
+source_path: null
+output_path: null
+
+dataset_id: DS-RESUMES-RAW
+dataset_version: "1.0.0"
+dataset_name: Raw Resume Corpus
+doc_type: resume
+
+recursive: true
+workers: 4
+follow_symlinks: false
+max_file_size_bytes: 52428800
+hash_algorithm: sha256
+enable_near_duplicate: false
+sampling_rate: 0.05
+min_samples: 10
+max_samples: 500
+max_depth_logged: 10
+factory_version: "1.0.0"

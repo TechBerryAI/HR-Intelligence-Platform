@@ -1,0 +1,21 @@
+schema_validate: true
+required_fields:
+- type
+- person
+- skills
+- experience
+- education
+optional_fields:
+- summary
+- confidence
+enums:
+  type:
+  - resume
+regex: {}
+length: {}
+dates: {}
+confidence:
+  min_overall: 0.55
+business_hooks:
+- validate_resume_toon_projection
+- batch_dedupe_skills

@@ -1,0 +1,103 @@
+contract:
+  id: CONTRACT-SKILL
+  version: "1.0.0"
+  kind: domain
+  status: active
+  supersedes: null
+  updated_at: "2026-06-25"
+
+purpose: >
+  Capability representation for matching, normalization, and search. Supports
+  raw extraction (string), normalized form (name + canonical_id), and ontology-linked
+  form via knowledge/skills. Used by ATS fuzzy skill matching.
+
+fields:
+  name:
+    type: string
+    description: Display name as extracted or normalized.
+    toon_path: null
+  canonical_id:
+    type: string
+    description: Stable ID from knowledge/skills entries (e.g. skill-python).
+    toon_path: null
+  canonical_name:
+    type: string
+    description: Preferred label from knowledge base.
+    toon_path: null
+  category:
+    type: enum
+    enum: [language, framework, library, database, cloud, devops, tool, methodology, domain, soft_skill, other]
+    toon_path: null
+  years_experience:
+    type: number
+    toon_path: null
+  proficiency:
+    type: enum
+    enum: [beginner, intermediate, advanced, expert]
+    toon_path: null
+  confidence:
+    type: number
+    description: Normalization or extraction confidence 0.0–1.0.
+    toon_path: null
+  source:
+    type: enum
+    enum: [extracted, inferred, user_provided, knowledge_linked]
+    toon_path: null
+
+required:
+  - name
+
+optional:
+  - canonical_id
+  - canonical_name
+  - category
+  - years_experience
+  - proficiency
+  - confidence
+  - source
+
+relationships:
+  - id: skill-knowledge-base
+    target: knowledge/skills/
+    field: canonical_id
+    cardinality: many_to_one
+  - id: skill-resume
+    target: contracts/resume.yaml
+    field: skills
+    cardinality: many_to_many
+  - id: skill-jd
+    target: contracts/job_description.yaml
+    field: skills
+    cardinality: many_to_many
+  - id: skill-experience
+    target: contracts/experience.yaml
+    field: skills_used
+    cardinality: many_to_many
+
+normalization_rules:
+  - id: skill-trim-casefold-lookup
+    applies_to: name
+    rule: Trim; casefold for alias lookup in knowledge/skills/aliases.json.
+    priority: 100
+  - id: skill-toon-string-form
+    applies_to: name
+    rule: TOON resume/JD skills[] are plain strings; emit name only on TOON projection.
+    priority: 90
+  - id: skill-alias-resolve
+    applies_to: canonical_id
+    rule: On alias hit, set canonical_id and canonical_name from knowledge entry.
+    priority: 80
+  - id: skill-category-infer
+    applies_to: category
+    rule: Use knowledge entry category when linked; else null until classified.
+    priority: 50
+  - id: skill-dedupe-key
+    applies_to: canonical_id
+    rule: Dedupe by canonical_id when present, else by normalized name.
+    priority: 70
+
+validation_notes:
+  - TOON wire format uses pipe-delimited string list at skills path — not skill objects.
+  - ATS _skill_match operates on string forms; normalization improves recall.
+  - Empty skill name is invalid in normalized form; filter before persistence.
+  - mandatory_skills and preferred_skills on JD use same contract shape.

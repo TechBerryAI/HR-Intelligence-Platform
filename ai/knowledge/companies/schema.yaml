@@ -1,0 +1,55 @@
+knowledge_base:
+  id: KB-COMPANIES
+  version: "1.0.0"
+  status: active
+  contract_ref: ../../contracts/company.yaml
+  updated_at: "2026-06-25"
+
+description: >
+  Organization registry for employer deduplication on resumes and JDs.
+
+entry:
+  required:
+    - id
+    - canonical_name
+  optional:
+    - legal_name
+    - industry
+    - size
+    - website
+    - headquarters_id
+    - parent_id
+    - stock_ticker
+    - deprecated
+    - replaced_by
+  properties:
+    id:
+      type: string
+      pattern: "^company-[a-z0-9-]+$"
+    canonical_name:
+      type: string
+    legal_name:
+      type: string
+    industry:
+      type: string
+    size:
+      type: enum
+      values: [startup, smb, mid_market, enterprise, unknown]
+    website:
+      type: url
+    headquarters_id:
+      type: string
+      description: loc-* reference into knowledge/locations.
+    parent_id:
+      type: string
+      description: Parent company company-* id.
+    stock_ticker:
+      type: string
+    deprecated: { type: boolean, default: false }
+    replaced_by: { type: string }
+
+storage:
+  entries_dir: entries/
+  shard_naming: "shard-{NNNN}.json"
+  aliases_file: aliases.json
+  index_file: index.json

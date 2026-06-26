@@ -1,0 +1,10 @@
+preferred_provider: null
+preferred_model_alias: hr-chat
+temperature: 0.6
+top_p: 1.0
+max_tokens: 2048
+streaming: true
+timeout_seconds: null
+retries: null
+fallback_policy: routing_chain
+output_mode: text

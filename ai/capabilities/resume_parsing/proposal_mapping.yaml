@@ -1,0 +1,477 @@
+# Provider-independent mapping from LLM/provider proposal output to canonical resume_v1.
+# Applies at normalization boundary before schema validation and TOON projection.
+# Aliases absorb provider naming variance; transforms are pure and deterministic.
+
+mapping:
+  id: MAPPING-RESUME-PARSING-V1
+  version: "1.0.0"
+  capability: resume_parsing
+  target_schema: resume_v1
+  contract_ref: ../../contracts/resume.yaml
+  toon_projection_ref: ../../schemas/mappings/toon.yaml#resume
+  status: active
+  updated_at: "2026-06-26"
+  description: >
+    Maps heterogeneous provider JSON into the canonical Resume object. Provider output
+    may use alias field names (start_date, role, validTill). This mapping normalizes
+    to contract field names before validation. Does not depend on any specific provider SDK.
+
+root:
+  type:
+    canonical: type
+    aliases: [document_type, doc_type]
+    transform: literal_resume
+    required: true
+  person:
+    canonical: person
+    aliases: [contact, personal_information, personal_info, candidate]
+    transform: object_map
+    required: true
+  summary:
+    canonical: summary
+    aliases: [objective, profile, professional_summary, about]
+    transform: trim_string_optional
+  skills:
+    canonical: skills
+    aliases: [technical_skills, core_competencies, competencies, skill_set]
+    transform: skill_array
+    required: true
+  experience:
+    canonical: experience
+    aliases: [work_experience, employment, employment_history, work_history, positions]
+    transform: experience_array
+    required: true
+  education:
+    canonical: education
+    aliases: [academic_background, academics, qualifications_education]
+    transform: education_array
+    required: true
+  projects:
+    canonical: projects
+    aliases: [portfolio, personal_projects, side_projects]
+    transform: project_array
+  certifications:
+    canonical: certifications
+    aliases: [certificates, licenses, credentials, professional_certifications]
+    transform: certification_array
+  languages:
+    canonical: languages
+    aliases: [language_skills, spoken_languages]
+    transform: language_array
+  awards:
+    canonical: awards
+    aliases: [honors, achievements, honors_and_awards, recognition]
+    transform: award_array
+  publications:
+    canonical: publications
+    aliases: [research, papers, published_work]
+    transform: publication_array
+  links:
+    canonical: links
+    aliases: [urls, social_links, web_presence, profiles]
+    transform: link_array
+  total_experience_years:
+    canonical: total_experience_years
+    aliases: [years_of_experience, total_years, experience_years, yoe]
+    transform: number_optional
+  confidence:
+    canonical: confidence
+    aliases: [overall_confidence, parse_confidence, score]
+    transform: confidence_clamp
+  source_tracking:
+    canonical: source_tracking
+    aliases: [provenance, extraction_provenance, field_provenance]
+    transform: passthrough_object
+  metadata:
+    canonical: metadata
+    aliases: [parse_metadata, processing_metadata]
+    transform: passthrough_object
+  validation:
+    canonical: validation
+    aliases: [validation_result, parse_validation]
+    transform: passthrough_object
+
+person:
+  name:
+    canonical: person.name
+    aliases: [full_name, candidate_name, person.full_name]
+    transform: trim_string
+    required: true
+  email:
+    canonical: person.email
+    aliases: [email_address, e_mail, person.email_address]
+    transform: normalize_email
+    required: true
+  phone:
+    canonical: person.phone
+    aliases: [phone_number, mobile, telephone, contact_number]
+    transform: normalize_phone
+    required: true
+  location:
+    canonical: person.location
+    aliases: [address, city, current_location, residence, person.address]
+    transform: location_or_string
+  linkedin:
+    canonical: person.linkedin
+    aliases: [linkedin_url, linked_in]
+    transform: url_optional
+    also_maps_to_links: linkedin
+  github:
+    canonical: person.github
+    aliases: [github_url, git_hub]
+    transform: url_optional
+    also_maps_to_links: github
+  portfolio:
+    canonical: person.portfolio
+    transform: url_optional
+    also_maps_to_links: portfolio
+  website:
+    canonical: person.website
+    aliases: [personal_website, site]
+    transform: url_optional
+    also_maps_to_links: website
+  twitter:
+    canonical: person.twitter
+    aliases: [twitter_url, x_profile]
+    transform: url_optional
+    also_maps_to_links: twitter
+  otherUrls:
+    canonical: person.otherUrls
+    aliases: [other_urls, additional_urls]
+    transform: url_array
+  current_location:
+    canonical: person.current_location
+    transform: trim_string_optional
+    merge_into: person.location
+  city:
+    canonical: person.city
+    transform: trim_string_optional
+    merge_into: person.location
+  address:
+    canonical: person.address
+    transform: trim_string_optional
+    merge_into: person.location
+  preferred_location:
+    canonical: person.preferred_location
+    transform: trim_string_optional
+
+experience_item:
+  title:
+    canonical: experience[].title
+    aliases: [role, position, job_title]
+    transform: trim_string
+  company:
+    canonical: experience[].company
+    aliases: [employer, organization, company_name]
+    transform: company_or_string
+  from:
+    canonical: experience[].from
+    aliases: [start, start_date, startDate, begin]
+    transform: normalize_date
+  to:
+    canonical: experience[].to
+    aliases: [end, end_date, endDate, finish]
+    transform: normalize_date_present
+  years:
+    canonical: experience[].years
+    aliases: [duration_years, tenure_years]
+    transform: number_derive_from_dates
+  description:
+    canonical: experience[].description
+    aliases: [responsibilities, duties, summary, highlights]
+    transform: trim_string_optional
+  location:
+    canonical: experience[].location
+    transform: location_or_string
+  skills_used:
+    canonical: experience[].skills_used
+    aliases: [technologies, tech_stack, tools_used]
+    transform: skill_array
+  is_current:
+    canonical: experience[].is_current
+    aliases: [current, is_present]
+    transform: derive_from_end_date
+
+education_item:
+  degree:
+    canonical: education[].degree
+    aliases: [qualification, degree_name]
+    transform: trim_string
+  field:
+    canonical: education[].field
+    aliases: [major, specialization, stream, discipline]
+    transform: trim_string
+  institution:
+    canonical: education[].institution
+    aliases: [school, university, college, institute]
+    transform: trim_string
+  year:
+    canonical: education[].year
+    aliases: [graduation_year, completion_year]
+    transform: trim_string
+  from:
+    canonical: education[].from
+    aliases: [start, start_date]
+    transform: normalize_date
+  to:
+    canonical: education[].to
+    aliases: [end, end_date]
+    transform: normalize_date
+  gpa:
+    canonical: education[].gpa
+    aliases: [cgpa, grade, gpa_score]
+    transform: trim_string
+  location:
+    canonical: education[].location
+    transform: location_or_string
+
+skill_item:
+  name:
+    canonical: skills[].name
+    aliases: [skill, skill_name, label]
+    transform: trim_string
+    string_form: skills[] as plain string
+  canonical_id:
+    canonical: skills[].canonical_id
+    transform: passthrough_optional
+  canonical_name:
+    canonical: skills[].canonical_name
+    transform: passthrough_optional
+  category:
+    canonical: skills[].category
+    transform: enum_normalize
+  years_experience:
+    canonical: skills[].years_experience
+    aliases: [years, experience_years]
+    transform: number_optional
+  proficiency:
+    canonical: skills[].proficiency
+    transform: enum_normalize
+  confidence:
+    canonical: skills[].confidence
+    transform: confidence_clamp
+  source:
+    canonical: skills[].source
+    transform: enum_normalize
+
+project_item:
+  name:
+    canonical: projects[].name
+    aliases: [title, project_name]
+    transform: trim_string
+  description:
+    canonical: projects[].description
+    transform: trim_string_optional
+  url:
+    canonical: projects[].url
+    aliases: [link, project_url]
+    transform: url_optional
+  technologies:
+    canonical: projects[].technologies
+    aliases: [tech_stack, stack, tools]
+    transform: skill_array
+  from:
+    canonical: projects[].from
+    aliases: [start, start_date]
+    transform: normalize_date
+  to:
+    canonical: projects[].to
+    aliases: [end, end_date]
+    transform: normalize_date_present
+  role:
+    canonical: projects[].role
+    transform: trim_string_optional
+  organization:
+    canonical: projects[].organization
+    aliases: [client, company]
+    transform: company_or_string
+
+certification_item:
+  name:
+    canonical: certifications[].name
+    aliases: [title, certification_name]
+    transform: trim_string
+    string_form: certifications[] as plain string
+  issuer:
+    canonical: certifications[].issuer
+    aliases: [organization, issuing_body]
+    transform: trim_string_optional
+  year:
+    canonical: certifications[].year
+    aliases: [issued_year, date_obtained]
+    transform: trim_string
+  expiry:
+    canonical: certifications[].expiry
+    aliases: [validTill, expiration, expires, valid_until]
+    transform: normalize_date
+  credential_id:
+    canonical: certifications[].credential_id
+    aliases: [license_id, badge_id, id]
+    transform: trim_string_optional
+  url:
+    canonical: certifications[].url
+    aliases: [verification_url]
+    transform: url_optional
+  status:
+    canonical: certifications[].status
+    transform: enum_normalize
+
+language_item:
+  language:
+    canonical: languages[].language
+    aliases: [name, lang]
+    transform: trim_string
+    string_form: languages[] as plain string
+  proficiency:
+    canonical: languages[].proficiency
+    aliases: [level, fluency]
+    transform: enum_normalize
+  reading:
+    canonical: languages[].reading
+    transform: enum_normalize
+  writing:
+    canonical: languages[].writing
+    transform: enum_normalize
+  speaking:
+    canonical: languages[].speaking
+    transform: enum_normalize
+  canonical_id:
+    canonical: languages[].canonical_id
+    aliases: [iso_code, language_code]
+    transform: passthrough_optional
+
+award_item:
+  name:
+    canonical: awards[].name
+    aliases: [title, award_name]
+    transform: trim_string
+  issuer:
+    canonical: awards[].issuer
+    aliases: [organization, awarded_by]
+    transform: trim_string_optional
+  year:
+    canonical: awards[].year
+    transform: trim_string
+  description:
+    canonical: awards[].description
+    transform: trim_string_optional
+  category:
+    canonical: awards[].category
+    transform: trim_string_optional
+
+publication_item:
+  title:
+    canonical: publications[].title
+    aliases: [name, paper_title]
+    transform: trim_string
+  authors:
+    canonical: publications[].authors
+    transform: string_array
+  venue:
+    canonical: publications[].venue
+    aliases: [journal, conference, publisher]
+    transform: trim_string_optional
+  year:
+    canonical: publications[].year
+    transform: trim_string
+  url:
+    canonical: publications[].url
+    transform: url_optional
+  doi:
+    canonical: publications[].doi
+    transform: trim_string_optional
+  abstract:
+    canonical: publications[].abstract
+    transform: trim_string_optional
+
+link_item:
+  type:
+    canonical: links[].type
+    transform: enum_normalize
+  url:
+    canonical: links[].url
+    aliases: [href, link]
+    transform: url_required
+  label:
+    canonical: links[].label
+    aliases: [name, title]
+    transform: trim_string_optional
+
+post_mapping:
+  - id: merge_person_links
+    rule: >
+      Promote person.linkedin, person.github, person.portfolio, person.website,
+      person.twitter into links[] when not already present. Dedupe by normalized URL.
+  - id: normalize_experience_dates
+    rule: >
+      Copy start_date/end_date to from/to when from/to absent. Set is_current when
+      end_date or to is Present/Current/Now.
+  - id: dedupe_skills
+    rule: Case-insensitive dedupe on skill name; preserve first occurrence casing.
+  - id: sort_experience
+    rule: Reverse-chronological by end date; current roles first.
+  - id: derive_total_experience
+    rule: >
+      When total_experience_years absent, derive from experience[].years sum with
+      overlap policy documented in field_definitions.yaml.
+  - id: strip_unknown_root_keys
+    rule: Drop keys not in resume_v1 schema after alias resolution.
+  - id: attach_default_confidence
+    rule: When confidence absent, omit (runtime validation may apply min threshold separately).
+
+transforms:
+  literal_resume:
+    description: Coerce to literal "resume"; reject other document types at validation.
+  trim_string:
+    description: Trim whitespace; collapse internal runs; empty becomes "".
+  trim_string_optional:
+    description: Trim; empty or whitespace-only becomes null and is omitted.
+  normalize_email:
+    description: Lowercase; trim; validate basic email shape.
+  normalize_phone:
+    description: Strip non-digit except leading +; preserve country code when present.
+  normalize_date:
+    description: Parse to YYYY-MM when possible; preserve YYYY when month unknown.
+  normalize_date_present:
+    description: Map Present/Current/Now/Presently to canonical "Present".
+  number_optional:
+    description: Parse float; null when unparseable.
+  number_derive_from_dates:
+    description: Compute years from from/to when years missing and dates parseable.
+  confidence_clamp:
+    description: Clamp to [0.0, 1.0]; round to 4 decimal places.
+  location_or_string:
+    description: String passthrough or structured location object per location contract.
+  company_or_string:
+    description: String passthrough or { name } object per company contract.
+  skill_array:
+    description: Accept string[], object[], or pipe-delimited string; emit skill_or_string[].
+  url_optional:
+    description: Prepend https:// when scheme missing; null when invalid.
+  url_required:
+    description: Same as url_optional but reject item when URL invalid.
+  enum_normalize:
+    description: Case-insensitive match to schema enum; null when no match.
+  passthrough_object:
+    description: Shallow copy allowed keys; drop unknown keys per nested schema.
+
+omitted_on_toon:
+  - projects
+  - awards
+  - publications
+  - links
+  - source_tracking
+  - metadata
+  - validation
+  - person.current_location
+  - person.city
+  - person.address
+  - person.preferred_location
+  - experience.location
+  - experience.skills_used
+  - experience.is_current
+  - experience.start_date
+  - experience.end_date
+  - skill.canonical_id
+  - skill.confidence
+  - skill.source

@@ -1,0 +1,58 @@
+# Stage interface — all Dataset Factory stages implement this contract.
+# Future Python implementations must conform without changing this file's semantics.
+
+interface:
+  id: DF-STAGE-INTERFACE
+  version: "1.0.0"
+  status: active
+
+stage_contract:
+  required_metadata:
+    stage_id: string
+    stage_version: semver
+    factory_version: semver
+    run_id: uuid
+    started_at: datetime
+    completed_at: datetime | null
+
+  inputs:
+    source_path:
+      type: path
+      description: Read-only input directory or artifact reference.
+      mutability: read_only
+    config:
+      type: object
+      description: Stage-specific config; validated against stage config schema.
+    upstream_artifacts:
+      type: array
+      items: { $ref: artifact_envelope.yaml#/artifact }
+
+  outputs:
+    artifacts:
+      type: array
+      description: Machine-readable files written to stage output directory.
+    lineage:
+      parent_run_id: uuid | null
+      parent_artifact_ids: array
+      child_stage: string | null
+
+  invariants:
+    - MUST NOT modify files under source_path.
+    - MUST write outputs only to designated output directory.
+    - MUST emit lineage record conforming to artifact_envelope.yaml.
+    - MUST be idempotent given identical inputs and config (deterministic outputs).
+    - MUST register dataset version in registry/datasets/ when stage produces DS-* artifact.
+
+  hooks:
+    pre_run: validate_inputs, check_disk_space, verify_read_only_mount
+    post_run: write_inspection_or_stage_log, update_lineage, optional_registry_publish
+    on_failure: write_partial_log, preserve_error_context, do_not_touch_source
+
+stage_ids:
+  STAGE-INSPECTOR: inspector/
+  STAGE-EXTRACTOR: extractor/
+  STAGE-VALIDATOR: validator/
+  STAGE-NORMALIZER: normalizer/
+  STAGE-REVIEWER: reviewer/
+  STAGE-EXPORTER: exporter/
+  STAGE-BENCHMARK: benchmark/

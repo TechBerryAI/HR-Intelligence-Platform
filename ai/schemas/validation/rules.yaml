@@ -1,0 +1,122 @@
+# Validation rules for HR Intelligence Foundation schemas (M2)
+# Consumed by preprocessing/validate/ in future milestones.
+# HRMS production TOON rules referenced but not duplicated — see mapping.
+
+validation:
+  id: VALIDATION-RULES
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-25"
+
+resume:
+  schema_ref: ../resume.yaml
+  rules:
+    - id: resume-root-type
+      severity: error
+      check: field_equals
+      field: type
+      value: resume
+    - id: resume-required-root
+      severity: error
+      check: keys_present
+      fields: [person, skills, experience, education]
+    - id: resume-person-keys
+      severity: error
+      check: nested_keys_present
+      path: person
+      fields: [name, email, phone]
+    - id: resume-person-urls
+      severity: error
+      check: optional_string_or_null
+      path: person
+      fields: [linkedin, github, portfolio, website, twitter]
+    - id: resume-person-other-urls
+      severity: error
+      check: optional_array_or_null
+      path: person.otherUrls
+    - id: resume-skills-array
+      severity: error
+      check: is_array
+      field: skills
+    - id: resume-experience-array
+      severity: error
+      check: is_array
+      field: experience
+    - id: resume-education-array
+      severity: error
+      check: is_array
+      field: education
+    - id: resume-skill-name-nonempty
+      severity: warn
+      check: array_items_nonempty_string
+      field: skills
+      when: normalized_form
+    - id: resume-certification-name
+      severity: warn
+      check: certification_items_have_name
+      field: certifications
+      when: object_form
+
+  hrms_delegate:
+    function: backend/parsing_utils.validate_toon_format
+    document_type: resume
+
+job_description:
+  schema_ref: ../job_description.yaml
+  rules:
+    - id: jd-root-type
+      severity: error
+      check: field_equals
+      field: type
+      value: job_description
+    - id: jd-required-root
+      severity: error
+      check: keys_present
+      fields: [title, location, skills, responsibilities]
+    - id: jd-skills-array
+      severity: error
+      check: is_array
+      field: skills
+    - id: jd-responsibilities-array
+      severity: error
+      check: is_array
+      field: responsibilities
+    - id: jd-experience-range
+      severity: warn
+      check: min_lte_max
+      fields: [min_experience_years, max_experience_years]
+      when: both_present
+
+  hrms_delegate:
+    function: backend/parsing_utils.validate_toon_format
+    document_type: job_description
+
+candidate:
+  schema_ref: ../candidate.yaml
+  rules:
+    - id: candidate-id-required
+      severity: error
+      check: field_present
+      field: candidate_id
+    - id: candidate-primary-resume-type
+      severity: error
+      check: nested_field_equals
+      path: primary_resume.type
+      value: resume
+      when: primary_resume_present
+    - id: candidate-person-sync
+      severity: warn
+      check: person_matches_primary_resume
+      when: both_present
+
+knowledge_linking:
+  description: Optional post-validation enrichment; never blocks TOON acceptance.
+  rules:
+    - id: skill-canonical-resolve
+      severity: info
+      check: knowledge_alias_lookup
+      knowledge_base: skills
+    - id: location-canonical-resolve
+      severity: info
+      check: knowledge_alias_lookup
+      knowledge_base: locations

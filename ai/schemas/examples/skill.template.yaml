@@ -1,0 +1,16 @@
+# Skill entity template — structure only, no sample data.
+
+_template:
+  contract: ../../contracts/skill.yaml
+  schema: ../skill.yaml#/skill_object
+  version: "1.0.0"
+  kind: template
+
+name: null
+canonical_id: null
+canonical_name: null
+category: null
+years_experience: null
+proficiency: null
+confidence: null
+source: null

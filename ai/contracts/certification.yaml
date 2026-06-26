@@ -1,0 +1,93 @@
+contract:
+  id: CONTRACT-CERTIFICATION
+  version: "1.0.0"
+  kind: domain
+  status: active
+  supersedes: null
+  updated_at: "2026-06-25"
+
+purpose: >
+  Professional certifications, licenses, and credentials. HRMS accepts TOON as
+  string[] or structured objects; this contract is the normalized target shape.
+
+fields:
+  name:
+    type: string
+    description: Certification or credential name.
+    toon_path: certifications
+  issuer:
+    type: string
+    description: Issuing organization.
+    toon_path: null
+  year:
+    type: string
+    description: Year obtained.
+    toon_path: null
+  expiry:
+    type: string
+    description: Expiration YYYY-MM; maps to validTill in frontend.
+    toon_path: null
+  credential_id:
+    type: string
+    description: License or badge ID.
+    toon_path: null
+  url:
+    type: url
+    description: Verification URL.
+    toon_path: null
+  status:
+    type: enum
+    enum: [active, expired, revoked, unknown]
+    toon_path: null
+  canonical_id:
+    type: string
+    description: Link to knowledge/certifications entry.
+    toon_path: null
+
+required:
+  - name
+
+optional:
+  - issuer
+  - year
+  - expiry
+  - credential_id
+  - url
+  - status
+  - canonical_id
+
+relationships:
+  - id: certification-resume
+    target: contracts/resume.yaml
+    field: certifications
+    cardinality: many_to_one
+  - id: certification-kb
+    target: knowledge/certifications/
+    field: canonical_id
+    cardinality: many_to_one
+
+normalization_rules:
+  - id: certification-string-to-object
+    applies_to: name
+    rule: TOON string entry becomes { name: string } with other fields null.
+    priority: 100
+  - id: certification-kb-link
+    applies_to: canonical_id
+    rule: Resolve name/issuer via knowledge/certifications aliases.
+    priority: 70
+  - id: certification-expiry-alias
+    applies_to: expiry
+    rule: Accept validTill alias from frontend object form.
+    priority: 60
+  - id: certification-toon-projection
+    applies_to: name
+    rule: >
+      TOON projection may emit string[] (LLM prompt style) or object[] (frontend);
+      prefer string[] for LLM round-trip compatibility unless consumer requires objects.
+    priority: 50
+
+validation_notes:
+  - ATS education/certifications component includes certification signal (10% weight).
+  - LLM resume prompt often returns pipe-delimited certification strings.
+  - name is the only required field in normalized form.
+  - Empty certifications[] or omitted key is valid on resume TOON (optional root field).

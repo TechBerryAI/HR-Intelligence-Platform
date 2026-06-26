@@ -1,0 +1,120 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ── Dataset Factory inspection outputs (gitignore run artifacts) ──
+dataset_factory/inspector/outputs/**/*
+!dataset_factory/inspector/outputs/.gitkeep
+
+# ── Knowledge base shards (structure tracked, entry data gitignored) ──
+knowledge/**/entries/**
+!knowledge/**/entries/.gitkeep
+knowledge/**/index.json
+
+# ── Datasets (stage artifacts — structure tracked, data gitignored) ──
+datasets/raw/**/*
+!datasets/raw/**/.gitkeep
+datasets/extracted/**/*
+!datasets/extracted/.gitkeep
+datasets/cleaned/**/*
+!datasets/cleaned/.gitkeep
+datasets/normalized/**/*
+!datasets/normalized/.gitkeep
+datasets/jsonl/**/*
+!datasets/jsonl/.gitkeep
+datasets/benchmark/**/*
+!datasets/benchmark/.gitkeep
+!datasets/benchmark/README.md
+datasets/synthetic/**/*
+!datasets/synthetic/.gitkeep
+
+# ── Silver layer (extracted text — PII) ──
+datasets/silver/**/*
+!datasets/silver/**/
+!datasets/silver/**/.gitkeep
+
+# ── Proposal artifacts (derived labels — PII) ──
+datasets/proposals/**/*
+!datasets/proposals/**/
+!datasets/proposals/**/.gitkeep
+
+# ── Inspector run outputs (filenames, hashes — PII metadata) ──
+datasets/inspection/**
+!datasets/inspection/.gitkeep
+
+# ── Evaluation datasets (sanitized resume text used at benchmark runtime) ──
+datasets/evaluation/**
+!datasets/evaluation/.gitkeep
+
+# ── Document binaries (never commit source resumes/JDs) ──
+datasets/**/*.pdf
+datasets/**/*.doc
+datasets/**/*.docx
+
+# ── Local config copies (may contain secrets) ──
+configs/*.yaml
+!configs/*.yaml.example
+
+# ── Models (weights and binaries) ──
+models/base/**/*
+!models/base/.gitkeep
+!models/base/README.md
+models/adapters/**/*
+!models/adapters/.gitkeep
+models/merged/**/*
+!models/merged/.gitkeep
+models/gguf/**
+!models/gguf/.gitkeep
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# ── Training artifacts ──
+training/checkpoints/**
+training/runs/**
+training/logs/**
+training/configs/*
+!training/configs/.gitkeep
+!training/configs/README.md
+
+# ── Evaluation artifacts ──
+evaluation/reports/**
+evaluation/comparisons/**
+evaluation/metrics/**
+evaluation/regression/**
+
+# ── Experiments (local runs gitignored; registry metadata committed) ──
+experiments/*
+!experiments/README.md
+!experiments/_template/
+
+# ── Deployment bundles ──
+exports/**
+!exports/.gitkeep
+!exports/README.md
+
+# ── Experiment tracking ──
+wandb/
+mlruns/
+tensorboard/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

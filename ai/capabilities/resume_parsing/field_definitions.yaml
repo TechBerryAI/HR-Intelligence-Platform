@@ -1,0 +1,834 @@
+field_definitions:
+  id: FIELD-DEF-RESUME-PARSING-V1
+  version: "1.0.0"
+  capability: resume_parsing
+  schema_id: resume_v1
+  contract_ref: ../../contracts/resume.yaml
+  updated_at: "2026-06-26"
+
+root:
+  type:
+    purpose: Document discriminator for HRMS TOON validation and ATS routing.
+    expected_value: Literal string "resume"
+    examples:
+      - resume
+    normalization_rules:
+      - Reject or remap job_description and unknown types at mapping boundary.
+    required: true
+    optional: false
+    business_meaning: Identifies document as a candidate resume in the HR data model.
+    future_extensions:
+      - resume_version discriminator for schema evolution (resume_v2).
+
+  person:
+    purpose: Contact and identity block for candidate outreach and deduplication.
+    expected_value: Object with name, email, phone keys present.
+    examples:
+      - "{ name, email, phone, location }"
+    normalization_rules:
+      - Merge current_location, city, address into location when projecting.
+    required: true
+    optional: false
+    business_meaning: Primary identity anchor for candidate records and communications.
+    future_extensions:
+      - Structured name components (first, middle, last).
+      - PII redaction flags per field.
+
+  summary:
+    purpose: Professional narrative for screening and summarization capabilities.
+    expected_value: Free-text paragraph or null when absent.
+    examples:
+      - "Professional summary paragraph extracted from header section."
+    normalization_rules:
+      - Trim; collapse excessive whitespace; max 5000 chars at validation.
+    required: false
+    optional: true
+    business_meaning: Elevator pitch used in recruiter review and resume_summary input.
+    future_extensions:
+      - Structured summary bullets.
+      - Generated vs extracted provenance flag.
+
+  skills:
+    purpose: Capability inventory for ATS matching and search indexing.
+    expected_value: Array of strings or skill objects with name.
+    examples:
+      - '["Python", "AWS"]'
+      - '[{ "name": "Python", "category": "language" }]'
+    normalization_rules:
+      - Case-insensitive dedupe; trim; promote strings to objects on normalization.
+      - Link to knowledge/skills via canonical_id when available.
+    required: true
+    optional: false
+    business_meaning: Core matching signal against JD mandatory and preferred skills.
+    future_extensions:
+      - Skill endorsements count.
+      - Last-used date per skill.
+
+  experience:
+    purpose: Employment history for experience scoring and role fit.
+    expected_value: Array of role entries; reverse-chronological preferred.
+    examples:
+      - "[{ title, company, from, to, years, description }]"
+    normalization_rules:
+      - Normalize date aliases; derive years; set is_current from Present token.
+      - Sort by end date descending.
+    required: true
+    optional: false
+    business_meaning: Primary signal for seniority, domain, and employer history.
+    future_extensions:
+      - Employment type (full-time, contract, internship).
+      - Reporting structure and team size.
+
+  education:
+    purpose: Academic credentials for qualification matching.
+    expected_value: Array of degree entries.
+    examples:
+      - '[{ "degree": "B.Tech", "field": "Computer Science", "institution": "...", "year": "2020" }]'
+    normalization_rules:
+      - Resolve degree via knowledge/degrees; institution fallback from field.
+    required: true
+    optional: false
+    business_meaning: Education gate and qualification scoring in ATS.
+    future_extensions:
+      - Accreditation and honors per degree.
+      - Thesis title for advanced degrees.
+
+  projects:
+    purpose: Portfolio work not captured as formal employment.
+    expected_value: Array of project objects or empty array.
+    examples:
+      - '[{ "name": "...", "technologies": ["React"], "url": "https://..." }]'
+    normalization_rules:
+      - Promote technology strings to skill refs.
+      - Omitted from TOON projection until extension approved.
+    required: false
+    optional: true
+    business_meaning: Enriches skill evidence and interview question generation.
+    future_extensions:
+      - Open-source contribution metrics.
+      - Project impact quantification.
+
+  certifications:
+    purpose: Professional credentials and licenses.
+    expected_value: String array or structured certification objects.
+    examples:
+      - '["AWS Solutions Architect"]'
+      - '[{ "name": "PMP", "issuer": "PMI", "year": "2022" }]'
+    normalization_rules:
+      - String entries become { name } objects on normalization.
+      - Map validTill alias to expiry.
+    required: false
+    optional: true
+    business_meaning: Credential verification and compliance screening.
+    future_extensions:
+      - Automated expiry monitoring.
+      - Verification API integration.
+
+  languages:
+    purpose: Spoken and written language proficiency.
+    expected_value: String array or structured language objects.
+    examples:
+      - '["English", "Hindi"]'
+      - '[{ "language": "English", "proficiency": "fluent" }]'
+    normalization_rules:
+      - Map CEFR and colloquial terms to proficiency enum.
+      - Dedupe keeping highest proficiency rank.
+    required: false
+    optional: true
+    business_meaning: Locale fit for global roles and client-facing positions.
+    future_extensions:
+      - Certification scores (IELTS, TOEFL).
+
+  awards:
+    purpose: Honors, recognition, and achievement signals.
+    expected_value: Array of award objects with name.
+    examples:
+      - '[{ "name": "Employee of the Month", "issuer": "...", "year": "2023" }]'
+    normalization_rules:
+      - Normalize year to YYYY when parseable.
+      - Not projected to TOON in v1.
+    required: false
+    optional: true
+    business_meaning: Differentiator for high performers; not used in core ATS today.
+    future_extensions:
+      - Award tier classification.
+      - Industry-specific award ontology.
+
+  publications:
+    purpose: Research papers, articles, and authored works.
+    expected_value: Array of publication objects with title.
+    examples:
+      - '[{ "title": "...", "venue": "IEEE", "year": "2021", "authors": ["..."] }]'
+    normalization_rules:
+      - Parse DOI and URL; normalize author list from comma-separated strings.
+    required: false
+    optional: true
+    business_meaning: Academic and research credibility for specialized roles.
+    future_extensions:
+      - Citation count integration.
+      - Peer-review status.
+
+  links:
+    purpose: Consolidated web presence beyond person.* URL fields.
+    expected_value: Array of { type, url, label } objects.
+    examples:
+      - '[{ "type": "linkedin", "url": "https://linkedin.com/in/..." }]'
+    normalization_rules:
+      - Dedupe against person.linkedin, github, etc.
+      - Infer type from URL hostname when type absent.
+    required: false
+    optional: true
+    business_meaning: Recruiter quick-access to external profiles.
+    future_extensions:
+      - Link health verification.
+      - Social graph enrichment.
+
+  total_experience_years:
+    purpose: Aggregate seniority metric for JD min/max experience matching.
+    expected_value: Non-negative number; may be derived.
+    examples:
+      - 7.5
+      - 12
+    normalization_rules:
+      - Derive from experience[].years when absent.
+      - Do not double-count overlapping roles without overlap policy.
+    required: false
+    optional: true
+    business_meaning: Primary experience gate in ATS scoring.
+    future_extensions:
+      - Domain-specific experience breakdown.
+      - Management vs IC tenure split.
+
+  confidence:
+    purpose: Overall parse quality score for routing to human review.
+    expected_value: Float in [0.0, 1.0].
+    examples:
+      - 0.92
+      - 0.65
+    normalization_rules:
+      - Clamp to [0, 1]; runtime rejects below min_overall threshold.
+    required: false
+    optional: true
+    business_meaning: Triggers review queue when below platform threshold.
+    future_extensions:
+      - Per-section confidence rollup.
+      - Calibration against human labels.
+
+  source_tracking:
+    purpose: Provenance linking extracted fields to source document evidence.
+    expected_value: Object with field_sources array and extraction metadata.
+    examples:
+      - '{ "extraction_method": "llm", "field_sources": [{ "field_path": "person.name", "section": "header" }] }'
+    normalization_rules:
+      - field_path uses dot notation aligned with canonical schema.
+    required: false
+    optional: true
+    business_meaning: Audit trail for disputed extractions and model debugging.
+    future_extensions:
+      - Bounding box coordinates for PDF/OCR sources.
+      - Token-level attribution.
+
+  metadata:
+    purpose: Processing and lineage metadata not stored in TOON wire format.
+    expected_value: Object with parsed_id, model_version, parsed_at, etc.
+    examples:
+      - '{ "parser_version": "1.0.0", "provider": "ollama", "parsed_at": "2026-06-26T12:00:00Z" }'
+    normalization_rules:
+      - parsed_at ISO 8601 UTC.
+      - Attach at runtime post-invocation when not from LLM.
+    required: false
+    optional: true
+    business_meaning: Operational traceability across Dataset Factory and HRMS ingest.
+    future_extensions:
+      - Cost and token usage metrics.
+      - Pipeline stage timings.
+
+  validation:
+    purpose: Self-reported parse validity from model or post-processor.
+    expected_value: Object with is_valid, errors, warnings, field_status.
+    examples:
+      - '{ "is_valid": true, "toon_projectable": true, "warnings": [] }'
+    normalization_rules:
+      - Merge with runtime validation results at ingest boundary.
+    required: false
+    optional: true
+    business_meaning: Early signal for reject/review before HRMS persistence.
+    future_extensions:
+      - Auto-remediation suggestions per error code.
+
+person:
+  name:
+    purpose: Full legal or preferred name as printed on resume.
+    expected_value: Non-empty string when evidence exists; empty string at TOON boundary.
+    examples:
+      - "[CANDIDATE_NAME]"
+    normalization_rules:
+      - Trim; title-case when ALL CAPS detected heuristically.
+    required: true
+    optional: false
+    business_meaning: Display name across HRMS UI and communications.
+    future_extensions:
+      - Phonetic name for search.
+
+  email:
+    purpose: Primary email for candidate contact.
+    expected_value: RFC-like email string.
+    examples:
+      - "[EMAIL_ADDRESS]"
+    normalization_rules:
+      - Lowercase local part; trim; regex validation.
+    required: true
+    optional: false
+    business_meaning: Dedup key and outreach channel.
+    future_extensions:
+      - Email verification status.
+
+  phone:
+    purpose: Primary phone number.
+    expected_value: E.164 preferred; digits with optional country code.
+    examples:
+      - "+1-555-0100"
+      - "9876543210"
+    normalization_rules:
+      - Strip formatting; preserve leading +.
+    required: true
+    optional: false
+    business_meaning: Recruiter callback and SMS outreach.
+    future_extensions:
+      - Phone type (mobile, work).
+      - WhatsApp availability flag.
+
+  location:
+    purpose: Current or mailing location for geo matching.
+    expected_value: Free-text string or structured location object.
+    examples:
+      - "San Francisco, CA"
+      - '{ "city": "Pune", "country": "IN", "raw": "Pune, India" }'
+    normalization_rules:
+      - location_to_string for TOON projection.
+      - Remote detection sets location.remote true.
+    required: false
+    optional: true
+    business_meaning: Location score component in ATS.
+    future_extensions:
+      - Geocoded coordinates.
+      - Relocation willingness.
+
+  linkedin:
+    purpose: LinkedIn profile URL.
+    expected_value: HTTPS URL.
+    examples:
+      - "https://linkedin.com/in/[PROFILE]"
+    normalization_rules:
+      - Prepend https when missing; also emit links[] entry.
+    required: false
+    optional: true
+    business_meaning: Social verification and recruiter research.
+    future_extensions:
+      - Profile snapshot hash.
+
+  github:
+    purpose: GitHub profile URL for technical roles.
+    expected_value: HTTPS URL.
+    examples:
+      - "https://github.com/[USERNAME]"
+    normalization_rules:
+      - Prepend https when missing.
+    required: false
+    optional: true
+    business_meaning: Code portfolio signal for engineering hires.
+    future_extensions:
+      - Contribution stats linkage.
+
+  portfolio:
+    purpose: Personal portfolio or project showcase URL.
+    expected_value: HTTPS URL.
+    examples:
+      - "https://[PORTFOLIO_DOMAIN]"
+    normalization_rules:
+      - Prepend https when missing.
+    required: false
+    optional: true
+    business_meaning: Design and creative work samples.
+    future_extensions:
+      - Portfolio CMS detection.
+
+  website:
+    purpose: Personal or professional website.
+    expected_value: HTTPS URL.
+    examples:
+      - "https://[DOMAIN]"
+    normalization_rules:
+      - Prepend https when missing.
+    required: false
+    optional: true
+    business_meaning: Additional professional presence.
+    future_extensions:
+      - Domain ownership verification.
+
+  twitter:
+    purpose: Twitter/X social profile.
+    expected_value: HTTPS URL.
+    examples:
+      - "https://twitter.com/[HANDLE]"
+    normalization_rules:
+      - Accept x.com URLs; normalize hostname.
+    required: false
+    optional: true
+    business_meaning: Public thought leadership signal.
+    future_extensions:
+      - Follower count enrichment.
+
+  otherUrls:
+    purpose: Additional URLs not covered by typed person fields.
+    expected_value: Array of URLs.
+    examples:
+      - '["https://stackoverflow.com/users/..."]'
+    normalization_rules:
+      - Dedupe against links[] and typed URLs.
+    required: false
+    optional: true
+    business_meaning: Catch-all for miscellaneous profiles.
+    future_extensions:
+      - URL categorization model.
+
+experience_item:
+  title:
+    purpose: Job title or role name at employer.
+    expected_value: String; alias role accepted at mapping.
+    examples:
+      - "Senior Software Engineer"
+    normalization_rules:
+      - Map role alias to title.
+    required: false
+    optional: true
+    business_meaning: Title match against JD role family.
+    future_extensions:
+      - Canonical job title ontology link.
+
+  company:
+    purpose: Employer organization name.
+    expected_value: String or { name } object.
+    examples:
+      - "Acme Corp"
+    normalization_rules:
+      - company_to_string for TOON.
+    required: false
+    optional: true
+    business_meaning: Employer brand and industry inference.
+    future_extensions:
+      - Company knowledge base link.
+
+  from:
+    purpose: Role start date.
+    expected_value: YYYY-MM or YYYY.
+    examples:
+      - "2019-03"
+      - "2019"
+    normalization_rules:
+      - Accept start_date alias; normalize to YYYY-MM.
+    required: false
+    optional: true
+    business_meaning: Tenure calculation and timeline validation.
+    future_extensions:
+      - Precision flag (month vs year only).
+
+  to:
+    purpose: Role end date or Present for current role.
+    expected_value: YYYY-MM, YYYY, or Present.
+    examples:
+      - "2023-06"
+      - "Present"
+    normalization_rules:
+      - Accept end_date alias; normalize Present tokens.
+    required: false
+    optional: true
+    business_meaning: Recency of experience for matching.
+    future_extensions:
+      - Reason for leaving (if stated).
+
+  years:
+    purpose: Duration in years for this role.
+    expected_value: Non-negative number; may be estimated.
+    examples:
+      - 2.5
+      - 4
+    normalization_rules:
+      - Derive from from/to when missing.
+    required: false
+    optional: true
+    business_meaning: Granular tenure for scoring.
+    future_extensions:
+      - Full-time equivalent adjustment.
+
+  description:
+    purpose: Role responsibilities and achievements narrative.
+    expected_value: Free text or bullet concatenation.
+    examples:
+      - "Led team of 5 engineers..."
+    normalization_rules:
+      - Preserve bullet structure as newlines when possible.
+    required: false
+    optional: true
+    business_meaning: Qualitative evidence for interview prep.
+    future_extensions:
+      - Structured achievement bullets with metrics.
+
+  location:
+    purpose: Work location for this role.
+    expected_value: String or location object.
+    examples:
+      - "Remote"
+      - "New York, NY"
+    normalization_rules:
+      - TOON extension; omitted on projection.
+    required: false
+    optional: true
+    business_meaning: Geo history for relocation assessment.
+    future_extensions:
+      - Hybrid schedule annotation.
+
+  skills_used:
+    purpose: Technologies exercised in this role.
+    expected_value: Skill array.
+    examples:
+      - '["Kubernetes", "Go"]'
+    normalization_rules:
+      - Dedupe against root skills[].
+    required: false
+    optional: true
+    business_meaning: Contextual skill evidence.
+    future_extensions:
+      - Skill proficiency per role.
+
+  is_current:
+    purpose: Flag for ongoing employment.
+    expected_value: Boolean derived from end date.
+    examples:
+      - true
+      - false
+    normalization_rules:
+      - Set true when to is Present/Current/Now.
+    required: false
+    optional: true
+    business_meaning: Identifies current employer for conflict checks.
+    future_extensions:
+      - Notice period indication.
+
+education_item:
+  degree:
+    purpose: Degree or qualification name.
+    expected_value: String; may link to knowledge/degrees.
+    examples:
+      - "Bachelor of Technology"
+      - "MBA"
+    normalization_rules:
+      - KB alias resolution when available.
+    required: false
+    optional: true
+    business_meaning: Degree level gate in ATS education scoring.
+    future_extensions:
+      - Degree level enum (bachelor, master, doctorate).
+
+  field:
+    purpose: Major, discipline, or specialization.
+    expected_value: String.
+    examples:
+      - "Computer Science"
+      - "Mechanical Engineering"
+    normalization_rules:
+      - Used as institution fallback in HRMS frontend.
+    required: false
+    optional: true
+    business_meaning: Field relevance to JD domain.
+    future_extensions:
+      - Field ontology mapping.
+
+  institution:
+    purpose: School, college, or university name.
+    expected_value: String.
+    examples:
+      - "[INSTITUTION_NAME]"
+    normalization_rules:
+      - Trim; normalize known abbreviations.
+    required: false
+    optional: true
+    business_meaning: Institution tier and accreditation signals.
+    future_extensions:
+      - University knowledge base link.
+
+  year:
+    purpose: Graduation or completion year.
+    expected_value: YYYY or free text as extracted.
+    examples:
+      - "2020"
+      - "Expected 2025"
+    normalization_rules:
+      - Preserve original when non-standard.
+    required: false
+    optional: true
+    business_meaning: Recency of education.
+    future_extensions:
+      - In-progress flag for expected graduation.
+
+  gpa:
+    purpose: Grade point average as printed.
+    expected_value: String to preserve scale ambiguity.
+    examples:
+      - "3.8/4.0"
+      - "8.5 CGPA"
+    normalization_rules:
+      - Do not convert scales without explicit mapping.
+    required: false
+    optional: true
+    business_meaning: Academic performance signal when present.
+    future_extensions:
+      - Normalized GPA on 4.0 scale.
+
+skill_item:
+  name:
+    purpose: Display name of the skill.
+    expected_value: Non-empty string.
+    examples:
+      - "Python"
+      - "Project Management"
+    normalization_rules:
+      - Trim; casefold for dedupe lookup.
+    required: true
+    optional: false
+    business_meaning: Primary skill matching token.
+    future_extensions:
+      - Synonym cluster ID.
+
+  canonical_id:
+    purpose: Stable ID from knowledge/skills ontology.
+    expected_value: String like skill-python.
+    examples:
+      - "skill-python"
+    normalization_rules:
+      - Set via KB lookup post-extraction.
+    required: false
+    optional: true
+    business_meaning: Precise matching beyond string fuzzy match.
+    future_extensions:
+      - Ontology version pinning.
+
+  category:
+    purpose: Skill taxonomy bucket.
+    expected_value: Enum value from schema.
+    examples:
+      - language
+      - framework
+    normalization_rules:
+      - Infer from KB when linked.
+    required: false
+    optional: true
+    business_meaning: Skill grouping in UI and reports.
+    future_extensions:
+      - Custom tenant categories.
+
+  proficiency:
+    purpose: Self-reported or inferred skill level.
+    expected_value: beginner | intermediate | advanced | expert.
+    examples:
+      - advanced
+    normalization_rules:
+      - Map colloquial terms (expertise, mastery) to enum.
+    required: false
+    optional: true
+    business_meaning: Depth signal beyond presence/absence.
+    future_extensions:
+      - Verified proficiency via assessment.
+
+certification_item:
+  name:
+    purpose: Certification or license title.
+    expected_value: Non-empty string.
+    examples:
+      - "AWS Certified Solutions Architect – Associate"
+    normalization_rules:
+      - String form accepted at TOON boundary.
+    required: true
+    optional: false
+    business_meaning: Credential matching for regulated roles.
+    future_extensions:
+      - Certification KB link.
+
+  issuer:
+    purpose: Organization that issued the credential.
+    expected_value: String.
+    examples:
+      - "Amazon Web Services"
+    normalization_rules:
+      - Trim; normalize known issuer abbreviations.
+    required: false
+    optional: true
+    business_meaning: Issuer credibility and verification routing.
+    future_extensions:
+      - Issuer authority registry.
+
+  expiry:
+    purpose: Credential expiration date.
+    expected_value: YYYY-MM.
+    examples:
+      - "2025-12"
+    normalization_rules:
+      - Accept validTill alias from frontend objects.
+    required: false
+    optional: true
+    business_meaning: Compliance and renewal tracking.
+    future_extensions:
+      - Auto-expiry alerts.
+
+language_item:
+  language:
+    purpose: Language name.
+    expected_value: Non-empty string.
+    examples:
+      - "English"
+      - "Mandarin"
+    normalization_rules:
+      - Resolve to ISO code in canonical_id when unambiguous.
+    required: true
+    optional: false
+    business_meaning: Communication fit for role locale.
+    future_extensions:
+      - Dialect specification.
+
+  proficiency:
+    purpose: Overall proficiency level.
+    expected_value: native | fluent | professional | conversational | basic.
+    examples:
+      - fluent
+    normalization_rules:
+      - Map CEFR A1–C2 when present.
+    required: false
+    optional: true
+    business_meaning: Minimum language bar for client-facing roles.
+    future_extensions:
+      - Certified test scores.
+
+award_item:
+  name:
+    purpose: Award or honor title.
+    expected_value: Non-empty string.
+    examples:
+      - "Employee of the Year"
+    normalization_rules:
+      - Trim; dedupe near-identical entries.
+    required: true
+    optional: false
+    business_meaning: Recognition signal for culture fit narratives.
+    future_extensions:
+      - Award category taxonomy.
+
+publication_item:
+  title:
+    purpose: Publication or paper title.
+    expected_value: Non-empty string.
+    examples:
+      - "[PUBLICATION_TITLE]"
+    normalization_rules:
+      - Trim; preserve original casing.
+    required: true
+    optional: false
+    business_meaning: Research credibility for academic and R&D roles.
+    future_extensions:
+      - Open-access status.
+
+link_item:
+  type:
+    purpose: Classified link category.
+    expected_value: Enum from schema link_type.
+    examples:
+      - linkedin
+      - github
+    normalization_rules:
+      - Infer from URL when absent.
+    required: false
+    optional: true
+    business_meaning: UI icon and routing by platform.
+    future_extensions:
+      - Custom tenant link types.
+
+  url:
+    purpose: Absolute URL for the link.
+    expected_value: Valid HTTPS URL.
+    examples:
+      - "https://[PLATFORM]/[PATH]"
+    normalization_rules:
+      - Prepend scheme; reject malformed URLs.
+    required: true
+    optional: false
+    business_meaning: Direct navigation target.
+    future_extensions:
+      - Short URL expansion.
+
+metadata_fields:
+  parsed_id:
+    purpose: Unique ID for this parse result in the platform.
+    expected_value: UUID or platform-generated string.
+    examples:
+      - "[PARSED_ID]"
+    normalization_rules:
+      - Assigned by runtime when absent.
+    required: false
+    optional: true
+    business_meaning: Foreign key to parsed_resumes store.
+    future_extensions:
+      - Version chain for re-parses.
+
+  model_version:
+    purpose: Identifier of the model that produced the output.
+    expected_value: Provider model name or alias.
+    examples:
+      - "resume-parser"
+    normalization_rules:
+      - Set from runtime invocation context.
+    required: false
+    optional: true
+    business_meaning: Model lineage for regression tracking.
+    future_extensions:
+      - Fine-tune checkpoint ID.
+
+source_tracking_fields:
+  field_sources:
+    purpose: Per-field evidence mapping to source document.
+    expected_value: Array of { field_path, source_text, section, confidence }.
+    examples:
+      - '[{ "field_path": "person.email", "section": "header", "confidence": 0.95 }]'
+    normalization_rules:
+      - field_path must resolve to existing schema path.
+    required: false
+    optional: true
+    business_meaning: Explainability for recruiter trust and model audit.
+    future_extensions:
+      - Highlight coordinates in PDF viewer.
+
+validation_fields:
+  is_valid:
+    purpose: Whether output passes self-check and runtime validation.
+    expected_value: Boolean.
+    examples:
+      - true
+      - false
+    normalization_rules:
+      - Recomputed at ingest if runtime validation runs.
+    required: false
+    optional: true
+    business_meaning: Gate for auto-accept vs human review.
+    future_extensions:
+      - Partial validity with field-level accept.
+
+  toon_projectable:
+    purpose: Whether record can project to HRMS TOON without data loss.
+    expected_value: Boolean.
+    examples:
+      - true
+    normalization_rules:
+      - Check required_toon_keys per toon.yaml.
+    required: false
+    optional: true
+    business_meaning: HRMS ingest readiness flag.
+    future_extensions:
+      - List of fields that will be omitted on projection.

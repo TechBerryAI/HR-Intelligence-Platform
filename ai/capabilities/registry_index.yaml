@@ -1,0 +1,43 @@
+# AI Capability Library Registry Index
+# Auto-maintained catalog — capability IDs must match directory names.
+
+registry:
+  version: "1.0.0"
+  root: ai/capabilities
+  loader: capabilities.loader.discover_capabilities
+
+capabilities:
+  - id: resume_parsing
+    path: resume_parsing
+    status: active
+    task_alias: resume_parsing
+
+  - id: jd_parsing
+    path: jd_parsing
+    status: active
+    task_alias: jd_parsing
+
+  - id: bulk_resume_parsing
+    path: bulk_resume_parsing
+    status: active
+    task_alias: bulk_resume_parsing
+
+  - id: candidate_matching
+    path: candidate_matching
+    status: active
+    task_alias: candidate_matching
+
+  - id: resume_summary
+    path: resume_summary
+    status: active
+    task_alias: resume_summary
+
+  - id: interview_generation
+    path: interview_generation
+    status: active
+    task_alias: interview_generation
+
+  - id: hr_chat
+    path: hr_chat
+    status: active
+    task_alias: hr_chat

@@ -1,0 +1,31 @@
+# Benchmark Template: Fresh Graduate
+
+profile: fresh_graduate
+capability: resume_parsing
+schema_id: resume_v1
+
+input:
+  format: text
+  placeholder: "[DOCUMENT_TEXT_PLACEHOLDER]"
+
+expected_output_shape:
+  experience:
+    max_items: 2
+    note: Internships or part-time only
+  education:
+    min_items: 1
+    note: Primary signal
+  projects:
+    min_items: 0
+    note: Often present for technical graduates
+  total_experience_years:
+    max: 3
+
+quality_gates:
+  confidence_min: 0.65
+  schema_valid: true
+
+evaluation_focus:
+  - education_extraction_quality
+  - internship_vs_fulltime_classification
+  - project_skill_extraction

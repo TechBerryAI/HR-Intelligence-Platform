@@ -1,0 +1,23 @@
+# Benchmark Template: Multiple Degrees
+
+profile: multiple_degrees
+capability: resume_parsing
+schema_id: resume_v1
+
+input:
+  format: text
+  placeholder: "[DOCUMENT_TEXT_PLACEHOLDER]"
+
+expected_output_shape:
+  education:
+    min_items: 2
+    note: Undergraduate, graduate, and/or professional degrees
+
+quality_gates:
+  confidence_min: 0.7
+  schema_valid: true
+
+evaluation_focus:
+  - degree_institution_field_disambiguation
+  - education_reverse_chronological_order
+  - gpa_per_degree_extraction

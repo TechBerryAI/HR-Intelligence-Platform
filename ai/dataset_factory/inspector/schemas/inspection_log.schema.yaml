@@ -1,0 +1,75 @@
+# Schema — inspection_log.yaml (inspector output)
+
+schema:
+  id: DF-SCHEMA-INSPECTION-LOG
+  version: "1.0.0"
+  artifact_type: INSPECTION_LOG
+
+required:
+  - log
+  - run
+  - events
+
+properties:
+  log:
+    type: object
+    required: [id, version]
+    properties:
+      id: { type: string, const: INSPECTION-LOG }
+      version: { type: semver }
+
+  run:
+    type: object
+    required: [run_id, stage_id, started_at]
+    properties:
+      run_id: { type: uuid }
+      stage_id: { type: string, const: STAGE-INSPECTOR }
+      stage_version: { type: semver }
+      factory_version: { type: semver }
+      dataset_id: { type: string }
+      dataset_version: { type: semver }
+      source_path: { type: path }
+      output_path: { type: path }
+      started_at: { type: datetime }
+      completed_at: { type: datetime, nullable: true }
+      status: { type: enum, values: [running, success, partial, failed] }
+      source_mutated: { type: boolean, const: false }
+
+  config_snapshot:
+    type: object
+    description: Inspector config at run time for reproducibility
+
+  phases:
+    type: array
+    description: Execution phase timeline from architecture.yaml
+    items:
+      type: object
+      properties:
+        phase_id: { type: string }
+        started_at: { type: datetime }
+        completed_at: { type: datetime }
+        status: { type: enum, values: [pending, running, success, skipped, failed] }
+
+  events:
+    type: array
+    items:
+      type: object
+      required: [timestamp, level, message]
+      properties:
+        timestamp: { type: datetime }
+        level: { type: enum, values: [debug, info, warning, error] }
+        phase_id: { type: string }
+        code: { type: string }
+        path: { type: path }
+        message: { type: string }
+        details: { type: object }
+
+  summary:
+    type: object
+    properties:
+      files_scanned: { type: integer }
+      files_hashed: { type: integer }
+      files_skipped: { type: integer }
+      errors: { type: integer }
+      warnings: { type: integer }
+      artifacts_written: { type: array, items: { type: path } }

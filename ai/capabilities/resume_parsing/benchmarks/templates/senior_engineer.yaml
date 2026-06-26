@@ -1,0 +1,27 @@
+# Benchmark Template: Senior Engineer
+
+profile: senior_engineer
+capability: resume_parsing
+schema_id: resume_v1
+
+input:
+  format: text
+  placeholder: "[DOCUMENT_TEXT_PLACEHOLDER]"
+
+expected_output_shape:
+  experience:
+    min_items: 4
+  skills:
+    min_items: 15
+  total_experience_years:
+    min: 10
+
+quality_gates:
+  confidence_min: 0.75
+  schema_valid: true
+
+evaluation_focus:
+  - deep_experience_extraction
+  - skill_dedupe_across_roles
+  - technology_per_role_accuracy
+  - seniority_title_normalization

@@ -1,0 +1,37 @@
+capability:
+  id: jd_parsing
+  name: Job Description Parsing
+  version: 1.0.0
+  owner: ai-platform
+  status: active
+  supported_providers:
+  - mock
+  - ollama
+  - openai
+  - grok
+  supported_models:
+  - jd-parser
+  input_type: text
+  output_type: json
+  dependencies: []
+  schema:
+    id: jd_v1
+    file: schema.json
+  prompt:
+    id: jd_parser_v1
+    file: prompt.md
+    version: 1.0.0
+  validation:
+    file: validation.yaml
+  examples:
+    good: examples/good
+    bad: examples/bad
+    edge_cases: examples/edge_cases
+  benchmarks:
+    file: benchmarks/benchmark.yaml
+  tags:
+  - parsing
+  - job_description
+  - extraction
+  description: Parse unstructured job descriptions into structured jd_v1 output for
+    ATS matching and search.

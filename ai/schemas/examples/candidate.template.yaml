@@ -1,0 +1,35 @@
+# Candidate profile template — structure only, no sample data.
+
+_template:
+  schema: ../candidate.yaml
+  version: "1.0.0"
+  kind: template
+
+candidate_id: null
+
+external_ids:
+  hrms_cid: null
+  email: null
+
+primary_resume: null
+resume_history: []
+
+person:
+  name: null
+  email: null
+  phone: null
+  location: null
+
+preferences:
+  preferred_locations: []
+  remote: null
+  salary_expectation: null
+  employment_types: []
+  notice_period_days: null
+
+application_history: []
+
+metadata:
+  created_at: null
+  updated_at: null
+  source: null

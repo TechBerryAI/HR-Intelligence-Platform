@@ -1,0 +1,62 @@
+# Dataset Inspector — stage interface (implements shared/stage_interface.yaml)
+
+stage:
+  id: STAGE-INSPECTOR
+  version: "1.0.0"
+  implements: ../shared/stage_interface.yaml
+
+config_schema:
+  properties:
+    source_path:
+      type: path
+      required: true
+    dataset_id: { type: string, required: true }
+    dataset_version: { type: semver, required: true }
+    dataset_name: { type: string, required: true }
+    doc_type:
+      type: enum
+      values: [resume, job_description, mixed]
+      default: mixed
+    follow_symlinks: { type: boolean, default: false }
+    max_file_size_bytes: { type: integer, default: 52428800 }
+    hash_algorithm: { type: enum, values: [sha256], default: sha256 }
+    enable_near_duplicate: { type: boolean, default: false }
+    sampling_rate: { type: number, default: 0.05 }
+    output_path:
+      type: path
+      default: inspector/outputs/{dataset_id}/{dataset_version}/
+
+inputs:
+  - name: source_corpus
+    path: config.source_path
+    mutability: read_only
+
+outputs:
+  - dataset_manifest.yaml
+  - dataset_profile.yaml
+  - quality_report.yaml
+  - statistics.yaml
+  - hash_index.json
+  - inspection_log.yaml
+
+gates_produced:
+  extraction_ready:
+    description: Downstream extractor may proceed.
+    derived_from: quality_report.gates.extraction_ready
+  manual_review_required:
+    description: Human must approve before extraction.
+    derived_from: quality_report.gates.manual_review_required
+
+errors:
+  - code: SOURCE_NOT_FOUND
+    severity: fatal
+  - code: SOURCE_NOT_READABLE
+    severity: fatal
+  - code: OUTPUT_NOT_WRITABLE
+    severity: fatal
+  - code: FILE_READ_ERROR
+    severity: warning
+    action: log per file; continue
+  - code: UNSUPPORTED_FORMAT
+    severity: info
+    action: tally in statistics; continue

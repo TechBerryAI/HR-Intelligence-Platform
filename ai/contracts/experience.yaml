@@ -1,0 +1,115 @@
+contract:
+  id: CONTRACT-EXPERIENCE
+  version: "1.0.0"
+  kind: domain
+  status: active
+  supersedes: null
+  updated_at: "2026-06-25"
+
+purpose: >
+  Employment history entry — primary signal for experience scoring and role matching.
+  Maps to experience.N.* TOON paths. Distinct from projects (non-employment work).
+
+fields:
+  title:
+    type: string
+    description: Job title or role name.
+    toon_path: experience.{i}.title
+  company:
+    type: ref
+    ref: contracts/company.yaml
+    description: Employer name; string in TOON.
+    toon_path: experience.{i}.company
+  from:
+    type: string
+    description: Start date YYYY-MM preferred.
+    toon_path: experience.{i}.from
+  to:
+    type: string
+    description: End date YYYY-MM or Present/current.
+    toon_path: experience.{i}.to
+  years:
+    type: number
+    description: Duration in years; may be LLM-estimated.
+    toon_path: experience.{i}.years
+  description:
+    type: string
+    description: Role summary or bullet narrative.
+    toon_path: experience.{i}.description
+  location:
+    type: ref
+    ref: contracts/location.yaml
+    toon_path: experience.{i}.location
+    toon_extension: true
+  skills_used:
+    type: array
+    items: { type: ref, ref: contracts/skill.yaml }
+    description: Skills exercised in role; future extraction target.
+    toon_path: null
+  is_current:
+    type: boolean
+    description: Derived when to is Present/current.
+    toon_path: null
+
+required: []
+
+optional:
+  - title
+  - company
+  - from
+  - to
+  - years
+  - description
+  - location
+  - skills_used
+  - is_current
+
+relationships:
+  - id: experience-resume
+    target: contracts/resume.yaml
+    field: experience
+    cardinality: many_to_one
+  - id: experience-company
+    target: contracts/company.yaml
+    field: company
+    cardinality: many_to_one
+  - id: experience-location
+    target: contracts/location.yaml
+    field: location
+    cardinality: many_to_one
+  - id: experience-skills
+    target: contracts/skill.yaml
+    field: skills_used
+    cardinality: many_to_many
+
+normalization_rules:
+  - id: experience-title-aliases
+    applies_to: title
+    rule: Accept role as alias for title (LLM output variance).
+    priority: 90
+  - id: experience-date-aliases
+    applies_to: from
+    rule: Accept start, start_date, end, end_date aliases; normalize to from/to YYYY-MM.
+    priority: 85
+  - id: experience-present-token
+    applies_to: to
+    rule: Normalize Present, Current, Now to canonical present token; set is_current true.
+    priority: 80
+  - id: experience-company-string
+    applies_to: company
+    rule: TOON stores company as string; upgrade to company object with name.
+    priority: 70
+  - id: experience-years-derive
+    applies_to: years
+    rule: Compute from from/to span when missing and dates parseable.
+    priority: 60
+  - id: experience-location-fallback
+    applies_to: location
+    rule: Frontend may use experience[0].location as person.location fallback.
+    priority: 50
+
+validation_notes:
+  - TOON validation does not enforce nested experience item fields.
+  - title maps to role in HRMS frontend forms.
+  - ATS _compute_experience_score uses title and resume total_experience_years vs JD min/max.
+  - Indexed TOON paths use zero-based indices (experience.0.title).

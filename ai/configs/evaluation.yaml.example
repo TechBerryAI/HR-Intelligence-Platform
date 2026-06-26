@@ -1,0 +1,70 @@
+# Evaluation configuration
+# Copy to evaluation.yaml. Compare providers and model versions on benchmark data.
+
+evaluation:
+  run_name: eval-${EVAL_DATE:2026-06-25}
+  output_dir: evaluation/reports/${evaluation.run_name}
+  comparisons_dir: evaluation/comparisons
+  regression_baseline: evaluation/regression/baseline.yaml
+  seed: ${AI_RANDOM_SEED:42}
+
+  # Benchmark dataset (JSONL with raw_text, doc_type, expected_toon or field_checks)
+  benchmark:
+    version: parsing/v1
+    resume_path: datasets/benchmark/parsing/v1/resume.jsonl
+    jd_path: datasets/benchmark/parsing/v1/jd.jsonl
+    registry: registry/benchmarks/parsing-v1.yaml
+    sample_limit: null   # null = full suite
+
+  # Providers to evaluate (order does not imply priority)
+  providers:
+  - name: ollama
+    type: ollama
+    host: ${OLLAMA_HOST:http://localhost:11434}
+    model: ${OLLAMA_MODEL:hrms-resume-jd-parser}
+    timeout_seconds: ${OLLAMA_TIMEOUT_SECONDS:120}
+
+  - name: grok
+    type: xai
+    api_key: ${XAI_API_KEY:}
+    model: ${XAI_MODEL:grok-4-fast-reasoning}
+    base_url: ${XAI_BASE_URL:https://api.x.ai/v1}
+    timeout_seconds: 45
+
+  - name: openai
+    type: openai
+    api_key: ${OPENAI_API_KEY:}
+    model: ${OPENAI_MODEL:gpt-4o}
+    base_url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+    timeout_seconds: 90
+
+  - name: claude
+    type: anthropic
+    api_key: ${ANTHROPIC_API_KEY:}
+    model: ${ANTHROPIC_MODEL:claude-sonnet-4-20250514}
+    timeout_seconds: 90
+
+  - name: gemini
+    type: google
+    api_key: ${GOOGLE_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.0-flash}
+    timeout_seconds: 90
+
+  # Prompt templates (versioned under prompts/)
+  prompts:
+    resume: prompts/resume_parser.yaml
+    jd: prompts/jd_parser.yaml
+
+  # Metrics
+  metrics:
+    - toon_validity          # parses as valid TOON/JSON
+    - required_fields        # person.name, skills, experience, etc.
+    - field_f1               # per-field overlap vs gold
+    - latency_ms
+    - token_cost_estimate    # cloud providers only
+
+  # Pass/fail gates for CI (future)
+  gates:
+    toon_validity_min: 0.95
+    required_fields_min: 0.90
+    latency_p95_ms_max: 30000

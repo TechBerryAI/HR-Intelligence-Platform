@@ -1,0 +1,74 @@
+# Artifact envelope — common metadata wrapper for all factory outputs.
+
+artifact:
+  id: DF-ARTIFACT-ENVELOPE
+  version: "1.0.0"
+
+envelope:
+  required:
+    - artifact_id
+    - artifact_type
+    - stage_id
+    - created_at
+    - content_path
+  optional:
+    - parent_artifact_id
+    - dataset_id
+    - dataset_version
+    - sha256
+    - size_bytes
+    - mime_type
+    - lineage
+
+  properties:
+    artifact_id:
+      type: string
+      pattern: "^ART-DF-[A-Z]+-[a-f0-9]{8}$"
+      description: Unique artifact identifier.
+    artifact_type:
+      type: enum
+      values:
+        - DATASET_MANIFEST
+        - DATASET_PROFILE
+        - QUALITY_REPORT
+        - STATISTICS
+        - HASH_INDEX
+        - INSPECTION_LOG
+        - EXTRACTED_RECORD
+        - VALIDATION_REPORT
+        - NORMALIZED_RECORD
+        - REVIEW_DECISION
+        - JSONL_SPLIT
+        - BENCHMARK_MANIFEST
+    stage_id:
+      type: string
+      description: STAGE-* identifier from stage_interface.yaml.
+    created_at:
+      type: datetime
+      format: iso8601
+    content_path:
+      type: path
+      description: Relative path to payload file within output directory.
+    parent_artifact_id:
+      type: string
+      description: Lineage parent; null for inspector root artifacts.
+    dataset_id:
+      type: string
+      pattern: "^DS-[A-Z0-9-]+$"
+      example: DS-PARSE-v1.0.0
+    dataset_version:
+      type: semver
+    sha256:
+      type: string
+      pattern: "^sha256:[a-f0-9]{64}$"
+    size_bytes:
+      type: integer
+    mime_type:
+      type: string
+    lineage:
+      type: object
+      properties:
+        factory_version: { type: semver }
+        run_id: { type: uuid }
+        git_commit: { type: string }
+        upstream_stage: { type: string }

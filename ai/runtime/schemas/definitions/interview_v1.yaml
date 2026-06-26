@@ -1,0 +1,6 @@
+id: interview_v1
+version: "1.0.0"
+status: active
+schema_file: null
+format: json_schema
+description: Interview question output schema (not yet implemented).

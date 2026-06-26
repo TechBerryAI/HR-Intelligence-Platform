@@ -1,0 +1,90 @@
+# Resume Output Template
+
+> Structure-only template for expected `resume_v1` output shape. No production HR data.
+
+```json
+{
+  "type": "resume",
+  "person": {
+    "name": null,
+    "email": null,
+    "phone": null,
+    "location": null,
+    "linkedin": null,
+    "github": null,
+    "portfolio": null,
+    "website": null,
+    "twitter": null,
+    "otherUrls": []
+  },
+  "summary": null,
+  "skills": [],
+  "experience": [],
+  "education": [],
+  "projects": [],
+  "certifications": [],
+  "languages": [],
+  "awards": [],
+  "publications": [],
+  "links": [],
+  "total_experience_years": null,
+  "confidence": null,
+  "source_tracking": {
+    "extraction_method": null,
+    "field_sources": [],
+    "sections_detected": []
+  },
+  "metadata": {
+    "parsed_id": null,
+    "raw_file_id": null,
+    "model_version": null,
+    "parser_version": "1.0.0",
+    "capability_id": "resume_parsing",
+    "parsed_at": null,
+    "locale": "en",
+    "input_format": "text"
+  },
+  "validation": {
+    "is_valid": null,
+    "toon_projectable": null,
+    "errors": [],
+    "warnings": [],
+    "field_status": {}
+  }
+}
+```
+
+## Experience Item Shape
+
+```json
+{
+  "title": null,
+  "company": null,
+  "from": null,
+  "to": null,
+  "years": null,
+  "description": null,
+  "location": null,
+  "skills_used": [],
+  "is_current": null,
+  "confidence": null,
+  "source": "extracted"
+}
+```
+
+## Education Item Shape
+
+```json
+{
+  "degree": null,
+  "field": null,
+  "institution": null,
+  "year": null,
+  "from": null,
+  "to": null,
+  "gpa": null,
+  "location": null
+}
+```
+
+See `schema.json` and `field_definitions.yaml` for complete field documentation.

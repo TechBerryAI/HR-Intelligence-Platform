@@ -1,0 +1,22 @@
+{
+  "_template": {
+    "schema": "schemas/hash_index.schema.json",
+    "version": "1.0.0",
+    "kind": "template"
+  },
+  "index": {
+    "id": "HASH-INDEX",
+    "version": null,
+    "algorithm": "SHA-256",
+    "encoding": "hex",
+    "prefix": "sha256:",
+    "created_at": null,
+    "run_id": null
+  },
+  "dataset_ref": {
+    "id": null,
+    "version": null
+  },
+  "entries": [],
+  "duplicate_groups": []
+}

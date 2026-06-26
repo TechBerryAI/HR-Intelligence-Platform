@@ -1,0 +1,33 @@
+# Benchmark Template: Average Resume
+
+profile: average_resume
+capability: resume_parsing
+schema_id: resume_v1
+
+input:
+  format: text
+  source: datasets/evaluation/resume_parsing/[DOCUMENT_ID]/raw_text.txt
+  placeholder: "[DOCUMENT_TEXT_PLACEHOLDER]"
+
+expected_output_shape:
+  type: resume
+  required_sections:
+    - person
+    - skills
+    - experience
+    - education
+  optional_sections:
+    - summary
+    - certifications
+
+quality_gates:
+  confidence_min: 0.7
+  schema_valid: true
+  toon_projectable: true
+
+evaluation_focus:
+  - required_field_recall
+  - acceptable_sparse_optional_sections
+
+notes:
+  - Typical production parse; some optional fields may be absent.

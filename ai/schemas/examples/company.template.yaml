@@ -1,0 +1,15 @@
+# Company entity template — structure only, no sample data.
+
+_template:
+  contract: ../../contracts/company.yaml
+  schema: ../company.yaml#/company_object
+  version: "1.0.0"
+  kind: template
+
+name: null
+canonical_id: null
+legal_name: null
+industry: null
+size: null
+website: null
+headquarters: null

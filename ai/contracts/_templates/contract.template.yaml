@@ -1,0 +1,40 @@
+# Domain contract template — copy and fill for new entities.
+# See _envelope.yaml for structural requirements.
+
+contract:
+  id: CONTRACT-ENTITY-NAME
+  version: "1.0.0"
+  kind: domain
+  status: draft
+  supersedes: null
+  updated_at: null
+
+purpose: >
+  Describe the semantic role of this entity in the HR domain.
+
+fields:
+  example_field:
+    type: string
+    description: Field description.
+    toon_path: null
+
+required:
+  - example_field
+
+optional: []
+
+relationships:
+  - id: example-relationship
+    target: contracts/example.yaml
+    field: example_field
+    cardinality: many_to_one
+    description: Relationship description.
+
+normalization_rules:
+  - id: example-rule
+    applies_to: example_field
+    rule: Describe normalization behavior.
+    priority: 100
+
+validation_notes:
+  - Describe validation expectations and TOON boundary behavior.

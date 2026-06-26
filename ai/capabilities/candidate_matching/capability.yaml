@@ -1,0 +1,37 @@
+capability:
+  id: candidate_matching
+  name: Candidate Matching
+  version: 1.0.0
+  owner: ai-platform
+  status: active
+  supported_providers:
+  - mock
+  - ollama
+  - openai
+  - grok
+  supported_models:
+  - matching-engine
+  input_type: structured_pair
+  output_type: json
+  dependencies: []
+  schema:
+    id: candidate_match_v1
+    file: schema.json
+  prompt:
+    id: candidate_matching_v1
+    file: prompt.md
+    version: 1.0.0
+  validation:
+    file: validation.yaml
+  examples:
+    good: examples/good
+    bad: examples/bad
+    edge_cases: examples/edge_cases
+  benchmarks:
+    file: benchmarks/benchmark.yaml
+  tags:
+  - matching
+  - ranking
+  - ats
+  description: Score candidate fit against job requirements and produce explainable
+    match output.

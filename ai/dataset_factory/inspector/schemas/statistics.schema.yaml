@@ -1,0 +1,86 @@
+# Schema — statistics.yaml (inspector output)
+
+schema:
+  id: DF-SCHEMA-STATISTICS
+  version: "1.0.0"
+  artifact_type: STATISTICS
+
+required:
+  - statistics
+  - dataset_ref
+
+properties:
+  statistics:
+    type: object
+    required: [id, version, created_at]
+    properties:
+      id: { type: string, const: DATASET-STATISTICS }
+      version: { type: semver }
+      created_at: { type: datetime }
+      run_id: { type: uuid }
+
+  dataset_ref:
+    type: object
+    properties:
+      id: { type: string }
+      version: { type: semver }
+
+  files:
+    type: object
+    properties:
+      total: { type: integer, description: Total Files }
+      by_format: { type: object, additionalProperties: { type: integer } }
+      by_doc_type: { type: object, additionalProperties: { type: integer } }
+      by_extension: { type: object, additionalProperties: { type: integer } }
+
+  size:
+    type: object
+    properties:
+      total_bytes: { type: integer }
+      average_bytes: { type: number }
+      median_bytes: { type: number, nullable: true }
+      min_bytes: { type: integer }
+      max_bytes: { type: integer }
+      percentiles:
+        type: object
+        properties:
+          p50: { type: number }
+          p90: { type: number }
+          p99: { type: number }
+
+  pages:
+    type: object
+    properties:
+      total_estimated: { type: integer }
+      average_per_file: { type: number }
+      by_format: { type: object, additionalProperties: { type: integer } }
+
+  duplicates:
+    type: object
+    properties:
+      exact_groups: { type: integer }
+      duplicate_files: { type: integer }
+      unique_files: { type: integer }
+
+  issues:
+    type: object
+    properties:
+      corrupt: { type: integer }
+      password_protected: { type: integer }
+      zero_byte: { type: integer }
+      unsupported_format: { type: integer }
+      read_errors: { type: integer }
+
+  languages:
+    type: object
+    description: Populated when language detection runs
+    properties:
+      primary: { type: string, nullable: true }
+      distribution: { type: object, additionalProperties: { type: number } }
+
+  ocr:
+    type: object
+    properties:
+      ocr_required: { type: integer }
+      ocr_recommended: { type: integer }
+      text_layer_ok: { type: integer }

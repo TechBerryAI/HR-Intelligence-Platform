@@ -1,0 +1,78 @@
+schema:
+  id: SCHEMA-CANDIDATE
+  version: "1.0.0"
+  status: active
+  contract_ref: ../contracts/candidate.yaml
+  toon_type: null
+  updated_at: "2026-06-25"
+
+description: >
+  Platform candidate profile schema. No direct TOON serialization; primary_resume
+  projects to Resume TOON via nested mapping.
+
+root:
+  type: object
+
+composition:
+  contracts:
+    - candidate
+    - resume
+    - location
+
+properties:
+  candidate_id: { type: uuid, required: true }
+  external_ids:
+    type: object
+    properties:
+      hrms_cid: { type: string }
+      email: { type: string }
+  primary_resume:
+    $ref: resume.yaml
+  resume_history:
+    type: array
+    items: { $ref: resume.yaml }
+  person:
+    type: object
+    description: Denormalized from primary_resume.person
+    properties:
+      name: { type: string }
+      email: { type: string }
+      phone: { type: string }
+      location: { $ref: "#/defs/location_or_string" }
+  preferences:
+    type: object
+    properties:
+      preferred_locations:
+        type: array
+        items: { $ref: "#/defs/location_or_string" }
+      remote: { type: enum, values: [onsite, hybrid, remote, any] }
+      salary_expectation: { type: string }
+      employment_types: { type: array, items: { type: string } }
+      notice_period_days: { type: number }
+  application_history:
+    type: array
+    items:
+      type: object
+      properties:
+        application_id: { type: uuid }
+        job_id: { type: uuid }
+        applied_at: { type: datetime }
+        match_score: { type: number }
+  metadata:
+    type: object
+    properties:
+      created_at: { type: datetime }
+      updated_at: { type: datetime }
+      source: { type: string }
+
+defs:
+  location_or_string:
+    one_of:
+      - { type: string }
+      - { $ref: "location.yaml#/location_object" }
+
+toon_projection:
+  mapping_ref: mappings/toon.yaml#candidate
+  note: >
+    Candidate does not serialize to TOON. Use primary_resume mapping for HRMS
+    interchange. candidate_id maps to parsed_resumes.candidate_id at storage boundary.

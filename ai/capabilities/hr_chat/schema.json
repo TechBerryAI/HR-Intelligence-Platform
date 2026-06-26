@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "chat_v1",
+  "title": "HR Chat Output",
+  "type": "object",
+  "properties": {
+    "reply": {
+      "type": "string"
+    },
+    "intent": {
+      "type": "string"
+    },
+    "suggested_actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "citations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "reply"
+  ],
+  "additionalProperties": true
+}

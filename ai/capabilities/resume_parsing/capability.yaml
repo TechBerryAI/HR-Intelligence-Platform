@@ -1,0 +1,47 @@
+capability:
+  id: resume_parsing
+  name: Resume Parsing
+  version: 1.0.0
+  owner: ai-platform
+  status: active
+  supported_providers:
+    - mock
+    - ollama
+    - openai
+    - grok
+  supported_models:
+    - resume-parser
+  input_type: text
+  output_type: json
+  dependencies: []
+  schema:
+    id: resume_v1
+    file: schema.json
+  prompt:
+    id: resume_parser_v1
+    file: prompt.md
+    template: prompt.template.md
+    version: 1.0.0
+  validation:
+    file: validation.yaml
+  proposal_mapping:
+    file: proposal_mapping.yaml
+  field_definitions:
+    file: field_definitions.yaml
+  examples:
+    good: examples/good
+    bad: examples/bad
+    edge_cases: examples/edge_cases
+    templates: examples/templates
+  benchmarks:
+    file: benchmarks/benchmark.yaml
+    templates: benchmarks/templates
+  tags:
+    - parsing
+    - resume
+    - extraction
+    - hrparser-v1
+  description: >
+    Parse unstructured resume text into structured resume_v1 output aligned with
+    the canonical HRMS Resume contract. Production assets complete; final extraction
+    prompt to be authored from prompt.template.md.

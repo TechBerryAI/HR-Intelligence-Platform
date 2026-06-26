@@ -1,0 +1,71 @@
+# Inspection log template — structure only.
+# Schema: schemas/inspection_log.schema.yaml
+
+_template:
+  schema: schemas/inspection_log.schema.yaml
+  version: "1.0.0"
+  kind: template
+
+log:
+  id: INSPECTION-LOG
+  version: null
+
+run:
+  run_id: null
+  stage_id: STAGE-INSPECTOR
+  stage_version: "1.0.0"
+  factory_version: "1.0.0"
+  dataset_id: null
+  dataset_version: null
+  source_path: null
+  output_path: null
+  started_at: null
+  completed_at: null
+  status: running
+  source_mutated: false
+
+config_snapshot: {}
+
+phases:
+  - phase_id: discover
+    started_at: null
+    completed_at: null
+    status: pending
+  - phase_id: classify
+    started_at: null
+    completed_at: null
+    status: pending
+  - phase_id: measure
+    started_at: null
+    completed_at: null
+    status: pending
+  - phase_id: hash
+    started_at: null
+    completed_at: null
+    status: pending
+  - phase_id: detect_issues
+    started_at: null
+    completed_at: null
+    status: pending
+  - phase_id: sample
+    started_at: null
+    completed_at: null
+    status: pending
+  - phase_id: score
+    started_at: null
+    completed_at: null
+    status: pending
+  - phase_id: emit
+    started_at: null
+    completed_at: null
+    status: pending
+
+events: []
+
+summary:
+  files_scanned: null
+  files_hashed: null
+  files_skipped: null
+  errors: null
+  warnings: null
+  artifacts_written: []

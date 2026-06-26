@@ -1,0 +1,7 @@
+{
+  "knowledge_base": "skills",
+  "version": "1.0.0",
+  "schema_ref": "./schema.yaml",
+  "updated_at": "2026-06-25",
+  "aliases": []
+}

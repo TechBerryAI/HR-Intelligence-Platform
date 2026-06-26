@@ -1,0 +1,27 @@
+# Normalizer stage — architecture (not implemented)
+
+architecture:
+  id: DF-NORMALIZER-ARCH
+  version: "1.0.0"
+  status: interface_only
+
+purpose: >
+  Produce Gold-tier normalized records aligned with contracts/ and schemas/.
+  Output payload includes structured dict ready for TOON projection.
+
+flow:
+  - load_extracted_record
+  - classify_doc_type
+  - apply_contract_mapping  # resume or job_description
+  - link_knowledge_bases     # skills, locations, etc.
+  - validate_against_schemas
+  - write_normalized_json
+
+output_record_shape:
+  payload_fields:
+    - toon
+    - labeling.source
+    - labeling.confidence
+    - normalization.contract_version
+
+implementation: deferred_M4.2

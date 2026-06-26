@@ -1,0 +1,16 @@
+# Education entity template — structure only, no sample data.
+
+_template:
+  contract: ../../contracts/education.yaml
+  schema: ../education.yaml#/education_object
+  version: "1.0.0"
+  kind: template
+
+degree: null
+field: null
+institution: null
+year: null
+from: null
+to: null
+gpa: null
+location: null

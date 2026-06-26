@@ -1,0 +1,92 @@
+contract:
+  id: CONTRACT-EDUCATION
+  version: "1.0.0"
+  kind: domain
+  status: active
+  supersedes: null
+  updated_at: "2026-06-25"
+
+purpose: >
+  Academic credentials on a resume. Feeds ATS education scoring when compared
+  against JD qualifications. Projects to experience.N indexed TOON paths.
+
+fields:
+  degree:
+    type: ref
+    ref: knowledge/degrees/
+    description: Degree name; may link to knowledge/degrees canonical entry.
+    toon_path: education.{i}.degree
+  field:
+    type: string
+    description: Major, discipline, or specialization.
+    toon_path: education.{i}.field
+  institution:
+    type: string
+    description: School or university name.
+    toon_path: education.{i}.institution
+  year:
+    type: string
+    description: Graduation year or completion year as extracted (YYYY or free text).
+    toon_path: education.{i}.year
+  from:
+    type: string
+    description: Start date YYYY-MM or alias.
+    toon_path: education.{i}.from
+  to:
+    type: string
+    description: End date YYYY-MM.
+    toon_path: education.{i}.to
+  gpa:
+    type: string
+    description: GPA or CGPA as printed on resume.
+    toon_path: education.{i}.gpa
+  location:
+    type: ref
+    ref: contracts/location.yaml
+    toon_path: null
+
+required: []
+
+optional:
+  - degree
+  - field
+  - institution
+  - year
+  - from
+  - to
+  - gpa
+  - location
+
+relationships:
+  - id: education-resume
+    target: contracts/resume.yaml
+    field: education
+    cardinality: many_to_one
+  - id: education-degree-kb
+    target: knowledge/degrees/
+    field: degree
+    cardinality: many_to_one
+
+normalization_rules:
+  - id: education-date-aliases
+    applies_to: from
+    rule: Accept start, from aliases from LLM; normalize to YYYY-MM when parseable.
+    priority: 80
+  - id: education-institution-field-fallback
+    applies_to: institution
+    rule: HRMS frontend uses field as institution fallback when institution missing.
+    priority: 70
+  - id: education-degree-kb
+    applies_to: degree
+    rule: Resolve degree string via knowledge/degrees aliases; store canonical_id when linked.
+    priority: 60
+  - id: education-year-to-end
+    applies_to: year
+    rule: Map year to endMonth in form UIs; keep original string in normalized record.
+    priority: 50
+
+validation_notes:
+  - TOON validation requires education key on resume but not non-empty entries.
+  - Nested education item shapes are not runtime-validated in HRMS.
+  - ATS compares JD qualifications[] as text against degree/field/institution strings.
+  - Empty education[] is valid at TOON boundary.

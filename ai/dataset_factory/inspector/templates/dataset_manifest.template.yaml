@@ -1,0 +1,50 @@
+# Dataset manifest template — structure only. Fill at inspection run time.
+# Schema: schemas/dataset_manifest.schema.yaml
+
+_template:
+  schema: schemas/dataset_manifest.schema.yaml
+  version: "1.0.0"
+  kind: template
+
+manifest:
+  id: DATASET-MANIFEST
+  version: null
+  artifact_type: DATASET_MANIFEST
+  created_at: null
+  factory_version: "1.0.0"
+  run_id: null
+
+dataset:
+  id: null
+  version: null
+  name: null
+  doc_type: null
+  creation_date: null
+
+source:
+  path: null
+  mutability: read_only
+  hash_of_inventory: null
+
+inspection:
+  stage_id: STAGE-INSPECTOR
+  stage_version: "1.0.0"
+  completed_at: null
+  duration_seconds: null
+
+status: pending_inspection
+
+medallion:
+  tier: bronze
+  classified_at: null
+
+artifacts:
+  dataset_profile: dataset_profile.yaml
+  quality_report: quality_report.yaml
+  statistics: statistics.yaml
+  hash_index: hash_index.json
+  inspection_log: inspection_log.yaml
+
+registry:
+  publish: false
+  registry_path: null

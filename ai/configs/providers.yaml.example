@@ -1,0 +1,67 @@
+# Multi-provider routing configuration
+# Copy to providers.yaml. Defines primary, fallback chain, and per-task routing.
+# Future backend adapter will mirror this structure without changing business logic.
+
+providers:
+  default_timeout_seconds: 45
+  max_input_chars: 0              # 0 = no truncation; match backend LLM_MAX_INPUT_CHARS
+
+  # Priority order for inference (first healthy provider wins)
+  routing:
+    primary: ollama
+    fallback_chain:
+      - grok
+      - openai
+      - claude
+      - gemini
+
+  definitions:
+    ollama:
+      type: ollama
+      host: ${OLLAMA_HOST:http://localhost:11434}
+      model: ${OLLAMA_MODEL:hrms-resume-jd-parser}
+      timeout_seconds: ${OLLAMA_TIMEOUT_SECONDS:120}
+
+    grok:
+      type: xai
+      api_key: ${XAI_API_KEY:}
+      model: ${XAI_MODEL:grok-4-fast-reasoning}
+      base_url: ${XAI_BASE_URL:https://api.x.ai/v1}
+      # Multi-key rotation (training workspace benchmark only; HRMS uses llm_key_manager)
+      api_keys:
+        - ${HRMS_API_KEY_1:}
+        - ${HRMS_API_KEY_2:}
+        - ${HRMS_API_KEY_3:}
+        - ${HRMS_API_KEY_4:}
+      cooldown_seconds: ${LLM_KEY_COOLDOWN_SECONDS:45}
+
+    openai:
+      type: openai
+      api_key: ${OPENAI_API_KEY:}
+      model: ${OPENAI_MODEL:gpt-4o}
+      base_url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+
+    claude:
+      type: anthropic
+      api_key: ${ANTHROPIC_API_KEY:}
+      model: ${ANTHROPIC_MODEL:claude-sonnet-4-20250514}
+
+    gemini:
+      type: google
+      api_key: ${GOOGLE_API_KEY:}
+      model: ${GEMINI_MODEL:gemini-2.0-flash}
+
+  # Per document-type overrides (optional)
+  tasks:
+    resume:
+      temperature: 0.2
+      max_tokens: 2048
+    jd:
+      temperature: 0.2
+      max_tokens: 2048
+
+  # Retry policy
+  retry:
+    max_attempts: 3
+    backoff_seconds: 2
+    retry_on_status: [429, 500, 502, 503, 504]

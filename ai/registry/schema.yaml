@@ -1,0 +1,169 @@
+# Registry schema definitions
+
+All registry YAML files must conform to these schemas.
+
+---
+
+## model_record
+
+```yaml
+id: string                    # hrms-{feature}-v{N}
+version: semver
+artifact_id: string           # ART-MODEL-*
+status: enum                  # candidate | staging | production | deprecated
+feature: string
+created_at: ISO8601
+superseded_by: string | null
+
+training:
+  run_id: string
+  experiment: string | null     # EXP-*
+  config: path
+  base_model: string
+  method: enum                  # qlora | lora | full
+  dataset: string             # DS-*
+
+artifacts:
+  adapter: path | null
+  merged: path | null
+  gguf: path | null
+  gguf_quantization: string | null
+
+compatible:
+  datasets: string[]
+  prompts: string[]
+  benchmarks: string[]
+  deployments: string[]
+  evaluations: string[]
+
+evaluation:
+  report: path | null
+  metrics: object
+
+notes: string | null
+```
+
+---
+
+## dataset_record
+
+```yaml
+id: string                    # DS-{FEATURE}-v{semver}
+feature: string
+version: semver
+artifact_id: string           # ART-JSONL-*
+created_at: ISO8601
+paths: object
+counts: object
+provenance: object
+prompt_versions: object       # doc_type → PROMPT-*
+checksums: object
+```
+
+---
+
+## benchmark_record
+
+```yaml
+id: string                    # BENCH-{CAT}-v{N}
+feature: string
+category: enum                # PARSE | MATCH | RANK | SUMMARY | GEN | SEARCH
+version: integer
+artifact_id: string
+created_at: ISO8601
+paths: object
+counts: object
+frozen: boolean
+baseline_provider: string     # PROV-*
+baseline_metrics: object
+difficulty_distribution: object | null
+```
+
+---
+
+## experiment_record
+
+```yaml
+id: string                    # EXP-{NNNN}
+hypothesis: string
+status: enum                  # planned | running | completed | abandoned
+experiment_dir: path
+created_at: ISO8601
+outcome: object | null
+links:
+  training_runs: string[]
+  models: string[]
+  evaluations: string[]
+```
+
+---
+
+## prompt_record
+
+```yaml
+id: string                    # PROMPT-{NNNN}
+version: semver
+feature: string
+doc_type: string | null
+status: enum                  # active | deprecated
+file: path
+previous: string | null       # PROMPT-*
+created_at: ISO8601
+changelog: string
+used_by:
+  datasets: string[]
+  models: string[]
+  evaluations: string[]
+```
+
+---
+
+## provider_record
+
+```yaml
+id: string                    # PROV-{NAME}
+name: string
+status: enum                  # active | deprecated
+type: enum                    # local | cloud
+config_ref: path
+defaults: object
+capabilities: string[]
+key_rotation: boolean
+baseline_for: string[]        # BENCH-*
+```
+
+---
+
+## evaluation_record
+
+```yaml
+id: string                    # EVAL-{CAT}-{YYYYMMDD}
+benchmark: string             # BENCH-*
+artifact_id: string           # ART-EVAL-*
+created_at: ISO8601
+report: path
+config_snapshot: path
+targets: object[]
+metrics_summary: object
+passed_gates: boolean
+promotion_decision: string | null
+```
+
+---
+
+## deployment_record
+
+```yaml
+id: string                    # DEPLOY-{feature}-v{N}-{target}
+model: string                 # hrms-*-v{N}
+target: enum                  # ollama | gateway
+status: enum                  # staging | production | deprecated
+artifact_id: string           # ART-DEPLOY-*
+created_at: ISO8601
+artifacts:
+  gguf: path
+  modelfile: path
+ollama: object | null
+prompts: object
+health_check: object | null
+```

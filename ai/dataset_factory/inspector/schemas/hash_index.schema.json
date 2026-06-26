@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "DF-SCHEMA-HASH-INDEX",
+  "title": "Dataset Inspector Hash Index",
+  "description": "SHA-256 content index for duplicate detection. Template only — no entries until inspection run.",
+  "type": "object",
+  "required": ["index", "dataset_ref", "entries"],
+  "properties": {
+    "index": {
+      "type": "object",
+      "required": ["id", "version", "algorithm", "created_at"],
+      "properties": {
+        "id": { "const": "HASH-INDEX" },
+        "version": { "type": "string" },
+        "algorithm": { "const": "SHA-256" },
+        "encoding": { "const": "hex" },
+        "prefix": { "const": "sha256:" },
+        "created_at": { "type": ["string", "null"], "format": "date-time" },
+        "run_id": { "type": ["string", "null"], "format": "uuid" }
+      }
+    },
+    "dataset_ref": {
+      "type": "object",
+      "properties": {
+        "id": { "type": ["string", "null"] },
+        "version": { "type": ["string", "null"] }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "description": "One record per file hashed",
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256", "size_bytes"],
+        "properties": {
+          "path": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "size_bytes": { "type": "integer" },
+          "format": { "type": ["string", "null"] },
+          "duplicate_of": { "type": ["string", "null"], "description": "Path of first seen file with same hash" }
+        }
+      }
+    },
+    "duplicate_groups": {
+      "type": "array",
+      "description": "Groups of paths sharing identical sha256",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sha256": { "type": "string" },
+          "paths": { "type": "array", "items": { "type": "string" } },
+          "count": { "type": "integer" }
+        }
+      }
+    }
+  }
+}

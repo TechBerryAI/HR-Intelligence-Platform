@@ -1,0 +1,30 @@
+# Runtime configuration defaults — copy and customize locally.
+runtime:
+  settings:
+    default_timeout_seconds: 45
+    max_input_chars: 0
+
+  routing:
+    primary: ollama
+    fallback_chain: []
+
+  providers:
+    ollama:
+      type: ollama
+      enabled: true
+      base_url: http://localhost:11434
+      default_timeout_seconds: 120
+
+  retry:
+    max_attempts: 3
+    backoff_seconds: 2
+    retry_on_status: [429, 500, 502, 503, 504]
+
+  validation:
+    fail_on_validation_error: true
+
+  capabilities_dir: ../../capabilities
+  tasks_config_path: tasks.default.yaml
+  prompts_dir: ../prompts/definitions
+  schemas_dir: ../schemas/definitions
+  models_config_path: models.default.yaml

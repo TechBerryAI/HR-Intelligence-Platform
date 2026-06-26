@@ -1,0 +1,45 @@
+knowledge_base:
+  id: KB-DEGREES
+  version: "1.0.0"
+  status: active
+  contract_ref: ../../contracts/education.yaml
+  updated_at: "2026-06-25"
+
+description: >
+  Academic degree normalization for education blocks and JD qualification matching.
+
+entry:
+  required:
+    - id
+    - canonical_name
+  optional:
+    - level
+    - field_families
+    - abbreviations
+    - deprecated
+    - replaced_by
+  properties:
+    id:
+      type: string
+      pattern: "^degree-[a-z0-9-]+$"
+    canonical_name:
+      type: string
+      description: Full degree name (e.g. Bachelor of Science).
+    level:
+      type: enum
+      values: [certificate, associate, bachelor, master, doctorate, professional, other]
+    field_families:
+      type: array
+      items: { type: string }
+    abbreviations:
+      type: array
+      items: { type: string }
+      description: Also listed in aliases.json for lookup.
+    deprecated: { type: boolean, default: false }
+    replaced_by: { type: string }
+
+storage:
+  entries_dir: entries/
+  shard_naming: "shard-{NNNN}.json"
+  aliases_file: aliases.json
+  index_file: index.json

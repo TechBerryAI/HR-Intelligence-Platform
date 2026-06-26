@@ -1,0 +1,47 @@
+{
+  "foundation": {
+    "id": "HR-INTEL-FOUNDATION",
+    "milestone": "M2",
+    "version": "1.0.0",
+    "status": "active",
+    "updated_at": "2026-06-25"
+  },
+  "components": {
+    "contracts": {
+      "path": "contracts/",
+      "manifest": "contracts/manifest.yaml",
+      "count": 13
+    },
+    "schemas": {
+      "path": "schemas/",
+      "manifest": "schemas/manifest.yaml",
+      "documents": ["resume", "job_description", "candidate"],
+      "entities": ["skill", "experience", "education", "project", "certification", "language", "company", "location"],
+      "mappings": "schemas/mappings/toon.yaml",
+      "validation": "schemas/validation/rules.yaml"
+    },
+    "knowledge": {
+      "path": "knowledge/",
+      "manifest": "knowledge/manifest.yaml",
+      "bases": ["skills", "job_titles", "degrees", "certifications", "companies", "locations"]
+    }
+  },
+  "authority_chain": [
+    "contracts",
+    "schemas",
+    "knowledge",
+    "TOON (backend/toon.py — read-only)"
+  ],
+  "constraints": {
+    "no_hrms_modifications": true,
+    "no_training_code": true,
+    "no_fake_datasets": true
+  },
+  "dataset_factory": {
+    "path": "dataset_factory/",
+    "manifest": "dataset_factory/manifest.yaml",
+    "milestone": "M3.1",
+    "implemented_stages": ["inspector"],
+    "interface_only_stages": ["extractor", "validator", "normalizer", "reviewer", "exporter", "benchmark"]
+  }
+}

@@ -1,0 +1,7 @@
+id: interview_generation_v1
+version: "1.0.0"
+status: active
+template_file: null
+variables:
+  - input
+description: Interview question generation prompt (template not yet implemented).

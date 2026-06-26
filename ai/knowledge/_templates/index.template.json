@@ -1,0 +1,8 @@
+{
+  "knowledge_base": null,
+  "version": "1.0.0",
+  "updated_at": null,
+  "shards": {},
+  "entry_count": 0,
+  "notes": "Map canonical_id to shard filename, e.g. \"skill-python\": \"shard-0001.json\". Create when entries exceed one shard or random access is needed."
+}

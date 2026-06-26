@@ -1,0 +1,12 @@
+education_object:
+  type: object
+  contract_ref: ../contracts/education.yaml
+  properties:
+    degree: { type: string }
+    field: { type: string }
+    institution: { type: string }
+    year: { type: string }
+    from: { type: string }
+    to: { type: string }
+    gpa: { type: string }
+    location: { one_of: [{ type: string }, { $ref: "location.yaml#/location_object" }] }

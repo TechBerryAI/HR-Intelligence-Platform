@@ -1,0 +1,64 @@
+knowledge_base:
+  id: KB-LOCATIONS
+  version: "1.0.0"
+  status: active
+  contract_ref: ../../contracts/location.yaml
+  updated_at: "2026-06-25"
+
+description: >
+  Geographic location registry for person, job, and role location normalization.
+
+entry:
+  required:
+    - id
+    - label
+  optional:
+    - city
+    - region
+    - region_code
+    - country
+    - country_code
+    - postal_code
+    - latitude
+    - longitude
+    - timezone
+    - remote
+    - metro
+    - deprecated
+    - replaced_by
+  properties:
+    id:
+      type: string
+      pattern: "^loc-[a-z0-9-]+$"
+    label:
+      type: string
+      description: Default display string (e.g. "San Francisco, CA, US").
+    city: { type: string }
+    region: { type: string }
+    region_code: { type: string }
+    country: { type: string }
+    country_code:
+      type: string
+      pattern: "^[A-Z]{2}$"
+    postal_code: { type: string }
+    latitude: { type: number }
+    longitude: { type: number }
+    timezone: { type: string }
+    remote:
+      type: boolean
+      default: false
+    metro:
+      type: string
+      description: Metropolitan area name for broader matching.
+    deprecated: { type: boolean, default: false }
+    replaced_by: { type: string }
+
+storage:
+  entries_dir: entries/
+  shard_naming: "shard-{NNNN}.json"
+  aliases_file: aliases.json
+  index_file: index.json
+
+remote_entries:
+  description: Special loc-remote entry recommended for fully remote roles.
+  suggested_id: loc-remote

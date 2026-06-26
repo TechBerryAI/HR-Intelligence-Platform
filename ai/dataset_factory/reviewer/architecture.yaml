@@ -1,0 +1,22 @@
+# Reviewer stage — architecture (not implemented)
+
+architecture:
+  id: DF-REVIEWER-ARCH
+  version: "1.0.0"
+  status: interface_only
+
+purpose: >
+  Ensure training data quality through human verification. High-confidence
+  auto-approval path for scale; dual-review for benchmark candidates.
+
+workflow:
+  - enqueue_from_normalizer
+  - present_diff_raw_vs_normalized  # read-only raw reference
+  - capture_reviewer_decision
+  - apply_corrections_to_normalized_copy  # new version, not in-place raw edit
+  - update_review_status_on_record
+
+audit:
+  fields: [reviewer_id, reviewed_at, decision, notes, correction_patch]
+
+implementation: deferred_M4.3

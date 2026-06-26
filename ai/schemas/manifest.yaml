@@ -1,0 +1,51 @@
+# Canonical document schemas — HR Intelligence Foundation (M2)
+# Compose domain contracts into versioned document shapes for normalization,
+# validation, and TOON projection. These are NOT JSON Schema.
+
+foundation:
+  id: HR-INTEL-SCHEMAS
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-25"
+
+schemas:
+  - id: SCHEMA-RESUME
+    file: resume.yaml
+    contract: contracts/resume.yaml
+    toon_type: resume
+  - id: SCHEMA-JOB-DESCRIPTION
+    file: job_description.yaml
+    contract: contracts/job_description.yaml
+    toon_type: job_description
+  - id: SCHEMA-CANDIDATE
+    file: candidate.yaml
+    contract: contracts/candidate.yaml
+    toon_type: null
+
+mappings:
+  registry: mappings/manifest.yaml
+  toon: mappings/toon.yaml
+
+validation:
+  rules: validation/rules.yaml
+
+examples:
+  documents:
+    resume: examples/resume.template.yaml
+    job_description: examples/job_description.template.yaml
+    candidate: examples/candidate.template.yaml
+  entities:
+    skill: examples/skill.template.yaml
+    experience: examples/experience.template.yaml
+    education: examples/education.template.yaml
+    project: examples/project.template.yaml
+    certification: examples/certification.template.yaml
+    language: examples/language.template.yaml
+    company: examples/company.template.yaml
+    location: examples/location.template.yaml
+
+authority_chain:
+  - contracts/
+  - schemas/
+  - knowledge/
+  - TOON (backend/toon.py, read-only reference)

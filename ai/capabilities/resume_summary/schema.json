@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "resume_summary_v1",
+  "title": "Resume Summary Output",
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "highlights": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "key_skills": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "experience_years": {
+      "type": "number",
+      "minimum": 0
+    },
+    "tone": {
+      "type": "string",
+      "enum": [
+        "professional",
+        "concise",
+        "detailed"
+      ]
+    }
+  },
+  "required": [
+    "summary"
+  ],
+  "additionalProperties": true
+}

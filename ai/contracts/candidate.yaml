@@ -1,0 +1,122 @@
+contract:
+  id: CONTRACT-CANDIDATE
+  version: "1.0.0"
+  kind: aggregate
+  status: active
+  supersedes: null
+  updated_at: "2026-06-25"
+
+purpose: >
+  Platform-level view of a candidate beyond a single resume parse. Links resume
+  artifacts to HRMS candidate identity, holds preferences, and aggregates version
+  history. Not directly serialized as TOON today; composed from resume TOON plus
+  portal metadata (future HRMS read-only export).
+
+fields:
+  candidate_id:
+    type: uuid
+    description: HRMS candidate_signup.cid or platform-assigned UUID.
+    toon_path: null
+  external_ids:
+    type: object
+    description: Cross-system identifiers (HRMS, ATS, SSO).
+    properties:
+      hrms_cid: { type: string }
+      email: { type: string }
+  primary_resume:
+    type: ref
+    ref: contracts/resume.yaml
+    description: Latest or selected canonical resume snapshot.
+    toon_path: null
+  resume_history:
+    type: array
+    items: { type: ref, ref: contracts/resume.yaml }
+    description: Versioned parses ordered by parsed_at descending.
+    toon_path: null
+  person:
+    type: object
+    description: Denormalized identity from primary_resume.person for query convenience.
+    toon_path: null
+  preferences:
+    type: object
+    properties:
+      preferred_locations:
+        type: array
+        items: { type: ref, ref: contracts/location.yaml }
+      remote: { type: enum, enum: [onsite, hybrid, remote, any] }
+      salary_expectation: { type: string }
+      employment_types: { type: array, items: { type: string } }
+      notice_period_days: { type: number }
+    toon_path: null
+  application_history:
+    type: array
+    items:
+      type: object
+      properties:
+        application_id: { type: uuid }
+        job_id: { type: uuid }
+        applied_at: { type: datetime }
+        match_score: { type: number }
+    toon_path: null
+  metadata:
+    type: object
+    properties:
+      created_at: { type: datetime }
+      updated_at: { type: datetime }
+      source: { type: string }
+    toon_path: null
+
+required:
+  - candidate_id
+
+optional:
+  - external_ids
+  - primary_resume
+  - resume_history
+  - person
+  - preferences
+  - application_history
+  - metadata
+
+relationships:
+  - id: candidate-primary-resume
+    target: contracts/resume.yaml
+    field: primary_resume
+    cardinality: one_to_one
+  - id: candidate-resume-history
+    target: contracts/resume.yaml
+    field: resume_history
+    cardinality: one_to_many
+  - id: candidate-preferred-locations
+    target: contracts/location.yaml
+    field: preferences.preferred_locations
+    cardinality: one_to_many
+  - id: candidate-parsed-resumes-db
+    target: external:parsed_resumes
+    field: resume_history
+    cardinality: one_to_many
+    description: HRMS parsed_resumes rows linked via candidate_id.
+
+normalization_rules:
+  - id: candidate-id-authoritative
+    applies_to: candidate_id
+    rule: HRMS cid wins when present; never regenerate for same portal user.
+    priority: 100
+  - id: candidate-person-from-resume
+    applies_to: person
+    rule: Sync from primary_resume.person on resume promotion; do not fork identity fields.
+    priority: 80
+  - id: candidate-resume-dedupe
+    applies_to: resume_history
+    rule: Deduplicate by raw_file_id or content hash; keep highest confidence parse.
+    priority: 70
+  - id: candidate-preferences-location
+    applies_to: preferences.preferred_locations
+    rule: Resolve strings through knowledge/locations; fall back to raw text.
+    priority: 60
+
+validation_notes:
+  - No production TOON type for candidate; schema maps resume fields via primary_resume.
+  - candidate_id is optional on parsed_resumes in HRMS but required for platform candidate contract.
+  - Do not duplicate resume fields on candidate except denormalized person for indexing.
+  - Future M9+ HRMS export should populate without modifying TOON serializer.

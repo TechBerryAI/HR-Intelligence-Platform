@@ -1,0 +1,44 @@
+knowledge_base:
+  id: KB-JOB-TITLES
+  version: "1.0.0"
+  status: active
+  contract_ref: ../../contracts/experience.yaml
+  updated_at: "2026-06-25"
+
+description: >
+  Canonical job title taxonomy for role normalization, experience scoring, and
+  title-to-skill inference. Links to experience.title on resumes and JD title.
+
+entry:
+  required:
+    - id
+    - canonical_title
+  optional:
+    - level
+    - family
+    - related_skills
+    - deprecated
+    - replaced_by
+  properties:
+    id:
+      type: string
+      pattern: "^title-[a-z0-9-]+$"
+    canonical_title:
+      type: string
+    level:
+      type: enum
+      values: [intern, junior, mid, senior, lead, principal, manager, director, executive, unknown]
+    family:
+      type: string
+      description: Job family (e.g. software_engineering, data_science).
+    related_skills:
+      type: array
+      items: { type: string, description: "skill-* canonical id" }
+    deprecated: { type: boolean, default: false }
+    replaced_by: { type: string }
+
+storage:
+  entries_dir: entries/
+  shard_naming: "shard-{NNNN}.json"
+  aliases_file: aliases.json
+  index_file: index.json

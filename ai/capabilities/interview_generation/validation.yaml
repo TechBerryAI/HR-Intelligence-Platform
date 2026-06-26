@@ -1,0 +1,23 @@
+schema_validate: true
+required_fields:
+- questions
+optional_fields:
+- focus_areas
+- confidence
+enums:
+  questions[].category:
+  - technical
+  - behavioral
+  - situational
+  - culture
+regex: {}
+length:
+  questions:
+    min_items: 3
+    max_items: 15
+dates: {}
+confidence:
+  min_overall: 0.65
+business_hooks:
+- filter_biased_questions
+- ensure_skill_coverage

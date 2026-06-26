@@ -1,0 +1,12 @@
+certification_object:
+  type: object
+  contract_ref: ../contracts/certification.yaml
+  properties:
+    name: { type: string, required: true }
+    issuer: { type: string }
+    year: { type: string }
+    expiry: { type: string }
+    credential_id: { type: string }
+    url: { type: url }
+    status: { type: string }
+    canonical_id: { type: string }

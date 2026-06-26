@@ -1,0 +1,16 @@
+schema_validate: false
+required_fields: []
+optional_fields:
+- reply
+- intent
+- suggested_actions
+enums: {}
+regex: {}
+length:
+  reply:
+    max: 4000
+dates: {}
+confidence: {}
+business_hooks:
+- enforce_hr_policy_guardrails
+- redact_sensitive_data

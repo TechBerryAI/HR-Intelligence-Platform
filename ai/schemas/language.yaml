@@ -1,0 +1,10 @@
+language_object:
+  type: object
+  contract_ref: ../contracts/language.yaml
+  properties:
+    language: { type: string, required: true }
+    proficiency: { type: string }
+    reading: { type: string }
+    writing: { type: string }
+    speaking: { type: string }
+    canonical_id: { type: string }

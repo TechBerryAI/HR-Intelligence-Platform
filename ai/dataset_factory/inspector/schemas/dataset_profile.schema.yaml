@@ -1,0 +1,144 @@
+# Schema — dataset_profile.yaml (inspector output)
+
+schema:
+  id: DF-SCHEMA-DATASET-PROFILE
+  version: "1.0.0"
+  artifact_type: DATASET_PROFILE
+
+required:
+  - profile
+  - dataset_ref
+  - formats
+  - structure
+  - strategies
+
+properties:
+  profile:
+    type: object
+    required: [id, version, created_at]
+    properties:
+      id: { type: string, const: DATASET-PROFILE }
+      version: { type: semver }
+      created_at: { type: datetime }
+      run_id: { type: uuid }
+
+  dataset_ref:
+    type: object
+    required: [id, version, name]
+    properties:
+      id: { type: string }
+      version: { type: semver }
+      name: { type: string }
+      creation_date: { type: date }
+
+  formats:
+    type: object
+    properties:
+      supported:
+        type: array
+        description: Supported Formats detected in corpus
+        items: { type: enum, values: [pdf, docx, doc, txt, rtf, zip, unknown] }
+      unsupported:
+        type: array
+        items: { type: string }
+      file_counts:
+        type: object
+        description: File Counts by format extension
+        additionalProperties: { type: integer }
+
+  structure:
+    type: object
+    properties:
+      directory_structure:
+        type: object
+        description: Directory Structure tree summary
+        properties:
+          root: { type: path }
+          max_depth: { type: integer }
+          total_directories: { type: integer }
+          total_files: { type: integer }
+          tree: { type: array, description: Nested node list }
+      doc_type_paths:
+        type: object
+        properties:
+          resumes: { type: path }
+          job_descriptions: { type: path }
+
+  size:
+    type: object
+    properties:
+      total_files: { type: integer, description: Total Files }
+      total_bytes: { type: integer }
+      average_file_size_bytes: { type: number, description: Average File Size }
+      largest_file:
+        type: object
+        properties:
+          path: { type: path }
+          size_bytes: { type: integer }
+      smallest_file:
+        type: object
+        properties:
+          path: { type: path }
+          size_bytes: { type: integer }
+
+  page_estimates:
+    type: object
+    description: Estimated Page Counts
+    properties:
+      total_estimated: { type: integer }
+      by_format: { type: object, additionalProperties: { type: integer } }
+      method: { type: string }
+
+  strategies:
+    type: object
+    description: Declared detection and processing strategies (configuration snapshot)
+    properties:
+      duplicate_detection:
+        type: object
+        properties:
+          exact: { type: string }
+          near: { type: string }
+      hash_strategy:
+        type: object
+        properties:
+          algorithm: { type: string, const: SHA-256 }
+          encoding: { type: string }
+          prefix: { type: string }
+      corrupt_file_detection: { type: object }
+      password_protected_strategy: { type: object }
+      ocr_detection_strategy: { type: object }
+      language_detection_strategy: { type: object }
+      metadata_extraction_strategy: { type: object }
+      quality_score_strategy: { type: string }
+      sampling_strategy: { type: object }
+
+  sampling:
+    type: object
+    properties:
+      method: { type: string }
+      rate: { type: number }
+      selected_files: { type: array, items: { type: path } }
+
+  file_metadata:
+    type: array
+    description: Per-file metadata extraction results (sparse)
+    items:
+      type: object
+      properties:
+        path: { type: path }
+        format: { type: string }
+        metadata: { type: object }
+
+  ocr_signals:
+    type: array
+    items:
+      type: object
+      properties:
+        path: { type: path }
+        signal: { type: enum, values: [ocr_required, ocr_recommended, text_layer_ok] }
+
+  medallion:
+    type: object
+    properties:
+      tier: { type: enum, values: [bronze, silver, gold] }
+      classification: { type: string, description: Bronze/Silver/Gold Classification rationale }

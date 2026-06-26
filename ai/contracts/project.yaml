@@ -1,0 +1,90 @@
+contract:
+  id: CONTRACT-PROJECT
+  version: "1.0.0"
+  kind: domain
+  status: active
+  supersedes: null
+  updated_at: "2026-06-25"
+
+purpose: >
+  Portfolio, academic, or side projects not captured as formal employment.
+  Enriches skill extraction and interview question generation. Not in production
+  Resume TOON today — normalized-only until TOON extension is approved.
+
+fields:
+  name:
+    type: string
+    description: Project title.
+    toon_path: null
+  description:
+    type: string
+    toon_path: null
+  url:
+    type: url
+    toon_path: null
+  technologies:
+    type: array
+    items: { type: ref, ref: contracts/skill.yaml }
+    toon_path: null
+  from:
+    type: string
+    description: Start YYYY-MM.
+    toon_path: null
+  to:
+    type: string
+    description: End YYYY-MM or present.
+    toon_path: null
+  role:
+    type: string
+    description: Contributor role on the project.
+    toon_path: null
+  organization:
+    type: ref
+    ref: contracts/company.yaml
+    description: Client or affiliated org if applicable.
+    toon_path: null
+
+required: []
+
+optional:
+  - name
+  - description
+  - url
+  - technologies
+  - from
+  - to
+  - role
+  - organization
+
+relationships:
+  - id: project-resume
+    target: contracts/resume.yaml
+    field: projects
+    cardinality: many_to_one
+  - id: project-skills
+    target: contracts/skill.yaml
+    field: technologies
+    cardinality: many_to_many
+  - id: project-company
+    target: contracts/company.yaml
+    field: organization
+    cardinality: many_to_one
+
+normalization_rules:
+  - id: project-skill-extract
+    applies_to: technologies
+    rule: Promote technology strings to skill refs; link to knowledge/skills when matched.
+    priority: 70
+  - id: project-date-range
+    applies_to: from
+    rule: Same date normalization as experience contract.
+    priority: 60
+  - id: project-toon-omit
+    applies_to: name
+    rule: Omit projects[] from TOON projection until toon_extension approved on resume contract.
+    priority: 100
+
+validation_notes:
+  - Not serialized in current HRMS Resume TOON.
+  - Include in normalized resume records for training and future features.
+  - name recommended for meaningful records but not enforced at TOON layer.

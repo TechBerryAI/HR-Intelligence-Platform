@@ -1,0 +1,20 @@
+# Dataset Factory — shared components registry
+
+shared:
+  id: DF-SHARED
+  version: "1.0.0"
+  updated_at: "2026-06-25"
+
+components:
+  - id: DF-STAGE-INTERFACE
+    file: stage_interface.yaml
+    description: Contract all pipeline stages must implement.
+  - id: DF-ARTIFACT-ENVELOPE
+    file: artifact_envelope.yaml
+    description: Common wrapper for stage output artifacts.
+  - id: DF-FORMAT-REGISTRY
+    file: format_registry.yaml
+    description: Supported file formats and detection strategies.
+  - id: DF-MEDALLION
+    file: medallion.yaml
+    description: Bronze / Silver / Gold dataset classification model.

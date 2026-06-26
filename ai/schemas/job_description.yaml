@@ -1,0 +1,86 @@
+schema:
+  id: SCHEMA-JOB-DESCRIPTION
+  version: "1.0.0"
+  status: active
+  contract_ref: ../contracts/job_description.yaml
+  toon_type: job_description
+  updated_at: "2026-06-25"
+
+description: >
+  Canonical normalized Job Description document. Aligns with HRMS JD TOON including
+  ATS extensions mandatory_skills and preferred_skills.
+
+root:
+  type: object
+  discriminator:
+    field: type
+    value: job_description
+
+composition:
+  contracts:
+    - job_description
+    - skill
+    - company
+    - location
+
+properties:
+  type:
+    const: job_description
+    required: true
+  title: { type: string, required: true }
+  company: { $ref: "#/defs/company_or_string" }
+  location:
+    required: true
+    $ref: "#/defs/location_or_string"
+  employment_type: { type: string }
+  skills:
+    type: array
+    required: true
+    items: { $ref: "#/defs/skill_or_string" }
+  mandatory_skills:
+    type: array
+    items: { $ref: "#/defs/skill_or_string" }
+  preferred_skills:
+    type: array
+    items: { $ref: "#/defs/skill_or_string" }
+  responsibilities:
+    type: array
+    required: true
+    items: { type: string }
+  qualifications:
+    type: array
+    items: { type: string }
+  keywords:
+    type: array
+    items: { type: string }
+  min_experience_years: { type: number }
+  max_experience_years: { type: number }
+  salary_range: { type: string }
+
+defs:
+  company_or_string:
+    one_of:
+      - { type: string }
+      - { $ref: "company.yaml#/company_object" }
+  location_or_string:
+    one_of:
+      - { type: string }
+      - { $ref: "location.yaml#/location_object" }
+  skill_or_string:
+    one_of:
+      - { type: string }
+      - { $ref: "skill.yaml#/skill_object" }
+
+toon_projection:
+  mapping_ref: mappings/toon.yaml#job_description
+  serializer: backend/toon.py#toon_dumps
+  validator: backend/parsing_utils.py#validate_toon_format
+
+metadata:
+  provenance_fields:
+    - parsed_id
+    - raw_file_id
+    - job_id
+    - confidence
+    - model_version
+    - parsed_at

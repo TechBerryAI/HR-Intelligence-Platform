@@ -1,0 +1,14 @@
+# Language entity template — structure only, no sample data.
+
+_template:
+  contract: ../../contracts/language.yaml
+  schema: ../language.yaml#/language_object
+  version: "1.0.0"
+  kind: template
+
+language: null
+proficiency: null
+reading: null
+writing: null
+speaking: null
+canonical_id: null

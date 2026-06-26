@@ -1,0 +1,15 @@
+benchmark:
+  capability: candidate_matching
+  version: "1.0.0"
+  dataset: datasets/evaluation/candidate_matching
+  expected_schema: candidate_match_v1
+  success_criteria:
+    - schema_validation_pass_rate >= 0.95
+    - required_fields_present_rate >= 0.98
+  latency_target_ms: 5000
+  accuracy_target: 0.8
+  future_metrics:
+    - field_level_f1
+    - calibration_error
+    - human_review_agreement
+    - cost_per_invocation

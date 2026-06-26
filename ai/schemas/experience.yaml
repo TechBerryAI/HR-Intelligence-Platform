@@ -1,0 +1,13 @@
+experience_object:
+  type: object
+  contract_ref: ../contracts/experience.yaml
+  properties:
+    title: { type: string }
+    company: { one_of: [{ type: string }, { $ref: "company.yaml#/company_object" }] }
+    from: { type: string }
+    to: { type: string }
+    years: { type: number }
+    description: { type: string }
+    location: { one_of: [{ type: string }, { $ref: "location.yaml#/location_object" }] }
+    skills_used: { type: array, items: { $ref: "skill.yaml#/skill_object" } }
+    is_current: { type: boolean }

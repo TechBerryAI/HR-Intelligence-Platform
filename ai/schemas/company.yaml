@@ -1,0 +1,11 @@
+company_object:
+  type: object
+  contract_ref: ../contracts/company.yaml
+  properties:
+    name: { type: string, required: true }
+    canonical_id: { type: string }
+    legal_name: { type: string }
+    industry: { type: string }
+    size: { type: string }
+    website: { type: url }
+    headquarters: { $ref: "location.yaml#/location_object" }

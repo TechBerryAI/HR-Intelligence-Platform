@@ -1,0 +1,63 @@
+knowledge_base:
+  id: KB-SKILLS
+  version: "1.0.0"
+  status: active
+  contract_ref: ../../contracts/skill.yaml
+  updated_at: "2026-06-25"
+
+description: >
+  Canonical skill ontology for normalization, ATS matching, and search indexing.
+  Entries are added to entries/ as sharded JSON; aliases map surface forms to canonical_id.
+
+entry:
+  required:
+    - id
+    - canonical_name
+  optional:
+    - category
+    - parent_id
+    - tags
+    - deprecated
+    - replaced_by
+  properties:
+    id:
+      type: string
+      pattern: "^skill-[a-z0-9-]+$"
+      description: Stable canonical identifier.
+    canonical_name:
+      type: string
+      description: Preferred display label.
+    category:
+      type: enum
+      values: [language, framework, library, database, cloud, devops, tool, methodology, domain, soft_skill, other]
+    parent_id:
+      type: string
+      description: Optional parent skill for hierarchies (e.g. React → JavaScript).
+    tags:
+      type: array
+      items: { type: string }
+    deprecated:
+      type: boolean
+      default: false
+    replaced_by:
+      type: string
+      description: Successor canonical id when deprecated.
+
+storage:
+  entries_dir: entries/
+  shard_naming: "shard-{NNNN}.json"
+  shard_schema:
+    type: object
+    properties:
+      shard: { type: integer }
+      version: { type: string }
+      entries: { type: array, items: { $ref: "#/entry" } }
+  aliases_file: aliases.json
+  index_file: index.json
+
+index:
+  description: Optional id → shard lookup for O(1) resolution at scale.
+  properties:
+    version: { type: string }
+    updated_at: { type: string }
+    shards: { type: object, additionalProperties: { type: string } }

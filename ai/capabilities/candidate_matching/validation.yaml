@@ -1,0 +1,26 @@
+schema_validate: true
+required_fields:
+- match_score
+- overall_fit
+- skill_matches
+optional_fields:
+- gaps
+- strengths
+- rationale
+- confidence
+enums:
+  overall_fit:
+  - strong
+  - moderate
+  - weak
+  - no_match
+regex: {}
+length:
+  rationale:
+    max: 2000
+dates: {}
+confidence:
+  min_overall: 0.7
+business_hooks:
+- validate_ats_score_range
+- enforce_mandatory_skill_gate

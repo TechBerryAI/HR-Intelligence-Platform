@@ -1,0 +1,111 @@
+contract:
+  id: CONTRACT-LOCATION
+  version: "1.0.0"
+  kind: domain
+  status: active
+  supersedes: null
+  updated_at: "2026-06-25"
+
+purpose: >
+  Geographic location for persons, jobs, and roles. TOON uses free-text strings;
+  normalized form supports structured geo and knowledge/locations canonical IDs.
+
+fields:
+  raw:
+    type: string
+    description: Original text as extracted (e.g. "San Francisco, CA").
+    toon_path: location
+  canonical_id:
+    type: string
+    description: knowledge/locations entry ID.
+    toon_path: null
+  city:
+    type: string
+    toon_path: null
+  region:
+    type: string
+    description: State, province, or region.
+    toon_path: null
+  country:
+    type: string
+    description: Country name or ISO 3166-1 alpha-2.
+    toon_path: null
+  postal_code:
+    type: string
+    toon_path: null
+  latitude:
+    type: number
+    toon_path: null
+  longitude:
+    type: number
+    toon_path: null
+  remote:
+    type: boolean
+    description: True when location indicates fully remote.
+    toon_path: null
+
+required: []
+
+optional:
+  - raw
+  - canonical_id
+  - city
+  - region
+  - country
+  - postal_code
+  - latitude
+  - longitude
+  - remote
+
+relationships:
+  - id: location-kb
+    target: knowledge/locations/
+    field: canonical_id
+    cardinality: many_to_one
+  - id: location-person
+    target: contracts/resume.yaml
+    field: person.location
+    cardinality: one_to_many
+  - id: location-jd
+    target: contracts/job_description.yaml
+    field: location
+    cardinality: one_to_many
+  - id: location-experience
+    target: contracts/experience.yaml
+    field: location
+    cardinality: one_to_many
+  - id: location-candidate-prefs
+    target: contracts/candidate.yaml
+    field: preferences.preferred_locations
+    cardinality: one_to_many
+
+normalization_rules:
+  - id: location-toon-string
+    applies_to: raw
+    rule: TOON location fields are strings; set raw from string, parse components when possible.
+    priority: 100
+  - id: location-remote-detect
+    applies_to: remote
+    rule: >
+      Set remote true when raw matches remote, wfh, work from home, anywhere (case-insensitive).
+    priority: 90
+  - id: location-kb-resolve
+    applies_to: canonical_id
+    rule: Lookup raw/city+region+country in knowledge/locations aliases.
+    priority: 80
+  - id: location-person-aliases
+    applies_to: raw
+    rule: >
+      Merge person.current_location, person.city, person.address into raw for normalization
+      (HRMS frontend inverse mapping).
+    priority: 70
+  - id: location-toon-projection
+    applies_to: raw
+    rule: TOON projection emits raw string or best single-line label (city, region, country).
+    priority: 60
+
+validation_notes:
+  - JD location is required key in validate_toon_format; value may be empty string.
+  - ATS location score uses JD location string vs candidate person.location.
+  - Structured fields optional until geocoding or knowledge linking runs.
+  - Prefer raw populated whenever any location text exists.

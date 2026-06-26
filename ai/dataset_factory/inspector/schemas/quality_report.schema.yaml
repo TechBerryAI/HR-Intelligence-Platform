@@ -1,0 +1,87 @@
+# Schema — quality_report.yaml (inspector output)
+
+schema:
+  id: DF-SCHEMA-QUALITY-REPORT
+  version: "1.0.0"
+  artifact_type: QUALITY_REPORT
+  model_ref: ../quality_model.yaml
+
+required:
+  - report
+  - dataset_ref
+  - categories
+  - overall
+  - gates
+
+properties:
+  report:
+    type: object
+    required: [id, version, created_at, model_ref]
+    properties:
+      id: { type: string, const: QUALITY-REPORT }
+      version: { type: semver }
+      created_at: { type: datetime }
+      run_id: { type: uuid }
+      model_ref: { type: path, default: ../quality_model.yaml }
+      computation_status:
+        type: enum
+        values: [pending, computed, failed]
+
+  dataset_ref:
+    type: object
+    properties:
+      id: { type: string }
+      version: { type: semver }
+
+  categories:
+    type: object
+    description: Quality model category scores (null until M3.2)
+    properties:
+      integrity:
+        $ref: "#/category_score"
+      extractability:
+        $ref: "#/category_score"
+      ocr_readiness:
+        $ref: "#/category_score"
+      formatting_quality:
+        $ref: "#/category_score"
+      metadata_quality:
+        $ref: "#/category_score"
+      duplication_risk:
+        $ref: "#/category_score"
+      language_consistency:
+        $ref: "#/category_score"
+
+  overall:
+    type: object
+    properties:
+      score: { type: number, minimum: 0, maximum: 100, nullable: true }
+      grade: { type: enum, values: [A, B, C, D, F], nullable: true }
+      label: { type: string, nullable: true }
+
+  gates:
+    type: object
+    properties:
+      extraction_ready: { type: boolean, nullable: true }
+      manual_review_required: { type: boolean, nullable: true }
+      block_extraction: { type: boolean, nullable: true }
+
+  findings:
+    type: array
+    description: Actionable issues discovered during inspection
+    items:
+      type: object
+      properties:
+        code: { type: string }
+        severity: { type: enum, values: [info, warning, error] }
+        category: { type: string }
+        path: { type: path }
+        message: { type: string }
+
+  category_score:
+    type: object
+    properties:
+      score: { type: number, minimum: 0, maximum: 1, nullable: true }
+      weight: { type: number }
+      signals: { type: object, additionalProperties: true }
+      downgrade_triggers_fired: { type: array, items: { type: string } }

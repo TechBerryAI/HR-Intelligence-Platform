@@ -1,0 +1,159 @@
+contract:
+  id: CONTRACT-JOB-DESCRIPTION
+  version: "1.0.0"
+  kind: aggregate
+  status: active
+  supersedes: null
+  updated_at: "2026-06-25"
+
+purpose: >
+  Structured job posting for matching, ranking, interview generation, and search.
+  Separates role requirements, responsibilities, and skill tiers. Projects to HRMS
+  Job Description TOON; feeds ATS weighted matching in ats_service.py.
+
+fields:
+  type:
+    type: enum
+    enum: [job_description]
+    toon_path: type
+  title:
+    type: string
+    description: Role title as posted.
+    toon_path: title
+  company:
+    type: ref
+    ref: contracts/company.yaml
+    description: Hiring organization; may be plain string in TOON.
+    toon_path: company
+  location:
+    type: ref
+    ref: contracts/location.yaml
+    description: Primary work location; string in TOON.
+    toon_path: location
+  employment_type:
+    type: string
+    description: e.g. full-time, contract, internship.
+    toon_path: employment_type
+  skills:
+    type: array
+    items: { type: ref, ref: contracts/skill.yaml }
+    description: Legacy combined skills list when mandatory/preferred not split.
+    toon_path: skills
+  mandatory_skills:
+    type: array
+    items: { type: ref, ref: contracts/skill.yaml }
+    description: ATS gate skills (60% minimum match in production ATS).
+    toon_path: mandatory_skills
+    toon_extension: true
+  preferred_skills:
+    type: array
+    items: { type: ref, ref: contracts/skill.yaml }
+    description: Weighted preferred skills (20% of skills score).
+    toon_path: preferred_skills
+    toon_extension: true
+  responsibilities:
+    type: array
+    items: { type: string }
+    toon_path: responsibilities
+  qualifications:
+    type: array
+    items: { type: string }
+    description: Education and credential requirements as free text lines.
+    toon_path: qualifications
+  keywords:
+    type: array
+    items: { type: string }
+    description: Search and indexing terms.
+    toon_path: keywords
+  min_experience_years:
+    type: number
+    toon_path: min_experience_years
+  max_experience_years:
+    type: number
+    toon_path: max_experience_years
+  salary_range:
+    type: string
+    description: Free-text compensation band.
+    toon_path: salary_range
+
+required:
+  - type
+  - title
+  - location
+  - skills
+  - responsibilities
+
+optional:
+  - company
+  - employment_type
+  - mandatory_skills
+  - preferred_skills
+  - qualifications
+  - keywords
+  - min_experience_years
+  - max_experience_years
+  - salary_range
+
+relationships:
+  - id: jd-company
+    target: contracts/company.yaml
+    field: company
+    cardinality: one_to_one
+  - id: jd-location
+    target: contracts/location.yaml
+    field: location
+    cardinality: one_to_one
+  - id: jd-skills
+    target: contracts/skill.yaml
+    field: skills
+    cardinality: one_to_many
+  - id: jd-mandatory-skills
+    target: contracts/skill.yaml
+    field: mandatory_skills
+    cardinality: one_to_many
+  - id: jd-preferred-skills
+    target: contracts/skill.yaml
+    field: preferred_skills
+    cardinality: one_to_many
+  - id: jd-resume-match
+    target: contracts/resume.yaml
+    field: null
+    cardinality: many_to_many
+    description: ATS pairs JD with resume for scoring.
+
+normalization_rules:
+  - id: jd-type-discriminator
+    applies_to: type
+    rule: Must be literal job_description for TOON validation.
+    priority: 100
+  - id: jd-skills-split
+    applies_to: skills
+    rule: >
+      When mandatory_skills and preferred_skills are populated, skills may remain
+      as union for backward compatibility; ATS prefers split lists when present.
+    priority: 80
+  - id: jd-company-string
+    applies_to: company
+    rule: TOON stores company as string; normalize to company object with name set.
+    priority: 70
+  - id: jd-location-string
+    applies_to: location
+    rule: TOON stores location as string; resolve via knowledge/locations when possible.
+    priority: 70
+  - id: jd-experience-range
+    applies_to: min_experience_years
+    rule: >
+      Extract from free-text experience fields when missing (regex on jobs.experience
+      in synthetic TOON path).
+    priority: 60
+  - id: jd-responsibilities-lines
+    applies_to: responsibilities
+    rule: Split markdown bullet blocks into string array; trim leading markers.
+    priority: 50
+
+validation_notes:
+  - HRMS validate_toon_format(job_description) requires title, location, skills, responsibilities keys.
+  - mandatory_skills and preferred_skills are used by ATS but not enforced by validate_toon_format.
+  - employment_type is in TypeScript JDTOON but not runtime-validated.
+  - Synthetic JD TOON from jobs table may populate skills from markdown **Required Skills:** blocks.
+  - Empty arrays are valid for list fields at TOON boundary.

@@ -1,0 +1,66 @@
+# Dataset Inspector — stage manifest
+
+stage:
+  id: STAGE-INSPECTOR
+  version: "1.0.0"
+  status: designed
+  implementation: none
+  updated_at: "2026-06-25"
+
+description: >
+  Stage 1 of the Dataset Factory. Analyzes a raw dataset directory without
+  modifying any source file. Produces a machine-readable profile, quality model
+  scaffold, hash index, and inspection log for downstream gating.
+
+interface_ref: interface.yaml
+architecture_ref: architecture.yaml
+quality_model_ref: quality_model.yaml
+
+inputs:
+  source_path:
+    type: path
+    required: true
+    mutability: read_only
+  dataset_id:
+    type: string
+    pattern: "^DS-[A-Z0-9-]+$"
+    required: true
+  dataset_version:
+    type: semver
+    required: true
+  dataset_name:
+    type: string
+    required: true
+
+outputs:
+  directory_pattern: outputs/{dataset_id}/{dataset_version}/{run_id}/
+  artifacts:
+    - file: dataset_manifest.yaml
+      schema: schemas/dataset_manifest.schema.yaml
+      template: templates/dataset_manifest.template.yaml
+      artifact_type: DATASET_MANIFEST
+    - file: dataset_profile.yaml
+      schema: schemas/dataset_profile.schema.yaml
+      template: templates/dataset_profile.template.yaml
+      artifact_type: DATASET_PROFILE
+    - file: quality_report.yaml
+      schema: schemas/quality_report.schema.yaml
+      template: templates/quality_report.template.yaml
+      artifact_type: QUALITY_REPORT
+    - file: statistics.yaml
+      schema: schemas/statistics.schema.yaml
+      template: templates/statistics.template.yaml
+      artifact_type: STATISTICS
+    - file: hash_index.json
+      schema: schemas/hash_index.schema.json
+      template: templates/hash_index.template.json
+      artifact_type: HASH_INDEX
+    - file: inspection_log.yaml
+      schema: schemas/inspection_log.schema.yaml
+      template: templates/inspection_log.template.yaml
+      artifact_type: INSPECTION_LOG
+
+invariants:
+  - NEVER write to source_path
+  - NEVER delete, rename, or transform source files
+  - All computed values written only to outputs/

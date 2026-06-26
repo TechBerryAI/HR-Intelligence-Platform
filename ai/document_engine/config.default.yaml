@@ -1,0 +1,19 @@
+# Default configuration for Document Processing Engine Stage 1.
+
+source_path: null
+output_path: null
+inspection_path: null
+
+dataset_id: DS-RESUMES-RAW
+dataset_version: "1.0.0"
+doc_type: resume
+
+recursive: true
+workers: 4
+resume: false
+skip_duplicates: true
+skip_corrupt: false
+skip_password_protected: true
+skip_non_resume_artifacts: true
+enforce_extraction_gate: false
+pdf_max_pages: 0

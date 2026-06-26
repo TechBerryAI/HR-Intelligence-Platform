@@ -1,0 +1,25 @@
+# Benchmark stage — architecture (not implemented)
+
+architecture:
+  id: DF-BENCHMARK-ARCH
+  version: "1.0.0"
+  status: interface_only
+
+purpose: >
+  Maintain frozen gold evaluation sets for parsing, matching, and regression
+  gates independent of training data lineage.
+
+categories:
+  - parsing
+  - matching
+  - summarization
+
+freeze_process:
+  - select_candidate_records
+  - dual_human_review
+  - write_benchmark_jsonl
+  - compute_content_hash
+  - register_BENCH_id
+  - mark_records benchmark_frozen: true
+
+implementation: deferred_M4.4

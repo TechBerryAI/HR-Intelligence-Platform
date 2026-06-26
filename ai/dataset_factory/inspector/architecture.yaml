@@ -1,0 +1,185 @@
+# Dataset Inspector — architecture specification
+
+architecture:
+  id: DF-INSPECTOR-ARCH
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-25"
+
+principles:
+  - read_only_source: Source corpus is immutable; inspector opens files for read/stat only.
+  - deterministic_profile: Same inputs + config produce identical hash_index and statistics.
+  - format_extensible: New formats register in shared/format_registry.yaml only.
+  - schema_first: All outputs validate against inspector/schemas/ before registry publish.
+  - no_fake_data: Templates use null placeholders; implementation fills at run time.
+
+execution_model:
+  phases:
+    - id: discover
+      description: Walk source_path; build directory tree; inventory files.
+      outputs: [dataset_profile.directory_structure, statistics.file_counts]
+
+    - id: classify
+      description: Detect format per file via format_registry; tally supported vs unsupported.
+      outputs: [dataset_profile.supported_formats, statistics.format_breakdown]
+
+    - id: measure
+      description: Compute size stats, page estimates, encoding hints.
+      outputs: [statistics.size, dataset_profile.page_estimates]
+
+    - id: hash
+      description: SHA-256 content hash per file; build hash_index.json.
+      outputs: [hash_index.json]
+      strategy_ref: hash_strategy
+
+    - id: detect_issues
+      description: Corrupt, password-protected, duplicate, OCR-needed signals.
+      outputs: [quality_report, dataset_profile.detection_strategies]
+
+    - id: sample
+      description: Select representative file subset per sampling_strategy (metadata only).
+      outputs: [dataset_profile.sampling]
+
+    - id: score
+      description: Apply quality_model categories; populate quality_report structure.
+      outputs: [quality_report]
+      note: M3.1 defines model only; M3.2 computes values.
+
+    - id: emit
+      description: Write all artifacts; append inspection_log.yaml.
+      outputs: all
+
+hash_strategy:
+  algorithm: SHA-256
+  encoding: hex lowercase
+  prefix: "sha256:"
+  scope: full_file_content
+  duplicate_detection:
+    exact:
+      method: hash_equality
+      index: hash_index.json
+    near_duplicate:
+      method: reserved
+      note: Future — simhash on extracted text after extractor stage
+  index_structure: hash_index.schema.json
+
+corrupt_file_detection:
+  strategies:
+    - id: zero_byte_file
+      check: size_bytes == 0
+      severity: error
+    - id: truncated_magic
+      check: magic_bytes incomplete for declared extension
+      severity: error
+    - id: format_parse_probe
+      check: lightweight header parse per format_registry
+      severity: error
+      formats: [pdf, docx, doc, zip]
+    - id: read_error
+      check: os_read_failure
+      severity: error
+  on_corrupt: record in quality_report.integrity; do not modify file
+
+password_protected_detection:
+  strategies:
+    - id: pdf_encrypted
+      check: pdf_encryption_flag_in_header
+      format: pdf
+    - id: office_encrypted
+      check: ole_encryption_info_or_docx_encryption_xml
+      formats: [doc, docx]
+    - id: zip_encrypted
+      check: zip_entry_general_purpose_bit_flag
+      format: zip
+  on_protected: record in quality_report.extractability; exclude from auto-extract queue
+
+ocr_detection:
+  strategies:
+    - id: pdf_no_text_layer
+      check: pdf_text_extract_returns_empty_with_images
+      format: pdf
+      signal: ocr_required
+    - id: scanned_image_only
+      check: image_dominant_page_ratio_gt_threshold
+      threshold: 0.8
+      signal: ocr_required
+    - id: low_text_density
+      check: chars_per_page_lt_threshold
+      threshold: 50
+      signal: ocr_recommended
+  outputs: [quality_report.ocr_readiness, dataset_profile.ocr_signals]
+
+language_detection:
+  strategy:
+    method: reserved
+    implementation_note: >
+      M3.2 — sample first N KB of extractable text per file; use fastText or
+      langdetect; aggregate distribution in statistics.language_distribution.
+    fallback: unknown
+    min_confidence: 0.7
+  outputs: [quality_report.language_consistency, statistics.languages]
+
+metadata_extraction:
+  strategy:
+    per_format:
+      pdf: [page_count, author, title, creation_date, producer]
+      docx: [core_properties, paragraph_count_estimate]
+      doc: [ole_summary_info]
+      txt: [encoding, line_count]
+      rtf: [generator, code_page]
+      zip: [entry_count, compressed_size, inner_formats]
+    storage: dataset_profile.file_metadata[]
+    note: Best-effort; missing metadata does not fail inspection.
+
+page_count_estimation:
+  strategy:
+    pdf: page_tree_count_or_linearized_estimate
+    docx: approximate_via_render_or_app_property
+    doc: approximate_via_ole_stats
+    txt: lines_divisor_or_null
+    rtf: null
+    zip: sum_inner_estimates
+  outputs: [statistics.pages.total_estimated, statistics.pages.by_format]
+
+sampling_strategy:
+  purpose: Enable human spot-check without scanning full corpus at review time.
+  methods:
+    - id: stratified_by_format
+      description: Sample proportionally from each detected format.
+    - id: stratified_by_size_decile
+      description: Include representatives from size deciles.
+    - id: hash_bucket
+      description: Deterministic sample via hash mod N for reproducibility.
+  default_sample_rate: 0.05
+  min_samples: 10
+  max_samples: 500
+  outputs: [dataset_profile.sampling.selected_files]
+
+quality_score_strategy:
+  model_ref: quality_model.yaml
+  computation: deferred_to_M3.2
+  gate: extractor may require minimum overall.grade
+
+dataset_status:
+  on_success: inspected
+  on_partial: inspected_with_warnings
+  on_failure: inspection_failed
+  field: dataset_manifest.status
+
+directory_structure:
+  capture:
+    - relative_paths_from_source_root
+    - depth
+    - file_count_per_directory
+    - doc_type_inference_from_path  # resumes/ vs job_descriptions/
+  max_depth_logged: 10
+  outputs: [dataset_profile.directory_structure]
+
+integration:
+  downstream:
+    extractor:
+      consumes: [dataset_manifest, quality_report, hash_index]
+      gate_field: quality_report.gates.extraction_ready
+    registry:
+      publishes: dataset_manifest
+      path: registry/datasets/{dataset_id}.yaml

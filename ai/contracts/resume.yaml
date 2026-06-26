@@ -1,0 +1,170 @@
+contract:
+  id: CONTRACT-RESUME
+  version: "1.0.0"
+  kind: aggregate
+  status: active
+  supersedes: null
+  updated_at: "2026-06-25"
+
+purpose: >
+  Canonical representation of a candidate resume after parsing or normalization.
+  Aggregates identity, career narrative, capabilities, and credentials. Serves as
+  the primary input for ATS matching, ranking, search indexing, and interview
+  generation. Projects to HRMS Resume TOON without field invention.
+
+fields:
+  type:
+    type: enum
+    enum: [resume]
+    description: Document discriminator; must equal resume for TOON validation.
+    toon_path: type
+  person:
+    type: object
+    description: Contact and identity block (embedded; no separate person contract in M2).
+    toon_path: person
+    properties:
+      name: { type: string, toon_path: person.name }
+      email: { type: string, toon_path: person.email }
+      phone: { type: string, toon_path: person.phone }
+      location: { type: string, toon_path: person.location }
+      linkedin: { type: url, toon_path: person.linkedin }
+      github: { type: url, toon_path: person.github }
+      portfolio: { type: url, toon_path: person.portfolio }
+      website: { type: url, toon_path: person.website }
+      twitter: { type: url, toon_path: person.twitter }
+      otherUrls: { type: array, items: { type: url }, toon_path: person.otherUrls }
+      current_location: { type: string, toon_extension: true }
+      city: { type: string, toon_extension: true }
+      address: { type: string, toon_extension: true }
+      preferred_location: { type: string, toon_extension: true }
+  summary:
+    type: string
+    description: Professional summary or objective.
+    toon_path: summary
+  skills:
+    type: array
+    items: { type: ref, ref: contracts/skill.yaml }
+    description: Capabilities; may be raw strings before knowledge linking.
+    toon_path: skills
+  experience:
+    type: array
+    items: { type: ref, ref: contracts/experience.yaml }
+    description: Employment history in reverse-chronological order preferred.
+    toon_path: experience
+  education:
+    type: array
+    items: { type: ref, ref: contracts/education.yaml }
+    toon_path: education
+  projects:
+    type: array
+    items: { type: ref, ref: contracts/project.yaml }
+    description: Portfolio work not captured as formal employment.
+    toon_path: null
+  certifications:
+    type: array
+    items: { type: ref, ref: contracts/certification.yaml }
+    toon_path: certifications
+  languages:
+    type: array
+    items: { type: ref, ref: contracts/language.yaml }
+    toon_path: languages
+  total_experience_years:
+    type: number
+    description: Derived or explicit total years of professional experience.
+    toon_path: total_experience_years
+
+required:
+  - type
+  - person
+  - skills
+  - experience
+  - education
+
+optional:
+  - summary
+  - projects
+  - certifications
+  - languages
+  - total_experience_years
+
+relationships:
+  - id: resume-person-embedded
+    target: contracts/resume.yaml#person
+    field: person
+    cardinality: one_to_one
+    description: Identity block embedded at parse time; not a standalone persisted entity.
+  - id: resume-skills
+    target: contracts/skill.yaml
+    field: skills
+    cardinality: one_to_many
+    description: Skills may resolve to knowledge/skills canonical IDs after normalization.
+  - id: resume-experience
+    target: contracts/experience.yaml
+    field: experience
+    cardinality: one_to_many
+  - id: resume-education
+    target: contracts/education.yaml
+    field: education
+    cardinality: one_to_many
+  - id: resume-projects
+    target: contracts/project.yaml
+    field: projects
+    cardinality: one_to_many
+  - id: resume-certifications
+    target: contracts/certification.yaml
+    field: certifications
+    cardinality: one_to_many
+  - id: resume-languages
+    target: contracts/language.yaml
+    field: languages
+    cardinality: one_to_many
+  - id: resume-candidate
+    target: contracts/candidate.yaml
+    field: null
+    cardinality: many_to_one
+    description: Candidate profile references one or more resume versions.
+
+normalization_rules:
+  - id: resume-type-discriminator
+    applies_to: type
+    rule: Must be literal resume before TOON projection.
+    priority: 100
+  - id: resume-person-location-aliases
+    applies_to: person.location
+    rule: >
+      Merge person.current_location, person.city, person.address into person.location
+      when projecting from frontend form state (HRMS mapResumeTOONToForm inverse).
+    priority: 80
+  - id: resume-skills-dedupe
+    applies_to: skills
+    rule: Case-insensitive deduplication; trim whitespace; preserve first canonical casing.
+    priority: 70
+  - id: resume-skills-string-to-ref
+    applies_to: skills
+    rule: >
+      Raw string[] from TOON parse upgrades to skill objects with name set and
+      canonical_id null until knowledge/skills lookup succeeds.
+    priority: 60
+  - id: resume-certifications-polymorphic
+    applies_to: certifications
+    rule: >
+      Accept TOON string[] or object[]; normalize to certification contract objects
+      with at minimum name populated.
+    priority: 60
+  - id: resume-experience-order
+    applies_to: experience
+    rule: Sort by end date descending; Present/current roles first.
+    priority: 50
+  - id: resume-total-experience-derive
+    applies_to: total_experience_years
+    rule: >
+      If absent, derive from experience[].years sum or date span; do not double-count
+      overlapping roles without explicit overlap policy.
+    priority: 40
+
+validation_notes:
+  - HRMS validate_toon_format(resume) requires keys person, skills, experience, education (keys must exist; values may be empty arrays).
+  - person.name, person.email, person.phone keys must exist on TOON; empty strings are accepted at runtime.
+  - projects[] is not in production TOON today; omit on TOON projection unless marked toon_extension.
+  - Round-trip rule — toon_dumps(toon_loads_flex(toon)) must preserve semantics per DATA_CONTRACTS.md.
+  - Pipe-delimited skills in TOON wire format become string[] on parse; normalization may promote to skill refs.

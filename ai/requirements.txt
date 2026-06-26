@@ -1,0 +1,56 @@
+# AI Workspace — Python dependencies
+# Install in an isolated venv: python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+#
+# Pinned ranges for reproducibility; adjust per GPU/CUDA environment.
+
+# Core
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+rich>=13.7.0
+typer>=0.9.0
+
+# Data & validation
+pandas>=2.1.0
+jsonschema>=4.20.0
+datasets>=2.16.0
+
+# Document preprocessing (aligned with HRMS text_extraction stack)
+pypdf>=4.0.0
+python-docx>=1.1.0
+pdfplumber>=0.10.0
+
+# Training & fine-tuning (QLoRA / LoRA)
+torch>=2.1.0
+transformers>=4.38.0
+peft>=0.10.0
+trl>=0.8.0
+accelerate>=0.27.0
+bitsandbytes>=0.42.0
+sentencepiece>=0.1.99
+safetensors>=0.4.0
+
+# Evaluation & benchmarking
+scikit-learn>=1.4.0
+rouge-score>=0.1.2
+nltk>=3.8.1
+
+# Experiment tracking (optional)
+wandb>=0.16.0
+
+# Notebooks
+jupyter>=1.0.0
+ipykernel>=6.29.0
+matplotlib>=3.8.0
+
+# HTTP clients (provider benchmarking, Ollama API)
+httpx>=0.26.0
+requests>=2.31.0
+
+# Testing
+pytest>=8.0.0
+
+# GGUF export / Ollama tooling (install separately if needed)
+# llama-cpp-python
+# See docs/MODEL_LIFECYCLE.md for export workflow

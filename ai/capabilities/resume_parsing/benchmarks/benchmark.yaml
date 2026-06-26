@@ -1,0 +1,155 @@
+benchmark:
+  capability: resume_parsing
+  version: "1.0.0"
+  schema_id: resume_v1
+  dataset: datasets/evaluation/resume_parsing
+  mapping_ref: ../proposal_mapping.yaml
+  field_definitions_ref: ../field_definitions.yaml
+
+  success_criteria:
+    - schema_validation_pass_rate >= 0.95
+    - required_fields_present_rate >= 0.98
+    - toon_projection_pass_rate >= 0.95
+    - confidence_calibration_error <= 0.15
+
+  latency_target_ms: 8000
+  accuracy_target: 0.85
+  cost_target_usd: 0.05
+
+  future_metrics:
+    - field_level_f1
+    - calibration_error
+    - human_review_agreement
+    - cost_per_invocation
+    - section_detection_recall
+    - source_tracking_coverage
+
+profiles:
+  excellent_resume:
+    template: benchmarks/templates/excellent_resume.yaml
+    description: >
+      Well-structured resume with complete sections, consistent dates, and rich
+      skill coverage. Expect high confidence and full schema population.
+    expected_behavior:
+      - All required fields populated with high confidence
+      - Optional sections present when in source
+      - toon_projectable true
+    weight: 1.0
+
+  average_resume:
+    template: benchmarks/templates/average_resume.yaml
+    description: >
+      Typical resume with standard sections; some optional fields missing or sparse.
+    expected_behavior:
+      - Required fields present
+      - confidence >= 0.7
+      - Minor warnings acceptable
+    weight: 1.2
+
+  poor_resume:
+    template: benchmarks/templates/poor_resume.yaml
+    description: >
+      Low-quality scan, inconsistent formatting, or missing contact details.
+    expected_behavior:
+      - Schema validation may pass with empty arrays
+      - confidence below 0.7 triggers review
+      - validation.warnings populated
+    weight: 0.8
+
+  fresh_graduate:
+    template: benchmarks/templates/fresh_graduate.yaml
+    description: >
+      Entry-level profile with education-heavy content and minimal experience.
+    expected_behavior:
+      - experience[] may be empty or internship-only
+      - education[] well-populated
+      - projects[] and skills[] primary signals
+    weight: 1.0
+
+  senior_engineer:
+    template: benchmarks/templates/senior_engineer.yaml
+    description: >
+      10+ years technical career with deep experience and project history.
+    expected_behavior:
+      - experience[] >= 4 entries
+      - skills[] >= 15 entries
+      - total_experience_years >= 10
+    weight: 1.1
+
+  executive:
+    template: benchmarks/templates/executive.yaml
+    description: >
+      C-level or VP profile with leadership narrative and sparse technical detail.
+    expected_behavior:
+      - summary prominent
+      - experience titles at director+ level
+      - skills[] may emphasize soft_skill and domain
+    weight: 0.9
+
+  career_gap:
+    template: benchmarks/templates/career_gap.yaml
+    description: >
+      Employment history with visible gap between roles.
+    expected_behavior:
+      - experience date ranges non-contiguous
+      - total_experience_years excludes gap per policy
+      - cross_field experience_dates_order warnings acceptable
+    weight: 1.0
+
+  career_switch:
+    template: benchmarks/templates/career_switch.yaml
+    description: >
+      Candidate transitioning domains with mixed experience types.
+    expected_behavior:
+      - skills[] spans multiple categories
+      - summary explains transition
+      - experience titles span industries
+    weight: 1.0
+
+  multiple_degrees:
+    template: benchmarks/templates/multiple_degrees.yaml
+    description: >
+      Profile with undergraduate, graduate, and professional degrees.
+    expected_behavior:
+      - education[] >= 2 entries
+      - education sorted reverse-chronologically
+    weight: 0.9
+
+  international_resume:
+    template: benchmarks/templates/international_resume.yaml
+    description: >
+      Non-US format with alternate date order, phone formats, and locale conventions.
+    expected_behavior:
+      - person.phone normalized with country code
+      - dates normalized to YYYY-MM
+      - location structured or raw string
+    weight: 1.1
+
+execution:
+  mode: template_only
+  note: >
+    Benchmark templates define evaluation scenarios only. Populate input slots with
+    sanitized dataset documents from datasets/evaluation/resume_parsing at run time.
+    Do not embed production HR data in capability package.
+
+scoring:
+  field_weights:
+    person.name: 1.5
+    person.email: 1.5
+    person.phone: 1.2
+    experience: 2.0
+    education: 1.5
+    skills: 2.0
+    summary: 0.8
+    certifications: 0.6
+    languages: 0.5
+    projects: 0.7
+    awards: 0.3
+    publications: 0.3
+    links: 0.4
+
+  review_triggers:
+    - confidence < 0.6
+    - validation.is_valid == false
+    - validation.toon_projectable == false
+    - person.email missing or invalid

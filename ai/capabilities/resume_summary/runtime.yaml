@@ -1,0 +1,10 @@
+preferred_provider: null
+preferred_model_alias: summarizer
+temperature: 0.4
+top_p: 1.0
+max_tokens: 1024
+streaming: false
+timeout_seconds: null
+retries: null
+fallback_policy: routing_chain
+output_mode: text

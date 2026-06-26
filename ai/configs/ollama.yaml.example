@@ -1,0 +1,38 @@
+# Ollama deployment configuration
+# Copy to ollama.yaml. Used for Modelfile generation and local serve.
+
+ollama:
+  host: ${OLLAMA_HOST:http://localhost:11434}
+  model_name: ${OLLAMA_MODEL:hrms-resume-jd-parser}
+  tag: latest
+
+  # Source weights (post-merge HF folder or GGUF path)
+  source:
+    type: gguf                    # gguf | huggingface
+  gguf_path: models/gguf/${ollama.model_name}-q4_K_M.gguf
+  merged_path: models/merged/${ollama.model_name}
+  registry: registry/models/${ollama.model_name}.yaml
+
+  modelfile:
+    output: exports/modelfiles/${ollama.model_name}.Modelfile
+    template: llama3
+    temperature: 0.2
+    top_p: 0.9
+    num_ctx: 8192
+    stop_tokens: []
+
+  # System prompts loaded from prompts/ at build time
+  prompts:
+    resume_system: prompts/resume_parser.yaml
+    jd_system: prompts/jd_parser.yaml
+
+  # Quantization (when converting to GGUF)
+  quantization:
+    method: q4_K_M
+    # Alternatives: q8_0, f16 — trade speed vs quality
+
+  # Health check after deploy
+  health:
+    endpoint: /api/chat
+    test_message: "Reply with OK"
+    expected_substring: OK

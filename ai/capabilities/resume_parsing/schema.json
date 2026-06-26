@@ -1,0 +1,477 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "resume_v1",
+  "title": "Resume Parse Output",
+  "description": "Canonical HRMS Resume object produced by Resume Parsing v1. Superset of Resume TOON with structured refs, provenance, and normalized-only sections.",
+  "type": "object",
+  "$defs": {
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "confidence_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "source_enum": {
+      "type": "string",
+      "enum": ["extracted", "inferred", "user_provided", "knowledge_linked"]
+    },
+    "skill_category": {
+      "type": "string",
+      "enum": [
+        "language",
+        "framework",
+        "library",
+        "database",
+        "cloud",
+        "devops",
+        "tool",
+        "methodology",
+        "domain",
+        "soft_skill",
+        "other"
+      ]
+    },
+    "proficiency_level": {
+      "type": "string",
+      "enum": ["beginner", "intermediate", "advanced", "expert"]
+    },
+    "language_proficiency": {
+      "type": "string",
+      "enum": ["native", "fluent", "professional", "conversational", "basic"]
+    },
+    "certification_status": {
+      "type": "string",
+      "enum": ["active", "expired", "revoked", "unknown"]
+    },
+    "link_type": {
+      "type": "string",
+      "enum": [
+        "linkedin",
+        "github",
+        "portfolio",
+        "website",
+        "twitter",
+        "stackoverflow",
+        "medium",
+        "behance",
+        "dribbble",
+        "other"
+      ]
+    },
+    "location_object": {
+      "type": "object",
+      "properties": {
+        "raw": { "type": "string" },
+        "canonical_id": { "type": "string" },
+        "city": { "type": "string" },
+        "region": { "type": "string" },
+        "country": { "type": "string" },
+        "postal_code": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "remote": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "location_or_string": {
+      "oneOf": [
+        { "type": "string" },
+        { "$ref": "#/$defs/location_object" }
+      ]
+    },
+    "skill_object": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "canonical_id": { "type": "string" },
+        "canonical_name": { "type": "string" },
+        "category": { "$ref": "#/$defs/skill_category" },
+        "years_experience": { "type": "number", "minimum": 0 },
+        "proficiency": { "$ref": "#/$defs/proficiency_level" },
+        "confidence": { "$ref": "#/$defs/confidence_score" },
+        "source": { "$ref": "#/$defs/source_enum" }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "skill_or_string": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "$ref": "#/$defs/skill_object" }
+      ]
+    },
+    "person_object": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "location": { "$ref": "#/$defs/location_or_string" },
+        "linkedin": { "$ref": "#/$defs/url" },
+        "github": { "$ref": "#/$defs/url" },
+        "portfolio": { "$ref": "#/$defs/url" },
+        "website": { "$ref": "#/$defs/url" },
+        "twitter": { "$ref": "#/$defs/url" },
+        "otherUrls": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/url" }
+        },
+        "current_location": { "type": "string" },
+        "city": { "type": "string" },
+        "address": { "type": "string" },
+        "preferred_location": { "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidence_score" }
+      },
+      "required": ["name", "email", "phone"],
+      "additionalProperties": false
+    },
+    "experience_item": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "company": {
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "canonical_id": { "type": "string" }
+              },
+              "required": ["name"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "start_date": { "type": "string" },
+        "end_date": { "type": "string" },
+        "years": { "type": "number", "minimum": 0 },
+        "description": { "type": "string" },
+        "location": { "$ref": "#/$defs/location_or_string" },
+        "skills_used": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/skill_or_string" }
+        },
+        "is_current": { "type": "boolean" },
+        "confidence": { "$ref": "#/$defs/confidence_score" },
+        "source": { "$ref": "#/$defs/source_enum" }
+      },
+      "additionalProperties": false
+    },
+    "education_item": {
+      "type": "object",
+      "properties": {
+        "degree": { "type": "string" },
+        "field": { "type": "string" },
+        "institution": { "type": "string" },
+        "year": { "type": "string" },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "gpa": { "type": "string" },
+        "location": { "$ref": "#/$defs/location_or_string" },
+        "confidence": { "$ref": "#/$defs/confidence_score" },
+        "source": { "$ref": "#/$defs/source_enum" }
+      },
+      "additionalProperties": false
+    },
+    "project_item": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "url": { "$ref": "#/$defs/url" },
+        "technologies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/skill_or_string" }
+        },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "role": { "type": "string" },
+        "organization": {
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "canonical_id": { "type": "string" }
+              },
+              "required": ["name"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "confidence": { "$ref": "#/$defs/confidence_score" },
+        "source": { "$ref": "#/$defs/source_enum" }
+      },
+      "additionalProperties": false
+    },
+    "certification_object": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "issuer": { "type": "string" },
+        "year": { "type": "string" },
+        "expiry": { "type": "string" },
+        "credential_id": { "type": "string" },
+        "url": { "$ref": "#/$defs/url" },
+        "status": { "$ref": "#/$defs/certification_status" },
+        "canonical_id": { "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidence_score" },
+        "source": { "$ref": "#/$defs/source_enum" }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "certification_or_string": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "$ref": "#/$defs/certification_object" }
+      ]
+    },
+    "language_object": {
+      "type": "object",
+      "properties": {
+        "language": { "type": "string", "minLength": 1 },
+        "proficiency": { "$ref": "#/$defs/language_proficiency" },
+        "reading": { "$ref": "#/$defs/language_proficiency" },
+        "writing": { "$ref": "#/$defs/language_proficiency" },
+        "speaking": { "$ref": "#/$defs/language_proficiency" },
+        "canonical_id": { "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidence_score" },
+        "source": { "$ref": "#/$defs/source_enum" }
+      },
+      "required": ["language"],
+      "additionalProperties": false
+    },
+    "language_or_string": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "$ref": "#/$defs/language_object" }
+      ]
+    },
+    "award_item": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "issuer": { "type": "string" },
+        "year": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidence_score" },
+        "source": { "$ref": "#/$defs/source_enum" }
+      },
+      "required": ["name"],
+      "additionalProperties": false
+    },
+    "publication_item": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "authors": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "venue": { "type": "string" },
+        "year": { "type": "string" },
+        "url": { "$ref": "#/$defs/url" },
+        "doi": { "type": "string" },
+        "abstract": { "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidence_score" },
+        "source": { "$ref": "#/$defs/source_enum" }
+      },
+      "required": ["title"],
+      "additionalProperties": false
+    },
+    "link_item": {
+      "type": "object",
+      "properties": {
+        "type": { "$ref": "#/$defs/link_type" },
+        "url": { "$ref": "#/$defs/url" },
+        "label": { "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidence_score" },
+        "source": { "$ref": "#/$defs/source_enum" }
+      },
+      "required": ["url"],
+      "additionalProperties": false
+    },
+    "field_source_entry": {
+      "type": "object",
+      "properties": {
+        "field_path": { "type": "string" },
+        "source_text": { "type": "string" },
+        "section": { "type": "string" },
+        "page": { "type": "integer", "minimum": 1 },
+        "confidence": { "$ref": "#/$defs/confidence_score" },
+        "source": { "$ref": "#/$defs/source_enum" }
+      },
+      "required": ["field_path"],
+      "additionalProperties": false
+    },
+    "source_tracking_object": {
+      "type": "object",
+      "properties": {
+        "document_id": { "type": "string" },
+        "extraction_method": {
+          "type": "string",
+          "enum": ["llm", "ocr", "hybrid", "manual", "unknown"]
+        },
+        "field_sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/field_source_entry" }
+        },
+        "sections_detected": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "unmapped_text_spans": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": { "type": "string" },
+              "reason": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "metadata_object": {
+      "type": "object",
+      "properties": {
+        "parsed_id": { "type": "string" },
+        "raw_file_id": { "type": "string" },
+        "model_version": { "type": "string" },
+        "parser_version": { "type": "string" },
+        "capability_id": { "type": "string" },
+        "capability_version": { "type": "string" },
+        "provider": { "type": "string" },
+        "parsed_at": { "type": "string", "format": "date-time" },
+        "locale": { "type": "string" },
+        "input_format": {
+          "type": "string",
+          "enum": ["text", "pdf", "docx", "html", "image", "unknown"]
+        },
+        "page_count": { "type": "integer", "minimum": 1 },
+        "processing_time_ms": { "type": "number", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "validation_issue": {
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "field_path": { "type": "string" },
+        "message": { "type": "string" },
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning", "info"]
+        }
+      },
+      "required": ["code", "message", "severity"],
+      "additionalProperties": false
+    },
+    "validation_object": {
+      "type": "object",
+      "properties": {
+        "is_valid": { "type": "boolean" },
+        "toon_projectable": { "type": "boolean" },
+        "errors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/validation_issue" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/validation_issue" }
+        },
+        "field_status": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": ["present", "missing", "inferred", "low_confidence", "invalid"]
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "type": {
+      "type": "string",
+      "const": "resume"
+    },
+    "person": {
+      "$ref": "#/$defs/person_object"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "skills": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/skill_or_string" }
+    },
+    "experience": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/experience_item" }
+    },
+    "education": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/education_item" }
+    },
+    "projects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/project_item" }
+    },
+    "certifications": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/certification_or_string" }
+    },
+    "languages": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/language_or_string" }
+    },
+    "awards": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/award_item" }
+    },
+    "publications": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/publication_item" }
+    },
+    "links": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/link_item" }
+    },
+    "total_experience_years": {
+      "type": "number",
+      "minimum": 0
+    },
+    "confidence": {
+      "$ref": "#/$defs/confidence_score"
+    },
+    "source_tracking": {
+      "$ref": "#/$defs/source_tracking_object"
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata_object"
+    },
+    "validation": {
+      "$ref": "#/$defs/validation_object"
+    }
+  },
+  "required": [
+    "type",
+    "person",
+    "skills",
+    "experience",
+    "education"
+  ],
+  "additionalProperties": false
+}

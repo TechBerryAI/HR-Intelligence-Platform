@@ -1,0 +1,17 @@
+# Experience entity template — structure only, no sample data.
+
+_template:
+  contract: ../../contracts/experience.yaml
+  schema: ../experience.yaml#/experience_object
+  version: "1.0.0"
+  kind: template
+
+title: null
+company: null
+from: null
+to: null
+years: null
+description: null
+location: null
+skills_used: []
+is_current: null

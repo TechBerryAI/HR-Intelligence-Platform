@@ -1,0 +1,16 @@
+# Project entity template — structure only, no sample data.
+
+_template:
+  contract: ../../contracts/project.yaml
+  schema: ../project.yaml#/project_object
+  version: "1.0.0"
+  kind: template
+
+name: null
+description: null
+url: null
+technologies: []
+from: null
+to: null
+role: null
+organization: null

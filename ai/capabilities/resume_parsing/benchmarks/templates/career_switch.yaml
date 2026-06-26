@@ -1,0 +1,29 @@
+# Benchmark Template: Career Switch
+
+profile: career_switch
+capability: resume_parsing
+schema_id: resume_v1
+
+input:
+  format: text
+  placeholder: "[DOCUMENT_TEXT_PLACEHOLDER]"
+
+expected_output_shape:
+  experience:
+    min_items: 2
+    note: Multiple industries or role families
+  skills:
+    min_items: 5
+    categories_expected:
+      - domain
+      - soft_skill
+      - language
+
+quality_gates:
+  confidence_min: 0.65
+  schema_valid: true
+
+evaluation_focus:
+  - cross_industry_experience_ordering
+  - transferable_skill_extraction
+  - summary_transition_narrative

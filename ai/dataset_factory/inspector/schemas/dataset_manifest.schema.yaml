@@ -1,0 +1,90 @@
+# Schema — dataset_manifest.yaml (inspector output)
+
+schema:
+  id: DF-SCHEMA-DATASET-MANIFEST
+  version: "1.0.0"
+  artifact_type: DATASET_MANIFEST
+
+required:
+  - manifest
+  - dataset
+  - source
+  - inspection
+  - status
+
+properties:
+  manifest:
+    type: object
+    required: [id, version, artifact_type, created_at]
+    properties:
+      id: { type: string, const: DATASET-MANIFEST }
+      version: { type: semver }
+      artifact_type: { type: string, const: DATASET_MANIFEST }
+      created_at: { type: datetime }
+      factory_version: { type: semver }
+      run_id: { type: uuid }
+
+  dataset:
+    type: object
+    required: [id, version, name]
+    properties:
+      id:
+        type: string
+        pattern: "^DS-[A-Z0-9-]+$"
+        description: Dataset ID
+      version:
+        type: semver
+        description: Dataset Version
+      name:
+        type: string
+        description: Dataset Name
+      doc_type:
+        type: enum
+        values: [resume, job_description, mixed]
+      creation_date:
+        type: date
+        description: Dataset creation or ingestion date
+
+  source:
+    type: object
+    required: [path, mutability]
+    properties:
+      path: { type: path }
+      mutability: { type: string, const: read_only }
+      hash_of_inventory: { type: string, description: "sha256: aggregate optional" }
+
+  inspection:
+    type: object
+    required: [stage_id, stage_version, completed_at]
+    properties:
+      stage_id: { type: string, const: STAGE-INSPECTOR }
+      stage_version: { type: semver }
+      completed_at: { type: datetime }
+      duration_seconds: { type: number }
+
+  status:
+    type: enum
+    values: [pending_inspection, inspected, inspected_with_warnings, inspection_failed]
+    description: Dataset Status
+
+  medallion:
+    type: object
+    properties:
+      tier: { type: enum, values: [bronze, silver, gold] }
+      classified_at: { type: datetime }
+
+  artifacts:
+    type: object
+    description: Relative paths to sibling output files
+    properties:
+      dataset_profile: { type: path }
+      quality_report: { type: path }
+      statistics: { type: path }
+      hash_index: { type: path }
+      inspection_log: { type: path }
+
+  registry:
+    type: object
+    properties:
+      publish: { type: boolean }
+      registry_path: { type: path }

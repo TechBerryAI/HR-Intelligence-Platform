@@ -1,0 +1,33 @@
+# Benchmark Template: Executive
+
+profile: executive
+capability: resume_parsing
+schema_id: resume_v1
+
+input:
+  format: text
+  placeholder: "[DOCUMENT_TEXT_PLACEHOLDER]"
+
+expected_output_shape:
+  summary:
+    required: true
+    note: Leadership narrative prominent
+  experience:
+    min_items: 3
+    title_patterns:
+      - director
+      - vp
+      - chief
+      - head
+      - president
+  skills:
+    note: May emphasize domain and soft_skill categories
+
+quality_gates:
+  confidence_min: 0.7
+  schema_valid: true
+
+evaluation_focus:
+  - executive_title_extraction
+  - sparse_technical_skill_handling
+  - board_and_advisory_roles

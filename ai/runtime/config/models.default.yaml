@@ -1,0 +1,36 @@
+aliases:
+  resume-parser:
+    default_provider: ollama
+    description: Resume parsing model alias.
+    models:
+      ollama: qwen2.5:7b-instruct
+
+  jd-parser:
+    default_provider: ollama
+    description: Job description parsing model alias.
+    models:
+      ollama: qwen2.5:7b-instruct
+
+  matching-engine:
+    default_provider: ollama
+    description: Candidate matching model alias.
+    models:
+      ollama: qwen2.5:7b-instruct
+
+  summarizer:
+    default_provider: ollama
+    description: Resume summarization model alias.
+    models:
+      ollama: qwen2.5:7b-instruct
+
+  interview-generator:
+    default_provider: ollama
+    description: Interview question generation model alias.
+    models:
+      ollama: qwen2.5:7b-instruct
+
+  hr-chat:
+    default_provider: ollama
+    description: HR chat assistant model alias.
+    models:
+      ollama: qwen2.5:7b-instruct

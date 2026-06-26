@@ -1,0 +1,7 @@
+id: resume_summary_v1
+version: "1.0.0"
+status: active
+template_file: null
+variables:
+  - input
+description: Resume summary prompt (template not yet implemented).

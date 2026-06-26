@@ -1,0 +1,25 @@
+# Job Description document template — structure only, no sample data.
+
+_template:
+  schema: ../job_description.yaml
+  version: "1.0.0"
+  kind: template
+
+type: job_description
+
+title: null
+company: null
+location: null
+employment_type: null
+
+skills: []
+mandatory_skills: []
+preferred_skills: []
+
+responsibilities: []
+qualifications: []
+keywords: []
+
+min_experience_years: null
+max_experience_years: null
+salary_range: null

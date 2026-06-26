@@ -1,0 +1,13 @@
+location_object:
+  type: object
+  contract_ref: ../contracts/location.yaml
+  properties:
+    raw: { type: string }
+    canonical_id: { type: string }
+    city: { type: string }
+    region: { type: string }
+    country: { type: string }
+    postal_code: { type: string }
+    latitude: { type: number }
+    longitude: { type: number }
+    remote: { type: boolean }

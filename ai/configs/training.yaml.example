@@ -1,0 +1,69 @@
+# Training configuration
+# Copy to training.yaml and adjust. Secrets via environment variables only.
+
+training:
+  run_name: ${WANDB_PROJECT:hrms-qlora-resume-jd}-v1
+  seed: ${AI_RANDOM_SEED:42}
+  output_dir: training/runs/${training.run_name}
+  config_snapshot: training/configs/${training.run_name}.yaml
+
+  # Base model (Hugging Face hub ID or local path)
+  base_model: meta-llama/Llama-3.2-3B-Instruct
+  trust_remote_code: false
+
+  # Dataset (JSONL: instruction / input / output TOON)
+  dataset:
+    version: parsing-v1
+    train_path: datasets/jsonl/parsing-v1/train.jsonl
+    val_path: datasets/jsonl/parsing-v1/val.jsonl
+    test_path: datasets/jsonl/parsing-v1/test.jsonl
+    registry: registry/datasets/parsing-v1.yaml
+    max_seq_length: 4096
+
+  # QLoRA
+  qlora:
+    enabled: true
+    lora_r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    target_modules:
+      - q_proj
+      - k_proj
+      - v_proj
+      - o_proj
+    bits: 4
+    double_quant: true
+    quant_type: nf4
+
+  # Training hyperparameters
+  hyperparameters:
+    num_train_epochs: 3
+    per_device_train_batch_size: 2
+    gradient_accumulation_steps: 8
+    learning_rate: 2.0e-4
+    warmup_ratio: 0.03
+    lr_scheduler_type: cosine
+    weight_decay: 0.01
+    max_grad_norm: 1.0
+    logging_steps: 10
+    save_steps: 200
+    eval_steps: 200
+    bf16: true
+    gradient_checkpointing: true
+
+  # Experiment tracking
+  wandb:
+    enabled: true
+    project: ${WANDB_PROJECT:hrms-ai-parsing}
+    entity: null
+    api_key: ${WANDB_API_KEY:}
+
+  # Merge adapter into base after training
+  merge:
+    enabled: true
+    output_path: models/merged/hrms-parsing-v1
+    adapter_output: models/adapters/${training.run_name}
+
+  registry:
+    model_id: hrms-parsing-v1
+    register_on_complete: true

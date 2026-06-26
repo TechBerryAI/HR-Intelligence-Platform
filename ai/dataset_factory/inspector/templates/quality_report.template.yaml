@@ -1,0 +1,70 @@
+# Quality report template — structure only. Scores null until M3.2 implementation.
+# Schema: schemas/quality_report.schema.yaml
+# Model: quality_model.yaml
+
+_template:
+  schema: schemas/quality_report.schema.yaml
+  model: ../quality_model.yaml
+  version: "1.0.0"
+  kind: template
+
+report:
+  id: QUALITY-REPORT
+  version: null
+  created_at: null
+  run_id: null
+  model_ref: ../quality_model.yaml
+  computation_status: pending
+
+dataset_ref:
+  id: null
+  version: null
+
+categories:
+  integrity:
+    score: null
+    weight: 0.20
+    signals: {}
+    downgrade_triggers_fired: []
+  extractability:
+    score: null
+    weight: 0.20
+    signals: {}
+    downgrade_triggers_fired: []
+  ocr_readiness:
+    score: null
+    weight: 0.15
+    signals: {}
+    downgrade_triggers_fired: []
+  formatting_quality:
+    score: null
+    weight: 0.10
+    signals: {}
+    downgrade_triggers_fired: []
+  metadata_quality:
+    score: null
+    weight: 0.10
+    signals: {}
+    downgrade_triggers_fired: []
+  duplication_risk:
+    score: null
+    weight: 0.15
+    signals: {}
+    downgrade_triggers_fired: []
+  language_consistency:
+    score: null
+    weight: 0.10
+    signals: {}
+    downgrade_triggers_fired: []
+
+overall:
+  score: null
+  grade: null
+  label: null
+
+gates:
+  extraction_ready: null
+  manual_review_required: null
+  block_extraction: null
+
+findings: []

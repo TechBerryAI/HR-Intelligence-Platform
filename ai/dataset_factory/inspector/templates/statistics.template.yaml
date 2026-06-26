@@ -1,0 +1,60 @@
+# Statistics template — structure only. No computed values.
+# Schema: schemas/statistics.schema.yaml
+
+_template:
+  schema: schemas/statistics.schema.yaml
+  version: "1.0.0"
+  kind: template
+
+statistics:
+  id: DATASET-STATISTICS
+  version: null
+  created_at: null
+  run_id: null
+
+dataset_ref:
+  id: null
+  version: null
+
+files:
+  total: null
+  by_format: {}
+  by_doc_type: {}
+  by_extension: {}
+
+size:
+  total_bytes: null
+  average_bytes: null
+  median_bytes: null
+  min_bytes: null
+  max_bytes: null
+  percentiles:
+    p50: null
+    p90: null
+    p99: null
+
+pages:
+  total_estimated: null
+  average_per_file: null
+  by_format: {}
+
+duplicates:
+  exact_groups: null
+  duplicate_files: null
+  unique_files: null
+
+issues:
+  corrupt: null
+  password_protected: null
+  zero_byte: null
+  unsupported_format: null
+  read_errors: null
+
+languages:
+  primary: null
+  distribution: {}
+
+ocr:
+  ocr_required: null
+  ocr_recommended: null
+  text_layer_ok: null

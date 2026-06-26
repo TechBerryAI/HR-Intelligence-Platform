@@ -1,0 +1,15 @@
+benchmark:
+  capability: interview_generation
+  version: "1.0.0"
+  dataset: datasets/evaluation/interview_generation
+  expected_schema: interview_v1
+  success_criteria:
+    - schema_validation_pass_rate >= 0.95
+    - required_fields_present_rate >= 0.98
+  latency_target_ms: 7000
+  accuracy_target: 0.78
+  future_metrics:
+    - field_level_f1
+    - calibration_error
+    - human_review_agreement
+    - cost_per_invocation

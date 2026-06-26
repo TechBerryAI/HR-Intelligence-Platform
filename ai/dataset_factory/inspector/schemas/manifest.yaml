@@ -1,0 +1,25 @@
+# Schema registry — Dataset Inspector outputs
+
+registry:
+  id: DF-INSPECTOR-SCHEMAS
+  version: "1.0.0"
+
+schemas:
+  - id: DF-SCHEMA-DATASET-MANIFEST
+    file: dataset_manifest.schema.yaml
+    template: ../templates/dataset_manifest.template.yaml
+  - id: DF-SCHEMA-DATASET-PROFILE
+    file: dataset_profile.schema.yaml
+    template: ../templates/dataset_profile.template.yaml
+  - id: DF-SCHEMA-QUALITY-REPORT
+    file: quality_report.schema.yaml
+    template: ../templates/quality_report.template.yaml
+  - id: DF-SCHEMA-STATISTICS
+    file: statistics.schema.yaml
+    template: ../templates/statistics.template.yaml
+  - id: DF-SCHEMA-HASH-INDEX
+    file: hash_index.schema.json
+    template: ../templates/hash_index.template.json
+  - id: DF-SCHEMA-INSPECTION-LOG
+    file: inspection_log.schema.yaml
+    template: ../templates/inspection_log.template.yaml

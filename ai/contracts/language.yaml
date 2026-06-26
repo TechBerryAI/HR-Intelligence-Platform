@@ -1,0 +1,74 @@
+contract:
+  id: CONTRACT-LANGUAGE
+  version: "1.0.0"
+  kind: domain
+  status: active
+  supersedes: null
+  updated_at: "2026-06-25"
+
+purpose: >
+  Spoken or written language proficiency on a resume. Optional in HRMS TOON;
+  TypeScript types include languages[] as string[] — normalized form supports structure.
+
+fields:
+  language:
+    type: string
+    description: Language name (e.g. English, Spanish).
+    toon_path: languages
+  proficiency:
+    type: enum
+    enum: [native, fluent, professional, conversational, basic]
+    toon_path: null
+  reading:
+    type: enum
+    enum: [native, fluent, professional, conversational, basic]
+    toon_path: null
+  writing:
+    type: enum
+    enum: [native, fluent, professional, conversational, basic]
+    toon_path: null
+  speaking:
+    type: enum
+    enum: [native, fluent, professional, conversational, basic]
+    toon_path: null
+  canonical_id:
+    type: string
+    description: ISO 639-1/639-3 code when resolved.
+    toon_path: null
+
+required:
+  - language
+
+optional:
+  - proficiency
+  - reading
+  - writing
+  - speaking
+  - canonical_id
+
+relationships:
+  - id: language-resume
+    target: contracts/resume.yaml
+    field: languages
+    cardinality: many_to_one
+
+normalization_rules:
+  - id: language-toon-string
+    applies_to: language
+    rule: TOON languages[] may be plain strings; set language field, proficiency null.
+    priority: 90
+  - id: language-proficiency-map
+    applies_to: proficiency
+    rule: >
+      Map CEFR levels (A1–C2) and colloquial terms (mother tongue, bilingual) to enum
+      when parseable.
+    priority: 70
+  - id: language-iso-resolve
+    applies_to: canonical_id
+    rule: Resolve language name to ISO code when unambiguous.
+    priority: 50
+
+validation_notes:
+  - languages not in LLM resume prompt today; field may be absent in production parses.
+  - TOON pipe-list stores language names only unless object array extension adopted.
+  - Duplicate language entries should be merged keeping highest proficiency rank.

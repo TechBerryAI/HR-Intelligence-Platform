@@ -1,0 +1,25 @@
+# Validator stage — architecture (not implemented)
+
+architecture:
+  id: DF-VALIDATOR-ARCH
+  version: "1.0.0"
+  status: interface_only
+
+purpose: >
+  Quality gate between extraction and normalization. Ensures ≥95% of extracted
+  records meet minimum text and integrity thresholds before labeling spend.
+
+checks:
+  - id: non_empty_text
+    field: payload.raw_text
+    min_length: 100
+  - id: valid_utf8
+  - id: source_hash_match
+  - id: doc_type_known
+  - id: extraction_warnings_below_threshold
+
+output:
+  per_record: pass | fail | warn
+  summary: pass_rate, failure_codes_histogram
+
+implementation: deferred_M4.1

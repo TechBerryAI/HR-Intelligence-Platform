@@ -1,0 +1,17 @@
+# Location entity template — structure only, no sample data.
+
+_template:
+  contract: ../../contracts/location.yaml
+  schema: ../location.yaml#/location_object
+  version: "1.0.0"
+  kind: template
+
+raw: null
+canonical_id: null
+city: null
+region: null
+country: null
+postal_code: null
+latitude: null
+longitude: null
+remote: null

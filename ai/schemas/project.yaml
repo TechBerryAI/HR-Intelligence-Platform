@@ -1,0 +1,12 @@
+project_object:
+  type: object
+  contract_ref: ../contracts/project.yaml
+  properties:
+    name: { type: string }
+    description: { type: string }
+    url: { type: url }
+    technologies: { type: array, items: { $ref: "skill.yaml#/skill_object" } }
+    from: { type: string }
+    to: { type: string }
+    role: { type: string }
+    organization: { one_of: [{ type: string }, { $ref: "company.yaml#/company_object" }] }

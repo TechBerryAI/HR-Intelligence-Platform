@@ -1,0 +1,56 @@
+tasks:
+  resume_parsing:
+    prompt_id: resume_parser_v1
+    schema_id: resume_v1
+    model_alias: resume-parser
+    description: Parse resume documents into structured output.
+    validation:
+      schema_validate: true
+
+  jd_parsing:
+    prompt_id: jd_parser_v1
+    schema_id: jd_v1
+    model_alias: jd-parser
+    description: Parse job descriptions into structured output.
+    validation:
+      schema_validate: true
+
+  bulk_resume_parsing:
+    prompt_id: resume_parser_v1
+    schema_id: resume_v1
+    model_alias: resume-parser
+    description: Batch resume parsing capability.
+    validation:
+      schema_validate: true
+
+  candidate_matching:
+    prompt_id: candidate_matching_v1
+    schema_id: matching_v1
+    model_alias: matching-engine
+    description: Match candidates to job requirements.
+    validation:
+      schema_validate: true
+
+  resume_summary:
+    prompt_id: resume_summary_v1
+    schema_id: summary_v1
+    model_alias: summarizer
+    description: Generate concise resume summaries.
+    validation:
+      schema_validate: false
+
+  interview_generation:
+    prompt_id: interview_generation_v1
+    schema_id: interview_v1
+    model_alias: interview-generator
+    description: Generate interview questions from resume and JD.
+    validation:
+      schema_validate: true
+
+  hr_chat:
+    prompt_id: hr_chat_v1
+    schema_id: chat_v1
+    model_alias: hr-chat
+    description: HR assistant conversational interface.
+    validation:
+      schema_validate: false

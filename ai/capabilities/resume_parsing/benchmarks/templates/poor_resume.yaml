@@ -1,0 +1,36 @@
+# Benchmark Template: Poor Resume
+
+profile: poor_resume
+capability: resume_parsing
+schema_id: resume_v1
+
+input:
+  format: text
+  source: datasets/evaluation/resume_parsing/[DOCUMENT_ID]/raw_text.txt
+  placeholder: "[CORRUPTED_OR_SPARSE_TEXT_PLACEHOLDER]"
+
+expected_output_shape:
+  type: resume
+  required_sections:
+    - person
+    - skills
+    - experience
+    - education
+
+quality_gates:
+  confidence_max: 0.69
+  schema_valid: true
+  review_required: true
+
+evaluation_focus:
+  - graceful_degradation
+  - no_fabrication
+  - validation_warnings_populated
+
+failure_modes:
+  - missing_contact_details
+  - garbled_ocr_text
+  - non_resume_document
+
+notes:
+  - Empty arrays acceptable; keys must exist per TOON contract.

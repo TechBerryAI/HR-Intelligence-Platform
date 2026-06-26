@@ -1,0 +1,108 @@
+schema:
+  id: SCHEMA-RESUME
+  version: "1.0.0"
+  status: active
+  contract_ref: ../contracts/resume.yaml
+  toon_type: resume
+  updated_at: "2026-06-25"
+
+description: >
+  Canonical normalized Resume document. Superset of HRMS Resume TOON with structured
+  entity refs and projects[]. TOON projection uses schemas/mappings/toon.yaml.
+
+root:
+  type: object
+  discriminator:
+    field: type
+    value: resume
+
+composition:
+  contracts:
+    - resume
+    - skill
+    - experience
+    - education
+    - project
+    - certification
+    - language
+    - location
+
+properties:
+  type:
+    const: resume
+    required: true
+  person:
+    type: object
+    required: true
+    properties:
+      name: { type: string, required: true }
+      email: { type: string, required: true }
+      phone: { type: string, required: true }
+      location: { $ref: "#/defs/location_or_string" }
+      linkedin: { type: url }
+      github: { type: url }
+      portfolio: { type: url }
+      website: { type: url }
+      twitter: { type: url }
+      otherUrls: { type: array, items: { type: url } }
+  summary: { type: string }
+  skills:
+    type: array
+    required: true
+    items: { $ref: "#/defs/skill_or_string" }
+  experience:
+    type: array
+    required: true
+    items: { $ref: "#/defs/experience_item" }
+  education:
+    type: array
+    required: true
+    items: { $ref: "#/defs/education_item" }
+  projects:
+    type: array
+    items: { $ref: "#/defs/project_item" }
+  certifications:
+    type: array
+    items: { $ref: "#/defs/certification_or_string" }
+  languages:
+    type: array
+    items: { $ref: "#/defs/language_or_string" }
+  total_experience_years: { type: number }
+
+defs:
+  location_or_string:
+    one_of:
+      - { type: string }
+      - { $ref: "location.yaml#/location_object" }
+  skill_or_string:
+    one_of:
+      - { type: string }
+      - { $ref: "skill.yaml#/skill_object" }
+  certification_or_string:
+    one_of:
+      - { type: string }
+      - { $ref: "certification.yaml#/certification_object" }
+  language_or_string:
+    one_of:
+      - { type: string }
+      - { $ref: "language.yaml#/language_object" }
+  experience_item:
+    $ref: "experience.yaml#/experience_object"
+  education_item:
+    $ref: "education.yaml#/education_object"
+  project_item:
+    $ref: "project.yaml#/project_object"
+
+toon_projection:
+  mapping_ref: mappings/toon.yaml#resume
+  serializer: backend/toon.py#toon_dumps
+  validator: backend/parsing_utils.py#validate_toon_format
+
+metadata:
+  provenance_fields:
+    - parsed_id
+    - raw_file_id
+    - confidence
+    - model_version
+    - parsed_at
+  note: Provenance is not part of TOON wire format; attach in normalized dataset layer.

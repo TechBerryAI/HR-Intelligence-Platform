@@ -1,0 +1,37 @@
+capability:
+  id: interview_generation
+  name: Interview Question Generation
+  version: 1.0.0
+  owner: ai-platform
+  status: active
+  supported_providers:
+  - mock
+  - ollama
+  - openai
+  - grok
+  supported_models:
+  - interview-generator
+  input_type: structured_pair
+  output_type: json
+  dependencies: []
+  schema:
+    id: interview_v1
+    file: schema.json
+  prompt:
+    id: interview_generation_v1
+    file: prompt.md
+    version: 1.0.0
+  validation:
+    file: validation.yaml
+  examples:
+    good: examples/good
+    bad: examples/bad
+    edge_cases: examples/edge_cases
+  benchmarks:
+    file: benchmarks/benchmark.yaml
+  tags:
+  - interview
+  - generation
+  - recruiting
+  description: Generate role-appropriate interview questions from resume and job description
+    context.

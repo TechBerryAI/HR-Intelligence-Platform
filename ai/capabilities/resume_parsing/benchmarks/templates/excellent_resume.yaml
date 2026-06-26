@@ -1,0 +1,42 @@
+# Benchmark Template: Excellent Resume
+# Structure only — no production HR data.
+
+profile: excellent_resume
+capability: resume_parsing
+schema_id: resume_v1
+
+input:
+  format: text
+  source: datasets/evaluation/resume_parsing/[DOCUMENT_ID]/raw_text.txt
+  placeholder: "[DOCUMENT_TEXT_PLACEHOLDER]"
+
+expected_output_shape:
+  type: resume
+  required_sections:
+    - person
+    - summary
+    - skills
+    - experience
+    - education
+  optional_sections:
+    - certifications
+    - languages
+    - projects
+    - links
+    - awards
+    - publications
+
+quality_gates:
+  confidence_min: 0.85
+  schema_valid: true
+  toon_projectable: true
+  required_fields_present: true
+
+evaluation_focus:
+  - field_completeness
+  - date_normalization_accuracy
+  - skill_dedupe_correctness
+  - source_tracking_coverage
+
+notes:
+  - Replace input.source with sanitized evaluation document at benchmark run time.

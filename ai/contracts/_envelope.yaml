@@ -1,0 +1,54 @@
+# Contract envelope — every file in contracts/ follows this structure.
+# Domain contracts are NOT JSON Schema; they define semantic agreement for
+# preprocessing, normalization, knowledge linking, and TOON projection.
+
+envelope:
+  version: "1.0.0"
+  required_keys:
+    - contract
+    - purpose
+    - fields
+    - required
+    - optional
+    - relationships
+    - normalization_rules
+    - validation_notes
+
+contract:
+  id: string          # CONTRACT-{ENTITY}
+  version: semver     # 1.0.0
+  kind: enum          # domain | aggregate | reference
+  status: enum        # draft | active | deprecated
+  supersedes: string | null
+  updated_at: date    # YYYY-MM-DD
+
+purpose: string       # multi-line allowed
+
+fields:
+  # field_name:
+  #   type: string | number | boolean | date | datetime | uuid | url | enum | object | array | ref
+  #   ref: contracts/{entity}.yaml#field_name   # when type is ref
+  #   items: { type, ref }                      # when type is array
+  #   enum: [ ... ]
+  #   description: string
+  #   toon_path: string | null                  # HRMS TOON dot-path if projected
+  #   toon_extension: boolean                   # true if TOON-only, not in normalized form
+
+required: []          # list of field names
+optional: []          # list of field names
+
+relationships:
+  # - id: string
+  #   target: contracts/{entity}.yaml
+  #   field: string
+  #   cardinality: one_to_one | one_to_many | many_to_many
+  #   description: string
+
+normalization_rules:
+  # - id: string
+  #   applies_to: field name or path
+  #   rule: string
+  #   priority: integer
+
+validation_notes:
+  # - string (human + machine actionable guidance)

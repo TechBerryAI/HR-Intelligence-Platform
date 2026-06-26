@@ -1,0 +1,49 @@
+knowledge_base:
+  id: KB-CERTIFICATIONS
+  version: "1.0.0"
+  status: active
+  contract_ref: ../../contracts/certification.yaml
+  updated_at: "2026-06-25"
+
+description: >
+  Professional certification registry for credential normalization and verification metadata.
+
+entry:
+  required:
+    - id
+    - canonical_name
+  optional:
+    - issuer
+    - issuer_id
+    - credential_family
+    - typical_validity_years
+    - verification_url_template
+    - deprecated
+    - replaced_by
+  properties:
+    id:
+      type: string
+      pattern: "^cert-[a-z0-9-]+$"
+    canonical_name:
+      type: string
+    issuer:
+      type: string
+    issuer_id:
+      type: string
+      description: knowledge/companies canonical id when issuer is linked.
+    credential_family:
+      type: string
+      description: e.g. cloud, security, project_management.
+    typical_validity_years:
+      type: number
+    verification_url_template:
+      type: string
+      description: URL pattern with {credential_id} placeholder.
+    deprecated: { type: boolean, default: false }
+    replaced_by: { type: string }
+
+storage:
+  entries_dir: entries/
+  shard_naming: "shard-{NNNN}.json"
+  aliases_file: aliases.json
+  index_file: index.json

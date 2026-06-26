@@ -1,0 +1,30 @@
+# Benchmark Template: International Resume
+
+profile: international_resume
+capability: resume_parsing
+schema_id: resume_v1
+
+input:
+  format: text
+  locale: "[LOCALE_CODE]"
+  placeholder: "[DOCUMENT_TEXT_PLACEHOLDER]"
+
+expected_output_shape:
+  person:
+    phone:
+      note: International format with country code
+    location:
+      note: Non-US address conventions
+  experience:
+    date_format_source: DD/MM/YYYY or regional variants
+
+quality_gates:
+  confidence_min: 0.65
+  schema_valid: true
+  dates_normalized: YYYY-MM
+
+evaluation_focus:
+  - phone_international_normalization
+  - date_locale_normalization
+  - location_country_extraction
+  - non_english_section_headers

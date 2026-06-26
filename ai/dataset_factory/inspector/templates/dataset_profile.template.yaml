@@ -1,0 +1,87 @@
+# Dataset profile template — structure only. No computed values.
+# Schema: schemas/dataset_profile.schema.yaml
+
+_template:
+  schema: schemas/dataset_profile.schema.yaml
+  version: "1.0.0"
+  kind: template
+
+profile:
+  id: DATASET-PROFILE
+  version: null
+  created_at: null
+  run_id: null
+
+dataset_ref:
+  id: null
+  version: null
+  name: null
+  creation_date: null
+
+formats:
+  supported: []
+  unsupported: []
+  file_counts: {}
+
+structure:
+  directory_structure:
+    root: null
+    max_depth: null
+    total_directories: null
+    total_files: null
+    tree: []
+  doc_type_paths:
+    resumes: null
+    job_descriptions: null
+
+size:
+  total_files: null
+  total_bytes: null
+  average_file_size_bytes: null
+  largest_file:
+    path: null
+    size_bytes: null
+  smallest_file:
+    path: null
+    size_bytes: null
+
+page_estimates:
+  total_estimated: null
+  by_format: {}
+  method: null
+
+strategies:
+  duplicate_detection:
+    exact: hash_equality_via_hash_index
+    near: reserved_post_extractor
+  hash_strategy:
+    algorithm: SHA-256
+    encoding: hex
+    prefix: "sha256:"
+  corrupt_file_detection:
+    ref: ../architecture.yaml#corrupt_file_detection
+  password_protected_strategy:
+    ref: ../architecture.yaml#password_protected_detection
+  ocr_detection_strategy:
+    ref: ../architecture.yaml#ocr_detection
+  language_detection_strategy:
+    ref: ../architecture.yaml#language_detection
+  metadata_extraction_strategy:
+    ref: ../architecture.yaml#metadata_extraction
+  quality_score_strategy:
+    ref: ../quality_model.yaml
+  sampling_strategy:
+    ref: ../architecture.yaml#sampling_strategy
+
+sampling:
+  method: null
+  rate: null
+  selected_files: []
+
+file_metadata: []
+
+ocr_signals: []
+
+medallion:
+  tier: bronze
+  classification: null

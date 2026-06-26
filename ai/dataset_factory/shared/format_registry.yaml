@@ -1,0 +1,104 @@
+# Format registry — extensible file format support for Dataset Factory.
+# Inspector detects; Extractor consumes. Add formats here without architecture changes.
+
+format_registry:
+  id: DF-FORMAT-REGISTRY
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-25"
+
+detection_strategy:
+  order:
+    - magic_bytes
+    - extension_fallback
+    - mime_from_content_sniff
+  on_ambiguous: mark as unknown; flag in quality_report.integrity
+
+formats:
+  pdf:
+    extensions: [.pdf]
+    mime_types: [application/pdf]
+    magic_bytes:
+      - offset: 0
+        hex: "25504446"
+        label: "%PDF"
+    inspector_checks:
+      - corrupt_structure
+      - password_protected
+      - page_count_estimate
+      - text_layer_presence
+      - ocr_likelihood
+    extractor_module: extractor/formats/pdf  # future
+
+  docx:
+    extensions: [.docx]
+    mime_types: [application/vnd.openxmlformats-officedocument.wordprocessingml.document]
+    magic_bytes:
+      - offset: 0
+        hex: "504B0304"
+        note: ZIP container; verify word/ inside
+    inspector_checks:
+      - zip_integrity
+      - password_protected
+      - embedded_media_size
+    extractor_module: extractor/formats/docx
+
+  doc:
+    extensions: [.doc]
+    mime_types: [application/msword]
+    magic_bytes:
+      - offset: 0
+        hex: "D0CF11E0A1B11AE1"
+        label: OLE compound document
+    inspector_checks:
+      - ole_integrity
+      - password_protected
+    extractor_module: extractor/formats/doc
+
+  txt:
+    extensions: [.txt, .text]
+    mime_types: [text/plain]
+    magic_bytes: []
+    inspector_checks:
+      - encoding_detection
+      - null_byte_presence
+      - line_ending_consistency
+    extractor_module: extractor/formats/txt
+
+  rtf:
+    extensions: [.rtf]
+    mime_types: [application/rtf, text/rtf]
+    magic_bytes:
+      - offset: 0
+        ascii_prefix: "{\\rtf"
+    inspector_checks:
+      - rtf_structure
+      - encoding_detection
+    extractor_module: extractor/formats/rtf
+
+  zip:
+    extensions: [.zip]
+    mime_types: [application/zip]
+    magic_bytes:
+      - offset: 0
+        hex: "504B0304"
+    inspector_checks:
+      - zip_integrity
+      - nested_archive_depth
+      - inner_file_inventory
+      - password_protected
+    extractor_module: extractor/formats/zip
+    behavior:
+      inspect_inner: true
+      max_depth: 2
+      expand_on_extract: true
+
+unsupported:
+  action: log_and_skip
+  quality_impact: integrity category downgrade
+
+extension_points:
+  add_format:
+    - Register entry under formats with detection + inspector_checks + extractor_module.
+    - Bump format_registry version minor.
+    - No changes to inspector architecture.yaml required.

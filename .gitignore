@@ -266,6 +266,14 @@ site/
 uploads/
 media/
 
+# Backend runtime uploads (resumes, feedback screenshots)
+backend/uploads/
+
+# AI workspace — full rules in ai/.gitignore
+# Catch-all for large ML binaries if placed outside ai/models/
+*.gguf
+*.safetensors
+
 # Session data
 sessions/
 *.session

@@ -1,0 +1,65 @@
+# Canonical domain contract registry — HR Intelligence Foundation (M2)
+
+foundation:
+  id: HR-INTEL-FOUNDATION
+  milestone: M2
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-25"
+
+authority:
+  description: >
+    Domain contracts are the semantic source of truth. Schemas in ../schemas/
+    compose these contracts into document-level shapes. Knowledge bases in
+    ../knowledge/ supply canonical IDs for normalization. TOON (backend/toon.py)
+    is the HRMS production projection — never modified by this foundation.
+
+contracts:
+  aggregates:
+    - id: CONTRACT-RESUME
+      file: resume.yaml
+      kind: aggregate
+    - id: CONTRACT-JOB-DESCRIPTION
+      file: job_description.yaml
+      kind: aggregate
+    - id: CONTRACT-CANDIDATE
+      file: candidate.yaml
+      kind: aggregate
+
+  entities:
+    - id: CONTRACT-SKILL
+      file: skill.yaml
+    - id: CONTRACT-EDUCATION
+      file: education.yaml
+    - id: CONTRACT-EXPERIENCE
+      file: experience.yaml
+    - id: CONTRACT-PROJECT
+      file: project.yaml
+    - id: CONTRACT-CERTIFICATION
+      file: certification.yaml
+    - id: CONTRACT-LANGUAGE
+      file: language.yaml
+    - id: CONTRACT-COMPANY
+      file: company.yaml
+    - id: CONTRACT-LOCATION
+      file: location.yaml
+
+dependency_graph:
+  resume:
+    composes:
+      - skill
+      - experience
+      - education
+      - project
+      - certification
+      - language
+      - location
+  job_description:
+    composes:
+      - skill
+      - company
+      - location
+  candidate:
+    references:
+      - resume
+      - location

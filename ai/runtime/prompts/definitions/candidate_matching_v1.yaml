@@ -1,0 +1,7 @@
+id: candidate_matching_v1
+version: "1.0.0"
+status: active
+template_file: null
+variables:
+  - input
+description: Candidate matching prompt (template not yet implemented).

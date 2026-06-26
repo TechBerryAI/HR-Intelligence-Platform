@@ -1,0 +1,27 @@
+schema_validate: true
+required_fields:
+- type
+- title
+- location
+- skills
+- responsibilities
+optional_fields:
+- company
+- mandatory_skills
+- preferred_skills
+- qualifications
+- keywords
+enums:
+  type:
+  - job_description
+regex: {}
+length:
+  title:
+    min: 2
+    max: 200
+dates: {}
+confidence:
+  min_overall: 0.65
+business_hooks:
+- validate_jd_toon_projection
+- split_mandatory_preferred_skills

@@ -1,0 +1,48 @@
+# Knowledge base registry — HR Intelligence Foundation (M2)
+
+foundation:
+  id: HR-INTEL-KNOWLEDGE
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-25"
+
+description: >
+  Machine-readable reference datasets for normalization and entity linking.
+  Each domain is sharded for scale; aliases.json holds synonym maps; entries/
+  receives canonical records as JSON or YAML files.
+
+bases:
+  - id: KB-SKILLS
+    path: skills/
+    contract: contracts/skill.yaml
+    entry_id_prefix: skill-
+  - id: KB-JOB-TITLES
+    path: job_titles/
+    contract: contracts/experience.yaml
+    entry_id_prefix: title-
+  - id: KB-DEGREES
+    path: degrees/
+    contract: contracts/education.yaml
+    entry_id_prefix: degree-
+  - id: KB-CERTIFICATIONS
+    path: certifications/
+    contract: contracts/certification.yaml
+    entry_id_prefix: cert-
+  - id: KB-COMPANIES
+    path: companies/
+    contract: contracts/company.yaml
+    entry_id_prefix: company-
+  - id: KB-LOCATIONS
+    path: locations/
+    contract: contracts/location.yaml
+    entry_id_prefix: loc-
+
+scaling:
+  entries_per_shard: 1000
+  shard_pattern: "entries/shard-{NNNN}.json"
+  alternate_format: entries.jsonl
+  index_file: index.json
+
+versioning:
+  rule: Immutable shards; bump knowledge base version on breaking schema change.
+  semver_field: version in schema.yaml

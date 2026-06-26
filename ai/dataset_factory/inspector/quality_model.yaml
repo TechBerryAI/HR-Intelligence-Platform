@@ -1,0 +1,134 @@
+# Dataset Inspector — quality scoring model definition
+# Defines categories, weights, and grade bands. Does NOT compute scores (M3.1).
+
+quality_model:
+  id: DF-QUALITY-MODEL
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-25"
+  computation: deferred
+
+scale:
+  per_category: [0.0, 1.0]
+  overall: [0.0, 100.0]
+
+categories:
+  integrity:
+    weight: 0.20
+    description: >
+      Structural soundness of files — readable, non-zero, correct magic bytes,
+      no truncation, no read errors.
+    signals:
+      - zero_byte_files_ratio
+      - corrupt_files_ratio
+      - read_error_count
+      - unsupported_format_ratio
+    downgrade_triggers:
+      - corrupt_files_ratio_gt: 0.05
+      - read_error_count_gt: 0
+
+  extractability:
+    weight: 0.20
+    description: >
+      Likelihood that automated text extraction succeeds without manual intervention.
+    signals:
+      - password_protected_ratio
+      - supported_format_ratio
+      - corrupt_files_ratio
+      - zip_nested_depth_violations
+    downgrade_triggers:
+      - password_protected_ratio_gt: 0.10
+
+  ocr_readiness:
+    weight: 0.15
+    description: >
+      Preparedness for OCR pipeline — text layer presence, scan detection,
+      image-to-text ratio on PDFs.
+    signals:
+      - ocr_required_ratio
+      - ocr_recommended_ratio
+      - text_layer_present_ratio
+    downgrade_triggers:
+      - ocr_required_ratio_gt: 0.30
+
+  formatting_quality:
+    weight: 0.10
+    description: >
+      Document layout signals affecting parse quality — encoding issues,
+      inconsistent line endings, excessive formatting noise.
+    signals:
+      - encoding_error_ratio
+      - mixed_line_endings_ratio
+      - avg_file_size_bytes
+    downgrade_triggers: []
+
+  metadata_quality:
+    weight: 0.10
+    description: >
+      Richness of extractable file metadata — page counts, dates, authors.
+    signals:
+      - metadata_present_ratio
+      - page_count_available_ratio
+      - doc_type_path_consistency
+    downgrade_triggers: []
+
+  duplication_risk:
+    weight: 0.15
+    description: >
+      Exact and near-duplicate concentration — inflates training if unaddressed.
+    signals:
+      - exact_duplicate_groups_count
+      - exact_duplicate_files_ratio
+      - largest_duplicate_group_size
+      - near_duplicate_ratio  # future
+    downgrade_triggers:
+      - exact_duplicate_files_ratio_gt: 0.15
+
+  language_consistency:
+    weight: 0.10
+    description: >
+      Homogeneity of detected languages vs expected doc_type locale.
+    signals:
+      - primary_language_confidence
+      - language_entropy
+      - unexpected_language_ratio
+    downgrade_triggers:
+      - primary_language_confidence_lt: 0.7
+
+overall:
+  formula: weighted_sum_of_categories_scaled_to_100
+  categories:
+    - integrity
+    - extractability
+    - ocr_readiness
+    - formatting_quality
+    - metadata_quality
+    - duplication_risk
+    - language_consistency
+
+grades:
+  A: { min: 90, max: 100, label: production_ready }
+  B: { min: 75, max: 89, label: acceptable_with_monitoring }
+  C: { min: 60, max: 74, label: requires_remediation }
+  D: { min: 40, max: 59, label: extraction_not_recommended }
+  F: { min: 0, max: 39, label: reject }
+
+gates:
+  extraction_ready:
+    condition: overall.grade in [A, B, C] AND integrity.score gte 0.80
+  manual_review_required:
+    condition: overall.grade in [C, D] OR duplication_risk.score lt 0.70
+  block_extraction:
+    condition: overall.grade in [F] OR integrity.score lt 0.50
+
+output_mapping:
+  artifact: quality_report.yaml
+  paths:
+    per_category: quality_report.categories.{category_id}
+    overall: quality_report.overall
+    gates: quality_report.gates
+
+notes:
+  - M3.1 templates leave all scores null.
+  - M3.2 implementation computes from inspection signals.
+  - Gates are advisory until extractor enforces them.

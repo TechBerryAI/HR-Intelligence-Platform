@@ -1,0 +1,36 @@
+capability:
+  id: hr_chat
+  name: HR Chat Assistant
+  version: 1.0.0
+  owner: ai-platform
+  status: active
+  supported_providers:
+  - mock
+  - ollama
+  - openai
+  - grok
+  supported_models:
+  - hr-chat
+  input_type: conversation
+  output_type: text
+  dependencies: []
+  schema:
+    id: chat_v1
+    file: schema.json
+  prompt:
+    id: hr_chat_v1
+    file: prompt.md
+    version: 1.0.0
+  validation:
+    file: validation.yaml
+  examples:
+    good: examples/good
+    bad: examples/bad
+    edge_cases: examples/edge_cases
+  benchmarks:
+    file: benchmarks/benchmark.yaml
+  tags:
+  - chat
+  - assistant
+  - hr
+  description: Conversational HR assistant for recruiting workflows.

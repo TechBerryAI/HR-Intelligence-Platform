@@ -1,0 +1,12 @@
+skill_object:
+  type: object
+  contract_ref: ../contracts/skill.yaml
+  properties:
+    name: { type: string, required: true }
+    canonical_id: { type: string }
+    canonical_name: { type: string }
+    category: { type: string }
+    years_experience: { type: number }
+    proficiency: { type: string }
+    confidence: { type: number }
+    source: { type: string }

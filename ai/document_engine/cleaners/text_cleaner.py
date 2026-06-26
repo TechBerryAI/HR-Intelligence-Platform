@@ -1,0 +1,14 @@
+"""Basic deterministic text cleaning."""
+
+from __future__ import annotations
+
+import re
+
+
+def clean_extracted_text(text: str) -> str:
+    """Normalize whitespace while preserving paragraph breaks."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    return text.strip()

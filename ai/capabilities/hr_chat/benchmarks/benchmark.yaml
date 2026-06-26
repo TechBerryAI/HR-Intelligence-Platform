@@ -1,0 +1,15 @@
+benchmark:
+  capability: hr_chat
+  version: "1.0.0"
+  dataset: datasets/evaluation/hr_chat
+  expected_schema: chat_v1
+  success_criteria:
+    - schema_validation_pass_rate >= 0.95
+    - required_fields_present_rate >= 0.98
+  latency_target_ms: 2000
+  accuracy_target: 0.85
+  future_metrics:
+    - field_level_f1
+    - calibration_error
+    - human_review_agreement
+    - cost_per_invocation

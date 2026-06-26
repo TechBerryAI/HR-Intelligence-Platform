@@ -1,0 +1,16 @@
+# Certification entity template — structure only, no sample data.
+
+_template:
+  contract: ../../contracts/certification.yaml
+  schema: ../certification.yaml#/certification_object
+  version: "1.0.0"
+  kind: template
+
+name: null
+issuer: null
+year: null
+expiry: null
+credential_id: null
+url: null
+status: null
+canonical_id: null

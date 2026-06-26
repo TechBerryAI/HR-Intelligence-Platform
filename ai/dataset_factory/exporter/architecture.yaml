@@ -1,0 +1,24 @@
+# Exporter stage — architecture (not implemented)
+
+architecture:
+  id: DF-EXPORTER-ARCH
+  version: "1.0.0"
+  status: interface_only
+
+purpose: >
+  Terminal factory stage for training data. Produces immutable JSONL releases
+  registered in registry/datasets/.
+
+jsonl_record_shape:
+  ref: ../../docs/DATA_PIPELINE.md
+  required: [instruction, input, output, metadata]
+
+manifest_fields:
+  - dataset_id
+  - version
+  - record_counts
+  - split_hashes
+  - parent_inspection_run_id
+  - contracts_version
+
+implementation: deferred_M4.4

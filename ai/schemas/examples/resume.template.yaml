@@ -1,0 +1,50 @@
+# Resume document template — structure only, no sample data.
+# Replace null placeholders when authoring normalized records.
+
+_template:
+  schema: ../resume.yaml
+  version: "1.0.0"
+  kind: template
+
+type: resume
+
+person:
+  name: null
+  email: null
+  phone: null
+  location: null
+  linkedin: null
+  github: null
+  portfolio: null
+  website: null
+  twitter: null
+  otherUrls: []
+
+summary: null
+
+skills: []
+
+experience: []
+# experience item shape:
+#   title: null
+#   company: null
+#   from: null
+#   to: null
+#   years: null
+#   description: null
+
+education: []
+# education item shape:
+#   degree: null
+#   field: null
+#   institution: null
+#   year: null
+#   gpa: null
+
+projects: []
+
+certifications: []
+
+languages: []
+
+total_experience_years: null
