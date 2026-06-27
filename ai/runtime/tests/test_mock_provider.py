@@ -8,7 +8,7 @@ import pytest
 
 from runtime.exceptions import ProviderError
 from runtime.interfaces.types import InferenceRequest
-from runtime.providers.mock import MockProvider
+from providers.mock import MockProvider
 
 
 def test_mock_provider_success() -> None:

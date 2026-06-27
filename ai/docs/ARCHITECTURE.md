@@ -46,15 +46,15 @@ Production-grade machine learning platform for the HRMS recruitment stack. Desig
 
 | Layer | Directories | Responsibility |
 |-------|-------------|----------------|
-| **Data** | `datasets/` | Multi-stage data lake |
-| **Transform** | `preprocessing/` | Modular extract → split pipeline |
+| **Data** | `dataset/lake/` | Multi-stage data lake |
+| **Transform** | `dataset/` | Modular extract → split pipeline |
 | **Configuration** | `configs/`, `prompts/` | Templates and versioned prompts |
 | **Research** | `experiments/` | Hypothesis-driven exploration (EXP-*) |
 | **Training** | `training/`, `models/` | Fine-tune, merge, quantize |
 | **Quality** | `evaluation/` | Benchmark, compare, regress |
-| **Governance** | `registry/`, `governance/` | Six sub-registries, standards |
+| **Governance** | `registry/`, `ai/docs/ (governance standards in ADRs)` | Six sub-registries, standards |
 | **Deploy** | `exports/` | Modelfiles, integration bundles |
-| **Platform runtime** | `platform/` | Inference, services, providers, monitoring (M8+) |
+| **Platform runtime** | `runtime/` + `providers/` | Inference, services, providers, monitoring (M8+) |
 | **Utilities** | `scripts/`, `notebooks/` | CLI and exploration |
 
 ### Registry subsystems
@@ -84,13 +84,13 @@ Production-grade machine learning platform for the HRMS recruitment stack. Desig
 
 ### 2. Multi-stage dataset lake
 
-**Decision:** Replace flat `datasets/resumes/` + `processed/` with staged `raw/` → `extracted/` → `cleaned/` → `normalized/` → `jsonl/`.
+**Decision:** Replace flat `dataset/lake/resumes/` + `processed/` with staged `raw/` → `extracted/` → `cleaned/` → `normalized/` → `jsonl/`.
 
 **Rationale:** Each stage is independently re-runnable, auditable, and debuggable. Supports future features that need different stage entry points (e.g. summarization from `cleaned/`).
 
 ### 3. Modular preprocessing
 
-**Decision:** Five stage modules (`extract/`, `clean/`, `normalize/`, `validate/`, `split/`) instead of one `preprocessing/` folder.
+**Decision:** Five stage modules (`extract/`, `clean/`, `normalize/`, `validate/`, `split/`) instead of one `dataset/` folder.
 
 **Rationale:** Teams can own stages independently. Validation gates prevent bad data from reaching training.
 

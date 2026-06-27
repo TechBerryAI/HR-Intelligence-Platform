@@ -20,11 +20,11 @@ Training-centric architecture leads to:
 
 Adopt **AI Platform** paradigm with five platform subsystems:
 
-1. **Data Platform** — contracts, staged lake, artifacts (`datasets/`, `preprocessing/`, `docs/DATA_CONTRACTS.md`)
+1. **Data Platform** — contracts, staged lake, artifacts (`dataset/lake/`, `dataset/`, `docs/DATA_CONTRACTS.md`)
 2. **Training Platform** — experiments, QLoRA, model registry (`training/`, `models/`, `experiments/`)
-3. **Inference Platform** — LLM Gateway, provider management (`platform/inference/`, `platform/providers/`)
+3. **Inference Platform** — LLM Gateway, provider management (`runtime/`, `providers/`)
 4. **Evaluation Platform** — benchmarks, regression, comparisons (`evaluation/`, `registry/evaluations/`)
-5. **Governance Platform** — registry, versioning, ADRs, engineering standards (`registry/`, `governance/`, `docs/`)
+5. **Governance Platform** — registry, versioning, ADRs, engineering standards (`registry/`, `ai/docs/ (governance standards in ADRs)`, `docs/`)
 
 **LLM Gateway (M8)** sits between HRMS and providers — not direct Ollama calls from business logic.
 
@@ -47,12 +47,12 @@ Adopt **AI Platform** paradigm with five platform subsystems:
 - Clear M8–M11 milestones
 
 **Negative:**
-- `platform/` directories empty until M8 — requires discipline not to shortcut
+- `runtime/` + `providers/` directories empty until M8 — requires discipline not to shortcut
 - More documentation upfront
 
 ## Future work
 
-- M8: Implement LLM Gateway in `platform/`
+- M8: Implement LLM Gateway in `runtime/` + `providers/`
 - M9: HRMS adapter calls gateway, not providers
 - M10: Feature services for matching, summary, chat
 - M11: Monitoring and continuous improvement loop

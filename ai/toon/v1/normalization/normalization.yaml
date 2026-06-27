@@ -1,0 +1,54 @@
+# TOON normalization transforms
+# Used when projecting normalized schemas to TOON dict shape.
+
+normalization:
+  id: TOON-NORMALIZATION-v1
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-27"
+
+description: >
+  Transforms applied at normalization boundaries when projecting
+  ai/schemas/ instances to HRMS TOON dict shape for toon_dumps().
+
+transforms:
+  literal:
+    description: Emit constant type field value.
+  string:
+    description: String passthrough.
+  string_optional:
+    description: Emit string or omit if null.
+  string_array:
+    description: Emit string[]; pipe-join on wire via toon_dumps.
+  number_optional:
+    description: Emit number or omit if null.
+  location_to_string:
+    description: Emit location.raw or string passthrough; join city, region, country if structured.
+  company_to_string:
+    description: Emit company.name or string passthrough.
+  company_to_string_optional:
+    description: Emit company.name or string; omit if null.
+  skill_array_to_strings:
+    description: Map skill.name or string; pipe-join on wire format via toon_dumps.
+  language_array_to_strings:
+    description: Map language.name or string to string[].
+  certification_array_to_strings_or_objects:
+    description: Prefer string[] for LLM compatibility; object[] accepted by frontend.
+  experience_array:
+    description: Zero-indexed object array in TOON paths experience.N.field.
+  education_array:
+    description: Zero-indexed object array in TOON paths education.N.field.
+
+projection_flow:
+  - step: parse
+    source: HRMS toon_loads / toon_loads_flex
+    output: dict (TOON shape)
+  - step: normalize
+    source: contracts/ + knowledge/ alias lookup
+    output: normalized schema instance
+  - step: validate
+    source: schemas/validation/rules.yaml
+    output: validation report
+  - step: project
+    source: toon/v1/mappings/*.yaml field_map + transforms
+    output: TOON dict for toon_dumps

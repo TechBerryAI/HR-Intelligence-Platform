@@ -1,0 +1,85 @@
+# Dataset Factory — end-to-end pipeline definition
+# Machine-readable flow; consumed by orchestration in future milestones.
+
+pipeline:
+  id: DF-PIPELINE
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-25"
+
+flow:
+  - stage: inspector
+    id: STAGE-INSPECTOR
+    input: dataset/lake/raw/
+    output: inspector/outputs/{dataset_id}/{version}/
+    mutates_source: false
+    purpose: Profile raw corpus without modification; establish quality baseline.
+
+  - stage: extractor
+    id: STAGE-EXTRACTOR
+    input: dataset/lake/raw/
+    output: dataset/lake/extracted/
+    mutates_source: false
+    depends_on: [inspector]
+    gate: quality_report.overall.grade in [A, B, C] or manual_override
+    purpose: Extract plain text and file metadata from supported formats.
+
+  - stage: validator
+    id: STAGE-VALIDATOR
+    input: dataset/lake/extracted/
+    output: dataset/lake/extracted/  # validation sidecars alongside records
+    mutates_source: false
+    depends_on: [extractor]
+    purpose: Schema and integrity checks on extracted artifacts.
+
+  - stage: normalizer
+    id: STAGE-NORMALIZER
+    input: dataset/lake/extracted/
+    output: dataset/lake/normalized/
+    mutates_source: false
+    depends_on: [validator]
+    purpose: Map extracted text to HR Intelligence Foundation contracts/TOON.
+
+  - stage: reviewer
+    id: STAGE-REVIEWER
+    input: dataset/lake/normalized/
+    output: dataset/lake/normalized/  # review decisions as sidecars
+    mutates_source: false
+    depends_on: [normalizer]
+    purpose: Human-in-the-loop labeling, correction, and approval.
+
+  - stage: exporter
+    id: STAGE-EXPORTER
+    input: dataset/lake/normalized/
+    output: dataset/lake/jsonl/
+    mutates_source: false
+    depends_on: [reviewer]
+    purpose: Emit versioned JSONL training splits with manifests.
+
+  - stage: benchmark
+    id: STAGE-BENCHMARK
+    input: dataset/lake/normalized/
+    output: dataset/lake/benchmark/
+    mutates_source: false
+    depends_on: [reviewer]
+    branch: parallel_to_exporter
+    purpose: Freeze held-out evaluation set; never merged into training JSONL.
+
+terminal:
+  training_dataset:
+    path: dataset/lake/jsonl/{feature}-v{major}/
+    registry_id_pattern: DS-{FEATURE}-v{semver}
+    consumed_by: training/
+
+data_lake_alignment:
+  note: >
+    Dataset Factory stages map to dataset/lake/ directories defined in ADR-002.
+    Inspector is pre-lake — profiles raw before extraction begins.
+  mapping:
+    inspector: pre-stage (profiles dataset/lake/raw/)
+    extractor: dataset/lake/extracted/
+    validator: gate on extracted/
+    normalizer: dataset/lake/normalized/
+    reviewer: sidecars on normalized/
+    exporter: dataset/lake/jsonl/
+    benchmark: dataset/lake/benchmark/

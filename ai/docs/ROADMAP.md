@@ -35,7 +35,7 @@ Build an **enterprise AI platform** that powers every HRMS recruitment intellige
 
 - Multi-stage data lake, modular preprocessing, extended registry design
 - Artifact lineage, versioning strategy, data contracts (conceptual)
-- Platform layers (`platform/`), governance, ADRs, benchmark strategy
+- Platform layers (`runtime/` + `providers/`), governance, ADRs, benchmark strategy
 - [AI_ENGINEERING.md](AI_ENGINEERING.md), [PLATFORM_VISION.md](PLATFORM_VISION.md)
 
 **HRMS changes:** None
@@ -48,7 +48,7 @@ Build an **enterprise AI platform** that powers every HRMS recruitment intellige
 
 **Deliverables:**
 - Finalize [DATA_CONTRACTS.md](DATA_CONTRACTS.md)
-- JSON Schema files in `governance/schemas/` (optional start)
+- JSON Schema files in `ai/docs/ (governance standards in ADRs)schemas/` (optional start)
 - Contract → TOON projection mapping document
 - Review with HRMS team against `validate_toon_format()`
 
@@ -64,10 +64,10 @@ Build an **enterprise AI platform** that powers every HRMS recruitment intellige
 
 **Deliverables:**
 - HRMS read-only export script design
-- `datasets/raw/` populated (or export plan)
+- `dataset/lake/raw/` populated (or export plan)
 - `registry/datasets/DS-PARSE-v1.0.0.yaml`
 - Manifest and artifact ID conventions implemented
-- `datasets/benchmark/parsing/v1/` design finalized
+- `dataset/lake/benchmark/parsing/v1/` design finalized
 
 **Why before preprocessing:** Know target record counts, sources, and labeling strategy before writing pipelines.
 
@@ -82,7 +82,7 @@ Build an **enterprise AI platform** that powers every HRMS recruitment intellige
 **Deliverables:**
 - Stage scripts with manifest chain
 - Validation gates (≥95% pass)
-- `datasets/jsonl/parsing-v1/` produced
+- `dataset/lake/jsonl/parsing-v1/` produced
 - `registry/benchmarks/BENCH-PARSE-v1.yaml` frozen
 
 **Why before training:** Garbage in = garbage out. No GPU time until data is validated.
@@ -142,11 +142,11 @@ Build an **enterprise AI platform** that powers every HRMS recruitment intellige
 
 ## M8 — LLM Gateway
 
-**Goal:** Provider abstraction and inference routing inside `ai/platform/`.
+**Goal:** Provider abstraction and inference routing inside `ai/runtime/ + ai/providers/`.
 
 **Deliverables:**
-- `platform/inference/` — routing, caching, fallback
-- `platform/providers/` — Ollama, Grok, OpenAI, Claude, Gemini
+- `runtime/` — routing, caching, fallback
+- `providers/` — Ollama, Grok, OpenAI, Claude, Gemini
 - `registry/providers/` populated
 - Gateway tested against BENCH-PARSE without HRMS
 

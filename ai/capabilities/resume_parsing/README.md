@@ -55,7 +55,7 @@ The `resume_v1` schema represents the canonical HRMS Resume superset:
 | Source Tracking | `source_tracking` | No |
 | Validation | `validation` | No |
 
-TOON projection rules: `ai/schemas/mappings/toon.yaml`
+TOON projection rules: `ai/toon/v1/mappings/resume.yaml`
 
 ## Remaining Manual Work
 

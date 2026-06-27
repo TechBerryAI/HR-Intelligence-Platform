@@ -1,0 +1,33 @@
+# Validator stage — interface (not implemented)
+
+stage:
+  id: STAGE-VALIDATOR
+  version: "1.0.0"
+  status: interface_only
+  implements: ../shared/stage_interface.yaml
+
+description: >
+  Validate extracted artifacts for integrity, minimum text length, encoding,
+  and pre-normalization quality gates. Emits validation sidecars.
+
+depends_on:
+  - stage: STAGE-EXTRACTOR
+    required_artifacts: [EXTRACTED_RECORD]
+
+inputs:
+  source_path: dataset/lake/extracted/
+
+outputs:
+  sidecar_pattern: "{document_id}.validation.yaml"
+  artifact_type: VALIDATION_REPORT
+  aggregate: validation_summary.yaml
+
+validation_refs:
+  - ../../schemas/validation/rules.yaml
+  - ../../contracts/manifest.yaml
+
+gates:
+  pass_rate_minimum: 0.95
+  on_fail: block_normalizer
+
+implementation: deferred_M4.1

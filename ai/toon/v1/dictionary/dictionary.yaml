@@ -1,0 +1,104 @@
+# TOON field dictionary — glossary, aliases, and known gaps
+# Complements ontology.yaml with per-field semantics.
+
+dictionary:
+  id: TOON-DICTIONARY-v1
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-27"
+
+wire_format:
+  line_pattern: "key.path: value"
+  scalar_list_delimiter: "|"
+  object_array_pattern: "key.N.field"
+  empty_array_pattern: "key[0]:"
+  null_behavior: omitted_on_serialize
+
+fields:
+  resume:
+    type:
+      type: string
+      required: true
+      value: resume
+    person.name:
+      type: string
+      required: true
+      description: Full name
+    person.email:
+      type: string
+      required: true
+    person.phone:
+      type: string
+      required: true
+    person.location:
+      type: string
+      required: false
+      normalization: [current_location, city, address]
+    person.otherUrls:
+      type: string[]
+      required: false
+    summary:
+      type: string
+      required: false
+      typescript_gap: required in ResumeTOON interface
+    skills:
+      type: string[]
+      required: true
+      note: Key must exist; may be empty array
+    experience:
+      type: object[]
+      required: true
+    education:
+      type: object[]
+      required: true
+    certifications:
+      type: string[] | object[]
+      required: false
+      note: LLM emits strings; frontend accepts objects
+    languages:
+      type: string[]
+      required: false
+      llm_prompt: not included
+    total_experience_years:
+      type: number
+      required: false
+      ats_usage: experience scoring
+
+  job_description:
+    type:
+      type: string
+      required: true
+      value: job_description
+    title:
+      type: string
+      required: true
+    location:
+      type: string
+      required: true
+    skills:
+      type: string[]
+      required: true
+    responsibilities:
+      type: string[]
+      required: true
+    mandatory_skills:
+      type: string[]
+      required: false
+      typescript_gap: not in JDTOON interface
+      ats_usage: 60% gate
+    preferred_skills:
+      type: string[]
+      required: false
+      typescript_gap: not in JDTOON interface
+      ats_usage: 20% of skills weight
+    employment_type:
+      type: string
+      required: false
+      typescript_gap: required in JDTOON interface; not validated at runtime
+
+aliases:
+  experience.title: [role]
+  experience.from: [start, start_date]
+  experience.to: [end, end_date]
+  education.from: [start]
+  person.location_sources: [current_location, city, address, experience.0.location]

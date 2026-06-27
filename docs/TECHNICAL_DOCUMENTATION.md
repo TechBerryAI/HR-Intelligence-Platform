@@ -2,7 +2,9 @@
 
 **Version:** 1.0  
 **Audience:** Internal engineering, architecture reviews, production readiness  
-**Last Updated:** March 2025
+**Last Updated:** June 2026
+
+> **Related:** AI platform docs live in [`ai/README.md`](../ai/README.md). Full documentation index: [`docs/DOCUMENTATION_MAP.md`](DOCUMENTATION_MAP.md).
 
 ---
 
@@ -173,10 +175,12 @@ HR-Job-Portal-App/
 │   │   └── 03_employee_feedback.sql
 │   ├── requirements.txt, .env.example
 │   └── gunicorn.conf.py
-├── electron/                 # Desktop wrapper for bulk parser (folder access)
+├── electron/                 # Desktop shell (native dialogs, IPC only)
 │   ├── main.js, preload.js, ipc-handlers.js
-└── shared/
-    └── types/ toon.ts, toon.d.ts
+├── scripts/                  # Root utilities
+├── tests/                    # Test index
+├── tools/                    # CLI index
+└── ai/toon/v1/types/         # TOON TypeScript contracts (toon.ts)
 ```
 
 ### 3.2 Entry Points

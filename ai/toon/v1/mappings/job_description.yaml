@@ -1,0 +1,76 @@
+# Job description → TOON projection mapping
+# Canonical source: ai/toon/v1/mappings/job_description.yaml
+
+mapping:
+  id: MAPPING-TOON-JD
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-27"
+  package: ../../
+  datatypes_ref: ../vocabulary/datatypes.yaml
+  normalization_ref: ../normalization/normalization.yaml
+  validation_ref: ../validation/validation.yaml#job_description
+
+schema_ref: ../../../schemas/job_description.yaml
+toon_type: job_description
+type_field: job_description
+
+field_map:
+  - normalized: type
+    toon: type
+    transform: literal
+  - normalized: title
+    toon: title
+    transform: string
+  - normalized: company
+    toon: company
+    transform: company_to_string_optional
+  - normalized: location
+    toon: location
+    transform: location_to_string
+  - normalized: employment_type
+    toon: employment_type
+    transform: string_optional
+  - normalized: skills
+    toon: skills
+    transform: skill_array_to_strings
+  - normalized: mandatory_skills
+    toon: mandatory_skills
+    transform: skill_array_to_strings
+  - normalized: preferred_skills
+    toon: preferred_skills
+    transform: skill_array_to_strings
+  - normalized: responsibilities
+    toon: responsibilities
+    transform: string_array
+  - normalized: qualifications
+    toon: qualifications
+    transform: string_array_optional
+  - normalized: keywords
+    toon: keywords
+    transform: string_array_optional
+  - normalized: min_experience_years
+    toon: min_experience_years
+    transform: number_optional
+  - normalized: max_experience_years
+    toon: max_experience_years
+    transform: number_optional
+  - normalized: salary_range
+    toon: salary_range
+    transform: string_optional
+
+required_toon_keys:
+  root: [title, location, skills, responsibilities]
+
+typescript_gaps:
+  - field: mandatory_skills
+    ts: not in JDTOON interface
+    ats: used by ats_service.py
+  - field: preferred_skills
+    ts: not in JDTOON interface
+    ats: used by ats_service.py
+  - field: employment_type
+    ts: required in interface
+    runtime: not validated
+
+example: ../examples/jd/sample.toon

@@ -1,0 +1,24 @@
+# Candidate → TOON projection mapping
+# Candidate is not a TOON document class.
+
+mapping:
+  id: MAPPING-TOON-CANDIDATE
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-27"
+  package: ../../
+
+schema_ref: ../../../schemas/candidate.yaml
+toon_type: null
+projection: none
+
+notes:
+  - Candidate profile is not a TOON document class.
+  - HRMS links via parsed_resumes.candidate_id optional FK.
+  - For HRMS interchange, project primary_resume using mappings/resume.yaml.
+  - preferences and application_history remain platform-local.
+
+interchange:
+  primary_resume:
+    mapping_ref: resume.yaml
+    validation_ref: ../validation/validation.yaml#resume

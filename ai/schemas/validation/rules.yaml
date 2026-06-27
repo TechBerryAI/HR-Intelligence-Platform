@@ -1,5 +1,5 @@
 # Validation rules for HR Intelligence Foundation schemas (M2)
-# Consumed by preprocessing/validate/ in future milestones.
+# Consumed by dataset/factory/validator/ in future milestones.
 # HRMS production TOON rules referenced but not duplicated — see mapping.
 
 validation:

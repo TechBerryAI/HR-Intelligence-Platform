@@ -9,7 +9,7 @@ These items are ordered by relevance to training and deploying an Ollama replace
 
 ## A. Model Integration & Prompts
 
-1. **Externalize prompts** — Load `get_system_prompt()` from versioned YAML (`ai/prompts/`) with hash recorded in `parsed_*.model_version`.
+1. **Externalize prompts** — Load `get_system_prompt()` from versioned YAML (`ai/capabilities/*/prompt.md`) with hash recorded in `parsed_*.model_version`.
 
 2. **Unify output contract** — Choose JSON Schema or strict TOON; reject dual-format in `parse_llm_response` for eval consistency.
 
@@ -129,7 +129,7 @@ These items are ordered by relevance to training and deploying an Ollama replace
 
 44. **Benchmark bulk flatten fields** — Ensure model fills columns used in `_flatten_toon` Excel export.
 
-45. **Freeze evaluation set** — Use `ai/datasets/benchmark/` unrelated uploads from production hash samples.
+45. **Freeze evaluation set** — Use `ai/dataset/lake/benchmark/` unrelated uploads from production hash samples.
 
 46. **TOON-only training target** — Disable JSON acceptance in training pipeline even if production still accepts JSON during migration.
 

@@ -1,0 +1,27 @@
+# TOON version registry
+# Immutable versions — create v2/ for breaking changes; never edit v1 in place.
+
+toon:
+  id: TOON-PACKAGE
+  status: active
+  updated_at: "2026-06-27"
+
+versions:
+  - id: TOON-v1
+    path: v1/
+    semver: "1.0.0"
+    status: active
+    released_at: "2026-06-27"
+    supersedes: schemas/mappings/toon.yaml
+    notes: >
+      Canonical TOON ontology. Consolidated under ai/toon/v1/ during
+      repository modernization. Wire implementation remains backend/toon.py.
+
+active: TOON-v1
+
+implementation:
+  serialize: backend/toon.py#toon_dumps
+  parse: backend/toon.py#toon_loads
+  flex_parse: backend/toon.py#toon_loads_flex
+  validate: backend/parsing_utils.py#validate_toon_format
+  types: ai/toon/v1/types/toon.ts

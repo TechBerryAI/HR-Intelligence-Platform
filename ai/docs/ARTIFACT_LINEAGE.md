@@ -62,10 +62,10 @@ artifact:
   source:
     dataset_id: DS-PARSE-v1.0.0       # Source dataset (if applicable)
     document_id: uuid                 # Source document (if applicable)
-    file_path: datasets/raw/resumes/x.pdf
+    file_path: dataset/lake/raw/resumes/x.pdf
 
   storage:
-    path: datasets/extracted/resume/uuid.json
+    path: dataset/lake/extracted/resume/uuid.json
     size_bytes: 12400
     sha256: "a1b2c3d4e5f6..."         # Content checksum (required)
 
@@ -87,13 +87,13 @@ artifact:
 
 | Type | ID prefix | Storage location | Parent(s) |
 |------|-----------|------------------|-----------|
-| Raw document | `ART-RAW` | `datasets/raw/` | — |
-| Extracted text | `ART-EXTRACT` | `datasets/extracted/` | `ART-RAW` |
-| Cleaned text | `ART-CLEAN` | `datasets/cleaned/` | `ART-EXTRACT` |
-| Normalized record | `ART-NORM` | `datasets/normalized/` | `ART-CLEAN` |
-| JSONL dataset | `ART-JSONL` | `datasets/jsonl/` | `ART-NORM` (many) |
-| Benchmark set | `ART-BENCH` | `datasets/benchmark/` | `ART-NORM` (curated) |
-| Synthetic record | `ART-SYNTH` | `datasets/synthetic/` | `ART-NORM` or generated |
+| Raw document | `ART-RAW` | `dataset/lake/raw/` | — |
+| Extracted text | `ART-EXTRACT` | `dataset/lake/extracted/` | `ART-RAW` |
+| Cleaned text | `ART-CLEAN` | `dataset/lake/cleaned/` | `ART-EXTRACT` |
+| Normalized record | `ART-NORM` | `dataset/lake/normalized/` | `ART-CLEAN` |
+| JSONL dataset | `ART-JSONL` | `dataset/lake/jsonl/` | `ART-NORM` (many) |
+| Benchmark set | `ART-BENCH` | `dataset/lake/benchmark/` | `ART-NORM` (curated) |
+| Synthetic record | `ART-SYNTH` | `dataset/lake/synthetic/` | `ART-NORM` or generated |
 | LoRA adapter | `ART-ADAPTER` | `models/adapters/` | `ART-JSONL` |
 | Merged model | `ART-MERGED` | `models/merged/` | `ART-ADAPTER` + base |
 | GGUF model | `ART-GGUF` | `models/gguf/` | `ART-MERGED` |
@@ -162,7 +162,7 @@ manifest:
   artifact_id: ART-JSONL-parsing-v1
   stage: split
   pipeline_version: "1.2.0"
-  parent_manifest: datasets/normalized/manifest.yaml
+  parent_manifest: dataset/lake/normalized/manifest.yaml
   record_count: 1000
   artifact_ids:
     - ART-NORM-uuid1

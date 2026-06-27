@@ -1,0 +1,31 @@
+# Exporter stage — interface (not implemented)
+
+stage:
+  id: STAGE-EXPORTER
+  version: "1.0.0"
+  status: interface_only
+  implements: ../shared/stage_interface.yaml
+
+description: >
+  Export approved normalized records to versioned JSONL training splits.
+
+depends_on:
+  - stage: STAGE-REVIEWER
+    gate: review_status in [approved, auto_approved]
+
+inputs:
+  source_path: dataset/lake/normalized/
+  filter: review_decision.approved == true
+
+outputs:
+  path: dataset/lake/jsonl/{feature}-v{major}/
+  files: [train.jsonl, val.jsonl, test.jsonl, manifest.yaml]
+  artifact_type: JSONL_SPLIT
+  registry_id_pattern: DS-{FEATURE}-v{semver}
+
+split_strategy:
+  ref: ../../dataset/factory/exporter/  # future
+  default_ratios: { train: 0.8, val: 0.1, test: 0.1 }
+  stratify_by: doc_type
+
+implementation: deferred_M4.4

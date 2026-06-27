@@ -277,7 +277,7 @@ Both deserialize with `toon_loads_flex()`.
 |------|--------|
 | `parsing_utils.call_parsing_api()` | Defined but **not called** by `parsing_routes` |
 | `PARSING_API_URL` microservice | Referenced only for PDF text fallback; service **not in this repo** |
-| `ai/prompts/*.yaml.example` | Documentation/training templates; **not loaded at runtime** |
+| `ai/capabilities/*/prompt.md*.yaml.example` | Documentation/training templates; **not loaded at runtime** |
 
 ---
 

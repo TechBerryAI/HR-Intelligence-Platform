@@ -24,7 +24,7 @@ Without extended registries:
 registry/
 ├── schema.yaml
 ├── models/          # Model versions, artifacts, status
-├── datasets/        # Dataset versions, checksums
+├── dataset/lake/        # Dataset versions, checksums
 ├── benchmarks/      # Frozen benchmark definitions
 ├── experiments/     # EXP-* outcomes
 ├── prompts/         # PROMPT-* version history

@@ -1,0 +1,32 @@
+# Test runtime config — mock provider only (no external Ollama required).
+runtime:
+  routing:
+    primary: mock
+    fallback_chain: []
+
+  providers:
+    mock:
+      type: mock
+      enabled: true
+      default_latency_ms: 0
+      always_succeed: true
+      responses:
+        resume_parsing:
+          type: resume
+          person:
+            name: Jane Doe
+            email: jane@example.com
+            phone: "555-0100"
+          skills: []
+          experience: []
+          education: []
+
+  retry:
+    max_attempts: 1
+
+  validation:
+    fail_on_validation_error: true
+
+  capabilities_dir: ../../../capabilities
+  tasks_config_path: ../../../runtime/config/tasks.default.yaml
+  models_config_path: ../../../runtime/config/models.default.yaml

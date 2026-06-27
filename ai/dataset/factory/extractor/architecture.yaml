@@ -1,0 +1,39 @@
+# Extractor stage — architecture (not implemented)
+
+architecture:
+  id: DF-EXTRACTOR-ARCH
+  version: "1.0.0"
+  status: interface_only
+
+purpose: >
+  Transform Bronze (raw files) into Silver (extracted JSON) per medallion model.
+  One JSON artifact per source file with provenance chain to hash_index entry.
+
+flow:
+  - load_inspector_gates
+  - filter_skipped_files  # corrupt, password-protected, duplicates optional
+  - dispatch_by_format    # format_registry.yaml
+  - write_extracted_json
+  - emit_extraction_log
+
+output_record_shape:
+  required:
+    - id
+    - doc_type
+    - source_file
+    - source_hash
+    - pipeline_version
+    - stage
+    - created_at
+    - payload
+  payload_fields:
+    - raw_text
+    - extraction.method
+    - extraction.page_count
+    - extraction.warnings
+
+alignment:
+  data_pipeline_stage: Stage 1 Text extraction
+  preprocessing_module: dataset/extraction/  # future implementation may live here or call factory
+
+implementation: deferred_M3.3

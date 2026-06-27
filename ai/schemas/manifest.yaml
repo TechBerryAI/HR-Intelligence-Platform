@@ -24,7 +24,7 @@ schemas:
 
 mappings:
   registry: mappings/manifest.yaml
-  toon: mappings/toon.yaml
+  canonical: ../toon/v1/mappings/
 
 validation:
   rules: validation/rules.yaml
@@ -48,4 +48,5 @@ authority_chain:
   - contracts/
   - schemas/
   - knowledge/
-  - TOON (backend/toon.py, read-only reference)
+  - toon/v1/
+  - TOON runtime (backend/toon.py, read-only reference)

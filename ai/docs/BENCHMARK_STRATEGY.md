@@ -17,7 +17,7 @@ Future-proof evaluation design for all HRMS AI features. Benchmarks are **frozen
 ## Directory layout
 
 ```
-datasets/benchmark/
+dataset/lake/benchmark/
 ├── parsing/           # BENCH-PARSE
 │   ├── v1/
 │   │   ├── resume.jsonl
@@ -179,6 +179,6 @@ passed_gates: true
 ## Related documents
 
 - [VERSIONING.md](VERSIONING.md)
-- [datasets/benchmark/README.md](../datasets/benchmark/README.md)
+- [dataset/lake/benchmark/README.md](../dataset/lake/benchmark/README.md)
 - [registry/benchmarks/](../registry/benchmarks/) (future records)
 - [adr/ADR-003-registry-design.md](adr/ADR-003-registry-design.md)

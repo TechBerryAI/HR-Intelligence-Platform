@@ -1,6 +1,0 @@
-id: chat_v1
-version: "1.0.0"
-status: active
-schema_file: null
-format: json_schema
-description: HR chat output schema (not yet implemented).

@@ -25,6 +25,4 @@ runtime:
 
   capabilities_dir: ../../capabilities
   tasks_config_path: tasks.default.yaml
-  prompts_dir: ../prompts/definitions
-  schemas_dir: ../schemas/definitions
   models_config_path: models.default.yaml

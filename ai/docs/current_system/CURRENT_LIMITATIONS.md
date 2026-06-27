@@ -10,7 +10,7 @@
 ### Single hardcoded prompt source
 
 - Prompts live as inline strings in `llm_service.get_system_prompt()`.
-- `ai/prompts/*.yaml.example` is not loaded at runtime.
+- `ai/capabilities/*/prompt.md*.yaml.example` is not loaded at runtime.
 - No prompt versioning tied to `model_version` stored in DB (`{provider}-v1` only).
 
 ### Provider asymmetry
@@ -40,7 +40,7 @@
 
 ### Schema drift
 
-- TypeScript (`shared/types/toon.ts`) does not match Python validation.
+- TypeScript (`ai/toon/v1/types/toon.ts`) does not match Python validation.
 - JD: `company` CRITICAL in prompt but not validated.
 - JD: `location` required by validator but not marked CRITICAL in prompt.
 - ATS uses `mandatory_skills` / `preferred_skills` not in JD prompt.
@@ -229,7 +229,7 @@ Bulk and single parse can produce **different TOON quality** for the same file.
 
 ### AI workspace vs production divergence
 
-- `ai/preprocessing/` pipeline (extract → clean → normalize → validate) is **not** the production path.
+- `ai/dataset/` pipeline (extract → clean → normalize → validate) is **not** the production path.
 - Production: extract → LLM → validate (shallow) → store.
 - Risk: training data distribution differs from production behavior.
 

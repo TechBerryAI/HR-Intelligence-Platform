@@ -275,8 +275,8 @@ Candidate Profile **references** Resume contract; does not duplicate fields. Pop
 | Milestone | Deliverable |
 |-----------|-------------|
 | M2 | This document finalized; field ownership agreed |
-| M3 | JSON Schema files in `governance/schemas/` (future) |
-| M4 | Validation in `preprocessing/validate/` against schemas |
+| M3 | JSON Schema files in `ai/docs/ (governance standards in ADRs)schemas/` (future) |
+| M4 | Validation in `dataset/factory/validator/` against schemas |
 | M9 | HRMS TOON validated as Layer 4 projection of Layer 2 |
 
 ### TOON projection rules

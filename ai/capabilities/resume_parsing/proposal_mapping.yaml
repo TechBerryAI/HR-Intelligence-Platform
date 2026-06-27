@@ -8,7 +8,7 @@ mapping:
   capability: resume_parsing
   target_schema: resume_v1
   contract_ref: ../../contracts/resume.yaml
-  toon_projection_ref: ../../schemas/mappings/toon.yaml#resume
+  toon_projection_ref: ../../toon/v1/mappings/resume.yaml
   status: active
   updated_at: "2026-06-26"
   description: >

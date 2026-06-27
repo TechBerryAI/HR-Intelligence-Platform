@@ -1,31 +1,38 @@
 # TOON mapping registry — HR Intelligence Foundation (M2)
-# Documents how normalized schemas project to HRMS TOON (read-only reference).
+# Canonical mappings: ai/toon/v1/mappings/
 
 mapping_registry:
   id: MAPPING-REGISTRY
   version: "1.0.0"
   status: active
-  updated_at: "2026-06-25"
+  updated_at: "2026-06-27"
 
 authority:
+  toon_ontology: ../../toon/v1/
   toon_implementation: backend/toon.py
-  toon_types: shared/types/toon.ts
+  toon_types: ai/toon/v1/types/toon.ts
   reverse_engineering_doc: docs/current_system/CURRENT_TOON_SCHEMA.md
-  constraint: Do not modify TOON; consume mappings at normalization boundaries only.
+  constraint: Do not modify TOON runtime; consume mappings at normalization boundaries only.
 
 mappings:
-  - id: MAPPING-TOON
-    file: toon.yaml
+  - id: MAPPING-TOON-RESUME
+    file: ../../toon/v1/mappings/resume.yaml
     documents:
-      - schema: ../resume.yaml
-        toon_type: resume
-        required_toon_keys: [person, skills, experience, education]
-      - schema: ../job_description.yaml
-        toon_type: job_description
-        required_toon_keys: [title, location, skills, responsibilities]
-      - schema: ../candidate.yaml
-        toon_type: null
-        projection: primary_resume via resume mapping
+      schema: ../resume.yaml
+      toon_type: resume
+      required_toon_keys: [person, skills, experience, education]
+  - id: MAPPING-TOON-JD
+    file: ../../toon/v1/mappings/job_description.yaml
+    documents:
+      schema: ../job_description.yaml
+      toon_type: job_description
+      required_toon_keys: [title, location, skills, responsibilities]
+  - id: MAPPING-TOON-CANDIDATE
+    file: ../../toon/v1/mappings/candidate.yaml
+    documents:
+      schema: ../candidate.yaml
+      toon_type: null
+      projection: primary_resume via resume mapping
 
 projection_flow:
   - step: parse
@@ -38,7 +45,7 @@ projection_flow:
     source: schemas/validation/rules.yaml
     output: validation report
   - step: project
-    source: mappings/toon.yaml field_map + transforms
+    source: toon/v1/mappings/*.yaml field_map + transforms
     output: TOON dict for toon_dumps
 
 round_trip:

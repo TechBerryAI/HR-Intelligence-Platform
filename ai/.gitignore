@@ -16,98 +16,65 @@ venv/
 # Jupyter
 .ipynb_checkpoints/
 
-# ── Dataset Factory inspection outputs (gitignore run artifacts) ──
-dataset_factory/inspector/outputs/**/*
-!dataset_factory/inspector/outputs/.gitkeep
+# ── Dataset Factory inspection outputs ──
+dataset/factory/inspector/outputs/**/*
+!dataset/factory/inspector/outputs/.gitkeep
 
 # ── Knowledge base shards (structure tracked, entry data gitignored) ──
 knowledge/**/entries/**
 !knowledge/**/entries/.gitkeep
 knowledge/**/index.json
 
-# ── Datasets (stage artifacts — structure tracked, data gitignored) ──
-datasets/raw/**/*
-!datasets/raw/**/.gitkeep
-datasets/extracted/**/*
-!datasets/extracted/.gitkeep
-datasets/cleaned/**/*
-!datasets/cleaned/.gitkeep
-datasets/normalized/**/*
-!datasets/normalized/.gitkeep
-datasets/jsonl/**/*
-!datasets/jsonl/.gitkeep
-datasets/benchmark/**/*
-!datasets/benchmark/.gitkeep
-!datasets/benchmark/README.md
-datasets/synthetic/**/*
-!datasets/synthetic/.gitkeep
+# ── Data lake (stage artifacts — structure tracked, data gitignored) ──
+dataset/lake/raw/**/*
+!dataset/lake/raw/**/.gitkeep
+dataset/lake/extracted/**/*
+!dataset/lake/extracted/.gitkeep
+dataset/lake/cleaned/**/*
+!dataset/lake/cleaned/.gitkeep
+dataset/lake/normalized/**/*
+!dataset/lake/normalized/.gitkeep
+dataset/lake/jsonl/**/*
+!dataset/lake/jsonl/.gitkeep
+dataset/lake/benchmark/**/*
+!dataset/lake/benchmark/.gitkeep
+!dataset/lake/benchmark/README.md
+dataset/lake/synthetic/**/*
+!dataset/lake/synthetic/.gitkeep
 
 # ── Silver layer (extracted text — PII) ──
-datasets/silver/**/*
-!datasets/silver/**/
-!datasets/silver/**/.gitkeep
+dataset/lake/silver/**/*
+!dataset/lake/silver/**/
+!dataset/lake/silver/**/.gitkeep
 
 # ── Proposal artifacts (derived labels — PII) ──
-datasets/proposals/**/*
-!datasets/proposals/**/
-!datasets/proposals/**/.gitkeep
+dataset/lake/proposals/**/*
+!dataset/lake/proposals/**/
+!dataset/lake/proposals/**/.gitkeep
 
 # ── Inspector run outputs (filenames, hashes — PII metadata) ──
-datasets/inspection/**
-!datasets/inspection/.gitkeep
+dataset/lake/inspection/**
+!dataset/lake/inspection/.gitkeep
 
-# ── Evaluation datasets (sanitized resume text used at benchmark runtime) ──
-datasets/evaluation/**
-!datasets/evaluation/.gitkeep
+# ── Evaluation datasets ──
+dataset/lake/evaluation/**
+!dataset/lake/evaluation/.gitkeep
 
 # ── Document binaries (never commit source resumes/JDs) ──
-datasets/**/*.pdf
-datasets/**/*.doc
-datasets/**/*.docx
+dataset/lake/**/*.pdf
+dataset/lake/**/*.doc
+dataset/lake/**/*.docx
 
 # ── Local config copies (may contain secrets) ──
 configs/*.yaml
 !configs/*.yaml.example
 
-# ── Models (weights and binaries) ──
-models/base/**/*
-!models/base/.gitkeep
-!models/base/README.md
-models/adapters/**/*
-!models/adapters/.gitkeep
-models/merged/**/*
-!models/merged/.gitkeep
-models/gguf/**
-!models/gguf/.gitkeep
+# ── Models (weights and binaries — future training milestone) ──
 *.gguf
 *.safetensors
 *.bin
 *.pt
 *.pth
-
-# ── Training artifacts ──
-training/checkpoints/**
-training/runs/**
-training/logs/**
-training/configs/*
-!training/configs/.gitkeep
-!training/configs/README.md
-
-# ── Evaluation artifacts ──
-evaluation/reports/**
-evaluation/comparisons/**
-evaluation/metrics/**
-evaluation/regression/**
-
-# ── Experiments (local runs gitignored; registry metadata committed) ──
-experiments/*
-!experiments/README.md
-!experiments/_template/
-
-# ── Deployment bundles ──
-exports/**
-!exports/.gitkeep
-!exports/README.md
 
 # ── Experiment tracking ──
 wandb/

@@ -15,8 +15,8 @@ Repository standards for the HRMS AI platform. All engineers must follow these c
 ```
 ai/
 ├── configs/           # Platform-wide YAML templates (committed)
-├── datasets/          # Multi-stage data lake (binaries gitignored)
-├── preprocessing/     # Modular pipeline stages (extract → split)
+├── dataset/lake/          # Multi-stage data lake (binaries gitignored)
+├── dataset/     # Modular pipeline stages (extract → split)
 ├── prompts/           # Versioned prompt templates per feature
 ├── experiments/       # Hypothesis-driven research
 ├── training/          # Training runs, checkpoints, logs
@@ -31,14 +31,14 @@ ai/
 
 ### Stage-pure directories
 
-Each `datasets/` subdirectory represents **exactly one transformation stage**. Never mix stages (e.g. do not put cleaned text in `raw/`).
+Each `dataset/lake/` subdirectory represents **exactly one transformation stage**. Never mix stages (e.g. do not put cleaned text in `raw/`).
 
 ### Metadata vs binaries
 
 | Committed to git | Gitignored |
 |------------------|------------|
 | `registry/` YAML files | `models/` weights |
-| README files | `datasets/raw/`, `extracted/`, etc. |
+| README files | `dataset/lake/raw/`, `extracted/`, etc. |
 | `configs/*.example` | `training/runs/`, `checkpoints/` |
 | `exports/modelfiles/` | `*.gguf`, `*.safetensors` |
 | `prompts/*.yaml` (no secrets) | `evaluation/reports/` |
@@ -68,8 +68,8 @@ Each `datasets/` subdirectory represents **exactly one transformation stage**. N
 |------|---------|
 | Registry record | `registry/{type}/{id}.yaml` |
 | Training config snapshot | `training/configs/{run_id}.yaml` |
-| Per-document artifact | `datasets/{stage}/{doc_type}/{uuid}.json` |
-| JSONL split | `datasets/jsonl/{version}/{split}.jsonl` |
+| Per-document artifact | `dataset/lake/{stage}/{doc_type}/{uuid}.json` |
+| JSONL split | `dataset/lake/jsonl/{version}/{split}.jsonl` |
 | Modelfile | `exports/modelfiles/{model_id}.Modelfile` |
 
 ### Kebab-case rules
@@ -112,7 +112,7 @@ Each `datasets/` subdirectory represents **exactly one transformation stage**. N
 
 ## Benchmark versioning
 
-1. **Frozen directories** — `datasets/benchmark/{feature}/v{N}/`.
+1. **Frozen directories** — `dataset/lake/benchmark/{feature}/v{N}/`.
 2. **Registry required** — `registry/benchmarks/{feature}-v{N}.yaml`.
 3. **Never train on benchmark data** — enforced by split scripts and review.
 4. **Baseline recorded at creation** — Grok scores stored in registry at benchmark v1 creation.

@@ -2,7 +2,7 @@
 
 **Status:** Reverse-engineered from production code  
 **Runtime source of truth:** `backend/llm_service.py` → `get_system_prompt()`  
-**Note:** `ai/prompts/*.yaml.example` mirrors prompts for training/docs but is **not loaded at runtime**.
+**Note:** `ai/capabilities/*/prompt.md*.yaml.example` mirrors prompts for training/docs but is **not loaded at runtime**.
 
 ---
 
@@ -100,7 +100,7 @@ Fields in prompt but **not validated**: `summary`, `certifications`, `total_expe
 3. **Date format unspecified** — examples use `YYYY-MM` but validation does not enforce format.
 4. **Empty URL fields** — prompt shows blank values; model may omit keys, causing validation gaps for optional URLs only.
 5. **No instruction for certifications as objects** — prompt shows scalar pipe list; frontend accepts both strings and objects.
-6. **No languages field** in prompt despite TypeScript schema (`shared/types/toon.ts`).
+6. **No languages field** in prompt despite TypeScript schema (`ai/toon/v1/types/toon.ts`).
 7. **Truncation message** — if `LLM_MAX_INPUT_CHARS` set, appended text may confuse smaller models.
 8. **India-centric location fallback** exists in route post-processing, not in prompt.
 
@@ -110,7 +110,7 @@ Fields in prompt but **not validated**: `summary`, `certifications`, `total_expe
 - Specify canonical date formats and `Present` for current roles.
 - Distinguish mandatory vs optional fields in prompt to align with `validate_toon_format`.
 - Include `languages`, `experience.description`, education `gpa`.
-- Version prompts externally (`ai/prompts/resume_parser.yaml`) and load at runtime.
+- Version prompts externally (`ai/capabilities/*/prompt.mdresume_parser.yaml`) and load at runtime.
 - Add few-shot examples for edge cases (multi-column resumes, tables).
 
 ---
@@ -216,16 +216,16 @@ None directly — model responds with TOON/JSON in assistant message.
 
 - No document metadata (filename, language, page count).
 - No explicit instruction boundary between system and user roles beyond provider defaults.
-- `ai/prompts/resume_parser.yaml.example` defines `user_template: "{raw_text}"` but backend does not use this template file.
+- `ai/capabilities/*/prompt.mdresume_parser.yaml.example` defines `user_template: "{raw_text}"` but backend does not use this template file.
 
 ---
 
-## Prompt 4: Training Mirror (`ai/prompts/*.yaml.example`)
+## Prompt 4: Training Mirror (`ai/capabilities/*/prompt.md*.yaml.example`)
 
 ### Files
 
-- `ai/prompts/resume_parser.yaml.example` — version `1.0.0`, documents `required_output_fields`
-- `ai/prompts/jd_parser.yaml.example` — version `1.0.0`
+- `ai/capabilities/*/prompt.mdresume_parser.yaml.example` — version `1.0.0`, documents `required_output_fields`
+- `ai/capabilities/*/prompt.mdjd_parser.yaml.example` — version `1.0.0`
 
 ### Purpose
 

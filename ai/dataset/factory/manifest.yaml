@@ -1,0 +1,65 @@
+# Dataset Factory — platform manifest
+# First executable component of the AI platform (M3.1).
+# Lives entirely inside ai/; independent of HRMS.
+
+factory:
+  id: DATASET-FACTORY
+  version: "1.0.0"
+  milestone: M3.1
+  status: active
+  updated_at: "2026-06-25"
+
+description: >
+  Reusable data engineering pipeline that transforms raw resumes and job
+  descriptions into production-quality training datasets. Stages are pluggable,
+  versioned, and produce machine-readable artifacts with full lineage.
+
+authority:
+  foundation_ref: ../foundation.json
+  contracts_ref: ../contracts/manifest.yaml
+  artifact_lineage_ref: ../docs/ARTIFACT_LINEAGE.md
+  data_pipeline_ref: ../docs/DATA_PIPELINE.md
+
+constraints:
+  read_only_source: true
+  no_hrms_modifications: true
+  no_training_code: true
+  no_llm_providers: true
+  no_preprocessing_implementation: true
+
+stages:
+  - id: STAGE-INSPECTOR
+    path: inspector/
+    status: implemented
+    implementation: python_cli_and_tests
+  - id: STAGE-EXTRACTOR
+    path: extractor/
+    status: interface_only
+  - id: STAGE-VALIDATOR
+    path: validator/
+    status: interface_only
+  - id: STAGE-NORMALIZER
+    path: normalizer/
+    status: interface_only
+  - id: STAGE-REVIEWER
+    path: reviewer/
+    status: interface_only
+  - id: STAGE-EXPORTER
+    path: exporter/
+    status: interface_only
+  - id: STAGE-BENCHMARK
+    path: benchmark/
+    status: interface_only
+
+shared:
+  path: shared/
+  manifest: shared/manifest.yaml
+
+input:
+  default_root: ../lake/raw/
+  doc_types: [resume, job_description]
+  immutability: Source files are never modified by any factory stage.
+
+output:
+  inspection_artifacts_root: inspector/outputs/
+  registry_ref: ../registry/datasets/

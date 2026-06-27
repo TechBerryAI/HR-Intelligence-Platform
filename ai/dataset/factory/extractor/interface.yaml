@@ -1,0 +1,40 @@
+# Extractor stage — interface (not implemented)
+
+stage:
+  id: STAGE-EXTRACTOR
+  version: "1.0.0"
+  status: interface_only
+  implements: ../shared/stage_interface.yaml
+
+description: >
+  Extract plain text and per-file metadata from supported formats.
+  Writes dataset/lake/extracted/ JSON artifacts. Never mutates dataset/lake/raw/.
+
+depends_on:
+  - stage: STAGE-INSPECTOR
+    required_artifacts: [dataset_manifest, quality_report, hash_index]
+    gate: quality_report.gates.extraction_ready
+
+inputs:
+  source_path: dataset/lake/raw/
+  inspector_artifacts: inspector/outputs/{dataset_id}/{version}/
+
+outputs:
+  path: dataset/lake/extracted/{doc_type}/{document_id}.json
+  artifact_type: EXTRACTED_RECORD
+  schema_ref: ../shared/artifact_envelope.yaml
+
+format_modules:
+  ref: ../shared/format_registry.yaml
+
+config_schema:
+  properties:
+    extraction_methods:
+      pdf: [pypdf, pdfplumber]
+      docx: [python-docx]
+      doc: [antiword, libreoffice_headless]
+    skip_password_protected: { type: boolean, default: true }
+    skip_corrupt: { type: boolean, default: true }
+    dedupe_by_hash: { type: boolean, default: true }
+
+implementation: deferred_M3.3

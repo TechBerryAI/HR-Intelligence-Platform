@@ -255,8 +255,8 @@ flowchart TB
 
 | File | Used By |
 |------|---------|
-| `shared/types/toon.ts` | Documentation / future TS consumers |
-| `shared/types/toon.d.ts` | Type declarations |
+| `ai/toon/v1/types/toon.ts` | Documentation / future TS consumers |
+| `ai/toon/v1/types/toon.ts` | Type declarations |
 
 **Not imported at runtime** by Python backend.
 
@@ -266,8 +266,8 @@ flowchart TB
 
 | Path | Relationship |
 |------|--------------|
-| `ai/prompts/*.yaml.example` | Mirrors `get_system_prompt`; not loaded |
-| `ai/preprocessing/*` | Training pipeline; aligns with `text_extraction` behavior per docs |
+| `ai/capabilities/*/prompt.md*.yaml.example` | Mirrors `get_system_prompt`; not loaded |
+| `ai/dataset/*` | Training pipeline; aligns with `text_extraction` behavior per docs |
 | `ai/docs/HRMS_DEPENDENCY_MAP.md` | Prior milestone map (this doc supersedes for parsing detail) |
 
 ---

@@ -1,0 +1,34 @@
+# Benchmark stage — interface (not implemented)
+
+stage:
+  id: STAGE-BENCHMARK
+  version: "1.0.0"
+  status: interface_only
+  implements: ../shared/stage_interface.yaml
+
+description: >
+  Freeze held-out evaluation set from normalized records. Parallel branch to
+  exporter — never merged into training JSONL.
+
+depends_on:
+  - stage: STAGE-REVIEWER
+    gate: dual_review_complete_for_benchmark_candidates
+
+inputs:
+  source_path: dataset/lake/normalized/
+  selection: manual_or_stratified_sample
+
+outputs:
+  path: dataset/lake/benchmark/{category}/v{version}/
+  artifact_type: BENCHMARK_MANIFEST
+  registry_id_pattern: BENCH-{CATEGORY}-v{version}
+
+invariants:
+  - NEVER include benchmark records in exporter output
+  - Immutable once frozen — new version for changes
+  - Register in registry/benchmarks/
+
+alignment:
+  strategy_ref: ../../docs/BENCHMARK_STRATEGY.md
+
+implementation: deferred_M4.4

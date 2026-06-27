@@ -11,23 +11,23 @@ Resume / Job Description (raw file)
         │
         ▼
 ┌───────────────────┐
-│  TEXT EXTRACTION  │  preprocessing/extract/  →  datasets/extracted/
+│  TEXT EXTRACTION  │  dataset/extraction/  →  dataset/lake/extracted/
 └─────────┬─────────┘
           ▼
 ┌───────────────────┐
-│     CLEANING      │  preprocessing/clean/    →  datasets/cleaned/
+│     CLEANING      │  dataset/factory/ (clean stage — planned)    →  dataset/lake/cleaned/
 └─────────┬─────────┘
           ▼
 ┌───────────────────┐
-│   NORMALIZATION   │  preprocessing/normalize/ →  datasets/normalized/
+│   NORMALIZATION   │  dataset/factory/normalizer/ →  dataset/lake/normalized/
 └─────────┬─────────┘
           ▼
 ┌───────────────────┐
-│    VALIDATION     │  preprocessing/validate/ →  gate (≥95% pass)
+│    VALIDATION     │  dataset/factory/validator/ →  gate (≥95% pass)
 └─────────┬─────────┘
           ▼
 ┌───────────────────┐
-│      JSONL        │  preprocessing/split/    →  datasets/jsonl/{version}/
+│      JSONL        │  dataset/factory/exporter/    →  dataset/lake/jsonl/{version}/
 └─────────┬─────────┘
           │
           ├──────────────────────────────────────┐
@@ -73,7 +73,7 @@ Resume / Job Description (raw file)
 
 | Attribute | Value |
 |-----------|-------|
-| **Directory** | `datasets/raw/resumes/`, `datasets/raw/job_descriptions/` |
+| **Directory** | `dataset/lake/raw/resumes/`, `dataset/lake/raw/job_descriptions/` |
 | **Input** | PDF, DOC, DOCX files |
 | **Output** | Same files, immutable |
 | **Module** | Manual copy or HRMS export script (future) |
@@ -87,9 +87,9 @@ Resume / Job Description (raw file)
 
 | Attribute | Value |
 |-----------|-------|
-| **Module** | `preprocessing/extract/` |
-| **Input** | `datasets/raw/` |
-| **Output** | `datasets/extracted/{doc_type}/{id}.json` |
+| **Module** | `dataset/extraction/` |
+| **Input** | `dataset/lake/raw/` |
+| **Output** | `dataset/lake/extracted/{doc_type}/{id}.json` |
 | **Key fields** | `raw_text`, `source_hash`, `extraction.method` |
 
 Extractors: PyPDF, pdfplumber, python-docx. Behavior aligned with `backend/text_extraction.py`.
@@ -100,9 +100,9 @@ Extractors: PyPDF, pdfplumber, python-docx. Behavior aligned with `backend/text_
 
 | Attribute | Value |
 |-----------|-------|
-| **Module** | `preprocessing/clean/` |
-| **Input** | `datasets/extracted/` |
-| **Output** | `datasets/cleaned/{doc_type}/{id}.json` |
+| **Module** | `dataset/factory/ (clean stage — planned)` |
+| **Input** | `dataset/lake/extracted/` |
+| **Output** | `dataset/lake/cleaned/{doc_type}/{id}.json` |
 | **Key fields** | `text` (cleaned), `cleaning.rules_applied` |
 
 No semantic structuring at this stage — text only.
@@ -113,9 +113,9 @@ No semantic structuring at this stage — text only.
 
 | Attribute | Value |
 |-----------|-------|
-| **Module** | `preprocessing/normalize/` |
-| **Input** | `datasets/cleaned/` |
-| **Output** | `datasets/normalized/{doc_type}/{id}.json` |
+| **Module** | `dataset/factory/normalizer/` |
+| **Input** | `dataset/lake/cleaned/` |
+| **Output** | `dataset/lake/normalized/{doc_type}/{id}.json` |
 | **Key fields** | `toon` (structured dict), `labeling.source` |
 
 Produces TOON-compatible records. Label sources: human, grok, openai, synthetic.
@@ -126,8 +126,8 @@ Produces TOON-compatible records. Label sources: human, grok, openai, synthetic.
 
 | Attribute | Value |
 |-----------|-------|
-| **Module** | `preprocessing/validate/` |
-| **Input** | `datasets/normalized/` |
+| **Module** | `dataset/factory/validator/` |
+| **Input** | `dataset/lake/normalized/` |
 | **Output** | Pass → split; Fail → quarantine |
 | **Gate** | ≥ 95% pass rate |
 
@@ -139,9 +139,9 @@ Validates TOON schema, cross-field consistency, duplicate hashes.
 
 | Attribute | Value |
 |-----------|-------|
-| **Module** | `preprocessing/split/` |
-| **Input** | Validated `datasets/normalized/` |
-| **Output** | `datasets/jsonl/{version}/train.jsonl`, `val.jsonl`, `test.jsonl` |
+| **Module** | `dataset/factory/exporter/` |
+| **Input** | Validated `dataset/lake/normalized/` |
+| **Output** | `dataset/lake/jsonl/{version}/train.jsonl`, `val.jsonl`, `test.jsonl` |
 | **Registry** | `registry/datasets/{version}.yaml` |
 
 Split: 80/10/10 stratified by `doc_type`. No hash leakage across splits.
@@ -152,7 +152,7 @@ Split: 80/10/10 stratified by `doc_type`. No hash leakage across splits.
 
 | Attribute | Value |
 |-----------|-------|
-| **Directory** | `datasets/benchmark/parsing/v{N}/` |
+| **Directory** | `dataset/lake/benchmark/parsing/v{N}/` |
 | **Input** | Curated gold labels (never from train split) |
 | **Registry** | `registry/benchmarks/parsing-v{N}.yaml` |
 | **Rule** | **Frozen** — new version = new directory |
@@ -165,7 +165,7 @@ Split: 80/10/10 stratified by `doc_type`. No hash leakage across splits.
 |-----------|-------|
 | **Directory** | `training/runs/{run_id}/` |
 | **Config snapshot** | `training/configs/{run_id}.yaml` |
-| **Input** | `datasets/jsonl/{version}/train.jsonl` |
+| **Input** | `dataset/lake/jsonl/{version}/train.jsonl` |
 | **Output** | `training/runs/{run_id}/adapter/` → `models/adapters/` |
 
 ---
@@ -203,7 +203,7 @@ Split: 80/10/10 stratified by `doc_type`. No hash leakage across splits.
 | Attribute | Value |
 |-----------|-------|
 | **Directory** | `evaluation/reports/{eval_id}/` |
-| **Benchmark** | `datasets/benchmark/parsing/v{N}/` |
+| **Benchmark** | `dataset/lake/benchmark/parsing/v{N}/` |
 | **Providers** | Grok, Ollama, OpenAI, Claude, fine-tuned |
 | **Comparisons** | `evaluation/comparisons/` |
 | **Regression** | `evaluation/regression/baseline.yaml` |
@@ -256,7 +256,7 @@ All normalized and model outputs must conform to HRMS TOON rules.
 
 ## Synthetic data
 
-`datasets/synthetic/` holds LLM-generated or rule-based augmentations for edge cases (sparse resumes, non-English, multi-column layouts). Synthetic records flow through the same pipeline stages and are tagged `labeling.source: synthetic` in normalization.
+`dataset/lake/synthetic/` holds LLM-generated or rule-based augmentations for edge cases (sparse resumes, non-English, multi-column layouts). Synthetic records flow through the same pipeline stages and are tagged `labeling.source: synthetic` in normalization.
 
 ---
 
@@ -286,7 +286,7 @@ Every batch operation writes a `manifest.yaml`:
 stage: normalized
 version: parsing-v1
 created_at: "2026-06-25T12:00:00Z"
-input_manifest: datasets/cleaned/manifest.yaml
+input_manifest: dataset/lake/cleaned/manifest.yaml
 record_count: 1000
 pass_count: 972
 fail_count: 28

@@ -1,0 +1,90 @@
+# TOON ontology — document types, entities, and relationships
+# Canonical source for AI platform TOON semantics.
+
+ontology:
+  id: TOON-ONTOLOGY-v1
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-27"
+
+description: >
+  Token-Oriented Object Notation (TOON) is the HRMS structured format for
+  resumes, job descriptions, and ATS results. Wire format is line-oriented;
+  runtime implementation is backend/toon.py (read-only).
+
+document_types:
+  - id: resume
+    toon_type: resume
+    type_field: resume
+    schema_ref: ../../schemas/resume.yaml
+    mapping: ../mappings/resume.yaml
+    storage: parsed_resumes.toon
+    description: Parsed candidate resume
+
+  - id: job_description
+    toon_type: job_description
+    type_field: job_description
+    schema_ref: ../../schemas/job_description.yaml
+    mapping: ../mappings/job_description.yaml
+    storage: parsed_jds.toon
+    description: Parsed job description
+
+  - id: ats_result
+    toon_type: null
+    schema_ref: ai/toon/v1/types/toon.ts#ATSResultTOON
+    storage: applications.ats_analysis
+    description: ATS scoring result; uses json_output + toon_output envelope
+
+  - id: candidate
+    toon_type: null
+    schema_ref: ../../schemas/candidate.yaml
+    mapping: ../mappings/candidate.yaml
+    projection: none
+    description: >
+      Candidate profile is not a TOON document class. Project primary_resume
+      via resume mapping for HRMS interchange.
+
+entities:
+  person:
+    used_by: [resume]
+    fields: [name, email, phone, location, linkedin, github, portfolio, website, twitter, otherUrls]
+
+  experience_item:
+    used_by: [resume]
+    fields: [title, company, from, to, years, description]
+    aliases:
+      title: [role]
+      from: [start, start_date]
+      to: [end, end_date]
+
+  education_item:
+    used_by: [resume]
+    fields: [degree, field, institution, year, gpa]
+    aliases:
+      from: [start]
+
+relationships:
+  - from: raw_files
+    to: parsed_resumes
+    cardinality: "1:N"
+  - from: raw_files
+    to: parsed_jds
+    cardinality: "1:N"
+  - from: parsed_resumes
+    to: candidate_signup
+    field: candidate_id
+    cardinality: "N:1"
+    optional: true
+  - from: parsed_jds
+    to: jobs
+    field: job_id
+    cardinality: "N:1"
+    optional: true
+  - from: applications
+    reads: [parsed_resumes, parsed_jds]
+    note: No FK; reads latest parsed documents at apply time
+
+authority:
+  wire_implementation: backend/toon.py
+  types: ai/toon/v1/types/toon.ts
+  reverse_engineering: docs/current_system/CURRENT_TOON_SCHEMA.md

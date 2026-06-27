@@ -72,7 +72,7 @@ defs:
       - { $ref: "location.yaml#/location_object" }
 
 toon_projection:
-  mapping_ref: mappings/toon.yaml#candidate
+  mapping_ref: ../../toon/v1/mappings/candidate.yaml
   note: >
     Candidate does not serialize to TOON. Use primary_resume mapping for HRMS
     interchange. candidate_id maps to parsed_resumes.candidate_id at storage boundary.

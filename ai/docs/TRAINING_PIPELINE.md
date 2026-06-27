@@ -5,12 +5,12 @@
 
 ## Pipeline checklist
 
-- [ ] **Raw data** in `datasets/raw/`
-- [ ] **Extract** → `datasets/extracted/` via `preprocessing/extract/`
-- [ ] **Clean** → `datasets/cleaned/` via `preprocessing/clean/`
-- [ ] **Normalize** → `datasets/normalized/` via `preprocessing/normalize/`
-- [ ] **Validate** → ≥95% pass via `preprocessing/validate/`
-- [ ] **Split** → `datasets/jsonl/{version}/` via `preprocessing/split/`
+- [ ] **Raw data** in `dataset/lake/raw/`
+- [ ] **Extract** → `dataset/lake/extracted/` via `dataset/extraction/`
+- [ ] **Clean** → `dataset/lake/cleaned/` via `dataset/factory/ (clean stage — planned)`
+- [ ] **Normalize** → `dataset/lake/normalized/` via `dataset/factory/normalizer/`
+- [ ] **Validate** → ≥95% pass via `dataset/factory/validator/`
+- [ ] **Split** → `dataset/lake/jsonl/{version}/` via `dataset/factory/exporter/`
 - [ ] **Register dataset** → `registry/datasets/{version}.yaml`
 - [ ] **Snapshot config** → `training/configs/{run_id}.yaml`
 - [ ] **QLoRA train** → `training/runs/{run_id}/`
@@ -35,8 +35,8 @@
 
 | Artifact | Path |
 |----------|------|
-| Train JSONL | `datasets/jsonl/parsing-v1/train.jsonl` |
-| Benchmark | `datasets/benchmark/parsing/v1/` |
+| Train JSONL | `dataset/lake/jsonl/parsing-v1/train.jsonl` |
+| Benchmark | `dataset/lake/benchmark/parsing/v1/` |
 | Adapter | `models/adapters/{run_id}/` |
 | Merged | `models/merged/hrms-parsing-v1/` |
 | GGUF | `models/gguf/hrms-parsing-v1-q4_K_M.gguf` |

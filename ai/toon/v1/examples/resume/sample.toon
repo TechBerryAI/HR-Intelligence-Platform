@@ -1,0 +1,19 @@
+# Sample resume TOON wire format (structure only — no real PII)
+# Produced by backend/toon.py#toon_dumps from equivalent dict.
+
+type: resume
+person.name: Jane Doe
+person.email: jane.doe@example.com
+person.phone: +1-555-0100
+person.location: San Francisco, CA
+skills: Python|SQL|React
+experience.0.title: Software Engineer
+experience.0.company: Acme Corp
+experience.0.from: 2020-01
+experience.0.to: 2023-12
+experience.0.years: 3.9
+education.0.degree: BS
+education.0.field: Computer Science
+education.0.institution: Example University
+education.0.year: 2019
+summary: Experienced full-stack developer with focus on data systems.

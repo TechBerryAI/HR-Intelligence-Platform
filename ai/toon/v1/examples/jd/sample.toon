@@ -1,0 +1,15 @@
+# Sample job description TOON wire format (structure only — no real data)
+# Produced by backend/toon.py#toon_dumps from equivalent dict.
+
+type: job_description
+title: Senior Software Engineer
+company: Acme Corp
+location: Remote, US
+employment_type: Full-time
+skills: Python|PostgreSQL|AWS
+mandatory_skills: Python|PostgreSQL
+preferred_skills: AWS|Kubernetes
+responsibilities: Design APIs|Lead code reviews|Mentor junior engineers
+qualifications: BS in CS or equivalent|5+ years experience
+min_experience_years: 5
+max_experience_years: 10

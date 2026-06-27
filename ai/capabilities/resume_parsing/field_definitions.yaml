@@ -826,7 +826,7 @@ validation_fields:
     examples:
       - true
     normalization_rules:
-      - Check required_toon_keys per toon.yaml.
+      - Check required_toon_keys per ai/toon/v1/mappings/resume.yaml.
     required: false
     optional: true
     business_meaning: HRMS ingest readiness flag.

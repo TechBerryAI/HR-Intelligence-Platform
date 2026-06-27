@@ -42,7 +42,8 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
 - **Frontend:** Single-page app; single AppContext for auth, jobs, applicant state; role-based route guards (HR, Candidate, Super Admin).
 - **Backend:** Monolithic Flask app; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, super-admin. Connection-pooled PostgreSQL; raw SQL via `db_run`/`db_get`/`db_all`.
 
-Detailed architecture, API catalog, data flows, and security notes: **[docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md)**.
+Detailed architecture, API catalog, data flows, and security notes: **[docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md)**.  
+Documentation index: **[docs/DOCUMENTATION_MAP.md](docs/DOCUMENTATION_MAP.md)**.
 
 ---
 
@@ -154,9 +155,14 @@ Database and tables are created automatically on first backend run from `backend
 │   ├── utils.py          # JWT, auth decorators
 │   ├── schema_pg/        # PostgreSQL schema (01_schema.sql, ...)
 │   └── requirements.txt
-├── electron/             # Desktop app for bulk parser (folder access)
+├── electron/             # Desktop shell (native dialogs, IPC only)
+├── scripts/              # Root utilities (db-preflight, database tests)
+├── tests/                # Test index (component tests colocated with owners)
+├── tools/                # CLI entry-point index
+├── ai/                   # AI platform (runtime, providers, capabilities, dataset, toon)
 └── docs/
-    └── TECHNICAL_DOCUMENTATION.md   # Full technical reference
+    ├── DOCUMENTATION_MAP.md          # Documentation index
+    └── TECHNICAL_DOCUMENTATION.md   # Full HRMS technical reference
 ```
 
 ---
@@ -215,11 +221,15 @@ Electron opens a window that loads the app and uses OS folder dialogs.
 - **Port in use:** Stop process on 3000 (backend) or 5173 (frontend). On Windows: `Get-NetTCPConnection -LocalPort 3000 | Select-Object -ExpandProperty OwningProcess | Stop-Process -Force`.
 - **Email not sending:** Set `MAIL_SUPPRESS_SEND=true` in `backend/.env` for testing.
 
-More: [SETUP.md](SETUP.md). Performance notes: [PERFORMANCE_OPTIMIZATION.md](PERFORMANCE_OPTIMIZATION.md).
+More troubleshooting: [docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md).
 
 ---
 
 ## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branch workflow, architecture boundaries, testing, and documentation requirements.
+
+Quick summary:
 
 1. Create a feature branch from `main`.
 2. Follow existing patterns (see [docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md) for architecture and patterns).

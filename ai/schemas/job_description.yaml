@@ -72,7 +72,7 @@ defs:
       - { $ref: "skill.yaml#/skill_object" }
 
 toon_projection:
-  mapping_ref: mappings/toon.yaml#job_description
+  mapping_ref: ../../toon/v1/mappings/job_description.yaml
   serializer: backend/toon.py#toon_dumps
   validator: backend/parsing_utils.py#validate_toon_format
 

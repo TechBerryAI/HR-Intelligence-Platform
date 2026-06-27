@@ -8,7 +8,7 @@ schema:
 
 description: >
   Canonical normalized Resume document. Superset of HRMS Resume TOON with structured
-  entity refs and projects[]. TOON projection uses schemas/mappings/toon.yaml.
+  entity refs and projects[]. TOON projection uses toon/v1/mappings/resume.yaml.
 
 root:
   type: object
@@ -94,7 +94,7 @@ defs:
     $ref: "project.yaml#/project_object"
 
 toon_projection:
-  mapping_ref: mappings/toon.yaml#resume
+  mapping_ref: ../../toon/v1/mappings/resume.yaml
   serializer: backend/toon.py#toon_dumps
   validator: backend/parsing_utils.py#validate_toon_format
 

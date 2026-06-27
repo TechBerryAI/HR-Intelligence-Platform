@@ -22,8 +22,8 @@ Adopt a **layered platform layout** inside `ai/`:
 
 ```
 ai/
-├── datasets/          # Data lake (staged)
-├── preprocessing/     # Transform pipelines
+├── dataset/lake/          # Data lake (staged)
+├── dataset/     # Transform pipelines
 ├── prompts/           # Active prompt templates
 ├── experiments/       # Research
 ├── training/          # Training execution
@@ -32,18 +32,18 @@ ai/
 ├── evaluation/        # Quality measurement
 ├── exports/           # Deployment packages (not weights)
 ├── platform/          # Future runtime (inference, services, monitoring)
-├── governance/        # Standards index
+├── ai/docs/ (governance standards in ADRs)        # Standards index
 ├── configs/           # YAML templates
 ├── scripts/           # CLI (future)
 ├── notebooks/         # Exploration only
 └── docs/              # Architecture + ADRs
 ```
 
-**Separate `platform/` from `training/`.** Training produces models; platform consumes them.
+**Separate `runtime/` + `providers/` from `training/`.** Training produces models; platform consumes them.
 
 **Separate `registry/` from `models/`.** Metadata in git; weights out of git.
 
-**Add `governance/`** as index to standards documents.
+**Add `ai/docs/ (governance standards in ADRs)`** as index to standards documents.
 
 ## Alternatives considered
 
@@ -59,14 +59,14 @@ ai/
 **Positive:**
 - Clear ownership per directory
 - New features add benchmark + registry entries, not new top-level folders
-- Platform runtime has defined home (`platform/`)
+- Platform runtime has defined home (`runtime/` + `providers/`)
 
 **Negative:**
 - More directories to learn (mitigated by README per folder)
-- `platform/` empty until M8 (documented as intentional)
+- `runtime/` + `providers/` empty until M8 (documented as intentional)
 
 ## Future work
 
 - `AI_DATA_ROOT` env var for symlinked data mount (M3)
-- `governance/schemas/` for JSON Schema (M2)
+- `ai/docs/ (governance standards in ADRs)schemas/` for JSON Schema (M2)
 - CI validation of directory conventions (M6)

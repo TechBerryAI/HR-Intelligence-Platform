@@ -1,0 +1,62 @@
+# TOON wire-format datatypes
+# Describes how values serialize on the wire (backend/toon.py).
+
+datatypes:
+  id: TOON-DATATYPES-v1
+  version: "1.0.0"
+  status: active
+  updated_at: "2026-06-27"
+
+implementation: backend/toon.py
+
+wire_rules:
+  - id: line_oriented
+    rule: "key.path: value"
+    description: One entry per line
+  - id: nesting
+    rule: dot_separated_paths
+    example: person.email
+  - id: scalar_lists
+    rule: pipe_delimited
+    example: "skills: Python|React|AWS"
+  - id: object_arrays
+    rule: zero_indexed_dot_paths
+    example: experience.0.title
+  - id: empty_arrays
+    rule: "key[0]:"
+    description: Empty value denotes empty array
+  - id: quoting
+    rule: strings_with_pipe_or_newline_quoted
+  - id: null
+    rule: omitted_on_serialize
+    parse_token: "null"
+  - id: legacy_json
+    rule: toon_loads_flex accepts JSON object at boundaries
+
+types:
+  string:
+    wire: plain_text_or_quoted
+    parse: string
+  string_optional:
+    wire: omitted_if_null
+    parse: string | null
+  string_array:
+    wire: pipe_delimited
+    parse: string[]
+  number:
+    wire: plain_text
+    parse: number
+  number_optional:
+    wire: omitted_if_null
+    parse: number | null
+  object:
+    wire: nested_dot_paths
+    parse: dict
+  object_array:
+    wire: indexed_dot_paths
+    parse: dict[]
+
+round_trip:
+  rule: toon_dumps(toon_loads_flex(toon)) preserves semantics
+  flex_loader: backend/toon.py#toon_loads_flex
+  legacy_json: accepted at storage boundary only

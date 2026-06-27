@@ -80,8 +80,8 @@ def providers(
     """List configured providers."""
     runtime = _load_runtime(config)
     rows = []
-    for provider_id in runtime.providers.list_provider_ids():
-        provider = runtime.providers.get(provider_id)
+    for provider_id in providers.list_provider_ids():
+        provider = providers.get(provider_id)
         rows.append(
             {
                 "provider_id": provider_id,

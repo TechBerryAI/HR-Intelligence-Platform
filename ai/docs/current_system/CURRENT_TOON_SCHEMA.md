@@ -2,7 +2,7 @@
 
 **Status:** Reverse-engineered from production code  
 **Canonical implementation:** `backend/toon.py` (serialize/parse)  
-**Type definitions:** `shared/types/toon.ts`, `shared/types/toon.d.ts`  
+**Type definitions:** `ai/toon/v1/types/toon.ts`, `ai/toon/v1/types/toon.ts`  
 **Validation:** `backend/parsing_utils.validate_toon_format()`
 
 ---

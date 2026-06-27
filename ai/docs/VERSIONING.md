@@ -193,10 +193,10 @@ Examples: `BENCH-PARSE-v1`, `BENCH-MATCH-v1`, `BENCH-GEN-v2`
 ### Directory layout
 
 ```
-datasets/benchmark/{category}/v{N}/
+dataset/lake/benchmark/{category}/v{N}/
 ```
 
-Maps to: `datasets/benchmark/parsing/v1/` for `BENCH-PARSE-v1`
+Maps to: `dataset/lake/benchmark/parsing/v1/` for `BENCH-PARSE-v1`
 
 ---
 

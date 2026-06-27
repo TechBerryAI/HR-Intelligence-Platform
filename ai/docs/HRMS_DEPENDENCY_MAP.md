@@ -246,7 +246,7 @@ Defined in: `backend/.env.example`
 | HRMS touchpoint | M5 integration approach |
 |-----------------|-------------------------|
 | `llm_service.call_llm` | Replace internals with provider router; same function signature |
-| `get_system_prompt` | Load from `ai/prompts/*.yaml` or synced copy |
+| `get_system_prompt` | Load from `ai/capabilities/*/prompt.md*.yaml` or synced copy |
 | `parse_llm_response` | Unchanged — TOON contract preserved |
 | `llm_key_manager` | Grok fallback only; Ollama needs no keys |
 | `model_version` | Include Ollama tag + prompt version |

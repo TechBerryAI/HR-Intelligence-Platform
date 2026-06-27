@@ -26,7 +26,7 @@ Configs reference versioned paths:
 ```yaml
 dataset:
   version: parsing-v1
-  train_path: datasets/jsonl/parsing-v1/train.jsonl
+  train_path: dataset/lake/jsonl/parsing-v1/train.jsonl
   registry: registry/datasets/parsing-v1.yaml
 
 benchmark:

@@ -5,9 +5,9 @@ from __future__ import annotations
 import pytest
 
 from runtime.exceptions import ConfigurationError
-from runtime.providers.factory import ProviderFactory
-from runtime.providers.mock import MockProvider
-from runtime.providers.ollama import OllamaProvider
+from providers.factory import ProviderFactory
+from providers.mock import MockProvider
+from providers.ollama import OllamaProvider
 
 
 def test_factory_creates_mock_provider() -> None:

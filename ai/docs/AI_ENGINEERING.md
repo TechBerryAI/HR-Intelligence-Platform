@@ -246,9 +246,9 @@ If LFS is adopted for small shared artifacts (e.g. sample benchmark subset), doc
 
 | Path | Estimated size (1 year) |
 |------|-------------------------|
-| `datasets/raw/` | 10–50 GB |
-| `datasets/extracted/` – `normalized/` | 5–20 GB |
-| `datasets/jsonl/` | 1–5 GB |
+| `dataset/lake/raw/` | 10–50 GB |
+| `dataset/lake/extracted/` – `normalized/` | 5–20 GB |
+| `dataset/lake/jsonl/` | 1–5 GB |
 | `models/base/` | 15–50 GB per base model |
 | `models/merged/` | 15–50 GB per model |
 | `models/gguf/` | 2–8 GB per quant |
@@ -258,7 +258,7 @@ If LFS is adopted for small shared artifacts (e.g. sample benchmark subset), doc
 
 ```
 /mnt/ai-data/          # Large disk mount (WSL: /mnt/d/ai-data)
-  ├── datasets/
+  ├── dataset/lake/
   ├── models/
   └── training/
 
@@ -328,7 +328,7 @@ Always duplicate critical metrics in `training/runs/{run_id}/metrics.json` — d
 ## 13. Security
 
 - API keys in `ai/.env` only — never in configs, registry, or notebooks.
-- Raw resumes contain PII — `datasets/raw/` is gitignored.
+- Raw resumes contain PII — `dataset/lake/raw/` is gitignored.
 - Benchmark JSONL is gitignored.
 - Use read-only DB credentials for HRMS export (M3).
 
@@ -339,4 +339,4 @@ Always duplicate critical metrics in `training/runs/{run_id}/metrics.json` — d
 - [REPRODUCIBILITY.md](REPRODUCIBILITY.md)
 - [VERSIONING.md](VERSIONING.md)
 - [WORKFLOW.md](WORKFLOW.md)
-- [governance/README.md](../governance/README.md)
+- [ai/docs/ (governance standards in ADRs)README.md](../ai/docs/ (governance standards in ADRs)README.md)

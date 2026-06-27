@@ -11,8 +11,8 @@ import pytest
 from runtime.config.loader import load_runtime_config
 from runtime.core.runtime import AIRuntime, run_task
 from runtime.exceptions import RetryExhaustedError
-from runtime.providers.ollama.client import OllamaClient
-from runtime.providers.ollama.tests.conftest import (
+from providers.ollama.client import OllamaClient
+from providers.ollama.tests.conftest import (
     JD_RESPONSE,
     RESUME_RESPONSE,
     build_ollama_mock_transport,
@@ -29,7 +29,7 @@ def test_run_task_resume_parsing(runtime: AIRuntime) -> None:
 
 def test_run_task_module_api(runtime: AIRuntime) -> None:
     with patch(
-        "runtime.providers.ollama.provider.OllamaClient",
+        "providers.ollama.provider.OllamaClient",
         side_effect=lambda config, provider_id: OllamaClient(
             config,
             provider_id=provider_id,
@@ -46,7 +46,7 @@ def test_run_task_module_api(runtime: AIRuntime) -> None:
 
 def test_run_task_text_output_task(runtime: AIRuntime) -> None:
     with patch(
-        "runtime.providers.ollama.provider.OllamaClient",
+        "providers.ollama.provider.OllamaClient",
         side_effect=lambda config, provider_id: OllamaClient(
             config,
             provider_id=provider_id,
@@ -111,8 +111,6 @@ runtime:
     max_attempts: 1
   tasks_config_path: {Path(__file__).resolve().parents[1] / "config" / "tasks.default.yaml"}
   capabilities_dir: {Path(__file__).resolve().parents[2] / "capabilities"}
-  prompts_dir: {Path(__file__).resolve().parents[1] / "prompts" / "definitions"}
-  schemas_dir: {Path(__file__).resolve().parents[1] / "schemas" / "definitions"}
   models_config_path: {Path(__file__).resolve().parents[1] / "config" / "models.default.yaml"}
 """,
         encoding="utf-8",
@@ -140,8 +138,6 @@ runtime:
     max_attempts: 2
   tasks_config_path: {Path(__file__).resolve().parents[1] / "config" / "tasks.default.yaml"}
   capabilities_dir: {Path(__file__).resolve().parents[2] / "capabilities"}
-  prompts_dir: {Path(__file__).resolve().parents[1] / "prompts" / "definitions"}
-  schemas_dir: {Path(__file__).resolve().parents[1] / "schemas" / "definitions"}
   models_config_path: {Path(__file__).resolve().parents[1] / "config" / "models.default.yaml"}
 """,
         encoding="utf-8",

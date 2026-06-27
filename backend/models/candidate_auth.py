@@ -1,5 +1,9 @@
 from datetime import datetime
 
+# Retained for schema parity and init_models() registration.
+# Candidate auth routes use raw SQL via db.py (see routes/simple_candidate_auth.py).
+# See docs/BACKEND_DOCUMENTATION.md and ai/docs/archive/LEGACY_ARTIFACTS.md.
+
 from sqlalchemy import Boolean, Column, DateTime, Integer, String
 
 from . import Base

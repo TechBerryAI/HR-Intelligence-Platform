@@ -15,8 +15,7 @@ def test_load_default_runtime_config() -> None:
     config = load_runtime_config(DEFAULT_CONFIG_PATH)
     assert config.routing.primary == "ollama"
     assert config.tasks_config_path is not None
-    assert config.prompts_dir is not None
-    assert config.schemas_dir is not None
+    assert config.capabilities_dir is not None
     assert config.models_config_path is not None
 
 

@@ -14,10 +14,10 @@ experiments/{YYYY-MM-DD}_{slug}/
 
 ```bash
 # Manual
-cp resumes/*.pdf ai/datasets/raw/resumes/
+cp resumes/*.pdf ai/dataset/lake/raw/resumes/
 
 # Future: HRMS export
-python scripts/export_hrms_dataset.py --output datasets/raw/
+python scripts/export_hrms_dataset.py --output dataset/lake/raw/
 ```
 
 ### 3. Run preprocessing pipeline
@@ -31,7 +31,7 @@ Each stage writes `manifest.yaml`. Register dataset version in `registry/dataset
 ### 4. Curate benchmark (parallel)
 
 ```
-datasets/benchmark/parsing/v1/   # frozen, never train on this
+dataset/lake/benchmark/parsing/v1/   # frozen, never train on this
 registry/benchmarks/parsing-v1.yaml
 ```
 

@@ -1,8 +1,10 @@
 # Registry
 
-Central metadata catalog for the HRMS AI platform. **The registry is the source of truth for lineage** — binary artifacts in `models/` and `datasets/` are referenced by path, not embedded.
+Central metadata catalog for the HRMS AI platform. **The registry is the source of truth for lineage** — binary artifacts in `models/` and `dataset/lake/` are referenced by path, not embedded.
 
-## Six sub-registries
+## Sub-registries
+
+Eight artifact categories:
 
 ```
 registry/
@@ -17,7 +19,7 @@ registry/
 └── deployments/      # DEPLOY-* Ollama/gateway deployment snapshots
 ```
 
-## Why six registries (not one)
+## Why multiple registries (not one)
 
 | Registry | Problem it solves |
 |----------|-------------------|

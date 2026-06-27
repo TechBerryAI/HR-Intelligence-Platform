@@ -25,8 +25,8 @@ The HRMS AI workspace is not a model training folder. It is an **enterprise AI p
 │    Data      │   Training   │  Inference   │  Evaluation  │ Governance │
 │   Platform   │   Platform   │   Platform   │   Platform   │  Platform  │
 ├──────────────┼──────────────┼──────────────┼──────────────┼────────────┤
-│ datasets/    │ training/    │ platform/    │ evaluation/  │ registry/  │
-│ preprocess/  │ models/      │ inference/   │ benchmarks/  │ governance/│
+│ dataset/lake/    │ training/    │ platform/    │ evaluation/  │ registry/  │
+│ preprocess/  │ models/      │ inference/   │ benchmarks/  │ ai/docs/ (governance standards in ADRs)│
 │ contracts    │ experiments/ │ services/    │ regression/  │ adr/       │
 │ artifacts    │              │ providers/   │ comparisons/ │ versioning │
 │              │              │ orchestration│              │            │
@@ -60,11 +60,11 @@ The HRMS AI workspace is not a model training folder. It is an **enterprise AI p
 | Layer | Directory | Milestone |
 |-------|-----------|-----------|
 | Data contracts | `docs/DATA_CONTRACTS.md` | M2 |
-| Dataset engineering | `datasets/`, `preprocessing/` | M3–M4 |
+| Dataset engineering | `dataset/lake/`, `dataset/` | M3–M4 |
 | Training | `training/`, `models/` | M5 |
 | Evaluation | `evaluation/`, benchmarks | M6 |
 | Deployment | `exports/`, `models/gguf/` | M7 |
-| LLM Gateway | `platform/inference/`, `platform/providers/` | M8 |
+| LLM Gateway | `runtime/`, `providers/` | M8 |
 | HRMS integration | `exports/integration/` | M9 |
 | Advanced features | `platform/services/` | M10 |
 | Monitoring | `platform/monitoring/` | M11 |

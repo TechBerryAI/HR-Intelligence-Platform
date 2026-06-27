@@ -11,7 +11,7 @@ Design goal: **an engineer joining six months from now can reproduce any trainin
 | **Config immutability** | `training/configs/{run_id}.yaml` frozen at run start |
 | **Dataset versioning** | `registry/datasets/` + checksums in manifests |
 | **Model lineage** | `registry/models/` links run → adapter → merged → gguf |
-| **Benchmark freezing** | `datasets/benchmark/` versioned directories, never mutated |
+| **Benchmark freezing** | `dataset/lake/benchmark/` versioned directories, never mutated |
 | **Prompt versioning** | Semver in `prompts/*.yaml` recorded in every registry entry |
 | **Dependency pinning** | `requirements.txt` with version ranges |
 | **Git commit tracking** | `git_commit` field in manifests and training configs |
@@ -25,7 +25,7 @@ Design goal: **an engineer joining six months from now can reproduce any trainin
 ```
 datasets/{stage}/{doc_type}/{id}.json     # Per-document records
 datasets/jsonl/{version}/train.jsonl      # Versioned splits
-datasets/benchmark/{feature}/v{N}/        # Frozen eval sets
+dataset/lake/benchmark/{feature}/v{N}/        # Frozen eval sets
 ```
 
 **Never overwrite a versioned path.** Create `v2`, `v3`, etc.
@@ -66,7 +66,7 @@ registry/models/{model_id}.yaml             # Links all of the above
 
 ## Dataset versioning
 
-1. Create splits in `datasets/jsonl/{version}/`.
+1. Create splits in `dataset/lake/jsonl/{version}/`.
 2. Write `registry/datasets/{version}.yaml` with:
    - Record counts per split
    - SHA-256 checksums of each JSONL file
@@ -176,12 +176,12 @@ To reproduce model `hrms-parsing-v1`:
 
 - [ ] Clone repo; checkout `git_commit` from training config
 - [ ] `pip install -r requirements.txt` (or locked version)
-- [ ] Restore `datasets/jsonl/parsing-v1/` (verify checksums vs registry)
+- [ ] Restore `dataset/lake/jsonl/parsing-v1/` (verify checksums vs registry)
 - [ ] Restore or re-download `models/base/` foundation model at pinned HF revision
 - [ ] Run training with `training/configs/{run_id}.yaml`
 - [ ] Merge → `models/merged/hrms-parsing-v1/`
 - [ ] Export GGUF → `models/gguf/hrms-parsing-v1-q4_K_M.gguf`
-- [ ] Evaluate vs `datasets/benchmark/parsing/v1/`
+- [ ] Evaluate vs `dataset/lake/benchmark/parsing/v1/`
 - [ ] Compare metrics to `registry/models/hrms-parsing-v1.yaml`
 
 ---

@@ -17,8 +17,14 @@
       "manifest": "schemas/manifest.yaml",
       "documents": ["resume", "job_description", "candidate"],
       "entities": ["skill", "experience", "education", "project", "certification", "language", "company", "location"],
-      "mappings": "schemas/mappings/toon.yaml",
       "validation": "schemas/validation/rules.yaml"
+    },
+    "toon": {
+      "path": "toon/",
+      "manifest": "toon/versions.yaml",
+      "active_version": "toon/v1/",
+      "mappings": "toon/v1/mappings/",
+      "validation": "toon/v1/validation/validation.yaml"
     },
     "knowledge": {
       "path": "knowledge/",
@@ -30,16 +36,21 @@
     "contracts",
     "schemas",
     "knowledge",
-    "TOON (backend/toon.py — read-only)"
+    "toon/v1",
+    "TOON runtime (backend/toon.py — read-only)"
   ],
   "constraints": {
     "no_hrms_modifications": true,
     "no_training_code": true,
     "no_fake_datasets": true
   },
-  "dataset_factory": {
-    "path": "dataset_factory/",
-    "manifest": "dataset_factory/manifest.yaml",
+  "dataset": {
+    "path": "dataset/",
+    "factory": "dataset/factory/",
+    "lake": "dataset/lake/",
+    "extraction": "dataset/extraction/",
+    "proposals": "dataset/proposals/",
+    "manifest": "dataset/factory/manifest.yaml",
     "milestone": "M3.1",
     "implemented_stages": ["inspector"],
     "interface_only_stages": ["extractor", "validator", "normalizer", "reviewer", "exporter", "benchmark"]

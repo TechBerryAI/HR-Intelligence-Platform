@@ -1,6 +1,0 @@
-id: jd_v1
-version: "1.0.0"
-status: active
-schema_file: null
-format: json_schema
-description: Job description structured output schema (not yet implemented).
