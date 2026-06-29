@@ -17,6 +17,7 @@ from models import get_session
 from models.hr_auth import HRAuth
 from sessions_service import record_login_attempt
 from utils import build_jwt_payload, authenticate_token, validate_password_strength
+from rbac import build_hr_identity, ROLE_RECRUITER, get_user_id
 
 auth_bp = Blueprint('auth', __name__)
 HRAUTH_T = '"HRAuth"' if BACKEND == 'postgresql' else 'HRAuth'
@@ -253,7 +254,7 @@ def verify_hr_otp():
             traceback.print_exc()
             return jsonify({"error": "Failed to create account. Please try again."}), 500
 
-        identity = {"hrId": hrid, "email": hr_data['email'], "role": "HR"}
+        identity = {"user_id": hrid, "email": hr_data['email'], "role": ROLE_RECRUITER}
         access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
         refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
 
@@ -280,7 +281,7 @@ def verify_hr_otp():
                 "email": hr_data['email'],
                 "fullName": hr_data['full_name'],
                 "company": hr_data['company'],
-                "role": "HR"
+                "role": ROLE_RECRUITER
             }
         }), 200
     except Exception as e:
@@ -503,7 +504,7 @@ def hr_login():
 
         email_clean = email.strip().lower()
         signup_data = db_get(
-            'SELECT hrid, email, password, full_name, company, is_head_hr FROM hr_signup WHERE LOWER(TRIM(email)) = ?',
+            'SELECT hrid, email, password, full_name, company, role FROM hr_signup WHERE LOWER(TRIM(email)) = ?',
             (email_clean,)
         )
         if not signup_data:
@@ -520,8 +521,8 @@ def hr_login():
             return jsonify({"error": "Invalid email or password"}), 401
 
         user_id = signup_data['hrid']
-        role = 'head_hr' if signup_data.get('is_head_hr') else 'HR'
-        identity = {"hrId": user_id, "email": signup_data['email'], "role": role}
+        identity = build_hr_identity(signup_data)
+        role = identity['role']
         access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
         refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
 
@@ -566,7 +567,7 @@ def hr_login():
                 "email": signup_data['email'],
                 "fullName": signup_data['full_name'],
                 "company": signup_data['company'],
-                "role": role
+                "role": role,
             }
         })
     except Exception:
@@ -579,7 +580,7 @@ def hr_change_password():
     """Change password for logged-in HR or Super Admin. Requires current password and new password."""
     try:
         user = getattr(request, 'user', None)
-        if not user or not user.get('hrId'):
+        if not user or not get_user_id(user):
             return jsonify({'error': 'Access denied'}), 403
         data = request.get_json(force=True) or {}
         current_password = (data.get('currentPassword') or data.get('current_password') or '').strip()
@@ -589,7 +590,7 @@ def hr_change_password():
         ok, err = validate_password_strength(new_password)
         if not ok:
             return jsonify({'error': err}), 400
-        hrid = user['hrId']
+        hrid = get_user_id(user)
         signup_data = db_get(
             'SELECT hrid, email, password, full_name FROM hr_signup WHERE hrid = ?',
             (hrid,)
@@ -644,8 +645,8 @@ def refresh_tokens():
         payload = jwt.decode(refresh_token, JWT_SECRET, algorithms=["HS256"])
         if payload.get('type') != 'refresh':
             return jsonify({"error": "Invalid refresh token"}), 403
-        identity = {k: payload[k] for k in ('hrId', 'id', 'email', 'role') if k in payload}
-        if not identity:
+        identity = {k: payload[k] for k in ('user_id', 'email', 'role') if k in payload}
+        if not identity.get('user_id') or not identity.get('role'):
             return jsonify({"error": "Invalid refresh token"}), 403
         new_access = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
         new_refresh = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')

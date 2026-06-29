@@ -1,11 +1,13 @@
 """
 Local bulk resume parsing when external Bulk-Resume-Parser (port 8001) is unavailable.
 Uses existing text_extraction + llm_service; stores results in memory and exports Excel.
+Persists session/file progress to PostgreSQL (bulk_parse_sessions / bulk_parse_files).
 Processes files in parallel (configurable workers) for faster throughput.
 """
 import io
 import os
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -91,8 +93,10 @@ def _process_one_file(args: tuple[str, bytes]) -> tuple[str, dict | None, bool, 
         return (filename, None, True, f'Failed: {filename} - {str(e)[:100]}')
 
 
-def _worker(job_id: str, files_list: list[tuple[str, bytes]]) -> None:
+def _worker(job_id: str, files_list: list[tuple[str, bytes]], started_at: float) -> None:
     """Background: process files in parallel (ThreadPoolExecutor), update job progress as each completes."""
+    from services.bulk_session_db import finalize_session, update_file_status, update_session_progress
+
     with _local_jobs_lock:
         job = _local_jobs.get(job_id)
     if not job or job.get('status') == 'cancelled':
@@ -113,6 +117,7 @@ def _worker(job_id: str, files_list: list[tuple[str, bytes]]) -> None:
             filename, row, is_failed, message = future.result()
             if is_failed:
                 failed_count += 1
+                update_file_status(job_id, filename, 'Failed', error_message=message)
                 with _local_jobs_lock:
                     if job_id in _local_jobs:
                         _local_jobs[job_id].setdefault('failed_filenames', []).append(filename)
@@ -120,9 +125,11 @@ def _worker(job_id: str, files_list: list[tuple[str, bytes]]) -> None:
                 if row:
                     results.append(row)
                 success_count += 1
+                update_file_status(job_id, filename, 'Completed')
                 with _local_jobs_lock:
                     if job_id in _local_jobs:
                         _local_jobs[job_id].setdefault('success_filenames', []).append(filename)
+            update_session_progress(job_id, success_count + failed_count, success_count, failed_count)
             with _local_jobs_lock:
                 if job_id in _local_jobs:
                     _local_jobs[job_id]['processed_files'] = success_count + failed_count
@@ -137,12 +144,25 @@ def _worker(job_id: str, files_list: list[tuple[str, bytes]]) -> None:
             _local_jobs[job_id]['results'] = results
             _local_jobs[job_id]['message'] = f'Completed: {success_count} successful, {failed_count} failed'
 
+    finalize_session(job_id, started_at, success_count, failed_count)
 
-def start_local_job(files_list: list[tuple[str, bytes]]) -> tuple[str, dict]:
+
+def start_local_job(files_list: list[tuple[str, bytes]], started_by=None) -> tuple[str, dict]:
     """
     Start local bulk parse job. Returns (job_id, { job_id, total_files, status: 'started' }).
+    Persists session to DB when started_by is provided.
     """
-    job_id = str(uuid.uuid4())
+    from services.bulk_session_db import create_session
+
+    filenames = [f[0] for f in files_list]
+    file_data = [f[1] for f in files_list]
+    job_id = None
+    if started_by:
+        job_id = create_session(started_by, filenames, file_data)
+    if not job_id:
+        job_id = str(uuid.uuid4())
+
+    started_at = time.time()
     with _local_jobs_lock:
         _local_jobs[job_id] = {
             'status': 'started',
@@ -153,8 +173,10 @@ def start_local_job(files_list: list[tuple[str, bytes]]) -> tuple[str, dict]:
             'message': 'Processing...',
             'failed_filenames': [],
             'success_filenames': [],
+            'started_by': started_by,
+            'started_at': started_at,
         }
-    t = threading.Thread(target=_worker, args=(job_id, files_list), daemon=True)
+    t = threading.Thread(target=_worker, args=(job_id, files_list, started_at), daemon=True)
     t.start()
     return job_id, {
         'job_id': job_id,
@@ -164,21 +186,37 @@ def start_local_job(files_list: list[tuple[str, bytes]]) -> tuple[str, dict]:
     }
 
 
-def get_local_progress(job_id: str) -> tuple[bool, dict]:
+def get_local_progress(job_id: str, check_only: bool = False) -> tuple[bool, dict]:
     """Return (True, progress_dict) if job exists; else (False, error_dict)."""
     with _local_jobs_lock:
         job = _local_jobs.get(job_id)
-    if not job:
-        return False, {'error': 'Job not found'}
-    return True, {
-        'status': job['status'],
-        'total_files': job['total_files'],
-        'processed_files': job.get('processed_files', 0),
-        'failed_files': job.get('failed_files', 0),
-        'message': job.get('message', ''),
-        'failed_filenames': job.get('failed_filenames', []),
-        'success_filenames': job.get('success_filenames', []),
-    }
+    if job:
+        if check_only:
+            return True, {'started_by': job.get('started_by')}
+        return True, {
+            'status': job['status'],
+            'started_by': job.get('started_by'),
+            'total_files': job['total_files'],
+            'processed_files': job.get('processed_files', 0),
+            'failed_files': job.get('failed_files', 0),
+            'message': job.get('message', ''),
+            'failed_filenames': job.get('failed_filenames', []),
+            'success_filenames': job.get('success_filenames', []),
+        }
+
+    from services.bulk_session_db import get_session_progress, get_session_owner
+
+    db_progress = get_session_progress(job_id)
+    if db_progress:
+        if check_only:
+            return True, {'started_by': db_progress.get('started_by')}
+        return True, db_progress
+
+    owner = get_session_owner(job_id)
+    if owner and check_only:
+        return True, {'started_by': owner}
+
+    return False, {'error': 'Job not found'}
 
 
 def get_local_download(job_id: str) -> tuple[bool, Any]:

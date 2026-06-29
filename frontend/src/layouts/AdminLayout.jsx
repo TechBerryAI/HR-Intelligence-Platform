@@ -4,7 +4,7 @@ import Navbar from '../components/Navbar.jsx'
 import { PageContainer } from '../components/PageContainer.jsx'
 
 /**
- * Layout for admin/super-admin pages with sidebar.
+ * Layout for admin/head-hr pages with sidebar.
  * Uses same page container for content area.
  */
 export default function AdminLayout() {

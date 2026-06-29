@@ -13,9 +13,9 @@ def deactivate_all_user_sessions(user_id, user_type: str) -> Dict:
 
 
 def get_user_sessions(user_id, user_type: str) -> List[Dict]:
-    if user_type == 'HR':
+    if user_type in ('RECRUITER', 'HEAD_HR', 'CEO'):
         return db_all("SELECT hrid, email, logged_in_at FROM hr_login WHERE hrid = ? ORDER BY logged_in_at DESC", (user_id,))
-    if user_type == 'candidate':
+    if user_type == 'CANDIDATE':
         return db_all(
             "SELECT cid, email, logged_in_at FROM candidate_login WHERE cid = ? ORDER BY logged_in_at DESC",
             (user_id,)

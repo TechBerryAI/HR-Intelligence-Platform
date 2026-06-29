@@ -5,9 +5,10 @@ import { useAsyncAction } from '../hooks/useAsyncAction.js'
 import PasswordInput from '../components/PasswordInput.jsx'
 import AuthPageLayout from '../components/AuthPageLayout.jsx'
 import { Input } from '../components/ui/Input.jsx'
+import { ROLES, getRole } from '../utils/rbac.js'
 
 export default function LoginAdmin() {
-  const { loginHR, loginSuperAdmin, auth, superAdminAuth } = useApp()
+  const { loginHR, auth } = useApp()
   const navigate = useNavigate()
   const { run, loading } = useAsyncAction()
   const [adminEmail, setAdminEmail] = useState('')
@@ -15,34 +16,31 @@ export default function LoginAdmin() {
   const [adminError, setAdminError] = useState('')
 
   useEffect(() => {
-    if (auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')) {
-      navigate('/dashboard', { replace: true })
-    }
+    if (!auth.isLoggedIn) return
+    const role = getRole(auth)
+    if (role === ROLES.CEO) navigate('/ceo', { replace: true })
+    else if (role === ROLES.HEAD_HR) navigate('/head-hr', { replace: true })
+    else if (role === ROLES.RECRUITER) navigate('/dashboard', { replace: true })
   }, [auth.isLoggedIn, auth.role, navigate])
-
-  useEffect(() => {
-    if (superAdminAuth?.isLoggedIn) {
-      navigate('/super-admin', { replace: true })
-    }
-  }, [superAdminAuth?.isLoggedIn, navigate])
 
   const onAdminSubmit = (e) => {
     e.preventDefault()
     setAdminError('')
     run(async () => {
-      const superRes = await loginSuperAdmin(adminEmail.trim(), adminPassword)
-      if (superRes?.ok) {
-        navigate('/super-admin')
+      const email = adminEmail.trim()
+      const res = await loginHR(email, adminPassword)
+      if (!res.ok) {
+        setAdminError(res.message || 'Login failed')
         return
       }
-      const res = await loginHR(adminEmail, adminPassword)
-      if (res.ok) navigate('/dashboard')
-      else setAdminError(res.message || 'Login failed')
+      const role = res.user?.role || getRole({ isLoggedIn: true, role: res.user?.role })
+      if (role === ROLES.CEO) navigate('/ceo')
+      else if (role === ROLES.HEAD_HR) navigate('/head-hr')
+      else navigate('/dashboard')
     })
   }
 
-  if (auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')) return null
-  if (superAdminAuth?.isLoggedIn) return null
+  if (auth.isLoggedIn && getRole(auth)) return null
 
   return (
     <AuthPageLayout
@@ -51,7 +49,7 @@ export default function LoginAdmin() {
     >
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 shadow-premium p-6 sm:p-8">
         <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Sign in</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">HR/Admin access only</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">HR, Head of HR, or Executive access</p>
         <form onSubmit={onAdminSubmit} className="mt-6 space-y-4">
           {adminError && (
             <div className="rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 px-4 py-3 text-sm text-red-700 dark:text-red-300">

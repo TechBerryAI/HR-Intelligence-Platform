@@ -7,14 +7,14 @@ import { FiSettings, FiShield, FiLock, FiCheck, FiAlertCircle, FiX } from 'react
 import { PASSWORD_RULES, isPasswordStrong } from '../utils/passwordValidation.js'
 
 export default function Settings() {
-  const { applicantAuth, auth, superAdminAuth, changePasswordApplicant, changePasswordHr } = useApp()
+  const { applicantAuth, auth, changePasswordApplicant, changePasswordHr } = useApp()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
 
-  const isApplicant = applicantAuth?.isLoggedIn && !auth?.isLoggedIn && !superAdminAuth?.isLoggedIn
+  const isApplicant = applicantAuth?.isLoggedIn && !auth?.isLoggedIn
   const changePassword = isApplicant ? changePasswordApplicant : changePasswordHr
 
   const newPasswordValid = isPasswordStrong(newPassword)

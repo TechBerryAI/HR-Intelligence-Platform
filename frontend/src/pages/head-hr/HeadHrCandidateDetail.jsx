@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
 import { BASE_URL } from '../../utils/api.js'
-import SuperAdminLayout from './SuperAdminLayout.jsx'
+import HeadHrLayout from './HeadHrLayout.jsx'
 import { FiArrowLeft, FiUser, FiMail, FiPhone, FiMapPin, FiBriefcase, FiBook, FiAward, FiFileText } from 'react-icons/fi'
 
 function formatDate(ts) {
@@ -11,7 +11,7 @@ function formatDate(ts) {
   return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export default function SuperAdminCandidateDetail() {
+export default function HeadHrCandidateDetail() {
   const { cid } = useParams()
   const navigate = useNavigate()
   const [candidate, setCandidate] = useState(null)
@@ -26,7 +26,7 @@ export default function SuperAdminCandidateDetail() {
       setError('')
       try {
         const token = tokenService.getToken()
-        const data = await apiRequest(`/api/super-admin/candidates/${encodeURIComponent(cid)}`, { method: 'GET', token })
+        const data = await apiRequest(`/api/head-hr/candidates/${encodeURIComponent(cid)}`, { method: 'GET', token })
         if (!cancelled) setCandidate(data)
       } catch (err) {
         if (!cancelled) setError(err?.message || 'Failed to load candidate')
@@ -43,7 +43,7 @@ export default function SuperAdminCandidateDetail() {
     setResumeLoading(true)
     try {
       const token = tokenService.getToken()
-      const url = `${BASE_URL || ''}/api/super-admin/candidates/${encodeURIComponent(cid)}/resume`
+      const url = `${BASE_URL || ''}/api/head-hr/candidates/${encodeURIComponent(cid)}/resume`
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         credentials: 'include',
@@ -63,30 +63,30 @@ export default function SuperAdminCandidateDetail() {
 
   if (loading) {
     return (
-      <SuperAdminLayout>
+      <HeadHrLayout>
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-16 rounded-xl bg-zinc-900/60 border border-zinc-800 animate-pulse" />
           ))}
         </div>
-      </SuperAdminLayout>
+      </HeadHrLayout>
     )
   }
 
   if (error || !candidate) {
     return (
-      <SuperAdminLayout>
+      <HeadHrLayout>
         <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
           {error || 'Candidate not found'}
         </div>
         <button
           type="button"
-          onClick={() => navigate('/super-admin/candidates')}
+          onClick={() => navigate('/head-hr/candidates')}
           className="mt-4 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white"
         >
           <FiArrowLeft className="w-4 h-4" /> Back to Candidates
         </button>
-      </SuperAdminLayout>
+      </HeadHrLayout>
     )
   }
 
@@ -95,11 +95,11 @@ export default function SuperAdminCandidateDetail() {
   const valueClass = 'text-sm text-zinc-200 mt-0.5'
 
   return (
-    <SuperAdminLayout>
+    <HeadHrLayout>
       <div className="max-w-3xl mx-auto">
         <button
           type="button"
-          onClick={() => navigate('/super-admin/candidates')}
+          onClick={() => navigate('/head-hr/candidates')}
           className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white mb-6 transition-colors"
         >
           <FiArrowLeft className="w-4 h-4" /> Back to Candidates
@@ -250,6 +250,6 @@ export default function SuperAdminCandidateDetail() {
           )}
         </div>
       </div>
-    </SuperAdminLayout>
+    </HeadHrLayout>
   )
 }

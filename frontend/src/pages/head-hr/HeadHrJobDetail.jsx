@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
-import SuperAdminLayout from './SuperAdminLayout.jsx'
+import HeadHrLayout from './HeadHrLayout.jsx'
 import JobDescriptionView from '../../components/JobDescriptionView.jsx'
 import { FiArrowLeft, FiBriefcase, FiMapPin, FiDollarSign, FiUser, FiCalendar } from 'react-icons/fi'
 
@@ -11,7 +11,7 @@ function formatDate(ts) {
   return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export default function SuperAdminJobDetail() {
+export default function HeadHrJobDetail() {
   const { jdid } = useParams()
   const navigate = useNavigate()
   const [job, setJob] = useState(null)
@@ -25,7 +25,7 @@ export default function SuperAdminJobDetail() {
       setError('')
       try {
         const token = tokenService.getToken()
-        const data = await apiRequest(`/api/super-admin/jobs/${encodeURIComponent(jdid)}`, { method: 'GET', token })
+        const data = await apiRequest(`/api/head-hr/jobs/${encodeURIComponent(jdid)}`, { method: 'GET', token })
         if (!cancelled) setJob(data)
       } catch (err) {
         if (!cancelled) setError(err?.message || 'Failed to load job')
@@ -39,30 +39,30 @@ export default function SuperAdminJobDetail() {
 
   if (loading) {
     return (
-      <SuperAdminLayout>
+      <HeadHrLayout>
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-16 rounded-xl bg-zinc-900/60 border border-zinc-800 animate-pulse" />
           ))}
         </div>
-      </SuperAdminLayout>
+      </HeadHrLayout>
     )
   }
 
   if (error || !job) {
     return (
-      <SuperAdminLayout>
+      <HeadHrLayout>
         <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
           {error || 'Job not found'}
         </div>
         <button
           type="button"
-          onClick={() => navigate('/super-admin/jobs')}
+          onClick={() => navigate('/head-hr/jobs')}
           className="mt-4 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white"
         >
           <FiArrowLeft className="w-4 h-4" /> Back to Jobs
         </button>
-      </SuperAdminLayout>
+      </HeadHrLayout>
     )
   }
 
@@ -70,11 +70,11 @@ export default function SuperAdminJobDetail() {
   const labelClass = 'text-xs font-semibold text-zinc-500 uppercase tracking-wider'
 
   return (
-    <SuperAdminLayout>
+    <HeadHrLayout>
       <div className="max-w-3xl mx-auto">
         <button
           type="button"
-          onClick={() => navigate('/super-admin/jobs')}
+          onClick={() => navigate('/head-hr/jobs')}
           className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white mb-6 transition-colors"
         >
           <FiArrowLeft className="w-4 h-4" /> Back to Jobs
@@ -159,6 +159,6 @@ export default function SuperAdminJobDetail() {
           </div>
         </div>
       </div>
-    </SuperAdminLayout>
+    </HeadHrLayout>
   )
 }

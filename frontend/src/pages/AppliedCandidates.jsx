@@ -299,7 +299,7 @@ export default function AppliedCandidates() {
     }
   }
 
-  if (!auth.isLoggedIn || (auth.role !== 'HR' && auth.role !== 'head_hr')) {
+  if (!auth.isLoggedIn || (auth.role !== 'RECRUITER' && auth.role !== 'HEAD_HR')) {
     return (
       <section className="py-10">
         <div className="max-w-7xl mx-auto px-4">

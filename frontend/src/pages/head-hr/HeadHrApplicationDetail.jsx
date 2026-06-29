@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
-import SuperAdminLayout from './SuperAdminLayout.jsx'
+import HeadHrLayout from './HeadHrLayout.jsx'
 import { FiArrowLeft, FiFileText } from 'react-icons/fi'
 import { MatchHeader, ScoreCard, ChipGroup, CollapsibleSection } from '../../components/MatchExplanation'
 
@@ -35,7 +35,7 @@ function formatDate(ts) {
   return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export default function SuperAdminApplicationDetail() {
+export default function HeadHrApplicationDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [application, setApplication] = useState(null)
@@ -49,7 +49,7 @@ export default function SuperAdminApplicationDetail() {
       setError('')
       try {
         const token = tokenService.getToken()
-        const data = await apiRequest(`/api/super-admin/applications/${id}`, { method: 'GET', token })
+        const data = await apiRequest(`/api/head-hr/applications/${id}`, { method: 'GET', token })
         if (!cancelled) setApplication(data)
       } catch (err) {
         if (!cancelled) setError(err?.message || 'Failed to load application')
@@ -63,30 +63,30 @@ export default function SuperAdminApplicationDetail() {
 
   if (loading) {
     return (
-      <SuperAdminLayout>
+      <HeadHrLayout>
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-16 rounded-xl bg-zinc-900/60 border border-zinc-800 animate-pulse" />
           ))}
         </div>
-      </SuperAdminLayout>
+      </HeadHrLayout>
     )
   }
 
   if (error || !application) {
     return (
-      <SuperAdminLayout>
+      <HeadHrLayout>
         <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
           {error || 'Application not found'}
         </div>
         <button
           type="button"
-          onClick={() => navigate('/super-admin/applications')}
+          onClick={() => navigate('/head-hr/applications')}
           className="mt-4 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white"
         >
           <FiArrowLeft className="w-4 h-4" /> Back to Applications
         </button>
-      </SuperAdminLayout>
+      </HeadHrLayout>
     )
   }
 
@@ -131,11 +131,11 @@ export default function SuperAdminApplicationDetail() {
   const gapChips = toChips(rawGaps)
 
   return (
-    <SuperAdminLayout>
+    <HeadHrLayout>
       <div className="max-w-3xl mx-auto">
         <button
           type="button"
-          onClick={() => navigate('/super-admin/applications')}
+          onClick={() => navigate('/head-hr/applications')}
           className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white mb-6 transition-colors"
         >
           <FiArrowLeft className="w-4 h-4" /> Back to Applications
@@ -176,7 +176,7 @@ export default function SuperAdminApplicationDetail() {
             candidateName={application.candidate_name || 'Candidate'}
             candidateEmail={application.candidate_email || ''}
             verdict={verdict}
-            onClose={() => navigate('/super-admin/applications')}
+            onClose={() => navigate('/head-hr/applications')}
           />
           <div className="p-6 space-y-6">
             <div className="rounded-xl bg-zinc-800/50 ring-1 ring-zinc-700/50 px-4 py-3">
@@ -251,6 +251,6 @@ export default function SuperAdminApplicationDetail() {
           </div>
         </div>
       </div>
-    </SuperAdminLayout>
+    </HeadHrLayout>
   )
 }

@@ -1,16 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext.jsx'
-import { apiRequest } from '../utils/api.js'
-import { tokenService } from '../utils/tokenService.js'
 import JDUploadWithParsing from '../components/JDUploadWithParsing.jsx'
-import PasswordInput from '../components/PasswordInput.jsx'
 import PremiumButton from '../components/PremiumButton.jsx'
 import PremiumInput from '../components/PremiumInput.jsx'
 import AnimatedContainer from '../components/AnimatedContainer.jsx'
 import { StatCard, Card, CardHeader, CardTitle, CardContent, Modal } from '../components/ui/index.js'
 import { PageContainer } from '../components/PageContainer.jsx'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiPlus, FiUsers, FiLayers } from 'react-icons/fi'
+import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiUsers, FiLayers } from 'react-icons/fi'
 
 // Helper function to format date for display
 const formatDisplayDate = (dateString) => {
@@ -45,47 +42,7 @@ export default function Dashboard() {
   const [editExperienceTo, setEditExperienceTo] = useState('')
   const [editDescription, setEditDescription] = useState('')
 
-  const isHeadHr = auth?.role === 'head_hr'
-  const [showCreateAdmin, setShowCreateAdmin] = useState(false)
-  const [createAdminForm, setCreateAdminForm] = useState({ email: '', fullName: '', company: '', password: '' })
-  const [creatingAdmin, setCreatingAdmin] = useState(false)
-  const [createAdminToast, setCreateAdminToast] = useState(null)
-
-  const showCreateAdminToast = (msg, type = 'success') => {
-    setCreateAdminToast({ msg, type })
-    setTimeout(() => setCreateAdminToast(null), 3000)
-  }
-
-  const handleCreateAdmin = async (e) => {
-    e.preventDefault()
-    if (!createAdminForm.email?.trim() || !createAdminForm.fullName?.trim() || !createAdminForm.company?.trim() || !createAdminForm.password || createAdminForm.password.length < 6) {
-      showCreateAdminToast('Please fill all fields; password must be at least 6 characters', 'error')
-      return
-    }
-    setCreatingAdmin(true)
-    try {
-      const token = tokenService.getToken()
-      await apiRequest('/api/super-admin/admins', {
-        method: 'POST',
-        token,
-        body: {
-          email: createAdminForm.email.trim().toLowerCase(),
-          fullName: createAdminForm.fullName.trim(),
-          company: createAdminForm.company.trim(),
-          password: createAdminForm.password,
-        },
-      })
-      setShowCreateAdmin(false)
-      setCreateAdminForm({ email: '', fullName: '', company: '', password: '' })
-      showCreateAdminToast('Admin account created successfully')
-    } catch (err) {
-      showCreateAdminToast(err?.message || 'Failed to create admin', 'error')
-    } finally {
-      setCreatingAdmin(false)
-    }
-  }
-
-  // Always ensure company field is set to user's company when user data loads
+  // Handle JD autofill from parsing (company is never changed — always from HR account)
   useEffect(() => {
     if (user?.company) {
       // Set company to user's company if it's empty or not set
@@ -176,102 +133,13 @@ export default function Dashboard() {
             <h2 className="text-3xl font-bold text-slate-900">Job Posting Dashboard</h2>
             <p className="mt-1 text-slate-500">Create and manage your job postings</p>
           </div>
-            {isHeadHr && (
-              <button
-                type="button"
-                onClick={() => setShowCreateAdmin(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 shadow-md transition-colors"
-              >
-                <FiPlus className="w-4 h-4" />
-                Create Admin
-              </button>
-            )}
-          </div>
-        </AnimatedContainer>
+        </div>
 
-        {/* Stat cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
           <StatCard title="Total jobs" value={jobs.length} icon={FiBriefcase} />
           <StatCard title="Active" value={activeJobs} subtitle="Currently visible" icon={FiLayers} />
         </div>
-
-        {createAdminToast && (
-          <div
-            className={`fixed top-20 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-xl shadow-md text-sm font-medium border ${
-              createAdminToast.type === 'error'
-                ? 'bg-red-50 border-red-200 text-red-700'
-                : 'bg-emerald-50 border-emerald-200 text-emerald-700'
-            }`}
-          >
-            {createAdminToast.msg}
-          </div>
-        )}
-
-        <Modal open={showCreateAdmin} onClose={() => { setShowCreateAdmin(false); setCreateAdminForm({ email: '', fullName: '', company: '', password: '' }) }} title="Create Admin Account" size="md">
-          <p className="text-sm text-slate-500 mb-6">New HR admin can log in and create jobs, manage candidates.</p>
-          <form onSubmit={handleCreateAdmin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-              <input
-                type="email"
-                value={createAdminForm.email}
-                onChange={(e) => setCreateAdminForm((f) => ({ ...f, email: e.target.value }))}
-                className="input-premium"
-                placeholder="hr@company.com"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Full name</label>
-              <input
-                type="text"
-                value={createAdminForm.fullName}
-                onChange={(e) => setCreateAdminForm((f) => ({ ...f, fullName: e.target.value }))}
-                className="input-premium"
-                placeholder="Jane Doe"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Company</label>
-              <input
-                type="text"
-                value={createAdminForm.company}
-                onChange={(e) => setCreateAdminForm((f) => ({ ...f, company: e.target.value }))}
-                className="input-premium"
-                placeholder="Acme Inc"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Password (min 6 characters)</label>
-              <PasswordInput
-                value={createAdminForm.password}
-                onChange={(e) => setCreateAdminForm((f) => ({ ...f, password: e.target.value }))}
-                className="input-premium"
-                placeholder="••••••••"
-                minLength={6}
-                required
-              />
-            </div>
-            <div className="flex gap-3 justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => { setShowCreateAdmin(false); setCreateAdminForm({ email: '', fullName: '', company: '', password: '' }) }}
-                className="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={creatingAdmin}
-                className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-colors"
-              >
-                {creatingAdmin ? 'Creating…' : 'Create'}
-              </button>
-            </div>
-          </form>
-        </Modal>
+      </AnimatedContainer>
 
         <AnimatedContainer animation="slideUp" delay={0.2}>
           <Card className="p-8 space-y-6">

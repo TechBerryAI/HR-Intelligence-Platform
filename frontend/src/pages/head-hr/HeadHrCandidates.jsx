@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
 import { useAsyncAction } from '../../hooks/useAsyncAction.js'
-import SuperAdminLayout from './SuperAdminLayout.jsx'
-import { FiTrash2, FiRefreshCw, FiBriefcase, FiSearch, FiDownload } from 'react-icons/fi'
-import { generateJobsPdf } from '../../utils/pdfReportUtils.js'
+import HeadHrLayout from './HeadHrLayout.jsx'
+import { FiTrash2, FiRefreshCw, FiUser, FiSearch, FiCheckCircle, FiXCircle, FiDownload } from 'react-icons/fi'
+import { generateCandidatesPdf } from '../../utils/pdfReportUtils.js'
 
 const Spinner = () => (
   <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -19,11 +19,11 @@ function formatDate(ts) {
   return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export default function SuperAdminJobs() {
+export default function HeadHrCandidates() {
   const navigate = useNavigate()
   const { run: runRefresh, loading: refreshLoading } = useAsyncAction()
   const { run: runReport, loading: reportLoading } = useAsyncAction()
-  const [jobs, setJobs] = useState([])
+  const [candidates, setCandidates] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
@@ -36,10 +36,10 @@ export default function SuperAdminJobs() {
     setError('')
     try {
       const token = tokenService.getToken()
-      const data = await apiRequest('/api/super-admin/jobs', { method: 'GET', token })
-      setJobs(data.jobs || [])
+      const data = await apiRequest('/api/head-hr/candidates', { method: 'GET', token })
+      setCandidates(data.candidates || [])
     } catch (err) {
-      setError(err?.message || 'Failed to load jobs')
+      setError(err?.message || 'Failed to load candidates')
     } finally {
       setLoading(false)
     }
@@ -52,33 +52,33 @@ export default function SuperAdminJobs() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  const handleDelete = async (jdid) => {
-    setDeleting(jdid)
+  const handleDelete = async (cid) => {
+    setDeleting(cid)
     try {
       const token = tokenService.getToken()
-      await apiRequest(`/api/super-admin/jobs/${jdid}`, { method: 'DELETE', token })
-      setJobs((prev) => prev.filter((j) => j.jdid !== jdid))
-      showToast('Job deleted successfully')
+      await apiRequest(`/api/head-hr/candidates/${cid}`, { method: 'DELETE', token })
+      setCandidates((prev) => prev.filter((c) => c.cid !== cid))
+      showToast('Candidate deleted successfully')
     } catch (err) {
-      showToast(err?.message || 'Failed to delete job', 'error')
+      showToast(err?.message || 'Failed to delete candidate', 'error')
     } finally {
       setDeleting(null)
       setConfirmDelete(null)
     }
   }
 
-  const filtered = jobs.filter(
-    (j) =>
+  const filtered = candidates.filter(
+    (c) =>
       !search ||
-      j.title?.toLowerCase().includes(search.toLowerCase()) ||
-      j.company?.toLowerCase().includes(search.toLowerCase()) ||
-      j.location?.toLowerCase().includes(search.toLowerCase()) ||
-      j.posted_by_name?.toLowerCase().includes(search.toLowerCase()) ||
-      j.jdid?.toLowerCase().includes(search.toLowerCase()),
+      c.name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.email?.toLowerCase().includes(search.toLowerCase()) ||
+      c.full_name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.cid?.toLowerCase().includes(search.toLowerCase()),
   )
 
   return (
-    <SuperAdminLayout>
+    <HeadHrLayout>
+      {/* Toast */}
       {toast && (
         <div
           className={`fixed top-20 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-xl text-sm font-medium ${
@@ -91,13 +91,15 @@ export default function SuperAdminJobs() {
         </div>
       )}
 
+      {/* Confirm dialog */}
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div className="w-full max-w-sm rounded-2xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl">
-            <h3 className="text-lg font-semibold text-white">Delete Job?</h3>
+            <h3 className="text-lg font-semibold text-white">Delete Candidate?</h3>
             <p className="mt-2 text-sm text-zinc-400">
-              This will permanently delete the job{' '}
-              <span className="text-white font-medium">"{confirmDelete.title}"</span>. All associated applications will also be removed.
+              This will permanently delete candidate{' '}
+              <span className="text-white font-medium">{confirmDelete.name || confirmDelete.full_name}</span> ({confirmDelete.cid}).
+              Their profile, applications and resume will also be removed.
             </p>
             <div className="mt-5 flex gap-3 justify-end">
               <button
@@ -107,23 +109,24 @@ export default function SuperAdminJobs() {
                 Cancel
               </button>
               <button
-                onClick={() => handleDelete(confirmDelete.jdid)}
-                disabled={deleting === confirmDelete.jdid}
+                onClick={() => handleDelete(confirmDelete.cid)}
+                disabled={deleting === confirmDelete.cid}
                 className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 transition-colors"
               >
-                {deleting === confirmDelete.jdid ? 'Deleting…' : 'Delete'}
+                {deleting === confirmDelete.cid ? 'Deleting…' : 'Delete'}
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <FiBriefcase className="w-5 h-5 text-zinc-300" /> All Jobs
+            <FiUser className="w-5 h-5 text-zinc-300" /> Candidates
           </h1>
-          <p className="mt-0.5 text-sm text-zinc-400">{jobs.length} job{jobs.length !== 1 ? 's' : ''} in system</p>
+          <p className="mt-0.5 text-sm text-zinc-400">{candidates.length} candidate{candidates.length !== 1 ? 's' : ''} registered</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -135,8 +138,8 @@ export default function SuperAdminJobs() {
             {refreshLoading ? 'Refreshing…' : 'Refresh'}
           </button>
           <button
-            onClick={() => runReport(() => { generateJobsPdf(filtered.length ? filtered : jobs) })}
-            disabled={jobs.length === 0 || reportLoading}
+            onClick={() => runReport(() => { generateCandidatesPdf(filtered.length ? filtered : candidates) })}
+            disabled={candidates.length === 0 || reportLoading}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
           >
             {reportLoading ? <Spinner /> : <FiDownload className="w-4 h-4" />}
@@ -145,14 +148,15 @@ export default function SuperAdminJobs() {
         </div>
       </div>
 
+      {/* Search */}
       <div className="relative mb-5">
         <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
         <input
           type="text"
-          placeholder="Search by title, company, location or HR admin…"
+          placeholder="Search by name, email or ID…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-purple-500/50 transition-colors"
+          className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-blue-500/50 transition-colors"
         />
       </div>
 
@@ -168,7 +172,7 @@ export default function SuperAdminJobs() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-zinc-500 text-sm">
-          {search ? 'No jobs match your search.' : 'No jobs found.'}
+          {search ? 'No candidates match your search.' : 'No candidates found.'}
         </div>
       ) : (
         <div className="rounded-2xl border border-zinc-800 overflow-hidden">
@@ -177,45 +181,43 @@ export default function SuperAdminJobs() {
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-900/80">
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">ID</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Title</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Company</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Name</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Email</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Location</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Posted By</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Posted</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Profile</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Joined</th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
-                {filtered.map((job) => (
+                {filtered.map((c) => (
                   <tr
-                    key={job.jdid}
+                    key={c.cid}
                     role="button"
                     tabIndex={0}
-                    onClick={() => navigate(`/super-admin/jobs/${encodeURIComponent(job.jdid)}`)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/super-admin/jobs/${encodeURIComponent(job.jdid)}`) } }}
+                    onClick={() => navigate(`/head-hr/candidates/${encodeURIComponent(c.cid)}`)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/head-hr/candidates/${encodeURIComponent(c.cid)}`) } }}
                     className="bg-zinc-900/30 hover:bg-zinc-800/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-rose-500/50"
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-purple-400">{job.jdid}</td>
-                    <td className="px-4 py-3 text-zinc-100 font-medium max-w-[180px] truncate">{job.title}</td>
-                    <td className="px-4 py-3 text-zinc-400">{job.company}</td>
-                    <td className="px-4 py-3 text-zinc-500 text-xs">{job.location}</td>
-                    <td className="px-4 py-3 text-zinc-400 text-xs">{job.posted_by_name || '—'}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-blue-400">{c.cid}</td>
+                    <td className="px-4 py-3 text-zinc-100 font-medium">{c.full_name || c.name || '—'}</td>
+                    <td className="px-4 py-3 text-zinc-400">{c.email}</td>
+                    <td className="px-4 py-3 text-zinc-500 text-xs">{c.current_location || '—'}</td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          job.enabled
-                            ? 'bg-green-500/15 text-green-400 border border-green-500/20'
-                            : 'bg-zinc-700/50 text-zinc-500 border border-zinc-700'
-                        }`}
-                      >
-                        {job.enabled ? 'Active' : 'Disabled'}
-                      </span>
+                      {c.completed ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-green-400">
+                          <FiCheckCircle className="w-3.5 h-3.5" /> Complete
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
+                          <FiXCircle className="w-3.5 h-3.5" /> Incomplete
+                        </span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 text-zinc-500">{formatDate(job.posted_on)}</td>
+                    <td className="px-4 py-3 text-zinc-500">{formatDate(c.created_at)}</td>
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <button
-                        onClick={(e) => { e.stopPropagation(); setConfirmDelete(job) }}
+                        onClick={(e) => { e.stopPropagation(); setConfirmDelete(c) }}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 transition-all"
                       >
                         <FiTrash2 className="w-3.5 h-3.5" /> Delete
@@ -228,6 +230,6 @@ export default function SuperAdminJobs() {
           </div>
         </div>
       )}
-    </SuperAdminLayout>
+    </HeadHrLayout>
   )
 }

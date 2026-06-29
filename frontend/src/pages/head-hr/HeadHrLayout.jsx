@@ -6,31 +6,24 @@ import {
 } from 'react-icons/fi'
 
 const navItems = [
-  { label: 'Overview', path: '/super-admin', icon: FiGrid, end: true },
-  { label: 'Admins', path: '/super-admin/admins', icon: FiUsers },
-  { label: 'Candidates', path: '/super-admin/candidates', icon: FiUser },
-  { label: 'Jobs', path: '/super-admin/jobs', icon: FiBriefcase },
-  { label: 'Applications', path: '/super-admin/applications', icon: FiFileText },
-  { label: 'Settings', path: '/super-admin/settings', icon: FiSettings },
+  { label: 'Overview', path: '/head-hr', icon: FiGrid, end: true },
+  { label: 'Admins', path: '/head-hr/admins', icon: FiUsers },
+  { label: 'Candidates', path: '/head-hr/candidates', icon: FiUser },
+  { label: 'Jobs', path: '/head-hr/jobs', icon: FiBriefcase },
+  { label: 'Applications', path: '/head-hr/applications', icon: FiFileText },
+  { label: 'Settings', path: '/head-hr/settings', icon: FiSettings },
 ]
 
-export default function SuperAdminLayout({ children }) {
-  const { logoutSuperAdmin, logout, auth, superAdminAuth } = useApp()
+export default function HeadHrLayout({ children }) {
+  const { logout, auth } = useApp()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const isHeadHr = auth?.isLoggedIn && auth?.role === 'head_hr'
-  const displayEmail = isHeadHr ? auth?.email : superAdminAuth?.email
-  const displayName = isHeadHr ? (auth?.fullName || 'Head of HR') : (superAdminAuth?.name || 'Super Admin')
-  const panelLabel = isHeadHr ? 'Head of HR' : 'Super Admin'
+  const displayEmail = auth?.email
+  const displayName = auth?.fullName || 'Head of HR'
 
   const handleLogout = () => {
-    if (isHeadHr) {
-      logout()
-      navigate('/login/admin')
-    } else {
-      logoutSuperAdmin()
-      navigate('/login/admin')
-    }
+    logout()
+    navigate('/login/admin')
   }
 
   const Sidebar = ({ mobile = false }) => (
@@ -93,7 +86,7 @@ export default function SuperAdminLayout({ children }) {
           <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
           <div className="relative z-50 flex flex-col w-64 h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700">
             <div className="flex items-center justify-between px-4 py-4 border-b border-slate-200 dark:border-slate-700">
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">{panelLabel} Panel</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">Head of HR Panel</span>
               <button onClick={() => setSidebarOpen(false)} className="text-slate-500 hover:text-slate-700 dark:hover:text-white p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
                 <FiX className="w-5 h-5" />
               </button>
@@ -109,7 +102,7 @@ export default function SuperAdminLayout({ children }) {
             <FiMenu className="w-5 h-5" />
           </button>
           <span className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-            <FiShield className="w-4 h-4" /> {panelLabel} Panel
+            <FiShield className="w-4 h-4" /> Head of HR Panel
           </span>
         </div>
 

@@ -23,14 +23,15 @@ frontend/
     ├── context/
     │   └── AppContext.jsx   # Global state and API actions
     ├── guards/
-    │   ├── AdminGuard.jsx
+    │   ├── RecruiterGuard.jsx
     │   ├── CandidateGuard.jsx
-    │   └── SuperAdminGuard.jsx
+    │   ├── HeadHrGuard.jsx
+    │   └── CeoGuard.jsx
     ├── layouts/
     │   ├── MainLayout.jsx
     │   ├── DashboardLayout.jsx
     │   ├── AdminLayout.jsx
-    │   └── (in pages/super-admin) SuperAdminLayout.jsx
+    │   └── (in pages/head-hr) HeadHrLayout.jsx
     ├── pages/               # One component per route (lazy-loaded)
     ├── components/          # Reusable and feature components
     │   └── ui/              # Primitive UI (Button, Card, Input, etc.)
@@ -79,17 +80,17 @@ frontend/
    - `ToastProvider`
    - `ErrorBoundary`
    - `ConnectionStatus`
-   - Main div with optional `Navbar` (hidden when path starts with `/super-admin`)
+   - Main div with optional `Navbar` (hidden when path starts with `/head-hr`)
    - `ErrorToasts` (shows `authError` from context as a toast)
    - `<main>` with `<Suspense>` and `<Routes>`
-   - Footer (hidden on super-admin routes)
+   - Footer (hidden on head-hr routes)
 
 4. **Routes:**
    - Public: `/`, `/jobs`, `/support/*`, `/login`, `/login/applicant`, `/login/admin`, `/signup/*`, `/forgot-password/:variant` (request, verify, reset).
    - Candidate-only: wrapped in `<CandidateGuard>` — `/profile/applicant`, `/settings/applicant`, `/applications`.
    - HR-only: wrapped in `<PrivateRoute>` — `/dashboard`, `/candidates`, `/settings`.
    - Admin: wrapped in `<AdminGuard>` — `/admin/bulk-resume-parser`, `/admin/feedback`.
-   - Super Admin: wrapped in `<SuperAdminGuard>` — all `/super-admin/*` routes.
+   - Head of HR: wrapped in `<HeadHrGuard>` — all `/head-hr/*` routes.
    - Catch-all `*` → `NotFound`.
 
 5. **ErrorToasts**  
@@ -108,7 +109,7 @@ frontend/
 - `jobs`, `jobsLoading`, `jobsError`
 - `auth` (HR: isLoggedIn, role, email, fullName, company)
 - `applicantAuth` (isLoggedIn, email)
-- `superAdminAuth` (isLoggedIn, email)
+- `auth (HEAD_HR)` (isLoggedIn, email)
 - `token` (access token string)
 - `user` (current user object from login)
 - `applicantProfile` (full profile shape: education, experiences, certifications, resumeFileName, etc.)
@@ -117,11 +118,11 @@ frontend/
 - `backendHealthy`, `authLoading`, `authError`
 
 **Persistence:**  
-`STORAGE_KEYS` define localStorage keys. Auth, applicantAuth, superAdminAuth, applicantProfile, applicantApplications, applicantSavedJobs, and user are written to localStorage in `useEffect` and rehydrated on load. Token is kept in `tokenService` (and synced to state); it is not read from localStorage into state on purpose for security, but tokenService itself does persist it.
+`STORAGE_KEYS` define localStorage keys. Auth, applicantAuth, applicantProfile, applicantApplications, applicantSavedJobs, and user are written to localStorage in `useEffect` and rehydrated on load.
 
 **Key logic:**
 
-- **loginHR / loginApplicant / loginSuperAdmin:** Call the corresponding login API, then set token (and refresh in tokenService), user, and the relevant auth state; persist auth to localStorage. Applicant login may also fetch profile and call `fetchApplicantData()`.
+- **loginHR / loginApplicant:** Call the corresponding login API, then set token (and refresh in tokenService), user, and the relevant auth state; persist auth to localStorage. HEAD_HR uses `loginHR` like other staff roles.
 - **saveApplicantProfile:** Updates local state and localStorage first. If logged in, sends profile to `POST /api/candidate/profile` (JSON or FormData if resume file). Then fetches profile again and merges into state. On server error, still returns success with a warning so the user knows data was saved locally.
 - **applyToJobAsApplicant:** Checks profile completed, resume and education present. Does an optimistic update (sets applicantApplications[jobId]), then `POST /api/applications` with jobId. On success calls `fetchApplicantData()`; on failure reverts the optimistic update.
 - **fetchJobs:** GET `/api/jobs` with optional token (so HR sees only their jobs). Sets jobs array or jobs.jobs from response.
@@ -149,9 +150,9 @@ Guards are small wrapper components that either render `children` or redirect.
 - `isCandidate = applicantAuth?.isLoggedIn && !isHr`.
 - If not `isCandidate`, redirects to `/login/applicant`; otherwise renders `children`.
 
-### 4.3 `guards/SuperAdminGuard.jsx`
+### 4.3 `guards/HeadHrGuard.jsx`
 
-- If `!superAdminAuth?.isLoggedIn`, redirects to `/login/admin`.
+- If `!auth.isLoggedIn` or role is not `HEAD_HR`, redirects to `/login/admin`.
 - Otherwise renders `children`.
 
 ---
@@ -184,7 +185,7 @@ Guards are small wrapper components that either render `children` or redirect.
 ### 6.2 `pages/Jobs.jsx`
 
 - **Purpose:** List jobs with client-side filter and apply/save actions.
-- **State:** `applyError`, `applyingJobId`; reads from context: jobs, applicantAuth, applicantProfile, jobsError, jobsLoading, fetchJobs, applicantApplications, applicantSavedJobs, toggleSaveJob, applyToJobAsApplicant, auth, superAdminAuth.
+- **State:** `applyError`, `applyingJobId`; reads from context: jobs, applicantAuth, applicantProfile, jobsError, jobsLoading, fetchJobs, applicantApplications, applicantSavedJobs, toggleSaveJob, applyToJobAsApplicant, auth, auth (HEAD_HR).
 - **Query:** Reads `location.search` and builds `query = { keywords, location }` from `q` and `loc`.
 - **Filtering:** `useMemo` filters `jobs` by `enabled !== false`, then by keywords (title/company/description) and location (substring match).
 - **Search:** `handleSearch` updates URL with new `q` and `loc` so the same filter logic applies and the URL is shareable.
@@ -210,7 +211,7 @@ Guards are small wrapper components that either render `children` or redirect.
 - **AppliedCandidates:** Fetches applications per job via `fetchApplicationsForJob`; shows CandidateCard list and resume download.
 - **admin/BulkResumeParser:** Upload files, poll progress, download Excel via admin bulk-parse API.
 - **admin/FeedbackAdmin:** Lists and manages feedback from GET/PATCH feedback API.
-- **super-admin/*:** Super admin dashboard, admins, candidates, jobs, applications (list/detail), settings; all use super-admin API and SuperAdminGuard.
+- **head-hr/*:** Head of HR dashboard, admins, candidates, jobs, applications (list/detail), settings; uses `/api/head-hr` and `HeadHrGuard`.
 
 ---
 
@@ -218,11 +219,11 @@ Guards are small wrapper components that either render `children` or redirect.
 
 ### 7.1 `components/Navbar.jsx`
 
-- **Purpose:** Top bar with logo, Jobs link, role-based menu (Login / HR dropdown / Applicant dropdown / Super Admin button), and Support dropdown.
-- **Derived state:** `isHrLoggedIn`, `isApplicantLoggedIn`, `isSuperAdminLoggedIn` from context auth. `applicantInitials` and `hrInitials` from profile/user names (first letters of first two words).
+- **Purpose:** Top bar with logo, Jobs link, role-based menu (Login / HR dropdown / Applicant dropdown / Head of HR button), and Support dropdown.
+- **Derived state:** `isHrLoggedIn`, `isApplicantLoggedIn`, `isHeadHrLoggedIn` from context auth. `applicantInitials` and `hrInitials` from profile/user names (first letters of first two words).
 - **Logout:** `handleLogout` calls `logout()` then `navigate('/')`.
 - **NavLink:** Uses a function for `className`: active route gets `text-slate-900 font-semibold`, else `text-slate-600 hover:text-slate-900`.
-- **Conditional UI:** If no one logged in, show “Login”. If HR, show avatar dropdown with Dashboard, Candidates, Bulk Resume Parser, Feedback, Settings, Logout. If applicant, dropdown with Profile, Application Status, Settings, Logout. If super admin, link/button to “Super Admin”. Support dropdown: FAQ, Contact Us, HRMS Testing Feedback.
+- **Conditional UI:** If no one logged in, show “Login”. If HR, show avatar dropdown with Dashboard, Candidates, Bulk Resume Parser, Feedback, Settings, Logout. If applicant, dropdown with Profile, Application Status, Settings, Logout. If super admin, link/button to “Head of HR”. Support dropdown: FAQ, Contact Us, HRMS Testing Feedback.
 
 ### 7.2 `components/Hero.jsx`
 
@@ -363,6 +364,6 @@ All use Tailwind and, where applicable, Radix UI primitives and `class-variance-
 1. **User opens app:** main.jsx mounts App → AppProvider hydrates state from localStorage and tokenService, fetches jobs, starts health check.
 2. **Navigation:** React Router renders the matching route component; guards redirect if role is wrong.
 3. **User action (e.g. Apply):** Page/component calls context action (e.g. applyToJobAsApplicant) → context updates state (optimistic) → apiRequest in api.js → backend; on success context may refetch (fetchApplicantData) or update state; on failure context reverts and may set error message.
-4. **Auth:** Login pages call loginHR/loginApplicant/loginSuperAdmin; context sets token, user, auth state and persists to localStorage; api.js uses token from tokenService or passed option; on 403 api.js may refresh token and retry, or call logout.
+4. **Auth:** Login pages call loginHR/loginApplicant; context sets token, user, auth state and persists to localStorage; api.js uses token from tokenService or passed option; on 403 api.js may refresh token and retry, or call logout.
 
 This completes the frontend structure and code documentation.

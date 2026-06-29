@@ -11,17 +11,19 @@ import {
   AvatarWithInitials,
 } from './ui/index.js'
 import { FiBriefcase, FiUser, FiFileText, FiLogOut, FiUsers, FiHelpCircle, FiMessageCircle, FiMessageSquare, FiBook, FiShield, FiSettings } from 'react-icons/fi'
+import { isRecruiter, isHeadHr, isCeo } from '../utils/rbac.js'
 
 export default function Navbar() {
-  const { auth, applicantAuth, applicantProfile, logout, user, superAdminAuth } = useApp()
+  const { auth, applicantAuth, applicantProfile, logout, user } = useApp()
   const navigate = useNavigate()
 
   const activeClass = ({ isActive }) =>
     isActive ? 'text-slate-900 font-semibold' : 'text-slate-600 hover:text-slate-900 transition-colors'
 
-  const isHrLoggedIn = auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')
-  const isApplicantLoggedIn = applicantAuth.isLoggedIn && !isHrLoggedIn
-  const isSuperAdminLoggedIn = superAdminAuth?.isLoggedIn
+  const isHrRecruiter = auth.isLoggedIn && isRecruiter(auth)
+  const isHeadHrLoggedIn = auth.isLoggedIn && isHeadHr(auth)
+  const isCeoLoggedIn = auth.isLoggedIn && isCeo(auth)
+  const isApplicantLoggedIn = applicantAuth.isLoggedIn && !auth.isLoggedIn
 
   const applicantInitials = (() => {
     const name = applicantProfile?.completed && applicantProfile?.fullName ? applicantProfile.fullName : ''
@@ -30,8 +32,8 @@ export default function Navbar() {
   })()
 
   const hrInitials = (() => {
-    const name = user?.fullName || user?.name || ''
-    if (!name) return 'HR'
+    const name = user?.fullName || user?.name || auth?.fullName || ''
+    if (!name) return 'Recruiter'
     return name.trim().split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase()
   })()
 
@@ -46,6 +48,8 @@ export default function Navbar() {
     </NavLink>
   )
 
+  const showLogin = !isHrRecruiter && !isApplicantLoggedIn && !isHeadHrLoggedIn && !isCeoLoggedIn
+
   return (
     <header className="sticky top-0 z-30 w-full h-16 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between gap-6">
@@ -59,9 +63,9 @@ export default function Navbar() {
         <nav className="flex items-center gap-1 sm:gap-4">
           {navItem('/jobs', 'Jobs')}
 
-          {!isHrLoggedIn && !isApplicantLoggedIn && !isSuperAdminLoggedIn && navItem('/login', 'Login')}
+          {showLogin && navItem('/login', 'Login')}
 
-          {isHrLoggedIn && (
+          {isHrRecruiter && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="rounded-full">
@@ -121,10 +125,18 @@ export default function Navbar() {
             </DropdownMenu>
           )}
 
-          {isSuperAdminLoggedIn && (
-            <Link to="/super-admin">
+          {isHeadHrLoggedIn && (
+            <Link to="/head-hr">
               <Button variant="default" size="sm" className="gap-1.5">
-                <FiShield className="h-3.5 w-3.5" /> Super Admin
+                <FiShield className="h-3.5 w-3.5" /> Head of HR
+              </Button>
+            </Link>
+          )}
+
+          {isCeoLoggedIn && (
+            <Link to="/ceo">
+              <Button variant="default" size="sm" className="gap-1.5">
+                <FiShield className="h-3.5 w-3.5" /> Executive
               </Button>
             </Link>
           )}

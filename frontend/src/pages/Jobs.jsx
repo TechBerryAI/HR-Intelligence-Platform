@@ -7,8 +7,10 @@ import AnimatedContainer, { AnimatedStaggerContainer } from '../components/Anima
 import { motion } from 'framer-motion'
 import { FiAlertCircle, FiRefreshCw } from 'react-icons/fi'
 
+import { isStaffRecruiter } from '../utils/rbac.js'
+
 export default function Jobs() {
-  const { jobs, applicantAuth, applicantProfile, jobsError, jobsLoading, fetchJobs, applicantApplications, applicantSavedJobs, toggleSaveJob, applyToJobAsApplicant, auth, superAdminAuth } = useApp()
+  const { jobs, applicantAuth, applicantProfile, jobsError, jobsLoading, fetchJobs, applicantApplications, applicantSavedJobs, toggleSaveJob, applyToJobAsApplicant, auth } = useApp()
   const location = useLocation()
   const navigate = useNavigate()
   const params = new URLSearchParams(location.search)
@@ -152,7 +154,7 @@ export default function Jobs() {
                     job={job}
                     isApplied={!!applicantApplications[job.id] || !!applicantApplications[String(job.id)]}
                     isSaved={!!applicantSavedJobs[job.id] || !!applicantSavedJobs[String(job.id)]}
-                    isAdmin={!!(auth.role === 'HR' || auth.role === 'head_hr' || auth.role === 'admin' || superAdminAuth?.isLoggedIn)}
+                    isAdmin={isStaffRecruiter(auth)}
                     isApplying={applyingJobId === job.id}
                     onApply={async () => {
                       setApplyError('')

@@ -14,18 +14,18 @@ export default function ContactUs() {
   const [requestId, setRequestId] = useState(null)
 
   // Determine user info based on who's logged in
-  const isHrLoggedIn = auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')
-  const isApplicantLoggedIn = applicantAuth.isLoggedIn && !isHrLoggedIn
+  const isStaffLoggedIn = auth.isLoggedIn && (auth.role === 'RECRUITER' || auth.role === 'HEAD_HR')
+  const isApplicantLoggedIn = applicantAuth.isLoggedIn && !isStaffLoggedIn
 
   const defaultName = isApplicantLoggedIn 
     ? applicantProfile.fullName || '' 
-    : isHrLoggedIn 
+    : isStaffLoggedIn 
       ? user?.fullName || user?.name || '' 
       : ''
   
   const defaultEmail = isApplicantLoggedIn 
     ? applicantProfile.email || '' 
-    : isHrLoggedIn 
+    : isStaffLoggedIn 
       ? user?.email || '' 
       : ''
 
@@ -96,7 +96,7 @@ export default function ContactUs() {
       if (isApplicantLoggedIn) {
         payload.user_type = 'candidate'
         payload.user_id = applicantProfile.cid || applicantAuth.userId
-      } else if (isHrLoggedIn) {
+      } else if (isStaffLoggedIn) {
         payload.user_type = 'hr'
         payload.user_id = user?.hrid || auth.userId
       } else {

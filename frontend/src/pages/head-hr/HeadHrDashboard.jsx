@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useApp } from '../../context/AppContext.jsx'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
-import SuperAdminLayout from './SuperAdminLayout.jsx'
+import HeadHrLayout from './HeadHrLayout.jsx'
 import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiRefreshCw } from 'react-icons/fi'
 
 function StatCard({ icon: Icon, label, value, accent, onClick }) {
@@ -56,8 +56,8 @@ function BarRow({ label, count, total, colorClass }) {
   )
 }
 
-export default function SuperAdminDashboard() {
-  const { superAdminAuth } = useApp()
+export default function HeadHrDashboard() {
+  const { auth } = useApp()
   const navigate = useNavigate()
   const [stats, setStats] = useState(null)
   const [applications, setApplications] = useState([])
@@ -72,9 +72,9 @@ export default function SuperAdminDashboard() {
       setError('')
       const token = tokenService.getToken()
       const [statsRes, appsRes, jobsRes] = await Promise.all([
-        apiRequest('/api/super-admin/stats', { method: 'GET', token }),
-        apiRequest('/api/super-admin/applications', { method: 'GET', token }),
-        apiRequest('/api/super-admin/jobs', { method: 'GET', token }),
+        apiRequest('/api/head-hr/stats', { method: 'GET', token }),
+        apiRequest('/api/head-hr/applications', { method: 'GET', token }),
+        apiRequest('/api/head-hr/jobs', { method: 'GET', token }),
       ])
       setStats(statsRes)
       setApplications(appsRes.applications || [])
@@ -177,14 +177,14 @@ export default function SuperAdminDashboard() {
   }, [applications, jobs])
 
   return (
-    <SuperAdminLayout>
+    <HeadHrLayout>
       {/* Page header */}
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">System Overview</h1>
           <p className="mt-1 text-sm text-zinc-400">
             Full-access dashboard — logged in as{' '}
-            <span className="text-zinc-200 font-medium">{superAdminAuth?.email}</span>
+            <span className="text-zinc-200 font-medium">{auth?.email}</span>
           </p>
         </div>
         <button
@@ -221,42 +221,42 @@ export default function SuperAdminDashboard() {
             label="Total HR Admins"
             value={stats?.totalAdmins}
             accent="purple"
-            onClick={() => navigate('/super-admin/admins')}
+            onClick={() => navigate('/head-hr/admins')}
           />
           <StatCard
             icon={FiUser}
             label="Total Candidates"
             value={stats?.totalCandidates}
             accent="blue"
-            onClick={() => navigate('/super-admin/candidates')}
+            onClick={() => navigate('/head-hr/candidates')}
           />
           <StatCard
             icon={FiBriefcase}
             label="Total Jobs"
             value={stats?.totalJobs}
             accent="purple"
-            onClick={() => navigate('/super-admin/jobs')}
+            onClick={() => navigate('/head-hr/jobs')}
           />
           <StatCard
             icon={FiBriefcase}
             label="Active Jobs"
             value={stats?.activeJobs}
             accent="green"
-            onClick={() => navigate('/super-admin/jobs')}
+            onClick={() => navigate('/head-hr/jobs')}
           />
           <StatCard
             icon={FiFileText}
             label="Total Applications"
             value={stats?.totalApplications}
             accent="rose"
-            onClick={() => navigate('/super-admin/applications')}
+            onClick={() => navigate('/head-hr/applications')}
           />
           <StatCard
             icon={FiCheckCircle}
             label="Shortlisted"
             value={stats?.shortlistedApplications}
             accent="green"
-            onClick={() => navigate('/super-admin/applications')}
+            onClick={() => navigate('/head-hr/applications')}
           />
         </div>
       )}
@@ -351,7 +351,7 @@ export default function SuperAdminDashboard() {
                   <button
                     key={id}
                     type="button"
-                    onClick={() => navigate(`/super-admin/jobs/${encodeURIComponent(id)}`)}
+                    onClick={() => navigate(`/head-hr/jobs/${encodeURIComponent(id)}`)}
                     className="w-full flex flex-wrap items-center gap-x-4 gap-y-1 py-3 px-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50 hover:border-purple-500/30 hover:bg-zinc-800 transition-colors text-left"
                   >
                     <span className="text-sm font-medium text-zinc-200 truncate flex-1 min-w-0">{title || id}</span>
@@ -371,6 +371,6 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
       )}
-    </SuperAdminLayout>
+    </HeadHrLayout>
   )
 }

@@ -1,8 +1,8 @@
 # Conceptual Data Model
 
 **Document ID:** ARCH-06  
-**Status:** Constitutional — all database schemas and APIs derive from this model  
-**Related:** [02_DOMAIN_MODEL.md](02_DOMAIN_MODEL.md) · [05_TOON_ARCHITECTURE.md](05_TOON_ARCHITECTURE.md) · [07_SYSTEM_ARCHITECTURE.md](07_SYSTEM_ARCHITECTURE.md)
+**Status:** Constitutional — aligned with frozen schema (Sprint 1.2)  
+**Related:** [12_DATABASE_FREEZE_REPORT.md](12_DATABASE_FREEZE_REPORT.md) · [02_DOMAIN_MODEL.md](02_DOMAIN_MODEL.md) · [05_TOON_ARCHITECTURE.md](05_TOON_ARCHITECTURE.md) · [07_SYSTEM_ARCHITECTURE.md](07_SYSTEM_ARCHITECTURE.md)
 
 ---
 
@@ -48,10 +48,10 @@ Implementation reference: `backend/schema_pg/` (PostgreSQL DDL).
 | Actor | Identity entity | Authentication | Primary domains |
 |-------|----------------|---------------|-----------------|
 | **Guest** | None | None | Recruitment (read-only jobs) |
-| **Candidate** | Candidate Account | OTP signup + JWT | Recruitment |
-| **HR** | HR Account | Email/password + JWT | Recruitment, Hiring, Administration |
-| **Head HR** | HR Account (elevated) | Email/password + JWT | All HR domains + Administration |
-| **Super Admin** | HR Account (super) | Email/password + JWT | All domains |
+| **Candidate** | Candidate Account | OTP signup + JWT (`candidate`) | Recruitment |
+| **Recruiter** | HR Account (`role=RECRUITER`) | Email/password + JWT (`HR`) | Recruitment, Hiring |
+| **Head HR** | HR Account (`role=HEAD_HR`) | Email/password + JWT (`head_hr`) | All HR domains + Administration |
+| **CEO** | HR Account (`role=CEO`) | Email/password + JWT (`ceo`, read-only) | Analytics |
 
 ### Future actors
 
@@ -65,9 +65,9 @@ Implementation reference: `backend/schema_pg/` (PostgreSQL DDL).
 ### Actor hierarchy
 
 ```
-Super Admin
+CEO (read-only)
   └── Head HR
-        └── HR / Recruiter
+        └── Recruiter (JWT: HR)
               └── (future) Manager
                     └── (future) Employee / Learner
 
@@ -83,7 +83,7 @@ Guest (unauthenticated)
 
 | Entity | Description | Key attributes | Owner |
 |--------|-------------|---------------|-------|
-| **HR Account** | Recruiter/admin user | hrid, email, company, role flags | Administration |
+| **HR Account** | Recruiter/admin user | hrid, email, company, **role** (CEO/HEAD_HR/RECRUITER) | Administration |
 | **Candidate Account** | Job seeker user | cid, email, phone | Administration |
 | **Auth Staging** | OTP verification record | email, otp, expiry | Administration |
 | **Session** | Active login session | token, device, IP, expiry | Administration |
@@ -93,10 +93,14 @@ Guest (unauthenticated)
 
 | Entity | Description | Key attributes | Owner |
 |--------|-------------|---------------|-------|
-| **Job** | Open position | jdid, title, company, location, salary, status | Recruitment |
+| **Job** | Open position | jdid, title, company, location, salary, **status** | Recruitment |
 | **Candidate Profile** | Applicant information | name, contact, preferences, completion status | Recruitment |
-| **Application** | Candidate–Job link | status, match_score, shortlist, ATS data | Recruitment |
+| **Application** | Candidate–Job link | status, latest_match_id | Recruitment |
+| **Match** | Candidate–Job scoring | match_score, semantic_score, match_type, AI lineage | Recruitment |
 | **Saved Job** | Candidate bookmark | candidate, job, saved_at | Recruitment |
+| **Bulk Parse Session** | Admin bulk upload job | created_by, status, progress, file counts | Recruitment |
+| **Interview** | Scheduled interview | application_id, assigned_to, status | Hiring |
+| **Offer** | Compensation package | application_id, generated_by, status | Hiring |
 
 ### Profile detail entities (projections from TOON)
 
@@ -111,9 +115,9 @@ Guest (unauthenticated)
 | Entity | Description | Key attributes | Owner |
 |--------|-------------|---------------|-------|
 | **Raw File** | Uploaded document | uuid, filename, hash, mime, size | Recruitment |
-| **Parsed Resume** | AI-structured resume | toon, confidence, model_version, full_text | Recruitment |
-| **Parsed JD** | AI-structured job description | toon, confidence, model_version | Recruitment |
-| **ATS Analysis** | Match result envelope | score, reasoning, breakdown | Recruitment |
+| **Parsed Resume** | AI-structured resume | toon, confidence, model_version, parse_status, embedding_metadata | Recruitment |
+| **Parsed JD** | AI-structured job description | toon, confidence, model_version, parse_status | Recruitment |
+| **Match Record** | Scored candidate–job pair | match_score, rationale, analysis_toon, is_latest | Recruitment |
 
 ### Platform & governance
 
@@ -123,14 +127,12 @@ Guest (unauthenticated)
 | **Employee Feedback** | Internal testing feedback | category, description, screenshot | Administration |
 | **System Settings** | Tenant configuration | key, value, scope | Administration |
 
-### Future entities (designed, not implemented)
+### Future entities (not yet implemented)
 
 | Entity | Domain | Description |
 |--------|--------|-------------|
 | **Employee** | Employee | Core employment record |
 | **Employment Record** | Employee | Job title, department, status |
-| **Interview** | Hiring | Scheduled interview session |
-| **Offer** | Hiring | Compensation package |
 | **Onboarding Plan** | Employee | New hire task list |
 | **Learning Program** | Learning | Training curriculum |
 | **Course** | Learning | Individual learning unit |
@@ -231,43 +233,41 @@ Guest (unauthenticated)
 | Active | → Inactive (admin action) | Candidate, Admin |
 | Inactive | → Active (reactivation) | Admin |
 
-### Job
+### Job (frozen status enum)
 
 ```
-[Draft] ──publish──► [Active/Enabled] ──disable──► [Disabled] ──enable──► [Active]
-                         │
-                         └── archive ──► [Archived]
+Draft → Published → Paused / Closed / Archived / Expired
 ```
 
-| State | Visible to candidates | Applications accepted |
-|-------|----------------------|----------------------|
+| Status | Visible to candidates | Applications accepted |
+|--------|----------------------|----------------------|
 | Draft | No | No |
-| Active | Yes | Yes |
-| Disabled | No | No |
+| Published | Yes | Yes |
+| Paused | No | No |
+| Closed | No | No |
 | Archived | No | No (existing preserved) |
+| Expired | No | No |
 
-### Application
+Legacy `enabled` boolean is deprecated; synced with `status` via DB trigger.
+
+### Application (frozen status enum)
 
 ```
-[Submitted] ──ATS──► [Scored] ──HR review──► [Shortlisted / Not Shortlisted]
-                                                      │
-                                              ┌───────┼───────┐
-                                              ▼       ▼       ▼
-                                         [Interview] [Rejected] [On Hold]
-                                              │
-                                              ▼
-                                    (future: [Offer] → [Hired])
+Applied → Screening → Matched → Shortlisted → Interview → Offer → Hired
+                              ↘ Rejected / Withdrawn
 ```
 
-| State | Description | Set by |
-|-------|-------------|--------|
-| Submitted | Application created, ATS pending | System |
-| Scored | ATS complete, match_score available | System (AI) |
-| Shortlisted | HR marked or auto-shortlisted (score ≥ 75) | HR or System |
-| Not Shortlisted | Score below threshold or HR decision | HR or System |
-| Interview | Interview scheduled (future) | HR |
-| Rejected | HR rejected candidate | HR |
-| On Hold | Pipeline paused | HR |
+| Status | Description |
+|--------|-------------|
+| Applied | Application submitted |
+| Screening | HR viewed profile |
+| Matched | ATS/match score computed |
+| Shortlisted | HR or auto-shortlist |
+| Interview | Interview scheduled |
+| Rejected | HR rejected |
+| Offer | Offer extended |
+| Hired | Hire confirmed |
+| Withdrawn | Candidate withdrew |
 
 ### Parsed Resume / Parsed JD
 
@@ -305,7 +305,7 @@ Deduplication by content hash prevents redundant storage and re-parsing.
 |--------|------|---------------------|
 | **Administration** | HR Account, Candidate Account, Session, Login History, Support Request, Employee Feedback, System Settings | All (for management) |
 | **Recruitment** | Job, Candidate Profile, Application, Saved Job, Raw File, Parsed Resume, Parsed JD, ATS Analysis, profile detail entities | HR Account (for auth) |
-| **Hiring** (future) | Interview, Offer, Hire Record | Application, Parsed Resume, Parsed JD |
+| **Hiring** (scaffold) | Interview, Offer | Application, Parsed Resume, Parsed JD |
 | **Employee** (future) | Employee, Employment Record, Onboarding Plan, Lifecycle Event | Candidate Account (historical link) |
 | **AI** | Capability, Provider, Model, Dataset, Benchmark, Inference Record | TOON documents (format only) |
 | **Analytics** (future) | Metric, Dashboard, Report, Insight | All domain entities (read-only) |
@@ -359,3 +359,4 @@ Current implementation is single-tenant (company field on HR Account). Enterpris
 | Workflow sequences | [08_DATA_FLOWS.md](08_DATA_FLOWS.md) |
 | Security & PII | [09_SECURITY_MODEL.md](09_SECURITY_MODEL.md) |
 | PostgreSQL DDL | `backend/schema_pg/` |
+| Database freeze report | [12_DATABASE_FREEZE_REPORT.md](12_DATABASE_FREEZE_REPORT.md) |

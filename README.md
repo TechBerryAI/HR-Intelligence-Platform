@@ -10,7 +10,7 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
 |----------|--------------|
 | **HR / Recruiters** | Job CRUD, application tracking, resume viewing, AI match scores, bulk resume parser, feedback management |
 | **Candidates** | OTP-verified signup, profile & resume upload, job search, one-click apply, application status & match score |
-| **Super Admin** | System-wide dashboard, admin/candidate/job/application management |
+| **Head of HR (HEAD_HR)** | Org-wide dashboard, admin/candidate/job/application management |
 
 - **Authentication:** Separate HR and candidate flows; JWT access + refresh; OTP email verification for signup
 - **Parsing:** Resume and job description (PDF/DOC/DOCX) via LLM; TOON schema; optional external bulk parser
@@ -39,8 +39,8 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
                     └─────────────────────┘
 ```
 
-- **Frontend:** Single-page app; single AppContext for auth, jobs, applicant state; role-based route guards (HR, Candidate, Super Admin).
-- **Backend:** Monolithic Flask app; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, super-admin. Connection-pooled PostgreSQL; raw SQL via `db_run`/`db_get`/`db_all`.
+- **Frontend:** Single-page app; single AppContext for auth, jobs, applicant state; role-based route guards (Recruiter, Candidate, Head of HR, CEO).
+- **Backend:** Monolithic Flask app; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, head-hr. Connection-pooled PostgreSQL; raw SQL via `db_run`/`db_get`/`db_all`.
 
 Detailed architecture, API catalog, data flows, and security notes: **[docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md)**.  
 Documentation index: **[docs/DOCUMENTATION_MAP.md](docs/DOCUMENTATION_MAP.md)**.
@@ -141,7 +141,7 @@ Database and tables are created automatically on first backend run from `backend
 │   ├── src/
 │   │   ├── App.jsx       # Routes + guards
 │   │   ├── context/      # AppContext (state + API actions)
-│   │   ├── guards/       # AdminGuard, CandidateGuard, SuperAdminGuard
+│   │   ├── guards/       # RecruiterGuard, CandidateGuard, HeadHrGuard, CeoGuard
 │   │   ├── layouts/      # MainLayout, DashboardLayout, AdminLayout
 │   │   ├── pages/        # Lazy-loaded route components
 │   │   ├── components/   # UI primitives (ui/) + feature components
@@ -177,7 +177,7 @@ Database and tables are created automatically on first backend run from `backend
 | Applications | `/api/applications` | `POST /` (apply), `GET /` (my applications) |
 | Parsing | `/api` | `POST /parse/resume`, `POST /parse/jd` |
 | Admin | `/api/admin` | `POST /bulk-parse/upload`, `GET /bulk-parse/progress/:id`, `GET /job-matches` |
-| Super Admin | `/api/super-admin` | `POST /login`, `GET /stats`, `GET /admins`, `GET /candidates`, `GET /jobs`, `GET /applications` |
+| Head of HR | `/api/head-hr` | `GET /stats`, `GET /admins`, `GET /candidates`, `GET /jobs`, `GET /applications` |
 
 Full endpoint list, request/response shapes, and auth requirements: **[docs/TECHNICAL_DOCUMENTATION.md#6-api-documentation](docs/TECHNICAL_DOCUMENTATION.md#6-api-documentation)**.
 

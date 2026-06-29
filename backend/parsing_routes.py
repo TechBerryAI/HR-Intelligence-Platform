@@ -5,6 +5,7 @@ import os
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 
+from rbac import get_user_id, get_role, STAFF_ROLES, ROLE_CANDIDATE
 from utils import authenticate_token
 from toon import toon_loads_flex
 from parsing_utils import (
@@ -186,10 +187,9 @@ def parse_resume_upload():
         
         # Get uploader info from token
         # Candidates have 'id', HR has 'hrId'
-        uploader_id = current_user.get('id') or current_user.get('hrId')
-        jwt_role = current_user.get('role', 'candidate')
-        # Map JWT role to database role (HR -> admin for database constraint)
-        uploader_role = 'admin' if jwt_role == 'HR' else 'candidate'
+        uploader_id = get_user_id(current_user)
+        jwt_role = get_role(current_user) or ROLE_CANDIDATE
+        uploader_role = 'recruiter' if jwt_role in STAFF_ROLES else 'candidate'
         
         # Validate uploader_id
         if not uploader_id:
@@ -200,7 +200,7 @@ def parse_resume_upload():
         
         # Get optional candidate_id from form; for candidates, default to authenticated user
         candidate_id = request.form.get('candidate_id')
-        if jwt_role == 'candidate' and not candidate_id:
+        if jwt_role == ROLE_CANDIDATE and not candidate_id:
             candidate_id = uploader_id
         
         # Compute file hash for duplicate detection
@@ -210,7 +210,7 @@ def parse_resume_upload():
         cached = get_cached_parsing_result(file_hash, uploader_id, 'resume')
         if cached:
             # Link cached parse to candidate so apply can find it
-            if jwt_role == 'candidate' and uploader_id:
+            if jwt_role == ROLE_CANDIDATE and uploader_id:
                 from db import db_run
                 db_run(
                     'UPDATE parsed_resumes SET candidate_id = ? WHERE id = ?',
@@ -460,10 +460,9 @@ def parse_jd_upload():
         
         # Get uploader info from token (admin/HR)
         # Candidates have 'id', HR has 'hrId'
-        uploader_id = current_user.get('hrId') or current_user.get('id')
-        jwt_role = current_user.get('role', 'HR')
-        # Map JWT role to database role (HR -> admin for database constraint)
-        uploader_role = 'admin' if jwt_role == 'HR' else 'candidate'
+        uploader_id = get_user_id(current_user)
+        jwt_role = get_role(current_user)
+        uploader_role = 'recruiter' if jwt_role in STAFF_ROLES else 'candidate'
         
         # Validate uploader_id
         if not uploader_id:

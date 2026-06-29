@@ -3,6 +3,7 @@ import bcrypt
 from flask import Blueprint, request, jsonify, Response
 from db import db_get, db_run, db_all, BACKEND, NOW_SQL
 from utils import authenticate_token, require_candidate, require_hr, validate_password_strength
+from rbac import get_role, ROLE_RECRUITER, ROLE_CANDIDATE, has_permission, get_user_id
 from matching import calculate_matching_percentage
 
 candidate_bp = Blueprint('candidate', __name__)
@@ -494,9 +495,23 @@ def parse_profile(profile: dict) -> dict:
 
 @candidate_bp.get('/profile/<string:candidate_id>')
 @authenticate_token
-@require_hr
 def get_profile_admin(candidate_id: str):
-    """Allow HR/admins to view any candidate profile with full details."""
+    """HR/HEAD_HR/CEO view candidate profile with ownership rules for HR."""
+    user = request.user
+    if not has_permission(user, 'candidates:read_own'):
+        return jsonify({'error': 'Access denied'}), 403
+    if get_role(user) == ROLE_RECRUITER:
+        linked = db_get(
+            '''
+            SELECT 1 FROM applications a
+            JOIN jobs j ON a.job_id = j.jdid
+            WHERE a.candidate_id = ? AND j.posted_by = ?
+            LIMIT 1
+            ''',
+            (candidate_id, get_user_id(user)),
+        )
+        if not linked:
+            return jsonify({'error': 'Profile not found'}), 404
     try:
         profile = db_get(
             '''

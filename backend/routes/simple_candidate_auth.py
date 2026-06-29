@@ -306,7 +306,7 @@ def simple_candidate_login():
             return jsonify({'error': 'Invalid credentials'}), 401
         
         # Generate JWT access + refresh tokens
-        identity = {'id': candidate['cid'], 'email': candidate['email'], 'role': 'candidate'}
+        identity = {'user_id': candidate['cid'], 'email': candidate['email'], 'role': 'CANDIDATE'}
         access_token = jwt.encode(
             build_jwt_payload(identity, refresh=False),
             JWT_SECRET,
@@ -328,7 +328,7 @@ def simple_candidate_login():
             'id': candidate['cid'],
             'name': candidate['name'],
             'email': candidate['email'],
-            'role': 'candidate'
+            'role': 'CANDIDATE'
         }
         
         if profile:

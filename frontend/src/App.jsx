@@ -26,32 +26,51 @@ const FAQ = lazy(() => import('./pages/FAQ.jsx'))
 const ContactUs = lazy(() => import('./pages/ContactUs.jsx'))
 const HRMSTestingFeedback = lazy(() => import('./pages/HRMSTestingFeedback.jsx'))
 const NotFound = lazy(() => import('./pages/NotFound.jsx'))
-const SuperAdminDashboard = lazy(() => import('./pages/super-admin/SuperAdminDashboard.jsx'))
-const SuperAdminAdmins = lazy(() => import('./pages/super-admin/SuperAdminAdmins.jsx'))
-const SuperAdminCandidates = lazy(() => import('./pages/super-admin/SuperAdminCandidates.jsx'))
-const SuperAdminCandidateDetail = lazy(() => import('./pages/super-admin/SuperAdminCandidateDetail.jsx'))
-const SuperAdminJobs = lazy(() => import('./pages/super-admin/SuperAdminJobs.jsx'))
-const SuperAdminJobDetail = lazy(() => import('./pages/super-admin/SuperAdminJobDetail.jsx'))
-const SuperAdminApplications = lazy(() => import('./pages/super-admin/SuperAdminApplications.jsx'))
-const SuperAdminApplicationDetail = lazy(() => import('./pages/super-admin/SuperAdminApplicationDetail.jsx'))
-const SuperAdminSettings = lazy(() => import('./pages/super-admin/SuperAdminSettings.jsx'))
+const HeadHrDashboard = lazy(() => import('./pages/head-hr/HeadHrDashboard.jsx'))
+const HeadHrAdmins = lazy(() => import('./pages/head-hr/HeadHrAdmins.jsx'))
+const HeadHrCandidates = lazy(() => import('./pages/head-hr/HeadHrCandidates.jsx'))
+const HeadHrCandidateDetail = lazy(() => import('./pages/head-hr/HeadHrCandidateDetail.jsx'))
+const HeadHrJobs = lazy(() => import('./pages/head-hr/HeadHrJobs.jsx'))
+const HeadHrJobDetail = lazy(() => import('./pages/head-hr/HeadHrJobDetail.jsx'))
+const HeadHrApplications = lazy(() => import('./pages/head-hr/HeadHrApplications.jsx'))
+const HeadHrApplicationDetail = lazy(() => import('./pages/head-hr/HeadHrApplicationDetail.jsx'))
+const HeadHrSettings = lazy(() => import('./pages/head-hr/HeadHrSettings.jsx'))
 const Settings = lazy(() => import('./pages/Settings.jsx'))
 
-import AdminGuard from './guards/AdminGuard.jsx'
+import RecruiterGuard from './guards/RecruiterGuard.jsx'
 import CandidateGuard from './guards/CandidateGuard.jsx'
-import SuperAdminGuard from './guards/SuperAdminGuard.jsx'
+import HeadHrGuard from './guards/HeadHrGuard.jsx'
+import CeoGuard from './guards/CeoGuard.jsx'
 
-function PrivateRoute({ children }) {
+const CeoDashboard = lazy(() => import('./pages/ceo/CeoDashboard.jsx'))
+
+function HrPrivateRoute({ children }) {
   const { auth } = useApp()
-  const allowed = auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')
-  return allowed ? children : <Navigate to="/login" replace />
+  const allowed = auth.isLoggedIn && auth.role === 'RECRUITER'
+  return allowed ? children : <Navigate to="/login/admin" replace />
+}
+
+function StaffSettingsRoute({ children }) {
+  const { auth } = useApp()
+  const staffRoles = new Set(['RECRUITER', 'HEAD_HR', 'CEO'])
+  if (!auth.isLoggedIn || !staffRoles.has(auth.role)) {
+    return <Navigate to="/login/admin" replace />
+  }
+  return children
+}
+
+function LegacySuperAdminRedirect() {
+  const location = useLocation()
+  const target = location.pathname.replace(/^\/super-admin/, '/head-hr') + location.search
+  return <Navigate to={target} replace />
 }
 
 export default function App() {
   const location = useLocation()
-  const isSuperAdminRoute = location.pathname.startsWith('/super-admin')
+  const isHeadHrRoute = location.pathname.startsWith('/head-hr')
+  const isCeoRoute = location.pathname.startsWith('/ceo')
   const isLandingRoute = location.pathname === '/'
-  const hideChrome = isSuperAdminRoute || isLandingRoute
+  const hideChrome = isHeadHrRoute || isCeoRoute || isLandingRoute
 
   return (
     <AppProvider>
@@ -105,115 +124,124 @@ export default function App() {
                   <Route
                     path="/dashboard"
                     element={
-                      <PrivateRoute>
+                      <HrPrivateRoute>
                         <Dashboard />
-                      </PrivateRoute>
+                      </HrPrivateRoute>
                     }
                   />
                   <Route
                     path="/candidates"
                     element={
-                      <PrivateRoute>
+                      <HrPrivateRoute>
                         <AppliedCandidates />
-                      </PrivateRoute>
+                      </HrPrivateRoute>
+                    }
+                  />
+                  <Route
+                    path="/ceo"
+                    element={
+                      <CeoGuard>
+                        <CeoDashboard />
+                      </CeoGuard>
                     }
                   />
                   <Route
                     path="/settings"
                     element={
-                      <PrivateRoute>
+                      <StaffSettingsRoute>
                         <Settings />
-                      </PrivateRoute>
+                      </StaffSettingsRoute>
                     }
                   />
                   <Route
                     path="/admin/bulk-resume-parser"
                     element={
-                      <AdminGuard>
+                      <RecruiterGuard>
                         <BulkResumeParser />
-                      </AdminGuard>
+                      </RecruiterGuard>
                     }
                   />
                   <Route
                     path="/admin/feedback"
                     element={
-                      <AdminGuard>
+                      <RecruiterGuard>
                         <FeedbackAdmin />
-                      </AdminGuard>
+                      </RecruiterGuard>
                     }
                   />
-                  {/* All admins (Super Admin, Head of HR, HR) use /login/admin */}
+                  {/* Head of HR (HEAD_HR) uses /login/admin */}
                   <Route path="/login/super-admin" element={<Navigate to="/login/admin" replace />} />
+                  <Route path="/super-admin/*" element={<LegacySuperAdminRedirect />} />
                   <Route
-                    path="/super-admin"
+                    path="/head-hr"
                     element={
-                      <SuperAdminGuard>
-                        <SuperAdminDashboard />
-                      </SuperAdminGuard>
+                      <HeadHrGuard>
+                        <HeadHrDashboard />
+                      </HeadHrGuard>
                     }
                   />
                   <Route
-                    path="/super-admin/admins"
+                    path="/head-hr/admins"
                     element={
-                      <SuperAdminGuard>
-                        <SuperAdminAdmins />
-                      </SuperAdminGuard>
+                      <HeadHrGuard>
+                        <HeadHrAdmins />
+                      </HeadHrGuard>
                     }
                   />
                   <Route
-                    path="/super-admin/candidates"
+                    path="/head-hr/candidates"
                     element={
-                      <SuperAdminGuard>
-                        <SuperAdminCandidates />
-                      </SuperAdminGuard>
+                      <HeadHrGuard>
+                        <HeadHrCandidates />
+                      </HeadHrGuard>
                     }
                   />
                   <Route
-                    path="/super-admin/candidates/:cid"
+                    path="/head-hr/candidates/:cid"
                     element={
-                      <SuperAdminGuard>
-                        <SuperAdminCandidateDetail />
-                      </SuperAdminGuard>
+                      <HeadHrGuard>
+                        <HeadHrCandidateDetail />
+                      </HeadHrGuard>
                     }
                   />
                   <Route
-                    path="/super-admin/jobs"
+                    path="/head-hr/jobs"
                     element={
-                      <SuperAdminGuard>
-                        <SuperAdminJobs />
-                      </SuperAdminGuard>
+                      <HeadHrGuard>
+                        <HeadHrJobs />
+                      </HeadHrGuard>
                     }
                   />
                   <Route
-                    path="/super-admin/jobs/:jdid"
+                    path="/head-hr/jobs/:jdid"
                     element={
-                      <SuperAdminGuard>
-                        <SuperAdminJobDetail />
-                      </SuperAdminGuard>
+                      <HeadHrGuard>
+                        <HeadHrJobDetail />
+                      </HeadHrGuard>
                     }
                   />
                   <Route
-                    path="/super-admin/applications"
+                    path="/head-hr/applications"
                     element={
-                      <SuperAdminGuard>
-                        <SuperAdminApplications />
-                      </SuperAdminGuard>
+                      <HeadHrGuard>
+                        <HeadHrApplications />
+                      </HeadHrGuard>
                     }
                   />
                   <Route
-                    path="/super-admin/applications/:id"
+                    path="/head-hr/applications/:id"
                     element={
-                      <SuperAdminGuard>
-                        <SuperAdminApplicationDetail />
-                      </SuperAdminGuard>
+                      <HeadHrGuard>
+                        <HeadHrApplicationDetail />
+                      </HeadHrGuard>
                     }
                   />
                   <Route
-                    path="/super-admin/settings"
+                    path="/head-hr/settings"
                     element={
-                      <SuperAdminGuard>
-                        <SuperAdminSettings />
-                      </SuperAdminGuard>
+                      <HeadHrGuard>
+                        <HeadHrSettings />
+                      </HeadHrGuard>
                     }
                   />
                   <Route path="*" element={<NotFound />} />

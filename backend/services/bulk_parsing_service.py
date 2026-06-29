@@ -19,7 +19,7 @@ def _is_connection_error(e):
     return 'connection refused' in err or 'max retries exceeded' in err or 'connection error' in err
 
 
-def upload_files(files_list, output_filename=None, append=False):
+def upload_files(files_list, output_filename=None, append=False, started_by=None):
     """
     Try external Bulk-Resume-Parser first; on connection failure use local bulk parsing.
     files_list: list of (filename, file_bytes).
@@ -53,16 +53,20 @@ def upload_files(files_list, output_filename=None, append=False):
             # Fall through to local fallback
     # Local bulk parsing (external unreachable or BULK_PARSER_URL not set)
     from services.local_bulk_parser import start_local_job
-    _, result = start_local_job(files_list)
+    _, result = start_local_job(files_list, started_by=started_by)
     return True, result
 
 
-def get_progress(job_id):
+def get_progress(job_id, user=None):
     """Check local job first; else forward to Bulk-Resume-Parser GET /api/progress/{job_id}."""
     from services.local_bulk_parser import get_local_progress
+    from rbac import can_access_bulk_session
     ok, result = get_local_progress(job_id)
     if ok:
-        return True, result
+        started_by = result.get('started_by')
+        if user and started_by and not can_access_bulk_session(user, started_by):
+            return False, {'error': 'Access denied'}
+        return True, {k: v for k, v in result.items() if k != 'started_by'}
     if not BULK_PARSER_URL:
         return False, {'error': 'Job not found'}
     try:
@@ -85,12 +89,18 @@ def get_download_url(job_id):
     return f'{BULK_PARSER_URL}/api/download/{job_id}'
 
 
-def stream_download(job_id):
+def stream_download(job_id, user=None):
     """
     Return Excel from local job if present; else stream from Bulk-Resume-Parser.
     Returns (success, (content_iterator, filename, content_type)) or (False, error_dict).
     """
-    from services.local_bulk_parser import get_local_download
+    from services.local_bulk_parser import get_local_progress, get_local_download
+    from rbac import can_access_bulk_session
+    ok_meta, meta = get_local_progress(job_id, check_only=True)
+    if ok_meta:
+        started_by = meta.get('started_by')
+        if user and started_by and not can_access_bulk_session(user, started_by):
+            return False, {'error': 'Access denied'}
     ok, payload = get_local_download(job_id)
     if ok:
         bio, filename, content_type = payload

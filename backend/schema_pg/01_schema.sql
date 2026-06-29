@@ -18,10 +18,13 @@ CREATE TABLE IF NOT EXISTS hr_signup (
     email VARCHAR(255) UNIQUE NOT NULL,
     company VARCHAR(255) NOT NULL,
     password VARCHAR(255) NULL,
-    is_super_admin BOOLEAN DEFAULT false,
-    is_head_hr BOOLEAN DEFAULT false,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    role VARCHAR(20) NOT NULL DEFAULT 'RECRUITER'
+        CHECK (role IN ('CEO', 'HEAD_HR', 'RECRUITER')),
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_by VARCHAR(20) NULL REFERENCES hr_signup(hrid)
 );
+CREATE INDEX IF NOT EXISTS IX_hr_signup_role ON hr_signup(role);
 
 -- -----------------------------------------------------------------------------
 -- 2. Sequence for candidate CID (CID001, CID002, ...)

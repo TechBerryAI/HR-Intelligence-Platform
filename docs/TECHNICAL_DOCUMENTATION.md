@@ -16,7 +16,7 @@ The **HR Job Portal** is a full-stack recruitment platform that enables:
 
 - **HR/Recruiters** to post jobs, manage applications, view candidate resumes, run bulk resume parsing, and use AI-powered matching (ATS).
 - **Candidates** to sign up (OTP-verified), build profiles with resume upload, browse and apply to jobs, and track application status with match scores.
-- **Super Admins** to manage the entire system: view stats, manage HR admins, candidates, jobs, and applications in read-only/delete mode.
+- **Head of HRs** to manage the entire system: view stats, manage HR admins, candidates, jobs, and applications in read-only/delete mode.
 
 The system integrates resume and job-description (JD) parsing (LLM-based TOON format), optional external ATS/n8n webhooks, and an Electron desktop option for bulk resume parser folder access.
 
@@ -26,12 +26,12 @@ The system integrates resume and job-description (JD) parsing (LLM-based TOON fo
 |-----------------|--------------------------|-----------------------------------------------------------|
 | **Candidates**  | `/login/applicant`       | Signup (OTP), profile, resume upload, apply, track status |
 | **HR / Head HR**| `/login/admin`           | Job CRUD, view applications, bulk parser, feedback       |
-| **Super Admin**| `/login/admin` (special) | Dashboard, admins/candidates/jobs/applications, settings   |
+| **Head of HR**| `/login/admin` (special) | Dashboard, admins/candidates/jobs/applications, settings   |
 | **Guests**      | Public                   | Browse jobs, FAQ, contact, HRMS feedback form             |
 
 ### 1.3 Core Features
 
-- **Authentication:** Separate HR (OTP signup/verify, JWT access+refresh) and candidate (OTP signup/verify, JWT) flows; super admin uses `hr_signup` with `is_super_admin=true`.
+- **Authentication:** Separate HR (OTP signup/verify, JWT access+refresh) and candidate (OTP signup/verify, JWT) flows; Head of HR (`HEAD_HR`) uses `POST /api/login` like other staff roles.
 - **Jobs:** CRUD, enable/disable, jdid auto-generation from title; list filtered by role (HR sees own, public sees enabled only).
 - **Applications:** Apply (validates profile + parsed resume); ATS runs in background (in-process or n8n callback); shortlist/reject and match score stored.
 - **Resume/JD parsing:** PDF/DOC/DOCX upload, LLM-based TOON extraction, storage in `parsed_resumes`/`parsed_jds`; used for apply and ATS.
@@ -41,7 +41,7 @@ The system integrates resume and job-description (JD) parsing (LLM-based TOON fo
 ### 1.4 High-Level Architecture
 
 - **Frontend:** React 18 SPA (Vite), single `AppContext` for state, React Router with role-based guards.
-- **Backend:** Flask (Python 3.8+), PostgreSQL via psycopg3 and connection pool; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, super-admin.
+- **Backend:** Flask (Python 3.8+), PostgreSQL via psycopg3 and connection pool; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, head-hr.
 - **Communication:** REST JSON APIs; `Authorization: Bearer` JWT; CORS with credentials; frontend uses `fetch` with retry and token refresh on 403.
 - **Optional:** External ATS (n8n webhook + callback), external Bulk-Resume-Parser, Electron shell for desktop bulk parser.
 
@@ -121,17 +121,17 @@ HR-Job-Portal-App/
 │       ├── guards/
 │       │   ├── AdminGuard.jsx      # HR or head_hr -> else /login/admin
 │       │   ├── CandidateGuard.jsx  # applicantAuth and not HR -> else /login/applicant
-│       │   └── SuperAdminGuard.jsx # superAdminAuth -> else /login/admin
+│       │   └── HeadHrGuard.jsx # auth (HEAD_HR) -> else /login/admin
 │       ├── layouts/
 │       │   ├── MainLayout.jsx, DashboardLayout.jsx, AdminLayout.jsx
-│       │   └── (super-admin) SuperAdminLayout.jsx
+│       │   └── (super-admin) HeadHrLayout.jsx
 │       ├── pages/            # Lazy-loaded route components
 │       │   ├── Home.jsx, Jobs.jsx, Login.jsx, LoginApplicant.jsx, LoginAdmin.jsx
 │       │   ├── SignupApplicant.jsx, SignupAdmin.jsx
 │       │   ├── ForgotPassword*.jsx, ApplicantProfile.jsx, ApplicationStatus.jsx, Settings.jsx
 │       │   ├── Dashboard.jsx, AppliedCandidates.jsx
 │       │   ├── admin/ BulkResumeParser.jsx, FeedbackAdmin.jsx
-│       │   ├── super-admin/ SuperAdmin*.jsx
+│       │   ├── head-hr/ HeadHr*.jsx
 │       │   ├── FAQ.jsx, ContactUs.jsx, HRMSTestingFeedback.jsx, NotFound.jsx
 │       ├── components/       # Shared + feature components
 │       │   ├── ui/           # Button, Card, Input, Badge, Avatar, Modal, Tabs, Table, etc.
@@ -156,9 +156,9 @@ HR-Job-Portal-App/
 │   ├── parsing_routes.py     # parse/resume, parse/jd, parsed/resume/:id, parsed/jd/:id
 │   ├── support.py            # support submit, my-requests, all, by id, status
 │   ├── feedback_routes.py    # feedback submit, list, status
-│   ├── super_admin.py        # super-admin login, stats, admins, candidates, jobs, applications
+│   ├── head_hr.py        # super-admin login, stats, admins, candidates, jobs, applications
 │   ├── db.py                 # PostgreSQL pool, get_conn, db_run, db_get, db_all, run_migrations, init_db
-│   ├── utils.py              # JWT, authenticate_token, require_hr, require_candidate, require_super_admin, optional_authenticate_token
+│   ├── utils.py              # JWT, authenticate_token, require_hr, require_candidate, require_head_hr, optional_authenticate_token
 │   ├── env_validator.py, extensions.py (Flask-Mail)
 │   ├── toon.py, text_extraction.py, parsing_utils.py, llm_service.py
 │   ├── matching.py, llm_key_manager.py
@@ -211,18 +211,18 @@ Defined in `App.jsx`. All page components are lazy-loaded via `React.lazy()`.
 - **Candidate-only (CandidateGuard):** `/profile/applicant`, `/settings/applicant`, `/applications`.
 - **HR-only (PrivateRoute):** `/dashboard`, `/candidates`, `/settings`.
 - **Admin (AdminGuard):** `/admin/bulk-resume-parser`, `/admin/feedback`.
-- **Super Admin (SuperAdminGuard):** `/super-admin`, `/super-admin/admins`, `/super-admin/candidates`, `/super-admin/candidates/:cid`, `/super-admin/jobs`, `/super-admin/jobs/:jdid`, `/super-admin/applications`, `/super-admin/applications/:id`, `/super-admin/settings`.
-- **Redirects:** `/signup` → `/signup/applicant`, `/login/super-admin` → `/login/admin`.
+- **Head of HR (HeadHrGuard):** `/head-hr`, `/head-hr/admins`, `/head-hr/candidates`, `/head-hr/candidates/:cid`, `/head-hr/jobs`, `/head-hr/jobs/:jdid`, `/head-hr/applications`, `/head-hr/applications/:id`, `/head-hr/settings`.
+- **Redirects:** `/signup` → `/signup/applicant`, `/login/head-hr` → `/login/admin`.
 - **Fallback:** `*` → `NotFound`.
 
-`PrivateRoute` allows `auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')`. Navbar is hidden when `pathname.startsWith('/super-admin')`.
+`PrivateRoute` allows `auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')`. Navbar is hidden when `pathname.startsWith('/head-hr')`.
 
 ### 4.3 State Management
 
 - **No Redux.** Single **AppContext** (`context/AppContext.jsx`).
-- **State:** jobs, jobsLoading, jobsError; auth (HR), applicantAuth, superAdminAuth; applicantProfile, applicantApplications, applicantSavedJobs; user; token; backendHealthy; authLoading, authError.
-- **Persistence:** localStorage for auth, applicantAuth, superAdminAuth, applicantProfile, applicantApplications, applicantSavedJobs, user (keys in `STORAGE_KEYS`). Token is also in `tokenService` (in-memory + localStorage). Jobs are not persisted (fetched from API).
-- **Actions:** loginHR, loginApplicant, loginSuperAdmin; signup/verify/resend OTP (HR and applicant); forgot-password/verify/reset (HR and applicant); changePassword (HR and applicant); saveApplicantProfile, markApplicantProfileCompleted; applyToJobAsApplicant, toggleSaveJob; fetchJobs, addJob, updateJob, setJobEnabled; fetchApplicantData, fetchApplicationsForJob, fetchAllApplications; logout, logoutSuperAdmin.
+- **State:** jobs, jobsLoading, jobsError; auth (HR), applicantAuth, auth (HEAD_HR); applicantProfile, applicantApplications, applicantSavedJobs; user; token; backendHealthy; authLoading, authError.
+- **Persistence:** localStorage for auth, applicantAuth, auth (HEAD_HR), applicantProfile, applicantApplications, applicantSavedJobs, user (keys in `STORAGE_KEYS`). Token is also in `tokenService` (in-memory + localStorage). Jobs are not persisted (fetched from API).
+- **Actions:** loginHR, loginApplicant, loginHR; signup/verify/resend OTP (HR and applicant); forgot-password/verify/reset (HR and applicant); changePassword (HR and applicant); saveApplicantProfile, markApplicantProfileCompleted; applyToJobAsApplicant, toggleSaveJob; fetchJobs, addJob, updateJob, setJobEnabled; fetchApplicantData, fetchApplicationsForJob, fetchAllApplications; logout, logout.
 - **Effects:** On mount, setUnauthorizedHandler(logout), setOnTokensRefreshed(update token state). Initial health check after 2s; then every 30s. Token hydrated from tokenService on load. Jobs fetched on mount and when auth/applicantAuth changes. Applicant data fetched when applicantAuth and token are set.
 
 ### 4.4 Reusable UI System
@@ -237,9 +237,9 @@ Built with Radix primitives and Tailwind; variants via cva + cn.
 
 - **AdminGuard:** Renders children only if `auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')`; else `<Navigate to="/login/admin" replace />`.
 - **CandidateGuard:** Renders children only if `applicantAuth?.isLoggedIn && !(auth?.isLoggedIn && auth?.role === 'HR')`; else `<Navigate to="/login/applicant" replace />`.
-- **SuperAdminGuard:** Renders children only if `superAdminAuth?.isLoggedIn`; else `<Navigate to="/login/admin" replace />`.
+- **HeadHrGuard:** Renders children only if `auth (HEAD_HR)?.isLoggedIn`; else `<Navigate to="/login/admin" replace />`.
 
-Login flows: HR and candidate each use email + password; HR and candidate signup use OTP email verification. Super admin uses same login page as admin; backend returns 403 if not `is_super_admin`. On 401/403 with token, `api.js` calls optional `onUnauthorized` (wired to logout) and on 403 attempts one token refresh via `POST /api/refresh` then retries the request.
+Login flows: HR and candidate each use email + password; HR and candidate signup use OTP email verification. Super admin uses same login page as admin; backend returns 403 if not `is_head_hr`. On 401/403 with token, `api.js` calls optional `onUnauthorized` (wired to logout) and on 403 attempts one token refresh via `POST /api/refresh` then retries the request.
 
 ### 4.6 Services & API Integration
 
@@ -275,13 +275,13 @@ Login flows: HR and candidate each use email + password; HR and candidate signup
 
 ### 5.3 Controllers / Services / Models
 
-- **Blueprints:** auth, jobs, candidate (simple_candidate_auth + candidate), applications, sessions, parsing, support, feedback, admin, super_admin.
+- **Blueprints:** auth, jobs, candidate (simple_candidate_auth + candidate), applications, sessions, parsing, support, feedback, admin, head_hr.
 - **Models (SQLAlchemy):** `models/hr_auth.py`, `models/candidate_auth.py` for OTP verification tables (HRAuth, CandidateAuth). Main data access is raw SQL via `db.py`.
 - **Services:** `ats_service` (match_candidate_to_job), `candidate_notification_service`, `bulk_parsing_service` (upload, progress, stream_download to BULK_PARSER_URL).
 
 ### 5.4 Authentication & Authorization
 
-- **utils.py:** `authenticate_token`: reads Bearer token, decodes JWT with `JWT_SECRET`, sets `request.user`; rejects if token is refresh type; 401 if no token, 403 if invalid/expired. `require_hr`: after authenticate_token, allows role `HR` or `head_hr`. `require_candidate`: allows role `candidate`. `require_super_admin`: allows role `super_admin`. `require_head_hr`: allows `head_hr` or `super_admin`. `optional_authenticate_token`: if Bearer present, validate and set request.user; else request.user = None.
+- **utils.py:** `authenticate_token`: reads Bearer token, decodes JWT with `JWT_SECRET`, sets `request.user`; rejects if token is refresh type; 401 if no token, 403 if invalid/expired. `require_hr`: after authenticate_token, allows role `HR` or `head_hr`. `require_candidate`: allows role `candidate`. `require_head_hr`: allows role `head_hr`. `require_head_hr`: allows `head_hr` or `head_hr`. `optional_authenticate_token`: if Bearer present, validate and set request.user; else request.user = None.
 - **JWT:** `build_jwt_payload(identity_dict, refresh=False)` adds `type`, `iat`, `exp`; access and refresh expiry from env (default 1h / 30d).
 
 ### 5.5 Database Interaction
@@ -404,19 +404,19 @@ Base URL: `http://localhost:3000` (or `VITE_API_URL`). All below are relative to
 | GET | `/bulk-parse/download/:job_id` | Bearer HR | Excel download |
 | GET | `/job-matches` | Bearer HR | Jobs with application counts |
 
-**Super Admin — prefix `/api/super-admin`**
+**Head of HR — prefix `/api/head-hr`**
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/login` | email, password | Super admin login |
-| GET | `/stats` | Bearer head_hr/super_admin | Dashboard counts |
-| GET | `/admins` | Bearer super_admin | List HR admins |
-| POST | `/admins` | Bearer super_admin | Create admin |
-| DELETE | `/admins/:hrid` | Bearer super_admin | Delete admin |
+| GET | `/stats` | Bearer head_hr/head_hr | Dashboard counts |
+| GET | `/admins` | Bearer head_hr | List HR admins |
+| POST | `/admins` | Bearer head_hr | Create admin |
+| DELETE | `/admins/:hrid` | Bearer head_hr | Delete admin |
 | GET | `/candidates`, `/candidates/:cid`, `/candidates/:cid/resume` | Bearer | List/detail/resume |
-| DELETE | `/candidates/:cid` | Bearer super_admin | Delete candidate |
+| DELETE | `/candidates/:cid` | Bearer head_hr | Delete candidate |
 | GET | `/jobs`, `/jobs/:jdid` | Bearer | List/detail |
-| DELETE | `/jobs/:jdid` | Bearer super_admin | Delete job |
+| DELETE | `/jobs/:jdid` | Bearer head_hr | Delete job |
 | GET | `/applications`, `/applications/:id` | Bearer | List/detail |
 | GET | `/settings` | Bearer | Settings (e.g. feature flags) |
 
@@ -510,7 +510,7 @@ Base URL: `http://localhost:3000` (or `VITE_API_URL`). All below are relative to
 ### 9.4 db.py (backend)
 
 - **Purpose:** PostgreSQL connection pool and query helpers.
-- **Design:** ConnectionPool with Queue; get_connection checks pool, validates with SELECT 1, or creates new connection. get_conn context manager commits on success, rollback on exception, always returns connection to pool. run_migrations runs schema_pg/*.sql in order; idempotent column adds for is_super_admin, is_head_hr.
+- **Design:** ConnectionPool with Queue; get_connection checks pool, validates with SELECT 1, or creates new connection. get_conn context manager commits on success, rollback on exception, always returns connection to pool. run_migrations runs schema_pg/*.sql in order; idempotent column adds for is_head_hr, is_head_hr.
 
 ---
 
@@ -557,7 +557,7 @@ Manual frontend: `cd frontend && npm install && npm run dev`
 ## 11. Design Patterns & Practices
 
 - **Service layer:** Backend: blueprints as controllers; db.py as data access; services (ats_service, bulk_parsing_service) for external or complex logic. Frontend: api.js as HTTP layer; context as application service.
-- **Guards:** Route-level components (AdminGuard, CandidateGuard, SuperAdminGuard) enforce role before rendering page.
+- **Guards:** Route-level components (AdminGuard, CandidateGuard, HeadHrGuard) enforce role before rendering page.
 - **Optimistic updates:** applyToJobAsApplicant updates UI immediately and reverts on failure.
 - **Persistence:** Critical client state (auth, profile, applications, saved jobs) in localStorage with storage event sync across tabs.
 - **Lazy loading:** All route components lazy-loaded to reduce initial bundle.

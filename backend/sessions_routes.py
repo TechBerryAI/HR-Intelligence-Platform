@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from utils import authenticate_token
 from sessions_service import get_user_sessions, get_login_history, deactivate_session, deactivate_all_user_sessions
+from rbac import get_user_id, get_role
 
 sessions_bp = Blueprint('sessions', __name__)
 
@@ -9,7 +10,7 @@ sessions_bp = Blueprint('sessions', __name__)
 @authenticate_token
 def my_sessions():
     try:
-        user_id = request.user.get('hrId') if request.user.get('role') == 'HR' else request.user.get('id')
+        user_id = get_user_id(request.user)
         sessions = get_user_sessions(user_id, request.user['role'])
         return jsonify(sessions)
     except Exception:
@@ -45,7 +46,7 @@ def logout_session():
 @authenticate_token
 def logout_all():
     try:
-        user_id = request.user.get('hrId') if request.user.get('role') == 'HR' else request.user.get('id')
+        user_id = get_user_id(request.user)
         deactivate_all_user_sessions(user_id, request.user['role'])
         return jsonify({'message': 'All sessions deactivated successfully'})
     except Exception:

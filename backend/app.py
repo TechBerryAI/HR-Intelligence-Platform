@@ -116,7 +116,7 @@ from parsing_routes import parsing_bp  # noqa: E402
 from support import support_bp  # noqa: E402
 from feedback_routes import feedback_bp  # noqa: E402
 from modules.admin.routes import admin_bp  # noqa: E402
-from super_admin import super_admin_bp  # noqa: E402
+from head_hr import head_hr_bp  # noqa: E402
 
 # Database initialization - DO IT AT STARTUP, NOT LAZY
 # Lazy loading was causing 10+ second delays on first API call
@@ -191,7 +191,8 @@ app.register_blueprint(feedback_bp, url_prefix='/api/feedback')
 # Admin-only: bulk resume parsing (proxy to Bulk-Resume-Parser), job matches (ATS results)
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
 # Super Admin: system-level god mode (separate credentials, separate route)
-app.register_blueprint(super_admin_bp, url_prefix='/api/super-admin')
+app.register_blueprint(head_hr_bp, url_prefix='/api/head-hr')
+app.register_blueprint(head_hr_bp, url_prefix='/api/super-admin', name='head_hr_legacy')
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '3000'))

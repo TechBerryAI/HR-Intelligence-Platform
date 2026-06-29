@@ -211,36 +211,23 @@ def run_migrations():
                             print(f"[DB] Migration warning in {os.path.basename(schema_file)}: {e}")
                         conn.rollback()
 
-    # Ensure is_super_admin column exists on hr_signup (idempotent)
+    # Ensure role column exists on hr_signup (idempotent)
     try:
         with get_conn() as conn:
             with conn.cursor() as cursor:
                 cursor.execute("""
                     SELECT 1 FROM information_schema.columns
-                    WHERE table_schema = current_schema() AND table_name = 'hr_signup' AND column_name = 'is_super_admin'
+                    WHERE table_schema = current_schema() AND table_name = 'hr_signup' AND column_name = 'role'
                 """)
                 if cursor.fetchone() is None:
-                    cursor.execute("ALTER TABLE hr_signup ADD COLUMN is_super_admin BOOLEAN DEFAULT false")
-                    print("[DB] Added column hr_signup.is_super_admin")
+                    cursor.execute("""
+                        ALTER TABLE hr_signup ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'RECRUITER'
+                    """)
+                    print("[DB] Added column hr_signup.role")
     except Exception as e:
-        print(f"[DB] Warning ensuring is_super_admin column: {e}")
+        print(f"[DB] Warning ensuring role column: {e}")
 
-    # Ensure is_head_hr column exists on hr_signup (idempotent)
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("""
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_schema = current_schema() AND table_name = 'hr_signup' AND column_name = 'is_head_hr'
-                """)
-                if cursor.fetchone() is None:
-                    cursor.execute("ALTER TABLE hr_signup ADD COLUMN is_head_hr BOOLEAN DEFAULT false")
-                    print("[DB] Added column hr_signup.is_head_hr")
-    except Exception as e:
-        print(f"[DB] Warning ensuring is_head_hr column: {e}")
-
-    # Admin accounts (Super Admin, Head of HR) are seeded via script: python scripts/seed_admin_accounts.py
-    # Do not seed from .env here.
+    # Admin accounts are seeded via schema_pg/06_seed_admin_accounts.sql and 07_seed_ceo_account.sql
 
 
 def init_db():

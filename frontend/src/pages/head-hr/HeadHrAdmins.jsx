@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
 import { useApp } from '../../context/AppContext.jsx'
+import { isHeadHr } from '../../utils/rbac.js'
 import { useAsyncAction } from '../../hooks/useAsyncAction.js'
-import SuperAdminLayout from './SuperAdminLayout.jsx'
+import HeadHrLayout from './HeadHrLayout.jsx'
 import PasswordInput from '../../components/PasswordInput.jsx'
 import { FiTrash2, FiRefreshCw, FiUsers, FiSearch, FiDownload, FiPlus, FiArrowUp, FiArrowDown } from 'react-icons/fi'
 import { generateAdminsPdf } from '../../utils/pdfReportUtils.js'
@@ -20,7 +21,7 @@ function formatDate(ts) {
   return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export default function SuperAdminAdmins() {
+export default function HeadHrAdmins() {
   const { auth } = useApp()
   const { run: runRefresh, loading: refreshLoading } = useAsyncAction()
   const { run: runReport, loading: reportLoading } = useAsyncAction()
@@ -34,8 +35,7 @@ export default function SuperAdminAdmins() {
   const [showCreate, setShowCreate] = useState(false)
   const [createForm, setCreateForm] = useState({ email: '', fullName: '', company: '', password: '' })
   const [creating, setCreating] = useState(false)
-  const isSuperAdmin = auth?.role === 'super_admin'
-  const isHeadHr = auth?.role === 'head_hr'
+  const canManageAdmins = isHeadHr(auth)
   const [idOrder, setIdOrder] = useState('desc') // 'asc' | 'desc'
 
   const load = async () => {
@@ -43,7 +43,7 @@ export default function SuperAdminAdmins() {
     setError('')
     try {
       const token = tokenService.getToken()
-      const data = await apiRequest('/api/super-admin/admins', { method: 'GET', token })
+      const data = await apiRequest('/api/head-hr/admins', { method: 'GET', token })
       setAdmins(data.admins || [])
     } catch (err) {
       setError(err?.message || 'Failed to load admins')
@@ -68,7 +68,7 @@ export default function SuperAdminAdmins() {
     setCreating(true)
     try {
       const token = tokenService.getToken()
-      await apiRequest('/api/super-admin/admins', {
+      await apiRequest('/api/head-hr/admins', {
         method: 'POST',
         token,
         body: {
@@ -93,7 +93,7 @@ export default function SuperAdminAdmins() {
     setDeleting(hrid)
     try {
       const token = tokenService.getToken()
-      await apiRequest(`/api/super-admin/admins/${hrid}`, { method: 'DELETE', token })
+      await apiRequest(`/api/head-hr/admins/${hrid}`, { method: 'DELETE', token })
       setAdmins((prev) => prev.filter((a) => a.hrid !== hrid))
       showToast('Admin deleted successfully')
     } catch (err) {
@@ -120,7 +120,7 @@ export default function SuperAdminAdmins() {
   })
 
   return (
-    <SuperAdminLayout>
+    <HeadHrLayout>
       {/* Toast */}
       {toast && (
         <div
@@ -243,7 +243,7 @@ export default function SuperAdminAdmins() {
           <p className="mt-0.5 text-sm text-zinc-400">{admins.length} admin{admins.length !== 1 ? 's' : ''} registered</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {isHeadHr && (
+          {canManageAdmins && (
             <button
               onClick={() => setShowCreate(true)}
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 transition-colors border border-emerald-500/30"
@@ -317,7 +317,7 @@ export default function SuperAdminAdmins() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Email</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Company</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Joined</th>
-                  {isSuperAdmin && <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Actions</th>}
+                  {canManageAdmins && <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
@@ -328,7 +328,7 @@ export default function SuperAdminAdmins() {
                     <td className="px-4 py-3 text-zinc-400">{admin.email}</td>
                     <td className="px-4 py-3 text-zinc-400">{admin.company || '—'}</td>
                     <td className="px-4 py-3 text-zinc-500">{formatDate(admin.created_at)}</td>
-                    {isSuperAdmin && (
+                    {canManageAdmins && (
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => setConfirmDelete(admin)}
@@ -345,6 +345,6 @@ export default function SuperAdminAdmins() {
           </div>
         </div>
       )}
-    </SuperAdminLayout>
+    </HeadHrLayout>
   )
 }

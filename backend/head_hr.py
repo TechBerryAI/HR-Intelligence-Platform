@@ -1,20 +1,16 @@
 """
-Super Admin blueprint — god-mode access for the system owner.
-Super admin users are HR accounts in hr_signup with is_super_admin = true.
-No .env credentials; login uses same hr_signup table and password (bcrypt).
+Head HR blueprint — executive analytics and org-wide administration.
 """
-import os
-
 import bcrypt
-import jwt
 from functools import wraps
 from flask import Blueprint, jsonify, request
 
 from db import db_all, db_get, db_run
 from toon import toon_loads_flex
-from utils import authenticate_token, build_jwt_payload, require_head_hr, require_super_admin
+from utils import authenticate_token, require_head_hr
+from rbac import is_head_hr, require_analytics_read, is_read_only
 
-super_admin_bp = Blueprint('super_admin', __name__)
+head_hr_bp = Blueprint('head_hr', __name__)
 
 
 def allow_options_no_auth(f):
@@ -27,69 +23,12 @@ def allow_options_no_auth(f):
     return wrapper
 
 
-JWT_SECRET = os.getenv(
-    'JWT_SECRET',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE',
-)
-
-
-# ---------------------------------------------------------------------------
-# Auth (DB: hr_signup.is_super_admin = true)
-# ---------------------------------------------------------------------------
-
-@super_admin_bp.post('/login')
-def super_admin_login():
-    data = request.get_json(force=True) or {}
-    email = (data.get('email') or '').strip().lower()
-    password = (data.get('password') or '').strip()
-
-    if not email or not password:
-        return jsonify({'error': 'Email and password are required'}), 400
-
-    row = db_get(
-        'SELECT hrid, email, password, full_name, is_super_admin FROM hr_signup WHERE LOWER(TRIM(email)) = ?',
-        (email,),
-    )
-    if not row:
-        return jsonify({'error': 'Invalid credentials'}), 401
-
-    stored = row.get('password') or ''
-    if not stored:
-        return jsonify({'error': 'Invalid credentials'}), 401
-    stored_b = stored.encode('utf-8') if isinstance(stored, str) else stored
-    if not bcrypt.checkpw(password.encode('utf-8'), stored_b):
-        return jsonify({'error': 'Invalid credentials'}), 401
-
-    is_super = row.get('is_super_admin')
-    if is_super is None:
-        is_super = False
-    if not is_super:
-        return jsonify({'error': 'Super admin access is only for designated accounts'}), 403
-
-    identity = {'id': 'SUPER_ADMIN', 'hrId': row['hrid'], 'email': row['email'], 'role': 'super_admin'}
-    access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
-    refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
-    name = (row.get('full_name') or '').strip() or row['email']
-
-    return jsonify({
-        'token': access_token,
-        'refresh_token': refresh_token,
-        'user': {
-            'id': 'SUPER_ADMIN',
-            'email': row['email'],
-            'name': name,
-            'role': 'super_admin',
-        },
-    })
-
-
 # ---------------------------------------------------------------------------
 # Stats / Dashboard
 # ---------------------------------------------------------------------------
 
-@super_admin_bp.get('/stats')
-@authenticate_token
-@require_head_hr
+@head_hr_bp.get('/stats')
+@require_analytics_read
 def get_stats():
     total_admins = db_get('SELECT COUNT(*) AS cnt FROM hr_signup', ())
     total_candidates = db_get('SELECT COUNT(*) AS cnt FROM candidate_signup', ())
@@ -108,12 +47,11 @@ def get_stats():
 
 
 # ---------------------------------------------------------------------------
-# Admins (HR users) — list/create allowed for Head of HR and Super Admin; delete Super Admin only
+# Admins (HR users) — list/create/delete for Head of HR
 # ---------------------------------------------------------------------------
 
-@super_admin_bp.get('/admins')
-@authenticate_token
-@require_head_hr
+@head_hr_bp.get('/admins')
+@require_analytics_read
 def list_admins():
     rows = db_all(
         'SELECT hrid, full_name, email, company, created_at FROM hr_signup ORDER BY created_at DESC',
@@ -122,11 +60,13 @@ def list_admins():
     return jsonify({'admins': rows})
 
 
-@super_admin_bp.post('/admins')
+@head_hr_bp.post('/admins')
 @authenticate_token
 @require_head_hr
 def create_admin():
-    """Create a new HR/admin account (Head of HR or Super Admin only). Body: email, fullName, company, password."""
+    """Create a new HR/admin account (Head of HR only). Body: email, fullName, company, password."""
+    if is_read_only(request.user):
+        return jsonify({'error': 'Read-only access'}), 403
     data = request.get_json(force=True) or {}
     email = (data.get('email') or '').strip().lower()
     full_name = (data.get('fullName') or data.get('full_name') or '').strip()
@@ -160,13 +100,13 @@ def create_admin():
             'admin': {'hrid': hrid, 'full_name': full_name, 'email': email, 'company': company or '-'},
         }), 201
     except Exception as e:
-        print(f'[SUPER ADMIN] Error creating admin: {e}')
+        print(f'[HEAD HR] Error creating admin: {e}')
         return jsonify({'error': 'Failed to create admin'}), 500
 
 
-@super_admin_bp.delete('/admins/<hrid>')
+@head_hr_bp.delete('/admins/<hrid>')
 @authenticate_token
-@require_super_admin
+@require_head_hr
 def delete_admin(hrid):
     existing = db_get('SELECT hrid FROM hr_signup WHERE hrid = ?', (hrid,))
     if not existing:
@@ -175,7 +115,7 @@ def delete_admin(hrid):
         db_run('DELETE FROM hr_signup WHERE hrid = ?', (hrid,))
         return jsonify({'message': f'Admin {hrid} deleted successfully'})
     except Exception as e:
-        print(f'[SUPER ADMIN] Error deleting admin {hrid}: {e}')
+        print(f'[HEAD HR] Error deleting admin {hrid}: {e}')
         return jsonify({'error': 'Failed to delete admin'}), 500
 
 
@@ -183,9 +123,8 @@ def delete_admin(hrid):
 # Candidates
 # ---------------------------------------------------------------------------
 
-@super_admin_bp.get('/candidates')
-@authenticate_token
-@require_head_hr
+@head_hr_bp.get('/candidates')
+@require_analytics_read
 def list_candidates():
     rows = db_all(
         '''SELECT cs.cid, cs.name, cs.email, cs.created_at,
@@ -199,7 +138,7 @@ def list_candidates():
     return jsonify({'candidates': rows})
 
 
-def _super_admin_profile_payload(cid):
+def _head_hr_profile_payload(cid):
     """Build full profile payload for a candidate (profile + education + certs + experiences)."""
     profile = db_get(
         '''
@@ -262,13 +201,12 @@ def _super_admin_profile_payload(cid):
     }
 
 
-@super_admin_bp.route('/candidates/<cid>', methods=['GET', 'OPTIONS'])
+@head_hr_bp.route('/candidates/<cid>', methods=['GET', 'OPTIONS'])
 @allow_options_no_auth
-@authenticate_token
-@require_head_hr
+@require_analytics_read
 def get_candidate(cid):
-    """Return full candidate profile for super-admin detail view."""
-    payload = _super_admin_profile_payload(cid)
+    """Return full candidate profile for Head HR detail view."""
+    payload = _head_hr_profile_payload(cid)
     if not payload:
         signup = db_get('SELECT cid, name, email, created_at FROM candidate_signup WHERE cid = ?', (cid,))
         if not signup:
@@ -312,12 +250,11 @@ def _resume_bytes(data):
         return None
 
 
-@super_admin_bp.route('/candidates/<cid>/resume', methods=['GET', 'OPTIONS'])
+@head_hr_bp.route('/candidates/<cid>/resume', methods=['GET', 'OPTIONS'])
 @allow_options_no_auth
-@authenticate_token
-@require_head_hr
+@require_analytics_read
 def get_candidate_resume(cid):
-    """Serve candidate resume PDF for super-admin."""
+    """Serve candidate resume PDF for Head HR."""
     from flask import Response
     profile = db_get('SELECT resume FROM candidate_profiles WHERE candidate_id = ?', (cid,))
     if not profile or not profile.get('resume'):
@@ -336,9 +273,9 @@ def get_candidate_resume(cid):
     )
 
 
-@super_admin_bp.delete('/candidates/<cid>')
+@head_hr_bp.delete('/candidates/<cid>')
 @authenticate_token
-@require_super_admin
+@require_head_hr
 def delete_candidate(cid):
     existing = db_get('SELECT cid FROM candidate_signup WHERE cid = ?', (cid,))
     if not existing:
@@ -347,7 +284,7 @@ def delete_candidate(cid):
         db_run('DELETE FROM candidate_signup WHERE cid = ?', (cid,))
         return jsonify({'message': f'Candidate {cid} deleted successfully'})
     except Exception as e:
-        print(f'[SUPER ADMIN] Error deleting candidate {cid}: {e}')
+        print(f'[HEAD HR] Error deleting candidate {cid}: {e}')
         return jsonify({'error': 'Failed to delete candidate'}), 500
 
 
@@ -355,9 +292,8 @@ def delete_candidate(cid):
 # Jobs
 # ---------------------------------------------------------------------------
 
-@super_admin_bp.get('/jobs')
-@authenticate_token
-@require_head_hr
+@head_hr_bp.get('/jobs')
+@require_analytics_read
 def list_jobs():
     rows = db_all(
         '''SELECT j.jdid, j.title, j.company, j.location, j.salary,
@@ -371,15 +307,16 @@ def list_jobs():
     return jsonify({'jobs': rows})
 
 
-@super_admin_bp.route('/jobs/<jdid>', methods=['GET', 'OPTIONS', 'DELETE'])
+@head_hr_bp.route('/jobs/<jdid>', methods=['GET', 'OPTIONS', 'DELETE'])
 @allow_options_no_auth
 @authenticate_token
 def job_detail_or_delete(jdid):
-    """GET: full job details. OPTIONS: CORS preflight. DELETE: remove job (super_admin only)."""
+    """GET: full job details. OPTIONS: CORS preflight. DELETE: remove job (HEAD_HR only)."""
     if request.method == 'OPTIONS':
         return '', 204
     if request.method == 'DELETE':
-        if getattr(request, 'user', {}).get('role') != 'super_admin':
+        from rbac import is_head_hr, is_read_only
+        if is_read_only(request.user) or not is_head_hr(request.user):
             return jsonify({'error': 'Forbidden'}), 403
         existing = db_get('SELECT jdid FROM jobs WHERE jdid = ?', (jdid,))
         if not existing:
@@ -388,11 +325,10 @@ def job_detail_or_delete(jdid):
             db_run('DELETE FROM jobs WHERE jdid = ?', (jdid,))
             return jsonify({'message': f'Job {jdid} deleted successfully'})
         except Exception as e:
-            print(f'[SUPER ADMIN] Error deleting job {jdid}: {e}')
+            print(f'[HEAD HR] Error deleting job {jdid}: {e}')
             return jsonify({'error': 'Failed to delete job'}), 500
-    # GET
-    role = getattr(request, 'user', {}).get('role')
-    if role not in ('head_hr', 'super_admin'):
+    from rbac import has_permission
+    if not has_permission(getattr(request, 'user', None), 'analytics:read'):
         return jsonify({'error': 'Forbidden'}), 403
     row = db_get(
         '''SELECT j.jdid, j.title, j.company, j.location, j.salary,
@@ -425,9 +361,8 @@ def job_detail_or_delete(jdid):
 # Applications
 # ---------------------------------------------------------------------------
 
-@super_admin_bp.get('/applications')
-@authenticate_token
-@require_head_hr
+@head_hr_bp.get('/applications')
+@require_analytics_read
 def list_applications():
     rows = db_all(
         '''SELECT a.id, a.candidate_id, a.job_id, a.status,
@@ -445,17 +380,16 @@ def list_applications():
     return jsonify({'applications': rows})
 
 
-@super_admin_bp.route('/applications/<int:app_id>', methods=['OPTIONS'])
+@head_hr_bp.route('/applications/<int:app_id>', methods=['OPTIONS'])
 def options_application(app_id):
     """Allow CORS preflight for GET /applications/<id> (no auth on preflight)."""
     return '', 204
 
 
-@super_admin_bp.get('/applications/<int:app_id>')
-@authenticate_token
-@require_head_hr
+@head_hr_bp.get('/applications/<int:app_id>')
+@require_analytics_read
 def get_application(app_id):
-    """Return one application with full ATS analysis for super-admin detail view."""
+    """Return one application with full ATS analysis for Head HR detail view."""
     row = db_get(
         '''SELECT a.id, a.candidate_id, a.job_id, a.status,
                   a.applied_at, a.match_score, a.shortlisted,

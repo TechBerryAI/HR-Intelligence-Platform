@@ -3,9 +3,33 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from db import db_all, db_get, db_run, BACKEND, TRUE_SQL, FALSE_SQL
 from utils import authenticate_token, require_hr, optional_authenticate_token
+from rbac import (
+    can_access_job,
+    can_modify_job,
+    is_read_only,
+    get_role,
+    get_user_id,
+    ROLE_CEO,
+    ROLE_HEAD_HR,
+    ROLE_RECRUITER,
+)
 from toon import toon_loads_flex
 
 jobs_bp = Blueprint('jobs', __name__)
+
+
+def _get_job_for_user(job_id, user, require_write=False):
+    job = db_get('SELECT * FROM jobs WHERE jdid = ?', (job_id,))
+    if not job:
+        return None
+    posted_by = job.get('posted_by')
+    if require_write:
+        if not can_modify_job(user, posted_by):
+            return None
+    elif user and get_user_id(user):
+        if not can_access_job(user, posted_by):
+            return None
+    return job
 
 
 def _send_notification(hr_action, candidate_name, candidate_email, job_title, company_name, application_id, timestamp):
@@ -120,7 +144,17 @@ def get_jobs_public():
     """List jobs. If authenticated as HR, return only jobs posted by that HR. Otherwise return enabled jobs (public)."""
     try:
         user = getattr(request, 'user', None)
-        if user and user.get('role') in ('HR', 'head_hr') and user.get('hrId'):
+        role = get_role(user) if user else None
+        if user and get_user_id(user) and role in (ROLE_CEO, ROLE_HEAD_HR):
+            jobs = db_all(
+                '''
+                SELECT j.*, hs.company as company_name
+                FROM jobs j
+                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+                ORDER BY j.posted_on DESC
+                '''
+            )
+        elif user and get_user_id(user) and role == ROLE_RECRUITER:
             # Admin: only jobs posted by this HR
             jobs = db_all(
                 '''
@@ -130,7 +164,7 @@ def get_jobs_public():
                 WHERE j.posted_by = ?
                 ORDER BY j.posted_on DESC
                 ''',
-                (user.get('hrId'),)
+                (get_user_id(user),)
             )
             # Optionally restrict to jobs whose company matches JWT; if that would hide all, show all (avoid data mismatch hiding jobs)
             hr_company = (user.get('company') or '').strip()
@@ -176,15 +210,26 @@ def get_jobs_public():
 def get_jobs_all():
     try:
         user = request.user
-        jobs = db_all(
-            '''
-            SELECT j.*, hs.company as company_name
-            FROM jobs j
-            LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-            WHERE j.posted_by = ?
-            ORDER BY j.posted_on DESC
-            ''', (user.get('hrId'),)
-        )
+        role = get_role(user)
+        if role in (ROLE_CEO, ROLE_HEAD_HR):
+            jobs = db_all(
+                '''
+                SELECT j.*, hs.company as company_name
+                FROM jobs j
+                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+                ORDER BY j.posted_on DESC
+                '''
+            )
+        else:
+            jobs = db_all(
+                '''
+                SELECT j.*, hs.company as company_name
+                FROM jobs j
+                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+                WHERE j.posted_by = ?
+                ORDER BY j.posted_on DESC
+                ''', (get_user_id(user),)
+            )
         formatted = [
             {
                 'id': j['jdid'],
@@ -220,9 +265,8 @@ def get_job(job_id: str):
         if not job:
             return jsonify({'error': 'Job not found'}), 404
         user = getattr(request, 'user', None)
-        if user and user.get('role') in ('HR', 'head_hr'):
-            # HR may only view/edit jobs they posted
-            if job.get('posted_by') != user.get('hrId'):
+        if user and get_user_id(user):
+            if not can_access_job(user, job.get('posted_by')):
                 return jsonify({'error': 'Job not found or access denied'}), 404
         else:
             # Candidate/public: only enabled jobs
@@ -249,7 +293,7 @@ def get_job(job_id: str):
 def get_job_applications(job_id: str):
     try:
         # Verify job belongs to HR user
-        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        job = _get_job_for_user(job_id, request.user, require_write=False)
         if not job:
             # Return 200 with empty list so UI shows "No candidates" instead of errors; avoids 404 in terminal
             return jsonify({'applications': []}), 200
@@ -407,7 +451,7 @@ def get_candidate_resume(job_id: str, candidate_id: str):
     """Download candidate resume for HR"""
     try:
         # Verify job belongs to HR user
-        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        job = _get_job_for_user(job_id, request.user, require_write=False)
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
         
@@ -458,7 +502,7 @@ def get_candidate_resume(job_id: str, candidate_id: str):
 def record_profile_viewed(job_id: str, candidate_id: str):
     """Record that HR viewed this candidate's profile for this job. Sends email and updates status."""
     try:
-        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        job = _get_job_for_user(job_id, request.user, require_write=True)
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
         app = db_get(
@@ -520,7 +564,7 @@ def update_application_status(job_id: str, candidate_id: str):
         action = (data.get('action') or '').strip().lower()
         if action not in ('shortlist', 'reject'):
             return jsonify({'error': 'action must be "shortlist" or "reject"'}), 400
-        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        job = _get_job_for_user(job_id, request.user, require_write=True)
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
         app = db_get('SELECT id FROM applications WHERE job_id = ? AND candidate_id = ?', (job_id, candidate_id))
@@ -564,7 +608,8 @@ def update_application_status(job_id: str, candidate_id: str):
 @require_hr
 def create_job():
     try:
-        print("=" * 50)
+        if is_read_only(request.user):
+            return jsonify({'error': 'Read-only access'}), 403
         print("CREATE JOB ENDPOINT CALLED")
         print(f"Request method: {request.method}")
         print(f"Request URL: {request.url}")
@@ -607,7 +652,7 @@ def create_job():
         description = (data.get('description') or '').strip()
         
         # Company is always taken from the HR account — not from request body (keeps it unchangeable)
-        hr_id = request.user.get('hrId')
+        hr_id = get_user_id(request.user)
         if hr_id:
             hr_profile = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (hr_id,))
             if hr_profile and (hr_profile.get('company') or '').strip():
@@ -623,7 +668,7 @@ def create_job():
             return jsonify({'error': f'Missing required fields: {", ".join(missing_fields)}'}), 400
         
         # Ensure hrId exists
-        hr_id = request.user.get('hrId')
+        hr_id = get_user_id(request.user)
         if not hr_id:
             return jsonify({'error': 'Invalid HR user. Please log in again.'}), 401
         
@@ -717,7 +762,7 @@ def update_job(job_id: str):
                     experience = f"Up to {experience_to} years"
         description = (data.get('description') or '').strip()
 
-        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        job = _get_job_for_user(job_id, request.user, require_write=True)
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
 
@@ -791,7 +836,7 @@ def toggle_job(job_id: str):
     try:
         data = request.get_json(force=True)
         enabled = bool(data.get('enabled'))
-        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        job = _get_job_for_user(job_id, request.user, require_write=True)
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
         _enabled = (True, False) if BACKEND == 'postgresql' else (1, 0)
@@ -806,7 +851,7 @@ def toggle_job(job_id: str):
 @require_hr
 def delete_job(job_id: str):
     try:
-        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND posted_by = ?', (job_id, request.user.get('hrId')))
+        job = _get_job_for_user(job_id, request.user, require_write=True)
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
         db_run('DELETE FROM jobs WHERE jdid = ?', (job_id,))

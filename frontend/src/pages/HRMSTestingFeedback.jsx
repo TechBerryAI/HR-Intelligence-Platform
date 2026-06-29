@@ -47,15 +47,15 @@ export default function HRMSTestingFeedback() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
-  const isHrLoggedIn = auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')
-  const isApplicantLoggedIn = applicantAuth.isLoggedIn && !isHrLoggedIn
+  const isStaffLoggedIn = auth.isLoggedIn && (auth.role === 'RECRUITER' || auth.role === 'HEAD_HR')
+  const isApplicantLoggedIn = applicantAuth.isLoggedIn && !isStaffLoggedIn
 
   const defaultName = isApplicantLoggedIn
     ? applicantProfile?.fullName || ''
-    : isHrLoggedIn
+    : isStaffLoggedIn
       ? user?.fullName || user?.name || ''
       : ''
-  const defaultEmployeeId = isHrLoggedIn ? user?.hrId || '' : isApplicantLoggedIn ? applicantAuth?.userId || applicantProfile?.cid : ''
+  const defaultEmployeeId = isStaffLoggedIn ? user?.hrId || '' : isApplicantLoggedIn ? applicantAuth?.userId || applicantProfile?.cid : ''
 
   const [form, setForm] = useState({
     employee_name: defaultName,

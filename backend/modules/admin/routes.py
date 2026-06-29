@@ -6,6 +6,7 @@ from flask import Blueprint, request, jsonify, Response
 from werkzeug.utils import secure_filename
 from db import db_get, db_all, BACKEND, TRUE_SQL
 from utils import authenticate_token, require_hr
+from rbac import can_access_bulk_session, get_role, ROLE_HEAD_HR, is_read_only, get_user_id
 from services.bulk_parsing_service import (
     upload_files as bulk_upload,
     get_progress as bulk_progress,
@@ -34,6 +35,8 @@ def bulk_parse_upload():
     Upload multiple resume files for bulk parsing.
     Proxies to Bulk-Resume-Parser API; no duplicate parsing logic.
     """
+    if is_read_only(request.user):
+        return jsonify({'error': 'Read-only access'}), 403
     if 'files' not in request.files and not any(k.startswith('file') for k in request.files):
         return jsonify({'error': 'No files provided'}), 400
     files_from_request = request.files.getlist('files') or request.files.getlist('file')
@@ -47,7 +50,7 @@ def bulk_parse_upload():
                 files_list.append((secure_filename(f.filename), data))
     if not files_list:
         return jsonify({'error': 'No valid resume files (PDF/DOC/DOCX)'}), 400
-    success, result = bulk_upload(files_list, append=request.form.get('append', 'false').lower() == 'true')
+    success, result = bulk_upload(files_list, append=request.form.get('append', 'false').lower() == 'true', started_by=get_user_id(request.user))
     if not success:
         code = result.get('code')
         if code == ERROR_CODE_UNREACHABLE or code == 'BULK_PARSER_NOT_CONFIGURED':
@@ -61,7 +64,13 @@ def bulk_parse_upload():
 @require_hr
 def bulk_parse_progress(job_id):
     """Get bulk parsing job progress. Proxies to Bulk-Resume-Parser API."""
-    success, result = bulk_progress(job_id)
+    from services.local_bulk_parser import get_local_progress
+    ok_local, local_job = get_local_progress(job_id, check_only=True)
+    if ok_local:
+        started_by = local_job.get('started_by')
+        if started_by and not can_access_bulk_session(request.user, started_by):
+            return jsonify({'error': 'Access denied'}), 403
+    success, result = bulk_progress(job_id, user=request.user)
     if not success:
         if result.get('code') == ERROR_CODE_UNREACHABLE or result.get('code') == 'BULK_PARSER_NOT_CONFIGURED':
             return jsonify(result), 503
@@ -74,7 +83,13 @@ def bulk_parse_progress(job_id):
 @require_hr
 def bulk_parse_download(job_id):
     """Stream Excel download from Bulk-Resume-Parser. Proxies internally."""
-    success, payload = bulk_stream_download(job_id)
+    from services.local_bulk_parser import get_local_progress
+    ok_local, local_job = get_local_progress(job_id, check_only=True)
+    if ok_local:
+        started_by = local_job.get('started_by')
+        if started_by and not can_access_bulk_session(request.user, started_by):
+            return jsonify({'error': 'Access denied'}), 403
+    success, payload = bulk_stream_download(job_id, user=request.user)
     if not success:
         if payload.get('code') == ERROR_CODE_UNREACHABLE or payload.get('code') == 'BULK_PARSER_NOT_CONFIGURED':
             return jsonify(payload), 503
@@ -102,17 +117,29 @@ def job_matches():
     hr_id = request.user.get('hrId')
     if not hr_id:
         return jsonify({'error': 'HR user required'}), 403
-    jobs = db_all(
-        '''
-        SELECT j.jdid, j.title, j.company, j.location, j.enabled,
-               (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid) as application_count,
-               (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid AND a.shortlisted = ''' + TRUE_SQL + ''') as shortlisted_count
-        FROM jobs j
-        WHERE j.posted_by = ?
-        ORDER BY j.posted_on DESC
-        ''',
-        (hr_id,),
-    )
+    role = get_role(request.user)
+    if role == ROLE_HEAD_HR:
+        jobs = db_all(
+            '''
+            SELECT j.jdid, j.title, j.company, j.location, j.enabled,
+                   (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid) as application_count,
+                   (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid AND a.shortlisted = ''' + TRUE_SQL + ''') as shortlisted_count
+            FROM jobs j
+            ORDER BY j.posted_on DESC
+            '''
+        )
+    else:
+        jobs = db_all(
+            '''
+            SELECT j.jdid, j.title, j.company, j.location, j.enabled,
+                   (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid) as application_count,
+                   (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid AND a.shortlisted = ''' + TRUE_SQL + ''') as shortlisted_count
+            FROM jobs j
+            WHERE j.posted_by = ?
+            ORDER BY j.posted_on DESC
+            ''',
+            (hr_id,),
+        )
     return jsonify({
         'jobs': [
             {
