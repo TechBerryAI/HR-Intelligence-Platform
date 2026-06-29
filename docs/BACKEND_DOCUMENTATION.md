@@ -21,7 +21,7 @@ backend/
 ├── parsing_routes.py         # Parsing blueprint: parse resume/JD, get parsed by id
 ├── support.py                # Support blueprint: submit, my-requests, all, by id, status
 ├── feedback_routes.py        # Feedback blueprint: submit, list, status (HRMS testing feedback)
-├── super_admin.py            # Super-admin blueprint: login, stats, admins, candidates, jobs, applications
+├── head_hr.py            # Super-admin blueprint: login, stats, admins, candidates, jobs, applications
 ├── toon.py                   # TOON schema load/dump (JSON) for parsed resume/JD
 ├── text_extraction.py        # Extract text from PDF/DOC/DOCX
 ├── parsing_utils.py          # File hash, store raw file, store parsed resume/JD, cache lookup
@@ -87,7 +87,7 @@ backend/
    - `GET /` — API root JSON.  
    - `GET /health` — Health status and optional bulk_parser reachability.  
    - `GET|OPTIONS /api/test-cors` — CORS test.  
-   Then registers blueprints: auth_bp (`/api`), jobs_bp (`/api/jobs`), simple_candidate_auth_bp (`/api/candidate`), candidate_bp (`/api/candidate`), applications_bp (`/api/applications`), sessions_bp (`/api/sessions`), parsing_bp (`/api`), support_bp (`/api/support`), feedback_bp (`/api/feedback`), admin_bp (`/api/admin`), super_admin_bp (`/api/super-admin`).
+   Then registers blueprints: auth_bp (`/api`), jobs_bp (`/api/jobs`), simple_candidate_auth_bp (`/api/candidate`), candidate_bp (`/api/candidate`), applications_bp (`/api/applications`), sessions_bp (`/api/sessions`), parsing_bp (`/api`), support_bp (`/api/support`), feedback_bp (`/api/feedback`), admin_bp (`/api/admin`), head_hr_bp (`/api/head-hr`).
 
 9. **Run:** If `__name__ == '__main__'`, reads PORT and FLASK_DEBUG, optionally disables reloader, runs `app.run(host='0.0.0.0', port=..., debug=..., use_reloader=..., threaded=True)`.
 
@@ -113,7 +113,7 @@ backend/
 
 **Migrations:**
 
-- **run_migrations():** Reads all `.sql` files from `schema_pg/` in order, strips comments and empty lines, splits by `;` (keeping `DO $$ ... END $$;` as one statement), executes each. Then ensures columns `is_super_admin` and `is_head_hr` exist on `hr_signup` (idempotent ALTER).
+- **run_migrations():** Reads all `.sql` files from `schema_pg/` in order, strips comments and empty lines, splits by `;` (keeping `DO $$ ... END $$;` as one statement), executes each. Then ensures columns `is_HEAD_HR` and `is_head_hr` exist on `hr_signup` (idempotent ALTER).
 - **init_db():** Just calls `run_migrations()`.
 
 ---
@@ -133,10 +133,10 @@ backend/
 
 - **authenticate_token(f):** Reads `Authorization: Bearer <token>`. If no token, returns 401. Decodes JWT with JWT_SECRET; if `type == 'refresh'` returns 403 (refresh token cannot be used as access). Sets `request.user` to the decoded payload and calls `f`.
 - **optional_authenticate_token(f):** If no Bearer header, sets `request.user = None` and calls `f`. If Bearer present, same decode as above; invalid/expired/refresh-type returns 401.
-- **require_hr(f):** Must be used after authenticate_token. Checks `request.user` and that `role` is 'HR' or 'head_hr'; else 403.
+- **require_recruiter(f):** Must be used after authenticate_token. Checks `request.user` and that `role` is 'HR' or 'head_hr'; else 403.
 - **require_candidate(f):** Requires `request.user` and `role == 'candidate'`; else 403.
-- **require_super_admin(f):** Requires `request.user` and `role == 'super_admin'`; else 403.
-- **require_head_hr(f):** Requires role 'head_hr' or 'super_admin'; else 403.
+- **require_HEAD_HR(f):** Requires `request.user` and `role == 'HEAD_HR'`; else 403.
+- **require_head_hr(f):** Requires role 'head_hr' or 'HEAD_HR'; else 403.
 
 ---
 
@@ -172,16 +172,16 @@ backend/
 **Routes:**
 
 - **GET /** (`optional_authenticate_token`): List jobs. If user is HR (role HR and has hrId), selects jobs where posted_by = hrId, optionally filtered by company from JWT. Otherwise selects jobs where enabled = true or null, ordered by posted_on. Returns array of job objects (id, title, company, location, salary, experience, description, enabled, postedOn).
-- **GET /all** (`authenticate_token`, `require_hr`): All jobs for this HR (posted_by = hrId).
+- **GET /all** (`authenticate_token`, `require_recruiter`): All jobs for this HR (posted_by = hrId).
 - **GET /:job_id** (`optional_authenticate_token`): Single job. HR can only see own jobs; others only enabled. Returns 404 if not found or access denied.
-- **GET /:job_id/applications** (`authenticate_token`, `require_hr`): Verifies job belongs to hrId; selects applications with candidate profile and ATS fields; for each candidate loads education, experiences, certifications; returns formatted list (matchScore, shortlisted, atsReasoning, atsAnalysis, fullName, email, resumeUrl, education, experiences, certifications). If job not found, returns 200 with empty list.
-- **GET /:job_id/applications/:candidate_id/resume** (`authenticate_token`, `require_hr`): Verifies job and application; gets resume from candidate_profiles; returns binary response with Content-Disposition inline.
-- **POST /** (`authenticate_token`, `require_hr`): Body: job fields. Generates jdid via generate_jdid_from_title; inserts into jobs (title, company, location, salary, experience, description, enabled, posted_by).
-- **PUT /:job_id** (`authenticate_token`, `require_hr`): Verifies job belongs to hrId; updates job fields.
-- **PATCH /:job_id/enabled** (`authenticate_token`, `require_hr`): Body: enabled. Updates jobs.enabled.
-- **DELETE /:job_id** (`authenticate_token`, `require_hr`): Deletes job if owned by hrId.
-- **POST /:job_id/applications/:candidate_id/viewed** (`authenticate_token`, `require_hr`): Marks application as profile viewed; sends notification email; updates application status (e.g. profile_viewed).
-- **PATCH /:job_id/applications/:candidate_id/status** (`authenticate_token`, `require_hr`): Body: action (shortlist | reject). Sends notification email and updates application status and shortlisted flag.
+- **GET /:job_id/applications** (`authenticate_token`, `require_recruiter`): Verifies job belongs to hrId; selects applications with candidate profile and ATS fields; for each candidate loads education, experiences, certifications; returns formatted list (matchScore, shortlisted, atsReasoning, atsAnalysis, fullName, email, resumeUrl, education, experiences, certifications). If job not found, returns 200 with empty list.
+- **GET /:job_id/applications/:candidate_id/resume** (`authenticate_token`, `require_recruiter`): Verifies job and application; gets resume from candidate_profiles; returns binary response with Content-Disposition inline.
+- **POST /** (`authenticate_token`, `require_recruiter`): Body: job fields. Generates jdid via generate_jdid_from_title; inserts into jobs (title, company, location, salary, experience, description, enabled, posted_by).
+- **PUT /:job_id** (`authenticate_token`, `require_recruiter`): Verifies job belongs to hrId; updates job fields.
+- **PATCH /:job_id/enabled** (`authenticate_token`, `require_recruiter`): Body: enabled. Updates jobs.enabled.
+- **DELETE /:job_id** (`authenticate_token`, `require_recruiter`): Deletes job if owned by hrId.
+- **POST /:job_id/applications/:candidate_id/viewed** (`authenticate_token`, `require_recruiter`): Marks application as profile viewed; sends notification email; updates application status (e.g. profile_viewed).
+- **PATCH /:job_id/applications/:candidate_id/status** (`authenticate_token`, `require_recruiter`): Body: action (shortlist | reject). Sends notification email and updates application status and shortlisted flag.
 
 ---
 
@@ -196,7 +196,7 @@ backend/
 - **GET /profile** (`authenticate_token`, `require_candidate`): Selects from candidate_profiles (no resume binary); returns parsed profile (fullName, email, education, experiences, certifications, completed, etc.) or default empty shape. Uses a `parse_profile` helper to map DB columns to camelCase and structure.
 - **POST /profile** (`authenticate_token`, `require_candidate`): Accepts JSON or multipart/form-data. For multipart, reads form and parses JSON fields (education, certifications, experiences). Reads resume from request.files['resume'] or base64 from JSON. If profile exists: if new resume bytes provided, UPDATE with resume; else UPDATE without resume. If no profile, INSERT. Then deletes and re-inserts candidate_education, candidate_certifications, candidate_experiences from the request arrays. Returns success.
 - **GET /resume:** Returns the resume binary for the authenticated candidate (from candidate_profiles).
-- **GET /profile/:candidate_id** (`authenticate_token`, `require_hr`): Same as GET /profile but for a given candidate_id so HR can view candidate profile.
+- **GET /profile/:candidate_id** (`authenticate_token`, `require_recruiter`): Same as GET /profile but for a given candidate_id so HR can view candidate profile.
 
 **Note:** Candidate forgot-password endpoints (`/api/candidate/forgot-password`, verify-otp, reset-password) are not implemented in this blueprint; the frontend calls them but they return 404.
 
@@ -272,22 +272,22 @@ backend/
 
 ### 12.1 `modules/admin/routes.py` — Prefix `/api/admin`
 
-- **POST /bulk-parse/upload** (`authenticate_token`, `require_hr`): Accepts multipart files; validates extension (pdf, doc, docx); calls bulk_parsing_service.upload_files; returns job id or error (503 if BULK_PARSER unreachable).
-- **GET /bulk-parse/progress/:job_id** (`authenticate_token`, `require_hr`): Proxies to bulk_parsing_service.get_progress.
-- **GET /bulk-parse/download/:job_id** (`authenticate_token`, `require_hr`): Streams Excel from bulk_parsing_service.stream_download; returns attachment.
-- **GET /job-matches** (`authenticate_token`, `require_hr`): Returns jobs posted by this HR with application counts and shortlisted counts.
+- **POST /bulk-parse/upload** (`authenticate_token`, `require_recruiter`): Accepts multipart files; validates extension (pdf, doc, docx); calls bulk_parsing_service.upload_files; returns job id or error (503 if BULK_PARSER unreachable).
+- **GET /bulk-parse/progress/:job_id** (`authenticate_token`, `require_recruiter`): Proxies to bulk_parsing_service.get_progress.
+- **GET /bulk-parse/download/:job_id** (`authenticate_token`, `require_recruiter`): Streams Excel from bulk_parsing_service.stream_download; returns attachment.
+- **GET /job-matches** (`authenticate_token`, `require_recruiter`): Returns jobs posted by this HR with application counts and shortlisted counts.
 
-### 12.2 `super_admin.py` — Prefix `/api/super-admin`
+### 12.2 `head_hr.py` — Prefix `/api/head-hr`
 
-- **POST /login:** Body: email, password. Looks up hr_signup by email; verifies password; checks is_super_admin; issues JWT with role 'super_admin'. Returns token and user.
+- **POST /login:** Body: email, password. Looks up hr_signup by email; verifies password; checks is_HEAD_HR; issues JWT with role 'HEAD_HR'. Returns token and user.
 - **GET /stats** (`authenticate_token`, `require_head_hr`): Counts hr_signup, candidate_signup, jobs, applications, active jobs, shortlisted. Returns JSON.
-- **GET /admins** (`authenticate_token`, `require_super_admin`): List HR admins.
-- **POST /admins** (`authenticate_token`, `require_super_admin`): Create admin (signup flow).
-- **DELETE /admins/:hrid** (`authenticate_token`, `require_super_admin`): Delete HR admin.
-- **GET /candidates**, **GET /candidates/:cid**, **GET /candidates/:cid/resume** (`authenticate_token`, require_head_hr or super_admin): List/detail/resume.
-- **DELETE /candidates/:cid** (`authenticate_token`, `require_super_admin`): Delete candidate.
+- **GET /admins** (`authenticate_token`, `require_HEAD_HR`): List HR admins.
+- **POST /admins** (`authenticate_token`, `require_HEAD_HR`): Create admin (signup flow).
+- **DELETE /admins/:hrid** (`authenticate_token`, `require_HEAD_HR`): Delete HR admin.
+- **GET /candidates**, **GET /candidates/:cid**, **GET /candidates/:cid/resume** (`authenticate_token`, require_head_hr or HEAD_HR): List/detail/resume.
+- **DELETE /candidates/:cid** (`authenticate_token`, `require_HEAD_HR`): Delete candidate.
 - **GET /jobs**, **GET /jobs/:jdid** (`authenticate_token`): List/detail jobs.
-- **DELETE /jobs/:jdid** (`authenticate_token`, `require_super_admin`): Delete job.
+- **DELETE /jobs/:jdid** (`authenticate_token`, `require_HEAD_HR`): Delete job.
 - **GET /applications**, **GET /applications/:id** (`authenticate_token`): List/detail applications.
 - **GET /settings** (`authenticate_token`): Returns settings (e.g. feature flags).
 
@@ -363,7 +363,7 @@ Implementation details (session storage, deactivation) live in `sessions_service
 ## 15. Data Flow Summary
 
 1. **Request:** Flask receives HTTP request; CORS handles preflight; route matches a blueprint.
-2. **Auth:** If the route uses `authenticate_token`, the decorator reads Bearer token, decodes JWT, sets `request.user`. If `require_hr`/`require_candidate`/etc., checks role and returns 403 if wrong.
+2. **Auth:** If the route uses `authenticate_token`, the decorator reads Bearer token, decodes JWT, sets `request.user`. If `require_recruiter`/`require_candidate`/etc., checks role and returns 403 if wrong.
 3. **Handler:** View function reads `request.get_json()` or `request.files`/`request.form`; validates input; uses `db_get`/`db_all`/`db_run` for DB; may call helpers (email, ATS, parsing).
 4. **Response:** Returns `jsonify(...)` or `Response(body, mimetype=..., headers=...)`. Exceptions can be caught and converted to 500 with a generic message.
 5. **Background:** Apply flow inserts the application and starts a thread for ATS; parsing may call LLM and store TOON; notifications are sent via Flask-Mail or candidate_notification_service.

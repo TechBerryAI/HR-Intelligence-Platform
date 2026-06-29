@@ -41,7 +41,7 @@ flowchart TB
     subgraph Backend_Consumers
         APP[applications.py]
         JOBS[jobs.py]
-        SA[super_admin.py]
+        SA[head_hr.py]
     end
 
     subgraph External
@@ -199,7 +199,7 @@ flowchart TB
 | Imports | Role |
 |---------|------|
 | `services.bulk_parsing_service` | Bulk proxy |
-| `utils.authenticate_token, require_hr` | Auth |
+| `utils.authenticate_token, require_recruiter` | Auth |
 
 ---
 
@@ -244,7 +244,7 @@ flowchart TB
 | `applications.py` | — | `_jd_toon_from_job_row` synthetic |
 | `ats_service.py` | — | In-memory dict |
 | `jobs.py` | `applications` | `ats_analysis` via `toon_loads_flex` |
-| `super_admin.py` | `applications` | `ats_analysis` |
+| `head_hr.py` | `applications` | `ats_analysis` |
 | `parsing_routes.py` | `parsed_*` | GET by id |
 
 **No module** other than parsing pipeline and apply flow reads `parsed_resumes.toon` for search/analytics.

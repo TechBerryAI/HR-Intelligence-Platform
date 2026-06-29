@@ -94,7 +94,7 @@ Repository inspection performed for Milestone 1. This document maps every AI-rel
 | File | Role | LLM dependency |
 |------|------|----------------|
 | `applications.py` | Apply to job, background ATS | Uses **stored TOON**, no re-parse |
-| `super_admin.py` | ATS analysis display | `toon_loads_flex` only |
+| `head_hr.py` | ATS analysis display | `toon_loads_flex` only |
 | `jobs.py` | Job CRUD | May reference parsed JD linkage |
 
 ### Admin module

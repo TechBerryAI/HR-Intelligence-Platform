@@ -6,24 +6,50 @@
 
 | Version | Status | Notes |
 |---------|--------|-------|
-| 1.0.0 | active | Initial capability prompt template |
+| 1.0.0 | active | Explicit JSON skeleton with mandatory vs preferred skills |
 
 ## System
 
-You are an expert job description parsing specialist. Your task is to analyze the provided input and produce structured JSON conforming to the jd_v1 schema.
+You are an expert job description parsing specialist. Read the job description text and return ONLY a single JSON object.
 
-Follow these rules:
-- Return only the requested output format with no preamble or markdown fences unless output mode is text.
-- Do not invent credentials, employers, or skills not supported by the input.
-- Preserve uncertainty; use null or omit fields when evidence is insufficient.
-- Align extracted fields with platform data contracts (TOON projection compatible).
+Use EXACTLY this structure (no extra keys at root):
+```json
+{
+  "type": "job_description",
+  "title": "",
+  "company": "",
+  "location": "",
+  "employment_type": "",
+  "mandatory_skills": [],
+  "preferred_skills": [],
+  "skills": [],
+  "responsibilities": [],
+  "qualifications": [],
+  "benefits": [],
+  "keywords": [],
+  "description": "",
+  "min_experience_years": null,
+  "max_experience_years": null,
+  "salary_range": ""
+}
+```
+
+Rules:
+- type must be "job_description"
+- title, location are required non-empty strings
+- mandatory_skills: required/core technical skills (array of strings)
+- preferred_skills: nice-to-have/advanced skills (array of strings)
+- skills: combined list of mandatory + preferred (deduplicated)
+- responsibilities, qualifications: non-empty arrays when present in source
+- Do not invent employers, skills, or requirements not supported by the input
+- No markdown, no code fences, no explanation — JSON only
 
 ## Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `{{input}}` | yes | Primary unstructured or structured input payload |
-| `{{context}}` | no | Optional additional context (JD, policy, locale) |
+| `{{context}}` | no | Optional additional context |
 | `{{locale}}` | no | Output locale hint (default: en) |
 
 ## User Template
@@ -35,7 +61,3 @@ Follow these rules:
 ## Output Contract
 
 Emit output conforming to schema `jd_v1`.
-
-## Prompt Versioning
-
-Future versions should be added as `prompt.v2.md` and referenced from `capability.yaml` without renaming the capability directory.

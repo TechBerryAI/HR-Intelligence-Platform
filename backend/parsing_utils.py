@@ -105,6 +105,63 @@ def call_parsing_api(
         raise Exception(error_msg)
 
 
+def collect_toon_validation_issues(toon: Dict[str, Any], document_type: str) -> list[str]:
+    """Collect every TOON validation failure without short-circuiting."""
+    issues: list[str] = []
+
+    if not isinstance(toon, dict):
+        return ["TOON must be a dictionary"]
+
+    if toon.get('type') != document_type:
+        issues.append(f"TOON type mismatch: expected {document_type}, got {toon.get('type')}")
+
+    if document_type == 'resume':
+        required_fields = ['person', 'skills', 'experience', 'education']
+        for field in required_fields:
+            if field not in toon:
+                issues.append(f"Missing required field: {field}")
+
+        if not isinstance(toon.get('person'), dict):
+            issues.append("person must be a dictionary")
+        else:
+            person_fields = ['name', 'email', 'phone']
+            for field in person_fields:
+                if field not in toon['person']:
+                    issues.append(f"Missing person field: {field}")
+
+            optional_url_fields = ['linkedin', 'github', 'portfolio', 'website', 'twitter']
+            for field in optional_url_fields:
+                if field in toon['person'] and not isinstance(toon['person'][field], (str, type(None))):
+                    issues.append(f"person.{field} must be a string or null")
+
+            if 'otherUrls' in toon['person'] and not isinstance(toon['person']['otherUrls'], (list, type(None))):
+                issues.append("person.otherUrls must be an array or null")
+
+            if not (toon['person'].get('name') or '').strip():
+                issues.append("person.name must not be empty")
+            if not (toon['person'].get('email') or '').strip():
+                issues.append("person.email must not be empty")
+
+        if not isinstance(toon.get('skills'), list) or len(toon.get('skills') or []) == 0:
+            issues.append("skills must be a non-empty array")
+
+    elif document_type == 'job_description':
+        required_fields = ['title', 'location', 'skills', 'responsibilities']
+        for field in required_fields:
+            if field not in toon:
+                issues.append(f"Missing required field: {field}")
+        if not (toon.get('title') or '').strip():
+            issues.append("title must not be empty")
+        if not (toon.get('location') or '').strip():
+            issues.append("location must not be empty")
+        if not isinstance(toon.get('skills'), list) or len(toon.get('skills') or []) == 0:
+            issues.append("skills must be a non-empty array")
+        if not isinstance(toon.get('responsibilities'), list) or len(toon.get('responsibilities') or []) == 0:
+            issues.append("responsibilities must be a non-empty array")
+
+    return issues
+
+
 def validate_toon_format(toon: Dict[str, Any], document_type: str) -> Tuple[bool, Optional[str]]:
     """
     Validate TOON format structure
@@ -112,42 +169,9 @@ def validate_toon_format(toon: Dict[str, Any], document_type: str) -> Tuple[bool
     Returns:
         (is_valid, error_message)
     """
-    if not isinstance(toon, dict):
-        return False, "TOON must be a dictionary"
-    
-    if toon.get('type') != document_type:
-        return False, f"TOON type mismatch: expected {document_type}, got {toon.get('type')}"
-    
-    if document_type == 'resume':
-        required_fields = ['person', 'skills', 'experience', 'education']
-        for field in required_fields:
-            if field not in toon:
-                return False, f"Missing required field: {field}"
-        
-        # Validate person object
-        if not isinstance(toon.get('person'), dict):
-            return False, "person must be a dictionary"
-        
-        person_fields = ['name', 'email', 'phone']
-        for field in person_fields:
-            if field not in toon['person']:
-                return False, f"Missing person field: {field}"
-        
-        # URLs are optional but should be strings or arrays if present
-        optional_url_fields = ['linkedin', 'github', 'portfolio', 'website', 'twitter']
-        for field in optional_url_fields:
-            if field in toon['person'] and not isinstance(toon['person'][field], (str, type(None))):
-                return False, f"person.{field} must be a string or null"
-        
-        if 'otherUrls' in toon['person'] and not isinstance(toon['person']['otherUrls'], (list, type(None))):
-            return False, "person.otherUrls must be an array or null"
-    
-    elif document_type == 'job_description':
-        required_fields = ['title', 'location', 'skills', 'responsibilities']
-        for field in required_fields:
-            if field not in toon:
-                return False, f"Missing required field: {field}"
-    
+    issues = collect_toon_validation_issues(toon, document_type)
+    if issues:
+        return False, "; ".join(issues)
     return True, None
 
 

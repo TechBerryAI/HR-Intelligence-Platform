@@ -5,9 +5,12 @@ Supports X.AI Grok (multi-key rotation), OpenAI, and Anthropic
 import os
 import time
 import requests
-from typing import Dict, Any, Literal, Optional
+from typing import Dict, Any, Literal, Optional, TYPE_CHECKING
 
 from toon import toon_loads_flex
+
+if TYPE_CHECKING:
+    from resume_enrichment import ResumeEnrichmentContext
 
 # Reuse a session for connection keep-alive (faster repeated calls)
 _session: Optional[requests.Session] = None
@@ -28,13 +31,18 @@ ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
 AI_USE_GATEWAY = os.getenv('AI_USE_GATEWAY', 'true').lower() in ('1', 'true', 'yes')
 
 
-def call_llm(prompt: str, doc_type: Literal['resume', 'jd']) -> Dict[str, Any]:
+def call_llm(
+    prompt: str,
+    doc_type: Literal['resume', 'jd'],
+    enrichment_context: Optional['ResumeEnrichmentContext'] = None,
+) -> Dict[str, Any]:
     """
     Call LLM to parse document
     
     Args:
         prompt: The prompt containing document text
         doc_type: Type of document ('resume' or 'jd')
+        enrichment_context: Optional trusted account fields for candidate resume uploads
     
     Returns:
         Parsed TOON format as dict
@@ -42,17 +50,26 @@ def call_llm(prompt: str, doc_type: Literal['resume', 'jd']) -> Dict[str, Any]:
     if LLM_MAX_INPUT_CHARS and len(prompt) > LLM_MAX_INPUT_CHARS:
         prompt = prompt[:LLM_MAX_INPUT_CHARS] + "\n\n[Document truncated for length. Extract from above.]"
     if AI_USE_GATEWAY:
-        from ai_runtime_adapter import normalize_proposal, parse_via_runtime
+        from ai_runtime_adapter import parse_via_runtime
         structured = parse_via_runtime(prompt, doc_type)
-        return normalize_proposal(structured, doc_type)
+        if doc_type == 'jd':
+            from jd_toon_pipeline import build_jd_toon
+            return build_jd_toon(prompt, structured)
+        from resume_toon_pipeline import build_resume_toon
+        return build_resume_toon(prompt, structured, enrichment_context)
     if LLM_PROVIDER == 'xai':
-        return call_xai_grok(prompt, doc_type)
+        raw = call_xai_grok(prompt, doc_type)
     elif LLM_PROVIDER == 'openai':
-        return call_openai(prompt, doc_type)
+        raw = call_openai(prompt, doc_type)
     elif LLM_PROVIDER == 'anthropic':
-        return call_anthropic(prompt, doc_type)
+        raw = call_anthropic(prompt, doc_type)
     else:
         raise ValueError(f"Unsupported LLM provider: {LLM_PROVIDER}")
+    if doc_type == 'jd':
+        from jd_toon_pipeline import build_jd_toon
+        return build_jd_toon(prompt, raw)
+    from resume_toon_pipeline import build_resume_toon
+    return build_resume_toon(prompt, raw, enrichment_context)
 
 
 def call_xai_grok(prompt: str, doc_type: str, service_id: str = "parsing") -> Dict[str, Any]:

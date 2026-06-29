@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
 import { useAsyncAction } from '../../hooks/useAsyncAction.js'
-import HeadHrLayout from './HeadHrLayout.jsx'
+import PanelShell, { usePanelBasePath, usePanelReadOnly } from '../org/PanelShell.jsx'
 import { FiTrash2, FiRefreshCw, FiUser, FiSearch, FiCheckCircle, FiXCircle, FiDownload } from 'react-icons/fi'
 import { generateCandidatesPdf } from '../../utils/pdfReportUtils.js'
 
@@ -21,6 +21,8 @@ function formatDate(ts) {
 
 export default function HeadHrCandidates() {
   const navigate = useNavigate()
+  const basePath = usePanelBasePath()
+  const readOnly = usePanelReadOnly()
   const { run: runRefresh, loading: refreshLoading } = useAsyncAction()
   const { run: runReport, loading: reportLoading } = useAsyncAction()
   const [candidates, setCandidates] = useState([])
@@ -77,7 +79,7 @@ export default function HeadHrCandidates() {
   )
 
   return (
-    <HeadHrLayout>
+    <PanelShell>
       {/* Toast */}
       {toast && (
         <div
@@ -92,7 +94,7 @@ export default function HeadHrCandidates() {
       )}
 
       {/* Confirm dialog */}
-      {confirmDelete && (
+      {confirmDelete && !readOnly && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div className="w-full max-w-sm rounded-2xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl">
             <h3 className="text-lg font-semibold text-white">Delete Candidate?</h3>
@@ -186,7 +188,9 @@ export default function HeadHrCandidates() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Location</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Profile</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Joined</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Actions</th>
+                  {!readOnly && (
+                    <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
@@ -195,8 +199,8 @@ export default function HeadHrCandidates() {
                     key={c.cid}
                     role="button"
                     tabIndex={0}
-                    onClick={() => navigate(`/head-hr/candidates/${encodeURIComponent(c.cid)}`)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/head-hr/candidates/${encodeURIComponent(c.cid)}`) } }}
+                    onClick={() => navigate(`${basePath}/candidates/${encodeURIComponent(c.cid)}`)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`${basePath}/candidates/${encodeURIComponent(c.cid)}`) } }}
                     className="bg-zinc-900/30 hover:bg-zinc-800/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-rose-500/50"
                   >
                     <td className="px-4 py-3 font-mono text-xs text-blue-400">{c.cid}</td>
@@ -215,6 +219,7 @@ export default function HeadHrCandidates() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-zinc-500">{formatDate(c.created_at)}</td>
+                    {!readOnly && (
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={(e) => { e.stopPropagation(); setConfirmDelete(c) }}
@@ -223,6 +228,7 @@ export default function HeadHrCandidates() {
                         <FiTrash2 className="w-3.5 h-3.5" /> Delete
                       </button>
                     </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -230,6 +236,6 @@ export default function HeadHrCandidates() {
           </div>
         </div>
       )}
-    </HeadHrLayout>
+    </PanelShell>
   )
 }

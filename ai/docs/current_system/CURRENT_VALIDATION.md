@@ -45,7 +45,7 @@ Bulk local parsing implements **Layers 1–3 only** (no Layer 4–5).
 
 | Check | Rule |
 |-------|------|
-| HR role | `@require_hr` |
+| HR role | `@require_recruiter` |
 | At least one valid file | Extension filter |
 | Non-empty file bytes | Skipped if empty |
 

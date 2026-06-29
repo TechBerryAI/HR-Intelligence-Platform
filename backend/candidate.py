@@ -2,7 +2,7 @@ import os
 import bcrypt
 from flask import Blueprint, request, jsonify, Response
 from db import db_get, db_run, db_all, BACKEND, NOW_SQL
-from utils import authenticate_token, require_candidate, require_hr, validate_password_strength
+from utils import authenticate_token, require_candidate, require_recruiter, validate_password_strength
 from rbac import get_role, ROLE_RECRUITER, ROLE_CANDIDATE, has_permission, get_user_id
 from matching import calculate_matching_percentage
 
@@ -37,7 +37,7 @@ def candidate_change_password():
         ok, err = validate_password_strength(new_password)
         if not ok:
             return jsonify({'error': err}), 400
-        candidate_id = request.user['id']
+        candidate_id = get_user_id(request.user)
         row = db_get('SELECT cid, email, password FROM candidate_signup WHERE cid = ?', (candidate_id,))
         if not row:
             return jsonify({'error': 'Account not found'}), 404
@@ -62,7 +62,7 @@ def candidate_change_password():
 @require_candidate
 def get_profile():
     try:
-        user_id = request.user['id']
+        user_id = get_user_id(request.user)
         # Exclude resume binary data from profile query (it's large and not needed here)
         profile = db_get('''
             SELECT candidate_id, full_name, email, phone,
@@ -119,7 +119,7 @@ def save_profile():
         else:
             data = request.get_json(force=True) if request.is_json else {}
         
-        candidate_id = request.user['id']
+        candidate_id = get_user_id(request.user)
         existing = db_get('SELECT candidate_id FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
         
         # Handle resume file upload - check both request.files and request.form
@@ -379,7 +379,7 @@ def _read_resume_from_storage_url(storage_url: str) -> bytes | None:
 def get_resume():
     """Download the candidate's resume (from profile or latest upload before save)."""
     try:
-        candidate_id = request.user['id']
+        candidate_id = get_user_id(request.user)
         profile = db_get(
             '''
             SELECT resume

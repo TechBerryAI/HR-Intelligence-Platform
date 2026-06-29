@@ -6,7 +6,7 @@ from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 
 from rbac import get_user_id, get_role, STAFF_ROLES, ROLE_CANDIDATE
-from utils import authenticate_token
+from utils import authenticate_token, require_recruiter
 from toon import toon_loads_flex
 from parsing_utils import (
     compute_file_hash,
@@ -34,6 +34,17 @@ MIME_TYPE_MAP = {
 def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def _reject_legacy_doc(filename):
+    """Reject legacy .doc uploads with a clear message."""
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    if ext == 'doc':
+        return jsonify({
+            'status': 'error',
+            'error': 'Legacy .doc format is not supported. Please use DOCX or PDF.',
+        }), 400
+    return None
 
 
 def get_mime_type(filename):
@@ -165,6 +176,10 @@ def parse_resume_upload():
         
         if file.filename == '':
             return jsonify({'status': 'error', 'error': 'No file selected'}), 400
+
+        doc_reject = _reject_legacy_doc(file.filename)
+        if doc_reject:
+            return doc_reject
         
         if not allowed_file(file.filename):
             return jsonify({
@@ -266,91 +281,15 @@ def parse_resume_upload():
         if doc_type == 'unknown':
             print(f"[WARNING] Document type unclear, proceeding as resume")
         
-        # Call LLM to parse resume
+        # Call LLM to parse resume (repair → normalize → enrich inside call_llm)
         try:
-            toon = call_llm(raw_text, 'resume')
-            
-            # Post-process: Extract URLs from raw text if LLM missed them
-            import re
-            # More comprehensive URL pattern
-            url_pattern = r'(https?://[^\s<>"\'\)]+|www\.[^\s<>"\'\)]+|linkedin\.com/[^\s<>"\'\)]+|github\.com/[^\s<>"\'\)]+|twitter\.com/[^\s<>"\'\)]+|x\.com/[^\s<>"\'\)]+|[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-zA-Z]{2,}[^\s<>"\'\)]*)'
-            found_urls = re.findall(url_pattern, raw_text, re.IGNORECASE)
-            
-            # Ensure person object exists
-            if 'person' not in toon:
-                toon['person'] = {}
-            
-            # Extract and categorize URLs if not already extracted
-            if not toon['person'].get('linkedin'):
-                linkedin_urls = [url for url in found_urls if 'linkedin' in url.lower() or 'linked.in' in url.lower()]
-                if linkedin_urls:
-                    url = linkedin_urls[0].strip('.,;:')
-                    toon['person']['linkedin'] = url if url.startswith('http') else f"https://{url}"
-            
-            if not toon['person'].get('github'):
-                github_urls = [url for url in found_urls if 'github' in url.lower()]
-                if github_urls:
-                    url = github_urls[0].strip('.,;:')
-                    toon['person']['github'] = url if url.startswith('http') else f"https://{url}"
-            
-            if not toon['person'].get('twitter'):
-                twitter_urls = [url for url in found_urls if 'twitter' in url.lower() or 'x.com' in url.lower()]
-                if twitter_urls:
-                    url = twitter_urls[0].strip('.,;:')
-                    toon['person']['twitter'] = url if url.startswith('http') else f"https://{url}"
-            
-            if not toon['person'].get('portfolio') and not toon['person'].get('website'):
-                # Look for portfolio/website URLs (not linkedin, github, twitter, email domains, or common email providers)
-                excluded_domains = ['linkedin', 'github', 'twitter', 'x.com', 'gmail', 'yahoo', 'outlook', 'hotmail', 'email', 'mail', 'edu', 'ac.', '.gov']
-                portfolio_urls = [url for url in found_urls 
-                                 if not any(x in url.lower() for x in excluded_domains) and 
-                                 '.' in url and len(url) > 5]
-                if portfolio_urls:
-                    url = portfolio_urls[0].strip('.,;:')
-                    toon['person']['portfolio'] = url if url.startswith('http') else f"https://{url}"
-            
-            # Collect any remaining URLs into otherUrls
-            if 'otherUrls' not in toon['person']:
-                toon['person']['otherUrls'] = []
-            
-            # Add URLs that weren't categorized
-            categorized = set()
-            if toon['person'].get('linkedin'): categorized.add(toon['person']['linkedin'].lower())
-            if toon['person'].get('github'): categorized.add(toon['person']['github'].lower())
-            if toon['person'].get('twitter'): categorized.add(toon['person']['twitter'].lower())
-            if toon['person'].get('portfolio'): categorized.add(toon['person']['portfolio'].lower())
-            if toon['person'].get('website'): categorized.add(toon['person']['website'].lower())
-            
-            for url in found_urls:
-                url_clean = url.strip('.,;:')
-                if url_clean.lower() not in categorized and url_clean not in toon['person']['otherUrls']:
-                    url_final = url_clean if url_clean.startswith('http') else f"https://{url_clean}"
-                    toon['person']['otherUrls'].append(url_final)
-
-            # Post-process: Extract location from raw text if LLM did not return it
-            if not toon['person'].get('location') or not str(toon['person'].get('location', '')).strip():
-                import re
-                # Patterns: "Location: Mumbai", "Address: Bangalore", "City: Delhi", "Based in Mumbai"
-                location_patterns = [
-                    r'(?:location|current\s*location|address|city|based\s*in)\s*[:\-]\s*([A-Za-z\s,\.\-]+?)(?:\n|$|\.|;)',
-                    r'(?:location|address|city)\s*[:\-]\s*([A-Za-z\s,\.\-]+)',
-                ]
-                for pat in location_patterns:
-                    m = re.search(pat, raw_text, re.IGNORECASE)
-                    if m and m.group(1):
-                        loc = m.group(1).strip().strip('.,;:')
-                        if len(loc) >= 2 and len(loc) <= 80:
-                            toon['person']['location'] = loc
-                            break
-                # Fallback: common Indian cities if they appear in the first ~500 chars (header area)
-                if not toon['person'].get('location') or not str(toon['person'].get('location', '')).strip():
-                    header_text = raw_text[:500] if len(raw_text) > 500 else raw_text
-                    cities = ['Mumbai', 'Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune', 'Ahmedabad', 'Gurgaon', 'Gurugram', 'Noida', 'Faridabad', 'Jaipur', 'Lucknow']
-                    for city in cities:
-                        if city in header_text:
-                            toon['person']['location'] = city
-                            break
-            
+            from resume_enrichment import get_candidate_enrichment_context
+            enrichment_ctx = (
+                get_candidate_enrichment_context(current_user)
+                if jwt_role == ROLE_CANDIDATE
+                else None
+            )
+            toon = call_llm(raw_text, 'resume', enrichment_context=enrichment_ctx)
         except Exception as e:
             return jsonify({
                 'status': 'error',
@@ -358,7 +297,17 @@ def parse_resume_upload():
             }), 500
         
         # Validate TOON format
+        from parsing_utils import collect_toon_validation_issues
+        from resume_toon_pipeline import log_validated_resume_toon
+
+        validation_issues = collect_toon_validation_issues(toon, 'resume')
         is_valid, error_msg = validate_toon_format(toon, 'resume')
+        log_validated_resume_toon(
+            toon,
+            valid=is_valid,
+            error_msg=error_msg,
+            validation_issues=validation_issues,
+        )
         if not is_valid:
             return jsonify({
                 'status': 'error',
@@ -406,6 +355,7 @@ def parse_resume_upload():
 
 @parsing_bp.route('/parse/jd', methods=['POST'])
 @authenticate_token
+@require_recruiter
 def parse_jd_upload():
     """
     Upload and parse job description
@@ -438,6 +388,10 @@ def parse_jd_upload():
         
         if file.filename == '':
             return jsonify({'status': 'error', 'error': 'No file selected'}), 400
+
+        doc_reject = _reject_legacy_doc(file.filename)
+        if doc_reject:
+            return doc_reject
         
         if not allowed_file(file.filename):
             return jsonify({
@@ -525,7 +479,7 @@ def parse_jd_upload():
                 'error': error_msg
             }), 400
         
-        # Call LLM to parse job description
+        # Call LLM to parse job description (repair → normalize inside call_llm)
         try:
             toon = call_llm(raw_text, 'jd')
         except Exception as e:
@@ -536,6 +490,8 @@ def parse_jd_upload():
         
         # Validate TOON format
         is_valid, error_msg = validate_toon_format(toon, 'job_description')
+        from jd_toon_pipeline import log_validated_jd_toon
+        log_validated_jd_toon(toon, valid=is_valid, error_msg=error_msg)
         if not is_valid:
             return jsonify({
                 'status': 'error',
@@ -544,7 +500,14 @@ def parse_jd_upload():
         
         # Calculate confidence
         confidence = calculate_confidence(toon, 'jd')
-        model_version = f"{os.getenv('LLM_PROVIDER', 'xai')}-v1"
+        if os.getenv('AI_USE_GATEWAY', 'true').lower() in ('1', 'true', 'yes'):
+            try:
+                from ai_runtime_adapter import get_model_version
+                model_version = get_model_version()
+            except Exception:
+                model_version = 'ai-runtime-v1'
+        else:
+            model_version = f"{os.getenv('LLM_PROVIDER', 'xai')}-v1"
         
         # Store parsed result
         parsed_id = store_parsed_jd(

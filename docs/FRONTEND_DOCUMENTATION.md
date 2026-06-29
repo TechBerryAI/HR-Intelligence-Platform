@@ -109,7 +109,7 @@ frontend/
 - `jobs`, `jobsLoading`, `jobsError`
 - `auth` (HR: isLoggedIn, role, email, fullName, company)
 - `applicantAuth` (isLoggedIn, email)
-- `auth (HEAD_HR)` (isLoggedIn, email)
+- `superAdminAuth` (isLoggedIn, email)
 - `token` (access token string)
 - `user` (current user object from login)
 - `applicantProfile` (full profile shape: education, experiences, certifications, resumeFileName, etc.)
@@ -185,7 +185,7 @@ Guards are small wrapper components that either render `children` or redirect.
 ### 6.2 `pages/Jobs.jsx`
 
 - **Purpose:** List jobs with client-side filter and apply/save actions.
-- **State:** `applyError`, `applyingJobId`; reads from context: jobs, applicantAuth, applicantProfile, jobsError, jobsLoading, fetchJobs, applicantApplications, applicantSavedJobs, toggleSaveJob, applyToJobAsApplicant, auth, auth (HEAD_HR).
+- **State:** `applyError`, `applyingJobId`; reads from context: jobs, applicantAuth, applicantProfile, jobsError, jobsLoading, fetchJobs, applicantApplications, applicantSavedJobs, toggleSaveJob, applyToJobAsApplicant, auth, superAdminAuth.
 - **Query:** Reads `location.search` and builds `query = { keywords, location }` from `q` and `loc`.
 - **Filtering:** `useMemo` filters `jobs` by `enabled !== false`, then by keywords (title/company/description) and location (substring match).
 - **Search:** `handleSearch` updates URL with new `q` and `loc` so the same filter logic applies and the URL is shareable.
@@ -219,11 +219,11 @@ Guards are small wrapper components that either render `children` or redirect.
 
 ### 7.1 `components/Navbar.jsx`
 
-- **Purpose:** Top bar with logo, Jobs link, role-based menu (Login / HR dropdown / Applicant dropdown / Head of HR button), and Support dropdown.
-- **Derived state:** `isHrLoggedIn`, `isApplicantLoggedIn`, `isHeadHrLoggedIn` from context auth. `applicantInitials` and `hrInitials` from profile/user names (first letters of first two words).
+- **Purpose:** Top bar with logo, Jobs link, role-based menu (Login / HR dropdown / Applicant dropdown / Super Admin button), and Support dropdown.
+- **Derived state:** `isHrLoggedIn`, `isApplicantLoggedIn`, `isSuperAdminLoggedIn` from context auth. `applicantInitials` and `hrInitials` from profile/user names (first letters of first two words).
 - **Logout:** `handleLogout` calls `logout()` then `navigate('/')`.
 - **NavLink:** Uses a function for `className`: active route gets `text-slate-900 font-semibold`, else `text-slate-600 hover:text-slate-900`.
-- **Conditional UI:** If no one logged in, show “Login”. If HR, show avatar dropdown with Dashboard, Candidates, Bulk Resume Parser, Feedback, Settings, Logout. If applicant, dropdown with Profile, Application Status, Settings, Logout. If super admin, link/button to “Head of HR”. Support dropdown: FAQ, Contact Us, HRMS Testing Feedback.
+- **Conditional UI:** If no one logged in, show “Login”. If HR, show avatar dropdown with Dashboard, Candidates, Bulk Resume Parser, Feedback, Settings, Logout. If applicant, dropdown with Profile, Application Status, Settings, Logout. If super admin, link/button to “Super Admin”. Support dropdown: FAQ, Contact Us, HRMS Testing Feedback.
 
 ### 7.2 `components/Hero.jsx`
 

@@ -13,6 +13,7 @@ const formatStatusLabel = (status) => {
   if (s === 'profile_viewed') return 'Reviewed'
   if (s === 'shortlisted') return 'Shortlisted'
   if (s === 'rejected') return 'Rejected'
+  if (s === 'ats_failed') return 'ATS Failed'
   return status
 }
 
@@ -22,6 +23,7 @@ const getStatusBadgeClass = (status) => {
   if (s === 'profile_viewed') return 'bg-amber-500/20 text-amber-300 border-amber-500/30'
   if (s === 'shortlisted') return 'bg-purple-500/20 text-purple-300 border-purple-500/30'
   if (s === 'rejected') return 'bg-red-500/20 text-red-300 border-red-500/30'
+  if (s === 'ats_failed') return 'bg-orange-500/20 text-orange-300 border-orange-500/30'
   return 'bg-green-500/20 text-green-300 border-green-500/30' // applied
 }
 

@@ -117,14 +117,14 @@ HR-Job-Portal-App/
 │       ├── App.jsx           # AppProvider, Toast, ErrorBoundary, ConnectionStatus, Navbar, Routes, guards
 │       ├── index.css         # Tailwind imports
 │       ├── context/
-│       │   └── AppContext.jsx # Single app state + actions (auth, jobs, applicant, superAdmin)
+│       │   └── AppContext.jsx # Single app state + actions (auth, jobs, applicant, auth)
 │       ├── guards/
-│       │   ├── AdminGuard.jsx      # HR or head_hr -> else /login/admin
+│       │   ├── RecruiterGuard.jsx      # HR or head_hr -> else /login/admin
 │       │   ├── CandidateGuard.jsx  # applicantAuth and not HR -> else /login/applicant
 │       │   └── HeadHrGuard.jsx # auth (HEAD_HR) -> else /login/admin
 │       ├── layouts/
 │       │   ├── MainLayout.jsx, DashboardLayout.jsx, AdminLayout.jsx
-│       │   └── (super-admin) HeadHrLayout.jsx
+│       │   └── (head-hr) HeadHrLayout.jsx
 │       ├── pages/            # Lazy-loaded route components
 │       │   ├── Home.jsx, Jobs.jsx, Login.jsx, LoginApplicant.jsx, LoginAdmin.jsx
 │       │   ├── SignupApplicant.jsx, SignupAdmin.jsx
@@ -156,9 +156,9 @@ HR-Job-Portal-App/
 │   ├── parsing_routes.py     # parse/resume, parse/jd, parsed/resume/:id, parsed/jd/:id
 │   ├── support.py            # support submit, my-requests, all, by id, status
 │   ├── feedback_routes.py    # feedback submit, list, status
-│   ├── head_hr.py        # super-admin login, stats, admins, candidates, jobs, applications
+│   ├── head_hr.py        # head-hr stats, stats, admins, candidates, jobs, applications
 │   ├── db.py                 # PostgreSQL pool, get_conn, db_run, db_get, db_all, run_migrations, init_db
-│   ├── utils.py              # JWT, authenticate_token, require_hr, require_candidate, require_head_hr, optional_authenticate_token
+│   ├── utils.py              # JWT, authenticate_token, require_recruiter, require_candidate, require_head_hr, optional_authenticate_token
 │   ├── env_validator.py, extensions.py (Flask-Mail)
 │   ├── toon.py, text_extraction.py, parsing_utils.py, llm_service.py
 │   ├── matching.py, llm_key_manager.py
@@ -210,7 +210,7 @@ Defined in `App.jsx`. All page components are lazy-loaded via `React.lazy()`.
 - **Public:** `/`, `/jobs`, `/support/faq`, `/support/contact`, `/support/hrms-feedback`, `/login`, `/login/applicant`, `/login/admin`, `/signup/applicant`, `/signup/admin`, `/forgot-password/:variant`, `/forgot-password/:variant/verify`, `/forgot-password/:variant/reset`.
 - **Candidate-only (CandidateGuard):** `/profile/applicant`, `/settings/applicant`, `/applications`.
 - **HR-only (PrivateRoute):** `/dashboard`, `/candidates`, `/settings`.
-- **Admin (AdminGuard):** `/admin/bulk-resume-parser`, `/admin/feedback`.
+- **Admin (RecruiterGuard):** `/admin/bulk-resume-parser`, `/admin/feedback`.
 - **Head of HR (HeadHrGuard):** `/head-hr`, `/head-hr/admins`, `/head-hr/candidates`, `/head-hr/candidates/:cid`, `/head-hr/jobs`, `/head-hr/jobs/:jdid`, `/head-hr/applications`, `/head-hr/applications/:id`, `/head-hr/settings`.
 - **Redirects:** `/signup` → `/signup/applicant`, `/login/head-hr` → `/login/admin`.
 - **Fallback:** `*` → `NotFound`.
@@ -235,7 +235,7 @@ Built with Radix primitives and Tailwind; variants via cva + cn.
 
 ### 4.5 Guards & Authentication Flow
 
-- **AdminGuard:** Renders children only if `auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')`; else `<Navigate to="/login/admin" replace />`.
+- **RecruiterGuard:** Renders children only if `auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')`; else `<Navigate to="/login/admin" replace />`.
 - **CandidateGuard:** Renders children only if `applicantAuth?.isLoggedIn && !(auth?.isLoggedIn && auth?.role === 'HR')`; else `<Navigate to="/login/applicant" replace />`.
 - **HeadHrGuard:** Renders children only if `auth (HEAD_HR)?.isLoggedIn`; else `<Navigate to="/login/admin" replace />`.
 
@@ -281,7 +281,7 @@ Login flows: HR and candidate each use email + password; HR and candidate signup
 
 ### 5.4 Authentication & Authorization
 
-- **utils.py:** `authenticate_token`: reads Bearer token, decodes JWT with `JWT_SECRET`, sets `request.user`; rejects if token is refresh type; 401 if no token, 403 if invalid/expired. `require_hr`: after authenticate_token, allows role `HR` or `head_hr`. `require_candidate`: allows role `candidate`. `require_head_hr`: allows role `head_hr`. `require_head_hr`: allows `head_hr` or `head_hr`. `optional_authenticate_token`: if Bearer present, validate and set request.user; else request.user = None.
+- **utils.py:** `authenticate_token`: reads Bearer token, decodes JWT with `JWT_SECRET`, sets `request.user`; rejects if token is refresh type; 401 if no token, 403 if invalid/expired. `require_recruiter`: after authenticate_token, allows role `HR` or `head_hr`. `require_candidate`: allows role `candidate`. `require_head_hr`: allows role `head_hr`. `require_head_hr`: allows `head_hr` or `head_hr`. `optional_authenticate_token`: if Bearer present, validate and set request.user; else request.user = None.
 - **JWT:** `build_jwt_payload(identity_dict, refresh=False)` adds `type`, `iat`, `exp`; access and refresh expiry from env (default 1h / 30d).
 
 ### 5.5 Database Interaction
@@ -557,7 +557,7 @@ Manual frontend: `cd frontend && npm install && npm run dev`
 ## 11. Design Patterns & Practices
 
 - **Service layer:** Backend: blueprints as controllers; db.py as data access; services (ats_service, bulk_parsing_service) for external or complex logic. Frontend: api.js as HTTP layer; context as application service.
-- **Guards:** Route-level components (AdminGuard, CandidateGuard, HeadHrGuard) enforce role before rendering page.
+- **Guards:** Route-level components (RecruiterGuard, CandidateGuard, HeadHrGuard) enforce role before rendering page.
 - **Optimistic updates:** applyToJobAsApplicant updates UI immediately and reverts on failure.
 - **Persistence:** Critical client state (auth, profile, applications, saved jobs) in localStorage with storage event sync across tabs.
 - **Lazy loading:** All route components lazy-loaded to reduce initial bundle.

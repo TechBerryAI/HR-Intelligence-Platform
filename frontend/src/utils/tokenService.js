@@ -26,13 +26,28 @@ function writeToStorage(key, value) {
   } catch {}
 }
 
+function syncFromStorage() {
+  inMemoryToken = readFromStorage(STORAGE_KEY, '')
+  inMemoryRefreshToken = readFromStorage(REFRESH_STORAGE_KEY, '')
+}
+
 // Initialize cache from storage on first import/use
-inMemoryToken = readFromStorage(STORAGE_KEY, '')
-inMemoryRefreshToken = readFromStorage(REFRESH_STORAGE_KEY, '')
+syncFromStorage()
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.storageArea !== window.localStorage) return
+    if (event.key === STORAGE_KEY || event.key === REFRESH_STORAGE_KEY || event.key === null) {
+      syncFromStorage()
+    }
+  })
+}
 
 export const tokenService = {
   getToken() {
-    if (!inMemoryToken) inMemoryToken = readFromStorage(STORAGE_KEY, '')
+    if (typeof window !== 'undefined' && !inMemoryToken) {
+      inMemoryToken = readFromStorage(STORAGE_KEY, '')
+    }
     return inMemoryToken
   },
   setToken(token) {
@@ -40,7 +55,9 @@ export const tokenService = {
     writeToStorage(STORAGE_KEY, inMemoryToken)
   },
   getRefreshToken() {
-    if (!inMemoryRefreshToken) inMemoryRefreshToken = readFromStorage(REFRESH_STORAGE_KEY, '')
+    if (typeof window !== 'undefined' && !inMemoryRefreshToken) {
+      inMemoryRefreshToken = readFromStorage(REFRESH_STORAGE_KEY, '')
+    }
     return inMemoryRefreshToken
   },
   setRefreshToken(token) {
@@ -52,5 +69,6 @@ export const tokenService = {
     inMemoryRefreshToken = ''
     writeToStorage(STORAGE_KEY, '')
     writeToStorage(REFRESH_STORAGE_KEY, '')
-  }
+  },
+  syncFromStorage,
 }

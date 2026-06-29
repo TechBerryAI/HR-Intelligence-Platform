@@ -32,6 +32,7 @@ const HeadHrCandidates = lazy(() => import('./pages/head-hr/HeadHrCandidates.jsx
 const HeadHrCandidateDetail = lazy(() => import('./pages/head-hr/HeadHrCandidateDetail.jsx'))
 const HeadHrJobs = lazy(() => import('./pages/head-hr/HeadHrJobs.jsx'))
 const HeadHrJobDetail = lazy(() => import('./pages/head-hr/HeadHrJobDetail.jsx'))
+const HeadHrJobCandidateDetail = lazy(() => import('./pages/head-hr/HeadHrJobCandidateDetail.jsx'))
 const HeadHrApplications = lazy(() => import('./pages/head-hr/HeadHrApplications.jsx'))
 const HeadHrApplicationDetail = lazy(() => import('./pages/head-hr/HeadHrApplicationDetail.jsx'))
 const HeadHrSettings = lazy(() => import('./pages/head-hr/HeadHrSettings.jsx'))
@@ -44,12 +45,6 @@ import CeoGuard from './guards/CeoGuard.jsx'
 
 const CeoDashboard = lazy(() => import('./pages/ceo/CeoDashboard.jsx'))
 
-function HrPrivateRoute({ children }) {
-  const { auth } = useApp()
-  const allowed = auth.isLoggedIn && auth.role === 'RECRUITER'
-  return allowed ? children : <Navigate to="/login/admin" replace />
-}
-
 function StaffSettingsRoute({ children }) {
   const { auth } = useApp()
   const staffRoles = new Set(['RECRUITER', 'HEAD_HR', 'CEO'])
@@ -57,12 +52,6 @@ function StaffSettingsRoute({ children }) {
     return <Navigate to="/login/admin" replace />
   }
   return children
-}
-
-function LegacySuperAdminRedirect() {
-  const location = useLocation()
-  const target = location.pathname.replace(/^\/super-admin/, '/head-hr') + location.search
-  return <Navigate to={target} replace />
 }
 
 export default function App() {
@@ -124,17 +113,17 @@ export default function App() {
                   <Route
                     path="/dashboard"
                     element={
-                      <HrPrivateRoute>
+                      <RecruiterGuard>
                         <Dashboard />
-                      </HrPrivateRoute>
+                      </RecruiterGuard>
                     }
                   />
                   <Route
                     path="/candidates"
                     element={
-                      <HrPrivateRoute>
+                      <RecruiterGuard>
                         <AppliedCandidates />
-                      </HrPrivateRoute>
+                      </RecruiterGuard>
                     }
                   />
                   <Route
@@ -142,6 +131,34 @@ export default function App() {
                     element={
                       <CeoGuard>
                         <CeoDashboard />
+                      </CeoGuard>
+                    }
+                  />
+                  <Route path="/ceo/candidates" element={<Navigate to="/ceo/jobs" replace />} />
+                  <Route path="/ceo/candidates/:cid" element={<Navigate to="/ceo/jobs" replace />} />
+                  <Route path="/ceo/applications" element={<Navigate to="/ceo/jobs" replace />} />
+                  <Route path="/ceo/applications/:id" element={<Navigate to="/ceo/jobs" replace />} />
+                  <Route
+                    path="/ceo/jobs/:jdid/candidates/:cid"
+                    element={
+                      <CeoGuard>
+                        <HeadHrJobCandidateDetail />
+                      </CeoGuard>
+                    }
+                  />
+                  <Route
+                    path="/ceo/jobs"
+                    element={
+                      <CeoGuard>
+                        <HeadHrJobs />
+                      </CeoGuard>
+                    }
+                  />
+                  <Route
+                    path="/ceo/jobs/:jdid"
+                    element={
+                      <CeoGuard>
+                        <HeadHrJobDetail />
                       </CeoGuard>
                     }
                   />
@@ -170,8 +187,6 @@ export default function App() {
                     }
                   />
                   {/* Head of HR (HEAD_HR) uses /login/admin */}
-                  <Route path="/login/super-admin" element={<Navigate to="/login/admin" replace />} />
-                  <Route path="/super-admin/*" element={<LegacySuperAdminRedirect />} />
                   <Route
                     path="/head-hr"
                     element={
@@ -188,19 +203,15 @@ export default function App() {
                       </HeadHrGuard>
                     }
                   />
+                  <Route path="/head-hr/candidates" element={<Navigate to="/head-hr/jobs" replace />} />
+                  <Route path="/head-hr/candidates/:cid" element={<Navigate to="/head-hr/jobs" replace />} />
+                  <Route path="/head-hr/applications" element={<Navigate to="/head-hr/jobs" replace />} />
+                  <Route path="/head-hr/applications/:id" element={<Navigate to="/head-hr/jobs" replace />} />
                   <Route
-                    path="/head-hr/candidates"
+                    path="/head-hr/jobs/:jdid/candidates/:cid"
                     element={
                       <HeadHrGuard>
-                        <HeadHrCandidates />
-                      </HeadHrGuard>
-                    }
-                  />
-                  <Route
-                    path="/head-hr/candidates/:cid"
-                    element={
-                      <HeadHrGuard>
-                        <HeadHrCandidateDetail />
+                        <HeadHrJobCandidateDetail />
                       </HeadHrGuard>
                     }
                   />
@@ -217,22 +228,6 @@ export default function App() {
                     element={
                       <HeadHrGuard>
                         <HeadHrJobDetail />
-                      </HeadHrGuard>
-                    }
-                  />
-                  <Route
-                    path="/head-hr/applications"
-                    element={
-                      <HeadHrGuard>
-                        <HeadHrApplications />
-                      </HeadHrGuard>
-                    }
-                  />
-                  <Route
-                    path="/head-hr/applications/:id"
-                    element={
-                      <HeadHrGuard>
-                        <HeadHrApplicationDetail />
                       </HeadHrGuard>
                     }
                   />

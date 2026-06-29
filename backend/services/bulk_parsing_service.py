@@ -2,12 +2,44 @@
 Bulk Resume Parsing Service - calls Bulk-Resume-Parser API when available.
 Falls back to local bulk parsing (text_extraction + LLM) when external service is unreachable.
 """
+import json
 import os
+from pathlib import Path
+
 import requests
 
 BULK_PARSER_URL = (os.getenv('BULK_PARSER_URL') or 'http://localhost:8001').rstrip('/') or None
 
 ERROR_CODE_UNREACHABLE = 'BULK_PARSER_UNREACHABLE'
+
+_EXTERNAL_OWNERS_FILE = Path(__file__).resolve().parent.parent / 'data' / 'bulk_external_owners.json'
+_owners_lock = __import__('threading').Lock()
+
+
+def _load_external_owners() -> dict:
+    try:
+        if _EXTERNAL_OWNERS_FILE.is_file():
+            return json.loads(_EXTERNAL_OWNERS_FILE.read_text(encoding='utf-8'))
+    except Exception as e:
+        print(f"[bulk_parsing_service] load owners failed: {e}")
+    return {}
+
+
+def _save_external_owner(job_id: str, started_by: str) -> None:
+    if not job_id or not started_by:
+        return
+    with _owners_lock:
+        owners = _load_external_owners()
+        owners[job_id] = started_by
+        try:
+            _EXTERNAL_OWNERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _EXTERNAL_OWNERS_FILE.write_text(json.dumps(owners), encoding='utf-8')
+        except Exception as e:
+            print(f"[bulk_parsing_service] save owner failed: {e}")
+
+
+def _get_external_owner(job_id: str) -> str | None:
+    return _load_external_owners().get(job_id)
 
 
 def _is_connection_error(e):
@@ -40,7 +72,11 @@ def upload_files(files_list, output_filename=None, append=False, started_by=None
                 timeout=30,
             )
             resp.raise_for_status()
-            return True, resp.json()
+            payload = resp.json()
+            job_id = payload.get('job_id')
+            if started_by and job_id:
+                _save_external_owner(job_id, started_by)
+            return True, payload
         except requests.exceptions.RequestException as e:
             if not _is_connection_error(e):
                 err = str(e)
@@ -70,6 +106,9 @@ def get_progress(job_id, user=None):
     if not BULK_PARSER_URL:
         return False, {'error': 'Job not found'}
     try:
+        owner = _get_external_owner(job_id)
+        if user and owner and not can_access_bulk_session(user, owner):
+            return False, {'error': 'Access denied'}
         resp = requests.get(f'{BULK_PARSER_URL}/api/progress/{job_id}', timeout=10)
         resp.raise_for_status()
         return True, resp.json()
@@ -101,6 +140,10 @@ def stream_download(job_id, user=None):
         started_by = meta.get('started_by')
         if user and started_by and not can_access_bulk_session(user, started_by):
             return False, {'error': 'Access denied'}
+    else:
+        owner = _get_external_owner(job_id)
+        if user and owner and not can_access_bulk_session(user, owner):
+            return False, {'error': 'Access denied'}
     ok, payload = get_local_download(job_id)
     if ok:
         bio, filename, content_type = payload
@@ -115,6 +158,9 @@ def stream_download(job_id, user=None):
     if not BULK_PARSER_URL:
         return False, payload
     try:
+        owner = _get_external_owner(job_id)
+        if user and owner and not can_access_bulk_session(user, owner):
+            return False, {'error': 'Access denied'}
         resp = requests.get(
             f'{BULK_PARSER_URL}/api/download/{job_id}',
             stream=True,

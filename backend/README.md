@@ -4,7 +4,7 @@ Flask REST API for the HR Job Portal application.
 
 ## What is this?
 
-The backend provides authentication, job management, applications, resume/JD parsing, ATS matching, admin tools, and super-admin APIs. It uses PostgreSQL via a connection pool and raw SQL helpers.
+The backend provides authentication, job management, applications, resume/JD parsing, ATS matching, admin tools, and Head of HR APIs. It uses PostgreSQL via a connection pool and raw SQL helpers.
 
 ## Why does it exist?
 

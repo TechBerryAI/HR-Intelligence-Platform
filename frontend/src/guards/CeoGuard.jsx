@@ -1,10 +1,16 @@
 import { Navigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext.jsx'
-import { isCeo } from '../utils/rbac.js'
+import { isCeo, isHeadHr } from '../utils/rbac.js'
 
 export default function CeoGuard({ children }) {
   const { auth } = useApp()
-  if (!auth.isLoggedIn || !isCeo(auth)) {
+  if (!auth.isLoggedIn) {
+    return <Navigate to="/login/admin" replace />
+  }
+  if (isHeadHr(auth)) {
+    return <Navigate to="/head-hr" replace />
+  }
+  if (!isCeo(auth)) {
     return <Navigate to="/login/admin" replace />
   }
   return children

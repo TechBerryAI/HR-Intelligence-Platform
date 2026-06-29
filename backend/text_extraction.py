@@ -159,7 +159,9 @@ def extract_text(file_data: bytes, filename: str) -> str:
                     raise ValueError(f"Local extraction failed: {error_msg}. API fallback also failed: {str(api_error)}")
             else:
                 raise
-    elif ext in ('docx', 'doc'):
+    elif ext == 'doc':
+        raise ValueError('Legacy .doc format is not supported. Please use DOCX or PDF.')
+    elif ext == 'docx':
         return extract_text_from_docx(file_data)
     else:
         raise ValueError(f"Unsupported file type: {ext}")

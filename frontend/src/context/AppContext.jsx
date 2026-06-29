@@ -853,23 +853,17 @@ export function AppProvider({ children }) {
   }
 
   useEffect(() => {
-    // Clear any legacy locally stored jobs to avoid showing mock data
     try {
       if (typeof window !== 'undefined') {
         window.localStorage.removeItem(STORAGE_KEYS.jobs)
       }
     } catch {}
-    fetchJobs()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Refetch jobs when auth state changes (to get all jobs for HR)
   useEffect(() => {
-    if (auth.isLoggedIn || applicantAuth.isLoggedIn) {
-      fetchJobs()
-    }
+    fetchJobs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth.isLoggedIn, applicantAuth.isLoggedIn])
+  }, [auth.isLoggedIn, applicantAuth.isLoggedIn, token])
 
   // Fetch applicant data when logged in as candidate with matching token role
   useEffect(() => {

@@ -5,8 +5,15 @@ import requests
 from flask import Blueprint, request, jsonify
 from db import db_get, db_run, db_all, BACKEND, TRUE_SQL
 from utils import authenticate_token, require_candidate
+from rbac import get_user_id
 from services.ats_service import match_candidate_to_job
 from toon import toon_loads_flex, toon_dumps
+from jd_text_inference import (
+    extract_experience_years,
+    extract_qualifications_from_text,
+    extract_responsibilities_from_text,
+    extract_skills_from_text,
+)
 
 applications_bp = Blueprint('applications', __name__)
 
@@ -36,8 +43,25 @@ def _run_ats_and_update_application(candidate_id: str, job_id: str, parsed_resum
         else:
             err = ats_result.get('error', 'Unknown ATS error') if isinstance(ats_result, dict) else str(ats_result)
             print(f"[APPLY] ATS background run failed (non-blocking): {err}")
+            db_run(
+                """
+                UPDATE applications SET status = ?, ats_reasoning = ?, match_score = NULL, matching_percentage = NULL
+                WHERE candidate_id = ? AND job_id = ?
+                """,
+                ('ats_failed', f'[ATS_FAILED] {err}', candidate_id, job_id)
+            )
     except Exception as e:
         print(f"[APPLY] ATS background error: {e}")
+        try:
+            db_run(
+                """
+                UPDATE applications SET status = ?, ats_reasoning = ?, match_score = NULL, matching_percentage = NULL
+                WHERE candidate_id = ? AND job_id = ?
+                """,
+                ('ats_failed', f'[ATS_FAILED] {e}', candidate_id, job_id)
+            )
+        except Exception as db_err:
+            print(f"[APPLY] Failed to record ATS failure: {db_err}")
 
 
 def _jd_toon_from_job_row(job):
@@ -47,58 +71,10 @@ def _jd_toon_from_job_row(job):
     """
     desc = (job.get('description') or '').strip()
     experience_str = (job.get('experience') or '').strip()
-    min_years, max_years = None, None
-    if experience_str:
-        nums = re.findall(r'(\d+(?:\.\d+)?)', experience_str)
-        if len(nums) >= 2:
-            min_years = float(nums[0])
-            max_years = float(nums[1])
-        elif len(nums) == 1:
-            min_years = float(nums[0])
-    # Mandatory vs preferred skills for ATS (technical roles)
-    mandatory_skills = []
-    preferred_skills = []
-    skills = []
-    pref_block = re.search(r'\*\*(?:Preferred|Nice-to-have|Advanced)\s*Skills?\*\*\s*([^\n*]+)', desc, re.I)
-    req_block = re.search(r'\*\*(?:Required|Core|Mandatory)\s*Skills?\*\*\s*([^\n*]+)', desc, re.I)
-    if req_block:
-        mandatory_skills = [s.strip() for s in re.split(r'[,•·]', req_block.group(1)) if s.strip()]
-    if pref_block:
-        preferred_skills = [s.strip() for s in re.split(r'[,•·]', pref_block.group(1)) if s.strip()]
-    if not mandatory_skills and ('**Required Skills:**' in desc or '**Skills:**' in desc):
-        block = re.search(r'\*\*(?:Required )?Skills:\*\*\s*([^\n*]+)', desc, re.I)
-        if block:
-            skills = [s.strip() for s in re.split(r'[,•·]', block.group(1)) if s.strip()]
-            mandatory_skills = skills
-    if not skills and mandatory_skills:
-        skills = mandatory_skills
-    if not skills and desc:
-        for line in desc.split('\n')[:5]:
-            if 'skill' in line.lower() or 'experience' in line.lower():
-                parts = re.split(r'[,•·\-]', line)
-                skills.extend([p.strip().strip('*') for p in parts if len(p.strip()) > 2][:15])
-                break
-        if skills and not mandatory_skills:
-            mandatory_skills = skills
-    responsibilities = []
-    if '**Responsibilities:**' in desc:
-        block = re.search(r'\*\*Responsibilities:\*\*\s*([\s\S]*?)(?=\n\*\*|\Z)', desc)
-        if block:
-            raw = block.group(1)
-            responsibilities = [s.strip().strip('•').strip() for s in re.split(r'\n', raw) if s.strip() and len(s.strip()) > 3]
-    if not responsibilities and desc:
-        for line in desc.split('\n'):
-            line = line.strip().strip('•').strip()
-            if len(line) > 10:
-                responsibilities.append(line[:500])
-                if len(responsibilities) >= 10:
-                    break
-    qualifications = []
-    if '**Qualifications:**' in desc or 'qualifications' in desc.lower():
-        block = re.search(r'\*\*Qualifications:\*\*\s*([\s\S]*?)(?=\n\*\*|\Z)', desc, re.I)
-        if block:
-            raw = block.group(1)
-            qualifications = [s.strip().strip('•').strip() for s in re.split(r'\n', raw) if s.strip()]
+    min_years, max_years = extract_experience_years(experience_str)
+    mandatory_skills, preferred_skills, skills = extract_skills_from_text(desc)
+    responsibilities = extract_responsibilities_from_text(desc)
+    qualifications = extract_qualifications_from_text(desc)
     return {
         'type': 'job_description',
         'title': (job.get('title') or '').strip(),
@@ -107,11 +83,11 @@ def _jd_toon_from_job_row(job):
         'salary_range': (job.get('salary') or '').strip(),
         'min_experience_years': min_years,
         'max_experience_years': max_years,
-        'skills': (mandatory_skills or skills)[:30],
-        'mandatory_skills': mandatory_skills[:30] if mandatory_skills else [],
-        'preferred_skills': preferred_skills[:20] if preferred_skills else [],
-        'responsibilities': responsibilities[:20],
-        'qualifications': qualifications[:15],
+        'skills': skills,
+        'mandatory_skills': mandatory_skills,
+        'preferred_skills': preferred_skills,
+        'responsibilities': responsibilities,
+        'qualifications': qualifications,
         'keywords': [],
     }
 
@@ -197,7 +173,9 @@ def apply_job():
     try:
         data = request.get_json(force=True)
         job_id = data.get('jobId')
-        candidate_id = request.user['id']
+        candidate_id = get_user_id(request.user)
+        if not candidate_id:
+            return jsonify({'error': 'Candidate access required'}), 403
         
         if not job_id:
             return jsonify({'error': 'Job ID is required'}), 400
@@ -348,7 +326,7 @@ def get_my_applications():
             JOIN jobs j ON a.job_id = j.jdid
             WHERE a.candidate_id = ?
             ORDER BY a.applied_at DESC
-            ''', (request.user['id'],)
+            ''', (get_user_id(request.user),)
         )
         formatted = [
             {

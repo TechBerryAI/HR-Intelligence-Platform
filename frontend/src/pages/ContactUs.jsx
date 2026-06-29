@@ -5,6 +5,7 @@ import PremiumInput from '../components/PremiumInput.jsx'
 import PremiumButton from '../components/PremiumButton.jsx'
 import { useToast } from '../components/Toast.jsx'
 import { useApp } from '../context/AppContext.jsx'
+import { apiRequest } from '../utils/api.js'
 
 export default function ContactUs() {
   const { applicantProfile, user, auth, applicantAuth } = useApp()
@@ -14,7 +15,7 @@ export default function ContactUs() {
   const [requestId, setRequestId] = useState(null)
 
   // Determine user info based on who's logged in
-  const isStaffLoggedIn = auth.isLoggedIn && (auth.role === 'RECRUITER' || auth.role === 'HEAD_HR')
+  const isStaffLoggedIn = auth.isLoggedIn && (auth.role === 'RECRUITER' || auth.role === 'HEAD_HR' || auth.role === 'CEO')
   const isApplicantLoggedIn = applicantAuth.isLoggedIn && !isStaffLoggedIn
 
   const defaultName = isApplicantLoggedIn 
@@ -95,26 +96,20 @@ export default function ContactUs() {
       // Add user info if logged in
       if (isApplicantLoggedIn) {
         payload.user_type = 'candidate'
-        payload.user_id = applicantProfile.cid || applicantAuth.userId
+        payload.user_id = user?.id || applicantProfile?.candidate_id
       } else if (isStaffLoggedIn) {
         payload.user_type = 'hr'
-        payload.user_id = user?.hrid || auth.userId
+        payload.user_id = user?.hrId
       } else {
         payload.user_type = 'guest'
       }
 
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
-      const response = await fetch(`${API_BASE_URL}/api/support/submit`, {
+      const data = await apiRequest('/api/support/submit', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+        body: payload,
       })
 
-      const data = await response.json()
-
-      if (response.ok && data.success) {
+      if (data?.success) {
         setSubmitted(true)
         setRequestId(data.request_id)
         toast.success('Support request submitted successfully!')

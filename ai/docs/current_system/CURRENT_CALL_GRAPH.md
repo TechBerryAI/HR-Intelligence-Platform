@@ -128,7 +128,7 @@ call_openai() / call_anthropic()
 
 ```
 bulk_parse_upload()                            [admin/routes.py]
-├── authenticate_token, require_hr
+├── authenticate_token, require_recruiter
 ├── secure_filename per file
 └── bulk_upload(files_list)                    [bulk_parsing_service]
     ├── [try] requests.post(BULK_PARSER_URL/api/upload)

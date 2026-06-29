@@ -21,7 +21,7 @@ from helpers.otp_utils import (
 def _otp_expiry_utc():
     """OTP valid for 5 minutes from now, as timezone-aware UTC (so PG stores correct instant)."""
     return utc_now_aware() + timedelta(minutes=5)
-from utils import build_jwt_payload
+from utils import build_jwt_payload, validate_password_strength
 
 simple_candidate_auth_bp = Blueprint('simple_candidate_auth', __name__)
 # PostgreSQL requires quoted identifiers for mixed-case table names
@@ -143,7 +143,8 @@ def verify_candidate_otp():
         
         # Check OTP
         stored_otp = candidate.get('otp')
-        if not stored_otp or stored_otp != otp:
+        input_otp = str(otp).strip()
+        if not stored_otp or str(stored_otp).strip() != input_otp:
             return jsonify({'error': 'Invalid OTP. Please try again.'}), 400
         
         # Check expiry (PG returns timezone-aware timestamps; use aware UTC for comparison)
@@ -350,3 +351,124 @@ def simple_candidate_login():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'An unexpected error occurred during login. Please contact support if the issue persists.'}), 500
+
+
+def _upsert_candidate_auth_otp(email, name, password_hash, otp, expiry):
+    """Store password-reset OTP on CandidateAuth for an existing candidate."""
+    existing = db_get('SELECT id FROM ' + CAUTH_T + ' WHERE email = ?', (email,))
+    if existing:
+        db_run(
+            'UPDATE ' + CAUTH_T + ' SET name = ?, password_hash = ?, otp = ?, otp_expiry = ?, is_verified = ?, updated_at = ' + NOW_SQL + ' WHERE email = ?',
+            (name, password_hash, otp, expiry, True if BACKEND == 'postgresql' else 1, email),
+        )
+    else:
+        db_run(
+            'INSERT INTO ' + CAUTH_T + ' (name, email, password_hash, otp, otp_expiry, is_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ' + NOW_SQL + ', ' + NOW_SQL + ')',
+            (name, email, password_hash, otp, expiry, True if BACKEND == 'postgresql' else 1),
+        )
+
+
+@simple_candidate_auth_bp.post('/forgot-password')
+def candidate_forgot_password():
+    try:
+        data = request.get_json(force=True) or {}
+        email = (data.get('email') or '').strip().lower()
+        if not email:
+            return jsonify({'error': 'Email is required.'}), 400
+        if not is_valid_email(email):
+            return jsonify({'error': 'Please provide a valid email address.'}), 400
+
+        candidate = db_get(
+            'SELECT cid, name, email, password FROM candidate_signup WHERE LOWER(TRIM(email)) = ?',
+            (email,),
+        )
+        if not candidate:
+            return jsonify({'error': 'Account not found for this email.'}), 404
+
+        otp = generate_otp()
+        expiry = utc_now_aware() + timedelta(minutes=10)
+        _upsert_candidate_auth_otp(
+            email,
+            candidate.get('name') or '',
+            candidate.get('password') or '',
+            otp,
+            expiry,
+        )
+        if not send_email_otp(email, otp, user_type='Candidate'):
+            return jsonify({'error': 'Failed to send OTP email. Please try again later.'}), 500
+        return jsonify({'message': 'OTP sent successfully. Please check your email.'}), 200
+    except Exception as e:
+        print(f'[CANDIDATE FORGOT-PASSWORD ERROR] {type(e).__name__}: {e}')
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@simple_candidate_auth_bp.post('/forgot-password/verify-otp')
+def candidate_verify_reset_otp():
+    try:
+        data = request.get_json(force=True) or {}
+        email = (data.get('email') or '').strip().lower()
+        otp = (data.get('otp') or '').strip()
+        if not email or not otp:
+            return jsonify({'error': 'Email and OTP are required.'}), 400
+
+        row = db_get(
+            'SELECT otp, otp_expiry FROM ' + CAUTH_T + ' WHERE email = ?',
+            (email,),
+        )
+        if not row or not row.get('otp'):
+            return jsonify({'error': 'Please request a new OTP.'}), 400
+        if str(row.get('otp')).strip() != str(otp).strip():
+            return jsonify({'error': 'Invalid OTP.'}), 400
+
+        otp_expiry = parse_otp_expiry(row.get('otp_expiry'))
+        if not otp_expiry or utc_now_aware() > normalize_to_utc_aware(otp_expiry):
+            return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+        return jsonify({'message': 'OTP verified. You may set a new password.'}), 200
+    except Exception as e:
+        print(f'[CANDIDATE VERIFY RESET OTP ERROR] {type(e).__name__}: {e}')
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@simple_candidate_auth_bp.post('/reset-password')
+def candidate_reset_password():
+    try:
+        data = request.get_json(force=True) or {}
+        email = (data.get('email') or '').strip().lower()
+        otp = (data.get('otp') or '').strip()
+        new_password = data.get('newPassword') or data.get('password') or ''
+        confirm_password = data.get('confirmPassword') or data.get('confirm_password') or ''
+
+        if not email or not otp:
+            return jsonify({'error': 'Email and OTP are required.'}), 400
+        ok, err = validate_password_strength(new_password)
+        if not ok:
+            return jsonify({'error': err}), 400
+        if new_password != confirm_password:
+            return jsonify({'error': 'Passwords do not match.'}), 400
+
+        signup = db_get('SELECT cid, name FROM candidate_signup WHERE LOWER(TRIM(email)) = ?', (email,))
+        if not signup:
+            return jsonify({'error': 'Account not found for this email.'}), 404
+
+        row = db_get(
+            'SELECT otp, otp_expiry FROM ' + CAUTH_T + ' WHERE email = ?',
+            (email,),
+        )
+        if not row or not row.get('otp'):
+            return jsonify({'error': 'Please request a new OTP.'}), 400
+        if str(row.get('otp')).strip() != str(otp).strip():
+            return jsonify({'error': 'Invalid OTP.'}), 400
+        otp_expiry = parse_otp_expiry(row.get('otp_expiry'))
+        if not otp_expiry or utc_now_aware() > normalize_to_utc_aware(otp_expiry):
+            return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+
+        password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        db_run('UPDATE candidate_signup SET password = ? WHERE cid = ?', (password_hash, signup['cid']))
+        db_run(
+            'UPDATE ' + CAUTH_T + ' SET password_hash = ?, otp = NULL, otp_expiry = NULL, updated_at = ' + NOW_SQL + ' WHERE email = ?',
+            (password_hash, email),
+        )
+        return jsonify({'message': 'Password updated successfully. You can now login.'}), 200
+    except Exception as e:
+        print(f'[CANDIDATE RESET PASSWORD ERROR] {type(e).__name__}: {e}')
+        return jsonify({'error': 'Internal server error'}), 500

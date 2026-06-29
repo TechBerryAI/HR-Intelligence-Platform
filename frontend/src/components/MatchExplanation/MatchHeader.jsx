@@ -36,6 +36,7 @@ export default function MatchHeader({ score, candidateName, candidateEmail, verd
         </div>
       </div>
 
+      {onClose && (
       <button
         type="button"
         onClick={onClose}
@@ -46,6 +47,7 @@ export default function MatchHeader({ score, candidateName, candidateEmail, verd
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
         </svg>
       </button>
+      )}
     </div>
   )
 }

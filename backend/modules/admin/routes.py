@@ -1,11 +1,11 @@
 """
 Admin routes: bulk resume parsing (proxy to Bulk-Resume-Parser API), job matches (ATS results).
-All routes require HR role via require_hr middleware.
+All routes require RECRUITER or HEAD_HR via require_recruiter middleware.
 """
 from flask import Blueprint, request, jsonify, Response
 from werkzeug.utils import secure_filename
 from db import db_get, db_all, BACKEND, TRUE_SQL
-from utils import authenticate_token, require_hr
+from utils import authenticate_token, require_recruiter
 from rbac import can_access_bulk_session, get_role, ROLE_HEAD_HR, is_read_only, get_user_id
 from services.bulk_parsing_service import (
     upload_files as bulk_upload,
@@ -29,7 +29,7 @@ def _allowed_bulk_file(filename):
 
 @admin_bp.route('/bulk-parse/upload', methods=['POST'])
 @authenticate_token
-@require_hr
+@require_recruiter
 def bulk_parse_upload():
     """
     Upload multiple resume files for bulk parsing.
@@ -61,7 +61,7 @@ def bulk_parse_upload():
 
 @admin_bp.route('/bulk-parse/progress/<job_id>', methods=['GET'])
 @authenticate_token
-@require_hr
+@require_recruiter
 def bulk_parse_progress(job_id):
     """Get bulk parsing job progress. Proxies to Bulk-Resume-Parser API."""
     from services.local_bulk_parser import get_local_progress
@@ -80,7 +80,7 @@ def bulk_parse_progress(job_id):
 
 @admin_bp.route('/bulk-parse/download/<job_id>', methods=['GET'])
 @authenticate_token
-@require_hr
+@require_recruiter
 def bulk_parse_download(job_id):
     """Stream Excel download from Bulk-Resume-Parser. Proxies internally."""
     from services.local_bulk_parser import get_local_progress
@@ -108,13 +108,13 @@ def bulk_parse_download(job_id):
 
 @admin_bp.route('/job-matches', methods=['GET'])
 @authenticate_token
-@require_hr
+@require_recruiter
 def job_matches():
     """
     List jobs posted by this HR with application counts and shortlisted counts.
     Admin can then call GET /api/jobs/<job_id>/applications for full ATS results per job.
     """
-    hr_id = request.user.get('hrId')
+    hr_id = get_user_id(request.user)
     if not hr_id:
         return jsonify({'error': 'HR user required'}), 403
     role = get_role(request.user)

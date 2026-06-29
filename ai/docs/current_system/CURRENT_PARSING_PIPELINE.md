@@ -226,7 +226,7 @@ Frontend: `mapResumeTOONToForm(toon)` → profile form fields (`ApplicantProfile
 | Attribute | Value |
 |-----------|-------|
 | **HTTP** | `POST /api/admin/bulk-parse/upload` |
-| **Auth** | JWT + `@require_hr` |
+| **Auth** | JWT + `@require_recruiter` |
 | **Handler** | `modules/admin/routes.bulk_parse_upload()` → `bulk_parsing_service.upload_files()` |
 
 ### Routing Logic

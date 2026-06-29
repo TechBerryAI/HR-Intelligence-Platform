@@ -190,9 +190,8 @@ app.register_blueprint(support_bp, url_prefix='/api/support')
 app.register_blueprint(feedback_bp, url_prefix='/api/feedback')
 # Admin-only: bulk resume parsing (proxy to Bulk-Resume-Parser), job matches (ATS results)
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
-# Super Admin: system-level god mode (separate credentials, separate route)
+# Head of HR: org-wide administration and analytics
 app.register_blueprint(head_hr_bp, url_prefix='/api/head-hr')
-app.register_blueprint(head_hr_bp, url_prefix='/api/super-admin', name='head_hr_legacy')
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', '3000'))

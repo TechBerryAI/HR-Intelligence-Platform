@@ -67,8 +67,9 @@ POST /api/auth/refresh → Validate refresh token → Issue new access token
 
 ```json
 {
-  "sub": "user_id",
-  "role": "HR | head_hr | candidate | super_admin",
+  "user_id": "HRID001 | CID001",
+  "role": "CEO | HEAD_HR | RECRUITER | CANDIDATE",
+  "email": "user@example.com",
   "type": "access | refresh",
   "exp": "timestamp",
   "iat": "timestamp"
@@ -112,10 +113,10 @@ POST /api/auth/refresh → Validate refresh token → Issue new access token
 | Role | Code | Permissions |
 |------|------|------------|
 | **Guest** | (none) | View public jobs, contact form, FAQ |
-| **Candidate** | `candidate` | Own profile, applications, saved jobs, settings |
-| **HR** | `HR` | Job CRUD, view applications, bulk parser, feedback admin |
-| **Head HR** | `head_hr` | All HR + manage HR accounts |
-| **Super Admin** | `super_admin` | All operations + system-wide CRUD + admin management |
+| **Candidate** | `CANDIDATE` | Own profile, applications, saved jobs, settings |
+| **Recruiter** | `RECRUITER` | Own jobs, own candidates, bulk parser, feedback admin |
+| **Head of HR** | `HEAD_HR` | Org-wide administration, analytics, HR user management |
+| **CEO** | `CEO` | Read-only executive analytics |
 
 ### Authorization enforcement
 
@@ -124,23 +125,24 @@ POST /api/auth/refresh → Validate refresh token → Issue new access token
 | Decorator | Allows | Used on |
 |-----------|--------|---------|
 | `authenticate_token` | Valid access token | Protected endpoints |
-| `require_hr` | HR or head_hr | HR management endpoints |
-| `require_candidate` | candidate | Candidate endpoints |
-| `require_super_admin` | super_admin | Super admin endpoints |
-| `require_head_hr` | head_hr or super_admin | Admin management |
+| `require_recruiter` | `RECRUITER`, `HEAD_HR` | Operational recruitment endpoints |
+| `require_candidate` | `CANDIDATE` | Candidate endpoints |
+| `require_head_hr` | `HEAD_HR` | Head-of-HR write endpoints |
+| `require_analytics_read` | `CEO`, `HEAD_HR` | Analytics and org-wide read endpoints |
 | `optional_authenticate_token` | Sets user if present | Public endpoints with optional auth |
 
 **Frontend route guards:**
 
 | Guard | Protects |
 |-------|----------|
-| `AdminGuard` | HR dashboard, bulk parser, feedback admin |
+| `RecruiterGuard` | Recruiter dashboard, bulk parser, feedback admin |
 | `CandidateGuard` | Profile, applications, candidate settings |
-| `SuperAdminGuard` | Super admin pages |
+| `HeadHrGuard` | Head of HR admin pages |
+| `CeoGuard` | Executive dashboard |
 
 ### Permission matrix
 
-| Resource | Guest | Candidate | HR | Head HR | Super Admin |
+| Resource | Guest | Candidate | HR | Head HR | Head of HR |
 |----------|-------|-----------|-----|---------|-------------|
 | View public jobs | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Apply to job | | ✓ (own) | | | |
@@ -210,7 +212,7 @@ Single-tenant deployment. Company field on HR Account provides logical grouping 
 | **Tenant identifier** | `tenant_id` on every entity, derived from JWT or SSO claim |
 | **Cross-tenant queries** | Architecturally impossible — enforced at middleware + RLS |
 | **Shared resources** | Knowledge packs, AI models (read-only, no tenant data) |
-| **Tenant admin** | Head HR scoped to tenant; Super Admin is platform-level |
+| **Tenant admin** | Head HR scoped to tenant; Head of HR is platform-level |
 | **Data export** | Tenant-scoped; includes all tenant entities |
 | **Data deletion** | Tenant offboarding purges all tenant-scoped data (GDPR) |
 

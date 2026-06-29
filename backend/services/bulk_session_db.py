@@ -63,14 +63,25 @@ def update_file_status(
     processing_time_ms: int | None = None,
 ) -> None:
     try:
-        db_run(
-            """
-            UPDATE bulk_parse_files
-            SET status = ?, error_message = ?, processing_time_ms = ?, updated_at = NOW()
-            WHERE session_id = ? AND original_filename = ?
-            """,
-            (status, error_message, processing_time_ms, session_id, filename),
-        )
+        if status == 'Failed':
+            db_run(
+                """
+                UPDATE bulk_parse_files
+                SET status = ?, error_message = ?, processing_time_ms = ?,
+                    retry_count = retry_count + 1, updated_at = NOW()
+                WHERE session_id = ? AND original_filename = ?
+                """,
+                (status, error_message, processing_time_ms, session_id, filename),
+            )
+        else:
+            db_run(
+                """
+                UPDATE bulk_parse_files
+                SET status = ?, error_message = ?, processing_time_ms = ?, updated_at = NOW()
+                WHERE session_id = ? AND original_filename = ?
+                """,
+                (status, error_message, processing_time_ms, session_id, filename),
+            )
     except Exception as e:
         print(f"[bulk_session_db] update_file_status failed: {e}")
 

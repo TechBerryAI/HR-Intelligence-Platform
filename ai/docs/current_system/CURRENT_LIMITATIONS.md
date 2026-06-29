@@ -175,7 +175,7 @@ Bulk and single parse can produce **different TOON quality** for the same file.
 ### Authentication gaps
 
 - Parse endpoints require JWT but no per-role separation on resume endpoint (candidates and HR both use `/parse/resume` with different uploader resolution).
-- Bulk endpoints correctly gated with `@require_hr`.
+- Bulk endpoints correctly gated with `@require_recruiter`.
 
 ### File content trust
 

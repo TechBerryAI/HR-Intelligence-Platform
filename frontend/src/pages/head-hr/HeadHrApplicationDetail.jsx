@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
-import HeadHrLayout from './HeadHrLayout.jsx'
+import PanelShell, { usePanelBasePath } from '../org/PanelShell.jsx'
 import { FiArrowLeft, FiFileText } from 'react-icons/fi'
 import { MatchHeader, ScoreCard, ChipGroup, CollapsibleSection } from '../../components/MatchExplanation'
 
@@ -38,6 +38,7 @@ function formatDate(ts) {
 export default function HeadHrApplicationDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const basePath = usePanelBasePath()
   const [application, setApplication] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -63,30 +64,30 @@ export default function HeadHrApplicationDetail() {
 
   if (loading) {
     return (
-      <HeadHrLayout>
+      <PanelShell>
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-16 rounded-xl bg-zinc-900/60 border border-zinc-800 animate-pulse" />
           ))}
         </div>
-      </HeadHrLayout>
+      </PanelShell>
     )
   }
 
   if (error || !application) {
     return (
-      <HeadHrLayout>
+      <PanelShell>
         <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
           {error || 'Application not found'}
         </div>
         <button
           type="button"
-          onClick={() => navigate('/head-hr/applications')}
+          onClick={() => navigate(`${basePath}/applications`)}
           className="mt-4 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white"
         >
           <FiArrowLeft className="w-4 h-4" /> Back to Applications
         </button>
-      </HeadHrLayout>
+      </PanelShell>
     )
   }
 
@@ -131,11 +132,11 @@ export default function HeadHrApplicationDetail() {
   const gapChips = toChips(rawGaps)
 
   return (
-    <HeadHrLayout>
+    <PanelShell>
       <div className="max-w-3xl mx-auto">
         <button
           type="button"
-          onClick={() => navigate('/head-hr/applications')}
+          onClick={() => navigate(`${basePath}/applications`)}
           className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white mb-6 transition-colors"
         >
           <FiArrowLeft className="w-4 h-4" /> Back to Applications
@@ -176,7 +177,7 @@ export default function HeadHrApplicationDetail() {
             candidateName={application.candidate_name || 'Candidate'}
             candidateEmail={application.candidate_email || ''}
             verdict={verdict}
-            onClose={() => navigate('/head-hr/applications')}
+            onClose={() => navigate(`${basePath}/applications`)}
           />
           <div className="p-6 space-y-6">
             <div className="rounded-xl bg-zinc-800/50 ring-1 ring-zinc-700/50 px-4 py-3">
@@ -251,6 +252,6 @@ export default function HeadHrApplicationDetail() {
           </div>
         </div>
       </div>
-    </HeadHrLayout>
+    </PanelShell>
   )
 }

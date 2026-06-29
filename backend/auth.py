@@ -577,7 +577,7 @@ def hr_login():
 @auth_bp.post('/change-password')
 @authenticate_token
 def hr_change_password():
-    """Change password for logged-in HR or Super Admin. Requires current password and new password."""
+    """Change password for logged-in staff (RECRUITER, HEAD_HR, CEO). Requires current password and new password."""
     try:
         user = getattr(request, 'user', None)
         if not user or not get_user_id(user):

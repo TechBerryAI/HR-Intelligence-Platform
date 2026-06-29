@@ -32,17 +32,6 @@ export function getRole(auth) {
   return Object.values(ROLES).includes(role) ? role : null
 }
 
-export function can(auth, permission) {
-  const role = getRole(auth)
-  if (!role) return false
-  const allowed = PERMISSIONS[permission]
-  return allowed ? allowed.has(role) : false
-}
-
-export function isReadOnly(auth) {
-  return getRole(auth) === ROLES.CEO
-}
-
 export function isHeadHr(auth) {
   return getRole(auth) === ROLES.HEAD_HR
 }

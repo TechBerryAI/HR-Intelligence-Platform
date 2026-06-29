@@ -57,7 +57,7 @@ This document describes the **system architecture** of the Human Capital Intelli
 | **State management** | Single AppContext (auth, jobs, applicant state) |
 | **API communication** | `utils/api.js` — Bearer JWT, retry on 5xx, refresh on 403 |
 | **Auth storage** | localStorage + in-memory token service |
-| **Route guards** | AdminGuard, CandidateGuard, SuperAdminGuard |
+| **Route guards** | RecruiterGuard, CandidateGuard, HeadHrGuard |
 
 **Responsibilities:**
 - Render role-appropriate UI for all actors
@@ -75,7 +75,7 @@ frontend/src/
 ├── pages/                   # Route-level pages
 │   ├── admin/               # HR dashboard, bulk parser, feedback
 │   ├── applicant/           # Candidate profile, applications
-│   ├── super-admin/         # System administration
+│   ├── head-hr/         # System administration
 │   └── public/              # Jobs, login, signup, support
 ├── guards/                  # Route authorization
 └── utils/                   # API client, token service, helpers
@@ -147,7 +147,7 @@ electron/
 | `support_routes` | Contact form | Administration |
 | `feedback_routes` | Employee feedback | Administration |
 | `admin_routes` | Bulk parser, HR feedback admin | Administration |
-| `super_admin_routes` | System-wide CRUD, stats | Administration |
+| `HEAD_HR_routes` | System-wide CRUD, stats | Administration |
 
 **Key services:**
 

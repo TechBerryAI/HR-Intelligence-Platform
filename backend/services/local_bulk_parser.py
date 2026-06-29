@@ -10,11 +10,26 @@ import threading
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Any
 
 # In-memory job store: job_id -> { status, total_files, processed_files, failed_files, results, message, failed_filenames, success_filenames }
 _local_jobs: dict[str, dict[str, Any]] = {}
 _local_jobs_lock = threading.Lock()
+
+_BULK_EXPORT_DIR = Path(__file__).resolve().parent.parent / 'data' / 'bulk_exports'
+
+
+def _export_path(job_id: str) -> Path:
+    return _BULK_EXPORT_DIR / f'{job_id}.xlsx'
+
+
+def _persist_excel(job_id: str, rows: list[dict]) -> None:
+    try:
+        _BULK_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+        _export_path(job_id).write_bytes(_build_excel_bytes(rows))
+    except Exception as e:
+        print(f"[local_bulk_parser] persist excel failed: {e}")
 
 ALLOWED_EXT = {'pdf', 'doc', 'docx'}
 
@@ -144,6 +159,9 @@ def _worker(job_id: str, files_list: list[tuple[str, bytes]], started_at: float)
             _local_jobs[job_id]['results'] = results
             _local_jobs[job_id]['message'] = f'Completed: {success_count} successful, {failed_count} failed'
 
+    if results:
+        _persist_excel(job_id, results)
+
     finalize_session(job_id, started_at, success_count, failed_count)
 
 
@@ -226,13 +244,28 @@ def get_local_download(job_id: str) -> tuple[bool, Any]:
     """
     with _local_jobs_lock:
         job = _local_jobs.get(job_id)
-    if not job:
-        return False, {'error': 'Job not found'}
-    if job['status'] != 'completed':
-        return False, {'error': 'Job not completed yet'}
-    rows = job.get('results') or []
-    try:
-        xlsx_bytes = _build_excel_bytes(rows)
-    except Exception as e:
-        return False, {'error': f'Excel build failed: {e}'}
-    return True, (io.BytesIO(xlsx_bytes), 'Parsed_Resumes.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    if job:
+        if job['status'] != 'completed':
+            return False, {'error': 'Job not completed yet'}
+        rows = job.get('results') or []
+        try:
+            xlsx_bytes = _build_excel_bytes(rows)
+        except Exception as e:
+            return False, {'error': f'Excel build failed: {e}'}
+        return True, (io.BytesIO(xlsx_bytes), 'Parsed_Resumes.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+    export_file = _export_path(job_id)
+    if export_file.is_file():
+        return True, (
+            io.BytesIO(export_file.read_bytes()),
+            'Parsed_Resumes.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+
+    from services.bulk_session_db import get_session_progress
+
+    db_progress = get_session_progress(job_id)
+    if db_progress and db_progress.get('status') == 'completed':
+        return False, {'error': 'Export file not found for completed session'}
+
+    return False, {'error': 'Job not found'}

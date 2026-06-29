@@ -85,10 +85,6 @@ def require_recruiter(f):
     return wrapper
 
 
-# Backward route import name only — delegates to require_recruiter
-require_hr = require_recruiter
-
-
 def require_candidate(f):
     @wraps(f)
     @authenticate_token

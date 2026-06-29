@@ -86,7 +86,7 @@ Trigger removed: `trg_hr_signup_role_sync` / `hr_signup_role_sync()`
 | `CeoGuard` | unchanged |
 | `CandidateGuard` | unchanged |
 
-Backend: `require_hr` decorator delegates to `require_recruiter` (route import name only; checks `RECRUITER` + `HEAD_HR`).
+Backend: `require_recruiter` decorator (RECRUITER + HEAD_HR; removed `require_hr` alias in Sprint 1.4).
 
 ---
 
@@ -176,7 +176,6 @@ Login API `user` object still includes `hrId` for UI convenience (not in JWT).
 ### Intentionally unchanged (temporary)
 
 - `login_history.user_type` still uses `'HR'` / `'candidate'` (audit category, not JWT role)
-- Legacy API prefix `/api/super-admin` dual-registered alongside `/api/head-hr` (remove in a future sprint)
 - `hrId` in login API response body for frontend display
 
 ---
@@ -185,8 +184,8 @@ Login API `user` object still includes `hrId` for UI convenience (not in JWT).
 
 | Layer | Before | After |
 |-------|--------|-------|
-| API prefix | `/api/super-admin` | `/api/head-hr` (+ legacy dual-register) |
-| UI routes | `/super-admin/*` | `/head-hr/*` (bookmarks redirect) |
+| API prefix | `/api/super-admin` | `/api/head-hr` only (legacy removed Sprint 1.4) |
+| UI routes | `/super-admin/*` | `/head-hr/*` only (redirects removed Sprint 1.4) |
 | Guard | `SuperAdminGuard` | `HeadHrGuard` |
 | Login | `/api/login` + `/api/super-admin/login` | `/api/login` only |
 | Auth state | `auth` + `superAdminAuth` | `auth` only |

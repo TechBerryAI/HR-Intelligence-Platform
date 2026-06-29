@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { apiRequest } from '../../utils/api.js'
 import { tokenService } from '../../utils/tokenService.js'
 import { useAsyncAction } from '../../hooks/useAsyncAction.js'
-import HeadHrLayout from './HeadHrLayout.jsx'
+import PanelShell, { usePanelBasePath } from '../org/PanelShell.jsx'
 import { FiRefreshCw, FiFileText, FiSearch, FiDownload } from 'react-icons/fi'
 import { generateApplicationsPdf } from '../../utils/pdfReportUtils.js'
 
@@ -39,6 +39,7 @@ function StatusBadge({ status }) {
 
 export default function HeadHrApplications() {
   const navigate = useNavigate()
+  const basePath = usePanelBasePath()
   const { run: runRefresh, loading: refreshLoading } = useAsyncAction()
   const { run: runReport, loading: reportLoading } = useAsyncAction()
   const [applications, setApplications] = useState([])
@@ -80,7 +81,7 @@ export default function HeadHrApplications() {
   const pendingCount = applications.filter((a) => a.status === 'pending').length
 
   return (
-    <HeadHrLayout>
+    <PanelShell>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -184,8 +185,8 @@ export default function HeadHrApplications() {
                     key={app.id}
                     role="button"
                     tabIndex={0}
-                    onClick={() => navigate(`/head-hr/applications/${app.id}`)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/head-hr/applications/${app.id}`) } }}
+                    onClick={() => navigate(`${basePath}/applications/${app.id}`)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`${basePath}/applications/${app.id}`) } }}
                     className="bg-zinc-900/30 hover:bg-zinc-800/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-rose-500/50"
                   >
                     <td className="px-4 py-3 text-zinc-600 text-xs font-mono">#{app.id}</td>
@@ -226,6 +227,6 @@ export default function HeadHrApplications() {
           </div>
         </div>
       )}
-    </HeadHrLayout>
+    </PanelShell>
   )
 }

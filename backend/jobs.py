@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 from db import db_all, db_get, db_run, BACKEND, TRUE_SQL, FALSE_SQL
-from utils import authenticate_token, require_hr, optional_authenticate_token
+from utils import authenticate_token, require_recruiter, optional_authenticate_token
 from rbac import (
     can_access_job,
     can_modify_job,
@@ -206,7 +206,7 @@ def get_jobs_public():
 
 @jobs_bp.get('/all')
 @authenticate_token
-@require_hr
+@require_recruiter
 def get_jobs_all():
     try:
         user = request.user
@@ -289,7 +289,7 @@ def get_job(job_id: str):
 
 @jobs_bp.get('/<string:job_id>/applications')
 @authenticate_token
-@require_hr
+@require_recruiter
 def get_job_applications(job_id: str):
     try:
         # Verify job belongs to HR user
@@ -446,7 +446,7 @@ def get_job_applications(job_id: str):
 
 @jobs_bp.get('/<string:job_id>/applications/<string:candidate_id>/resume')
 @authenticate_token
-@require_hr
+@require_recruiter
 def get_candidate_resume(job_id: str, candidate_id: str):
     """Download candidate resume for HR"""
     try:
@@ -498,7 +498,7 @@ def get_candidate_resume(job_id: str, candidate_id: str):
 
 @jobs_bp.post('/<string:job_id>/applications/<string:candidate_id>/viewed')
 @authenticate_token
-@require_hr
+@require_recruiter
 def record_profile_viewed(job_id: str, candidate_id: str):
     """Record that HR viewed this candidate's profile for this job. Sends email and updates status."""
     try:
@@ -556,7 +556,7 @@ def record_profile_viewed(job_id: str, candidate_id: str):
 
 @jobs_bp.patch('/<string:job_id>/applications/<string:candidate_id>/status')
 @authenticate_token
-@require_hr
+@require_recruiter
 def update_application_status(job_id: str, candidate_id: str):
     """Shortlist or reject candidate. Body: { "action": "shortlist" | "reject" }."""
     try:
@@ -605,7 +605,7 @@ def update_application_status(job_id: str, candidate_id: str):
 
 @jobs_bp.post('/')
 @authenticate_token
-@require_hr
+@require_recruiter
 def create_job():
     try:
         if is_read_only(request.user):
@@ -650,8 +650,9 @@ def create_job():
                     experience = f"Up to {experience_to} years"
         
         description = (data.get('description') or '').strip()
+        parsed_jd_id = (data.get('parsedJdId') or data.get('parsed_jd_id') or '').strip() or None
         
-        # Company is always taken from the HR account — not from request body (keeps it unchangeable)
+        # Company is always taken from the HR account
         hr_id = get_user_id(request.user)
         if hr_id:
             hr_profile = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (hr_id,))
@@ -682,10 +683,10 @@ def create_job():
         _enabled_val = True if BACKEND == 'postgresql' else 1
         result = db_run(
             '''
-            INSERT INTO jobs (jdid, title, company, location, salary, experience, description, posted_by, enabled)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (jdid, title, company, location, salary, experience, description, posted_by, enabled, parsed_jd_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
-            (jdid, title, company, location, salary, experience, description, hr_id, _enabled_val)
+            (jdid, title, company, location, salary, experience, description, hr_id, _enabled_val, parsed_jd_id)
         )
         print(f"INSERT result: {result}")
         
@@ -696,6 +697,12 @@ def create_job():
         if not job:
             print("ERROR: Job created but could not be retrieved")
             return jsonify({'error': 'Job created but could not be retrieved'}), 500
+
+        if parsed_jd_id:
+            try:
+                db_run('UPDATE parsed_jds SET job_id = ? WHERE id = ?', (jdid, parsed_jd_id))
+            except Exception as link_err:
+                print(f"[jobs] parsed_jd link warning: {link_err}")
         
         print("Job created successfully!")
         print("=" * 50)
@@ -710,6 +717,7 @@ def create_job():
             'description': job['description'],
             'enabled': bool(job['enabled']),
             'postedOn': job['posted_on'],
+            'parsedJdId': job.get('parsed_jd_id'),
         }), 201
     except Exception as e:
         import traceback
@@ -726,7 +734,7 @@ def create_job():
 
 @jobs_bp.put('/<string:job_id>')
 @authenticate_token
-@require_hr
+@require_recruiter
 def update_job(job_id: str):
     try:
         data = request.get_json(force=True)
@@ -831,7 +839,7 @@ def update_job(job_id: str):
 
 @jobs_bp.patch('/<string:job_id>/enabled')
 @authenticate_token
-@require_hr
+@require_recruiter
 def toggle_job(job_id: str):
     try:
         data = request.get_json(force=True)
@@ -848,7 +856,7 @@ def toggle_job(job_id: str):
 
 @jobs_bp.delete('/<string:job_id>')
 @authenticate_token
-@require_hr
+@require_recruiter
 def delete_job(job_id: str):
     try:
         job = _get_job_for_user(job_id, request.user, require_write=True)

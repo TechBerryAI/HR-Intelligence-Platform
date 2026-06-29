@@ -30,7 +30,10 @@ def allow_options_no_auth(f):
 @head_hr_bp.get('/stats')
 @require_analytics_read
 def get_stats():
-    total_admins = db_get('SELECT COUNT(*) AS cnt FROM hr_signup', ())
+    total_admins = db_get(
+        "SELECT COUNT(*) AS cnt FROM hr_signup WHERE COALESCE(role, 'RECRUITER') != 'CEO'",
+        (),
+    )
     total_candidates = db_get('SELECT COUNT(*) AS cnt FROM candidate_signup', ())
     total_jobs = db_get('SELECT COUNT(*) AS cnt FROM jobs', ())
     total_applications = db_get('SELECT COUNT(*) AS cnt FROM applications', ())

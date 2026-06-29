@@ -142,31 +142,6 @@ def build_jwt_identity(user_id, email, role):
     return {'user_id': user_id, 'email': email, 'role': role}
 
 
-def require_permission(permission):
-    from utils import authenticate_token
-
-    def decorator(f):
-        @wraps(f)
-        @authenticate_token
-        def wrapper(*args, **kwargs):
-            user = getattr(request, 'user', None)
-            if not has_permission(user, permission):
-                return jsonify({'error': 'Access denied'}), 403
-            return f(*args, **kwargs)
-        return wrapper
-    return decorator
-
-
-def reject_read_only_writes(f):
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        user = getattr(request, 'user', None)
-        if is_read_only(user) and request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
-            return jsonify({'error': 'Read-only access'}), 403
-        return f(*args, **kwargs)
-    return wrapper
-
-
 def require_analytics_read(f):
     from utils import authenticate_token
 
