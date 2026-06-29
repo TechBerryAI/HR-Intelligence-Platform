@@ -113,7 +113,12 @@ async function setupFrontend() {
 
 function startBackend() {
   logStep(5, 6, 'Starting backend (Flask)');
-  const env = { ...process.env, PYTHONIOENCODING: 'utf-8' };
+  const env = {
+    ...process.env,
+    PYTHONIOENCODING: 'utf-8',
+    PYTHONPATH: path.join(ROOT, 'ai'),
+    AI_RUNTIME_CONFIG: path.join(ROOT, 'ai', 'runtime', 'config', 'runtime.production.yaml'),
+  };
   backendProcess = spawn(VENV_PYTHON, ['app.py'], {
     cwd: BACKEND_DIR,
     stdio: 'inherit',

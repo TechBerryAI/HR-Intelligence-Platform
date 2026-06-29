@@ -25,6 +25,7 @@ LLM_REQUEST_TIMEOUT = int(os.getenv('LLM_REQUEST_TIMEOUT', '45'))  # Lower = fas
 LLM_MAX_INPUT_CHARS = int(os.getenv('LLM_MAX_INPUT_CHARS', '0'))  # 0 = no trim; set e.g. 18000 to speed very long docs
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY', '')
+AI_USE_GATEWAY = os.getenv('AI_USE_GATEWAY', 'true').lower() in ('1', 'true', 'yes')
 
 
 def call_llm(prompt: str, doc_type: Literal['resume', 'jd']) -> Dict[str, Any]:
@@ -40,6 +41,10 @@ def call_llm(prompt: str, doc_type: Literal['resume', 'jd']) -> Dict[str, Any]:
     """
     if LLM_MAX_INPUT_CHARS and len(prompt) > LLM_MAX_INPUT_CHARS:
         prompt = prompt[:LLM_MAX_INPUT_CHARS] + "\n\n[Document truncated for length. Extract from above.]"
+    if AI_USE_GATEWAY:
+        from ai_runtime_adapter import normalize_proposal, parse_via_runtime
+        structured = parse_via_runtime(prompt, doc_type)
+        return normalize_proposal(structured, doc_type)
     if LLM_PROVIDER == 'xai':
         return call_xai_grok(prompt, doc_type)
     elif LLM_PROVIDER == 'openai':

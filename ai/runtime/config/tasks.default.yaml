@@ -1,7 +1,7 @@
 tasks:
   resume_parsing:
     prompt_id: resume_parser_v1
-    schema_id: resume_v1
+    schema_id: resume_milestone_v1
     model_alias: resume-parser
     description: Parse resume documents into structured output.
     validation:

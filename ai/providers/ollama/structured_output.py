@@ -15,10 +15,11 @@ _JSON_FENCE_RE = re.compile(
 
 def build_messages(*, prompt: str, input_text: str) -> list[dict[str, str]]:
     """Build Ollama chat messages from runtime prompt and input."""
-    user_content = input_text
-    if prompt.strip():
-        user_content = f"{prompt.strip()}\n\n{input_text}"
-    return [{"role": "user", "content": user_content}]
+    system = prompt.strip() or "Return JSON only."
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": input_text},
+    ]
 
 
 def resolve_response_format(schema_id: str | None) -> str | dict[str, Any] | None:

@@ -367,7 +367,14 @@ def parse_resume_upload():
         
         # Calculate confidence (simple heuristic based on field completeness)
         confidence = calculate_confidence(toon, 'resume')
-        model_version = f"{os.getenv('LLM_PROVIDER', 'xai')}-v1"
+        if os.getenv('AI_USE_GATEWAY', 'true').lower() in ('1', 'true', 'yes'):
+            try:
+                from ai_runtime_adapter import get_model_version
+                model_version = get_model_version()
+            except Exception:
+                model_version = 'ai-runtime-v1'
+        else:
+            model_version = f"{os.getenv('LLM_PROVIDER', 'xai')}-v1"
         
         # Store parsed result
         parsed_id = store_parsed_resume(

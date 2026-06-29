@@ -112,7 +112,8 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
         if (result.is_duplicate) {
           setParseSuccess('✨ Resume recognized! Using previously parsed data.');
         } else {
-          setParseSuccess('✨ Resume parsed successfully! Fields auto-filled below.');
+          const modelInfo = result.model_version ? ` (${result.model_version})` : '';
+          setParseSuccess(`✨ Resume parsed successfully! Fields auto-filled below.${modelInfo}`);
         }
 
         // Autofill form
@@ -124,6 +125,7 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
             _parsedId: result.parsed_id,
             _rawFileId: result.raw_file_id,
             _confidence: result.confidence,
+            _modelVersion: result.model_version,
           });
         }
 

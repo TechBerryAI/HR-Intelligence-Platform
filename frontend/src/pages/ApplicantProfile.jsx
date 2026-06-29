@@ -76,14 +76,8 @@ export default function ApplicantProfile() {
 	const [saved, setSaved] = useState('')
 	const [errors, setErrors] = useState({})
 	const [autofilledFields, setAutofilledFields] = useState({})
+	const [parsedSummary, setParsedSummary] = useState(null)
 	const [formInitialized, setFormInitialized] = useState(false)
-	
-	// Fetch profile from server when page mounts (ensures fresh data after login/navigation)
-	useEffect(() => {
-		if (applicantAuth.isLoggedIn && fetchApplicantData) {
-			fetchApplicantData()
-		}
-	}, [applicantAuth.isLoggedIn])
 	
 	// Helper to build form from applicantProfile (handles backend cert format: certification -> name)
 	const buildFormFromProfile = (profile, prevForm = {}) => {
@@ -329,6 +323,15 @@ export default function ApplicantProfile() {
 
 		setErrors({});
 
+		setParsedSummary({
+			fullName: toStr(parsedData.fullName),
+			email: toStr(parsedData.email),
+			skillCount: Array.isArray(parsedData._skills) ? parsedData._skills.length : 0,
+			experienceCount: Array.isArray(parsedData.experiences) ? parsedData.experiences.filter((e) => e.company || e.role).length : 0,
+			modelVersion: parsedData._modelVersion || '',
+			confidence: parsedData._confidence,
+		});
+
 		setTimeout(() => setAutofilledFields({}), 3000);
 		
 		window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -516,6 +519,26 @@ export default function ApplicantProfile() {
 											<li key={key}>{message}</li>
 										))}
 									</ul>
+								</motion.div>
+							)}
+
+							{/* Parsed resume summary */}
+							{parsedSummary && (
+								<motion.div
+									initial={{ opacity: 0, y: -10 }}
+									animate={{ opacity: 1, y: 0 }}
+									className="glass-card border border-emerald-500/30 bg-emerald-500/10 px-5 py-4 rounded-xl"
+								>
+									<p className="text-sm font-semibold text-emerald-200 mb-2">Parsed from resume</p>
+									<div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-emerald-100/90">
+										<span><strong>Name:</strong> {parsedSummary.fullName || '—'}</span>
+										<span><strong>Email:</strong> {parsedSummary.email || '—'}</span>
+										<span><strong>Skills:</strong> {parsedSummary.skillCount}</span>
+										<span><strong>Experience entries:</strong> {parsedSummary.experienceCount}</span>
+										{parsedSummary.modelVersion && (
+											<span className="sm:col-span-2 text-xs text-emerald-200/70">Model: {parsedSummary.modelVersion}</span>
+										)}
+									</div>
 								</motion.div>
 							)}
 

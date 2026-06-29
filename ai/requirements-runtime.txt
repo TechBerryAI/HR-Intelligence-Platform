@@ -1,0 +1,8 @@
+# Minimal AI Runtime dependencies (no training stack)
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+jsonschema>=4.20.0
+httpx>=0.26.0
+requests>=2.31.0

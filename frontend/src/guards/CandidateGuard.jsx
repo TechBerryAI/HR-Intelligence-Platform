@@ -6,7 +6,7 @@ import { useApp } from '../context/AppContext.jsx'
 
 export default function CandidateGuard({ children }) {
   const { applicantAuth, auth } = useApp()
-  const isHr = auth?.isLoggedIn && auth?.role === 'HR'
+  const isHr = auth?.isLoggedIn && (auth?.role === 'HR' || auth?.role === 'head_hr')
   const isCandidate = applicantAuth?.isLoggedIn && !isHr
   if (!isCandidate) {
     return <Navigate to="/login/applicant" replace />

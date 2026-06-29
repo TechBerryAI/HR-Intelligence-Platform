@@ -14,7 +14,7 @@ export default function ContactUs() {
   const [requestId, setRequestId] = useState(null)
 
   // Determine user info based on who's logged in
-  const isHrLoggedIn = auth.isLoggedIn && auth.role === 'HR'
+  const isHrLoggedIn = auth.isLoggedIn && (auth.role === 'HR' || auth.role === 'head_hr')
   const isApplicantLoggedIn = applicantAuth.isLoggedIn && !isHrLoggedIn
 
   const defaultName = isApplicantLoggedIn 

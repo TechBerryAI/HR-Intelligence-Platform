@@ -32,6 +32,13 @@ JWT_ACCESS_EXPIRY_SECONDS = int(os.getenv('JWT_ACCESS_EXPIRY_SECONDS', 3600))
 # Refresh token lifetime; default 30 days. Used to get new access token without re-login.
 JWT_REFRESH_EXPIRY_SECONDS = int(os.getenv('JWT_REFRESH_EXPIRY_SECONDS', 30 * 24 * 3600))
 
+_DEBUG = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+
+
+def _auth_log(message):
+    if _DEBUG:
+        print(message)
+
 
 def build_jwt_payload(identity_dict, refresh=False):
     """Return a copy of identity_dict with type, iat, exp. refresh=False -> access token, refresh=True -> refresh token."""
@@ -48,27 +55,27 @@ def build_jwt_payload(identity_dict, refresh=False):
 def authenticate_token(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        print(f"[AUTH] Authenticating request to {request.method} {request.path}")
+        _auth_log(f"[AUTH] Authenticating request to {request.method} {request.path}")
         auth_header = request.headers.get('Authorization', '')
-        print(f"[AUTH] Authorization header: {auth_header[:20]}..." if auth_header else "[AUTH] No Authorization header")
+        _auth_log(f"[AUTH] Authorization header: {auth_header[:20]}..." if auth_header else "[AUTH] No Authorization header")
         token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else None
         if not token:
-            print("[AUTH] No token found - returning 401")
+            _auth_log("[AUTH] No token found - returning 401")
             return jsonify({"error": "Access token required"}), 401
         try:
             user = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
             if user.get('type') == 'refresh':
-                print("[AUTH] Refresh token used as access token - returning 403")
+                _auth_log("[AUTH] Refresh token used as access token - returning 403")
                 return jsonify({"error": "Invalid or expired token"}), 403
-            print(f"[AUTH] Token decoded successfully. User: {user}")
+            _auth_log(f"[AUTH] Token decoded successfully. User: {user}")
             request.user = user
         except jwt.ExpiredSignatureError:
-            print("[AUTH] Token expired - returning 403")
+            _auth_log("[AUTH] Token expired - returning 403")
             return jsonify({"error": "Invalid or expired token"}), 403
         except Exception as e:
-            print(f"[AUTH] Token decode failed: {e} - returning 403")
+            _auth_log(f"[AUTH] Token decode failed: {e} - returning 403")
             return jsonify({"error": "Invalid or expired token"}), 403
-        print("[AUTH] Authentication successful")
+        _auth_log("[AUTH] Authentication successful")
         return f(*args, **kwargs)
     return wrapper
 
@@ -77,14 +84,14 @@ def require_hr(f):
     """Allow HR and Head of HR (head_hr has same job/candidate access as HR, plus admin management)."""
     @wraps(f)
     def wrapper(*args, **kwargs):
-        print(f"[HR CHECK] Checking HR access for {request.method} {request.path}")
+        _auth_log(f"[HR CHECK] Checking HR access for {request.method} {request.path}")
         user = getattr(request, 'user', None)
-        print(f"[HR CHECK] User: {user}")
+        _auth_log(f"[HR CHECK] User: {user}")
         role = user.get('role') if user else None
         if not user or role not in ('HR', 'head_hr'):
-            print(f"[HR CHECK] Access denied - role: {role if user else 'none'}")
+            _auth_log(f"[HR CHECK] Access denied - role: {role if user else 'none'}")
             return jsonify({"error": "HR access required"}), 403
-        print("[HR CHECK] HR access granted")
+        _auth_log("[HR CHECK] HR access granted")
         return f(*args, **kwargs)
     return wrapper
 

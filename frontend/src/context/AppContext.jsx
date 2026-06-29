@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { apiRequest, setUnauthorizedHandler, setOnTokensRefreshed } from '../utils/api'
 import { tokenService } from '../utils/tokenService'
 import { checkBackendHealth } from '../utils/healthCheck'
@@ -45,6 +45,18 @@ const writeJson = (key, value) => {
   }
 }
 
+function decodeJwtRole(token) {
+  if (!token) return null
+  try {
+    const parts = token.split('.')
+    if (parts.length < 2) return null
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return payload.role || null
+  } catch {
+    return null
+  }
+}
+
 export function AppProvider({ children }) {
   const [jobs, setJobs] = useState([])
   const [jobsLoading, setJobsLoading] = useState(false)
@@ -75,7 +87,7 @@ export function AppProvider({ children }) {
   const [auth, setAuth] = useState(() => readJson(STORAGE_KEYS.auth, defaultAuth))
   const [applicantAuth, setApplicantAuth] = useState(() => readJson(STORAGE_KEYS.applicantAuth, defaultApplicantAuth))
   const [superAdminAuth, setSuperAdminAuth] = useState(() => readJson(STORAGE_KEYS.superAdminAuth, defaultSuperAdminAuth))
-  const [token, setToken] = useState('')
+  const [token, setToken] = useState(() => tokenService.getToken())
   const [user, setUser] = useState(() => readJson(STORAGE_KEYS.user, null))
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState('')
@@ -84,11 +96,26 @@ export function AppProvider({ children }) {
   const [applicantSavedJobs, setApplicantSavedJobs] = useState(() => readJson(STORAGE_KEYS.applicantSavedJobs, {})) // jobId -> true
   const [backendHealthy, setBackendHealthy] = useState(true) // Backend health status - default to true
   const [healthCheckAttempts, setHealthCheckAttempts] = useState(0)
+  const logoutRef = useRef(() => {})
+  const fetchInFlightRef = useRef(null)
+
+  const clearOtherSessions = (activeType) => {
+    if (activeType !== 'hr') {
+      setAuth(defaultAuth)
+      writeJson(STORAGE_KEYS.auth, defaultAuth)
+    }
+    if (activeType !== 'candidate') {
+      setApplicantAuth(defaultApplicantAuth)
+      writeJson(STORAGE_KEYS.applicantAuth, defaultApplicantAuth)
+    }
+    if (activeType !== 'super_admin') {
+      setSuperAdminAuth(defaultSuperAdminAuth)
+      writeJson(STORAGE_KEYS.superAdminAuth, defaultSuperAdminAuth)
+    }
+  }
 
   useEffect(() => {
-    // Wire global 401/403 -> logout handling
-    setUnauthorizedHandler(() => logout())
-    // When access token is refreshed automatically, update React state
+    setUnauthorizedHandler(() => logoutRef.current())
     setOnTokensRefreshed((newAccess) => { setToken(newAccess) })
     
     // Wait 2 seconds before first health check to allow backend startup
@@ -124,15 +151,8 @@ export function AppProvider({ children }) {
     // Note: keep tokenService empty or disabled when using HttpOnly cookies.
   }, [])
 
-  // Initialize token from tokenService so it survives reloads via persistence
   useEffect(() => {
-    const existing = tokenService.getToken()
-    if (existing) setToken(existing)
-  }, [])
-
-  useEffect(() => {
-    // Keep in-memory token in sync if any flows setToken elsewhere
-    tokenService.setToken(token)
+    if (token) tokenService.setToken(token)
   }, [token])
 
   useEffect(() => {
@@ -224,6 +244,7 @@ export function AppProvider({ children }) {
         body: { email, password },
       })
       if (data && data.token && data.user) {
+        clearOtherSessions('hr')
         setToken(data.token)
         tokenService.setToken(data.token)
         if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
@@ -316,41 +337,62 @@ export function AppProvider({ children }) {
   const fetchApplicantData = useCallback(async () => {
     const authToken = token || tokenService.getToken()
     if (!applicantAuth.isLoggedIn || !authToken) return
-    try {
-      const profileRes = await apiRequest('/api/candidate/profile', { method: 'GET', token: authToken }).catch(() => null)
-      if (profileRes && typeof profileRes === 'object' && !profileRes.error) {
-        const hasServerProfile =
-          (profileRes.fullName && profileRes.fullName.trim()) ||
-          (profileRes.email && profileRes.email.trim()) ||
-          (profileRes.resumeFileName && profileRes.resumeFileName.trim()) ||
-          (Array.isArray(profileRes.education) && profileRes.education.length > 0) ||
-          (Array.isArray(profileRes.experiences) && profileRes.experiences.length > 0) ||
-          (Array.isArray(profileRes.certifications) && profileRes.certifications.length > 0)
-        if (hasServerProfile) {
-          setApplicantProfile(profileRes)
-          writeJson(STORAGE_KEYS.applicantProfile, profileRes)
-        }
-      }
+    if (decodeJwtRole(authToken) !== 'candidate') return
 
-      const applications = await apiRequest('/api/applications', { method: 'GET', token: authToken }).catch(() => [])
-      const applicationsMap = {}
-      if (Array.isArray(applications)) {
-        applications.forEach(app => {
-          const jobId = app.jobId || (app.job && app.job.id) || app.job_id
-          if (jobId) {
-            const status = app.status || 'applied'
-            const shortlisted = !!app.shortlisted
-            const entry = { status, shortlisted }
-            applicationsMap[jobId] = entry
-            applicationsMap[String(jobId)] = entry
-          }
-        })
-      }
-      setApplicantApplications(applicationsMap)
-      writeJson(STORAGE_KEYS.applicantApplications, applicationsMap)
-    } catch (err) {
-      console.error('Fetch applicant data error:', err)
+    if (fetchInFlightRef.current) {
+      return fetchInFlightRef.current
     }
+
+    const promise = (async () => {
+      try {
+        const profileRes = await apiRequest('/api/candidate/profile', {
+          method: 'GET',
+          token: authToken,
+          skipAuthHandler: true,
+        }).catch(() => null)
+        if (profileRes && typeof profileRes === 'object' && !profileRes.error) {
+          const hasServerProfile =
+            (profileRes.fullName && profileRes.fullName.trim()) ||
+            (profileRes.email && profileRes.email.trim()) ||
+            (profileRes.resumeFileName && profileRes.resumeFileName.trim()) ||
+            (Array.isArray(profileRes.education) && profileRes.education.length > 0) ||
+            (Array.isArray(profileRes.experiences) && profileRes.experiences.length > 0) ||
+            (Array.isArray(profileRes.certifications) && profileRes.certifications.length > 0)
+          if (hasServerProfile) {
+            setApplicantProfile(profileRes)
+            writeJson(STORAGE_KEYS.applicantProfile, profileRes)
+          }
+        }
+
+        const applications = await apiRequest('/api/applications', {
+          method: 'GET',
+          token: authToken,
+          skipAuthHandler: true,
+        }).catch(() => [])
+        const applicationsMap = {}
+        if (Array.isArray(applications)) {
+          applications.forEach(app => {
+            const jobId = app.jobId || (app.job && app.job.id) || app.job_id
+            if (jobId) {
+              const status = app.status || 'applied'
+              const shortlisted = !!app.shortlisted
+              const entry = { status, shortlisted }
+              applicationsMap[jobId] = entry
+              applicationsMap[String(jobId)] = entry
+            }
+          })
+        }
+        setApplicantApplications(applicationsMap)
+        writeJson(STORAGE_KEYS.applicantApplications, applicationsMap)
+      } catch (err) {
+        console.error('Fetch applicant data error:', err)
+      } finally {
+        fetchInFlightRef.current = null
+      }
+    })()
+
+    fetchInFlightRef.current = promise
+    return promise
   }, [token, applicantAuth.isLoggedIn])
 
   const loginApplicant = async (idOrEmail, password) => {
@@ -362,6 +404,7 @@ export function AppProvider({ children }) {
         body: { email: idOrEmail, password },
       })
       if (data && data.token && data.user) {
+        clearOtherSessions('candidate')
         setToken(data.token)
         tokenService.setToken(data.token)
         if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
@@ -369,8 +412,7 @@ export function AppProvider({ children }) {
         const nextApplicantAuth = { isLoggedIn: true, email: data.user.email || idOrEmail }
         setApplicantAuth(nextApplicantAuth)
         writeJson(STORAGE_KEYS.applicantAuth, nextApplicantAuth)
-        
-        // Use profile from login response if full (has fullName or education); otherwise fetch full profile from API
+
         const loginProfile = data.user.profile
         const hasFullProfile = loginProfile && (
           (loginProfile.fullName || loginProfile.email) &&
@@ -385,30 +427,8 @@ export function AppProvider({ children }) {
             writeJson(STORAGE_KEYS.applicantProfile, nextProfile)
             return nextProfile
           })
-          // Fetch full profile from backend (includes saved resume) so data persists after server restart / login
-          try {
-            const fullProfile = await apiRequest('/api/candidate/profile', {
-              method: 'GET',
-              token: data.token
-            })
-            const hasAnyProfile =
-              (fullProfile && fullProfile.fullName && fullProfile.fullName.trim()) ||
-              (fullProfile && fullProfile.email && fullProfile.email.trim()) ||
-              (fullProfile && fullProfile.resumeFileName && fullProfile.resumeFileName.trim()) ||
-              (fullProfile && Array.isArray(fullProfile.education) && fullProfile.education.length > 0) ||
-              (fullProfile && Array.isArray(fullProfile.experiences) && fullProfile.experiences.length > 0)
-            if (hasAnyProfile) {
-              setApplicantProfile(fullProfile)
-              writeJson(STORAGE_KEYS.applicantProfile, fullProfile)
-            }
-          } catch (err) {
-            console.warn('Could not fetch profile after login:', err)
-          }
         }
 
-        // Fetch applications and saved jobs (and re-fetch profile so resume is never missed)
-        setTimeout(() => fetchApplicantData(), 100)
-        
         return { ok: true }
       }
       return { ok: false, message: 'Invalid response from server' }
@@ -520,11 +540,13 @@ export function AppProvider({ children }) {
       })
       // If verification successful and token provided, store auth
       if (data && data.token && data.user) {
+        clearOtherSessions('hr')
         setToken(data.token)
         tokenService.setToken(data.token)
         if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setUser(data.user)
-        const nextAuth = { isLoggedIn: true, role: 'HR', email: data.user.email || email }
+        const role = data.user.role || 'HR'
+        const nextAuth = { isLoggedIn: true, role, email: data.user.email || email }
         setAuth(nextAuth)
         writeJson(STORAGE_KEYS.auth, nextAuth)
       }
@@ -754,14 +776,7 @@ export function AppProvider({ children }) {
         body: { email, password },
       })
       if (data && data.token && data.user) {
-        // Super admin is exclusive: clear HR and applicant auth so only one session type is active.
-        // This prevents VM/local from showing HR dashboard when super admin is logged in (e.g. stale localStorage).
-        setAuth(defaultAuth)
-        setApplicantAuth(defaultApplicantAuth)
-        if (typeof window !== 'undefined') {
-          writeJson(STORAGE_KEYS.auth, defaultAuth)
-          writeJson(STORAGE_KEYS.applicantAuth, defaultApplicantAuth)
-        }
+        clearOtherSessions('super_admin')
         tokenService.setToken(data.token)
         if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setToken(data.token)
@@ -811,11 +826,37 @@ export function AppProvider({ children }) {
     }
   }
 
+  logoutRef.current = logout
+
+  useEffect(() => {
+    const storedToken = tokenService.getToken()
+    const role = decodeJwtRole(storedToken)
+
+    if (!storedToken) {
+      const hrAuth = readJson(STORAGE_KEYS.auth, defaultAuth)
+      const appAuth = readJson(STORAGE_KEYS.applicantAuth, defaultApplicantAuth)
+      const saAuth = readJson(STORAGE_KEYS.superAdminAuth, defaultSuperAdminAuth)
+      if (hrAuth.isLoggedIn || appAuth.isLoggedIn || saAuth.isLoggedIn) {
+        logoutRef.current()
+      }
+      return
+    }
+
+    if (role === 'candidate') {
+      clearOtherSessions('candidate')
+    } else if (role === 'HR' || role === 'head_hr') {
+      clearOtherSessions('hr')
+    } else if (role === 'super_admin') {
+      clearOtherSessions('super_admin')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const getToken = () => token
 
   // Fetch applications for a specific job (HR only)
   const fetchApplicationsForJob = async (jobId) => {
-    if (!auth.isLoggedIn || auth.role !== 'HR') {
+    if (!auth.isLoggedIn || (auth.role !== 'HR' && auth.role !== 'head_hr')) {
       return { ok: false, message: 'Unauthorized' }
     }
     try {
@@ -838,7 +879,7 @@ export function AppProvider({ children }) {
 
   // Fetch all applications grouped by job (HR only)
   const fetchAllApplications = async () => {
-    if (!auth.isLoggedIn || auth.role !== 'HR') {
+    if (!auth.isLoggedIn || (auth.role !== 'HR' && auth.role !== 'head_hr')) {
       return { ok: false, message: 'Unauthorized' }
     }
     try {
@@ -889,9 +930,10 @@ export function AppProvider({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.isLoggedIn, applicantAuth.isLoggedIn])
 
-  // Fetch applicant data when logged in
+  // Fetch applicant data when logged in as candidate with matching token role
   useEffect(() => {
-    if (applicantAuth.isLoggedIn && token) {
+    const authToken = token || tokenService.getToken()
+    if (applicantAuth.isLoggedIn && token && decodeJwtRole(authToken) === 'candidate') {
       fetchApplicantData()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -63,9 +63,29 @@ function joinUrl(base, path) {
   return `${base}${p}`;
 }
 
+function getErrorMessage(data, statusText) {
+  return (data && (data.error || data.message)) || statusText || 'Request failed';
+}
+
+function isRefreshableAuthError(status, message) {
+  if (status !== 401 && status !== 403) return false;
+  const msg = (message || '').toLowerCase();
+  if (msg.includes('access required')) return false;
+  return (
+    msg.includes('invalid or expired token') ||
+    msg.includes('refresh token expired') ||
+    msg.includes('invalid refresh token') ||
+    status === 401
+  );
+}
+
+function isRoleMismatchError(message) {
+  return (message || '').toLowerCase().includes('access required');
+}
+
 export async function apiRequest(
   path,
-  { method = 'GET', body, token, headers = {}, timeoutMs, skipRetry = false } = {}
+  { method = 'GET', body, token, headers = {}, timeoutMs, skipRetry = false, skipAuthHandler = false } = {}
 ) {
   if (import.meta.env?.PROD && BASE_URL && BASE_URL.startsWith('http://')) {
     // eslint-disable-next-line no-console
@@ -85,7 +105,7 @@ export async function apiRequest(
     }
     
     try {
-      const result = await performRequest(url, method, body, token, headers, timeoutMs);
+      const result = await performRequest(url, method, body, token, headers, timeoutMs, false, skipAuthHandler);
       
       // Success - log retry success if applicable
       if (attempt > 0 && import.meta.env?.DEV) {
@@ -164,7 +184,7 @@ async function tryRefresh() {
   }
 }
 
-async function performRequest(url, method, body, token, headers, timeoutMs, alreadyTriedRefresh = false) {
+async function performRequest(url, method, body, token, headers, timeoutMs, alreadyTriedRefresh = false, skipAuthHandler = false) {
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
 
   const finalHeaders = new Headers(headers);
@@ -221,19 +241,22 @@ async function performRequest(url, method, body, token, headers, timeoutMs, alre
   const data = isJson ? await res.json().catch(() => ({})) : await res.text();
 
   if (!res.ok) {
-    const authFailure = (res.status === 401 || res.status === 403);
-    // On 403 with token: try refresh once, then retry this request with new access token.
-    if (res.status === 403 && sentAuth && !alreadyTriedRefresh) {
+    const message = isJson ? getErrorMessage(data, res.statusText) : (res.statusText || 'Request failed');
+    const authFailure = res.status === 401 || res.status === 403;
+    const roleMismatch = authFailure && isRoleMismatchError(message);
+    const refreshable = authFailure && !roleMismatch && isRefreshableAuthError(res.status, message);
+
+    if (refreshable && sentAuth && !alreadyTriedRefresh) {
       const refreshed = await tryRefresh();
       if (refreshed) {
-        return performRequest(url, method, body, tokenService.getToken(), headers, timeoutMs, true);
+        return performRequest(url, method, body, tokenService.getToken(), headers, timeoutMs, true, skipAuthHandler);
       }
     }
-    // Only trigger global logout when we actually sent a token and got auth failure (or refresh failed).
-    if (authFailure && sentAuth && typeof onUnauthorized === 'function') {
+
+    if (authFailure && sentAuth && !skipAuthHandler && !roleMismatch && typeof onUnauthorized === 'function') {
       try { onUnauthorized(); } catch {}
     }
-    const message = (isJson && data && (data.error || data.message)) || res.statusText || 'Request failed';
+
     const error = new Error(message);
     error.status = res.status;
     error.data = data;

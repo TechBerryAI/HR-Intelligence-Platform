@@ -35,6 +35,27 @@ cd backend && source venv/bin/activate
 python ../scripts/database/test_db_connection.py
 ```
 
+## Resume parsing smoke test (Ollama)
+
+Baseline end-to-end test for Milestone 1 AI pipeline:
+
+```bash
+# Prerequisites
+ollama pull qwen2.5:7b-instruct
+ollama serve   # if not already running
+
+# Install backend + AI runtime deps
+cd backend && source venv/bin/activate
+pip install -r requirements.txt
+
+# Run integration smoke test (requires Ollama)
+pytest tests/test_resume_ollama_smoke.py -v -m integration
+
+# Full app manual test
+node start.js
+# Login as candidate → http://localhost:5173/profile/applicant → upload resume
+```
+
 ## Related documentation
 
 - [Development guide](../docs/DEVELOPMENT.md)

@@ -120,7 +120,7 @@ def get_jobs_public():
     """List jobs. If authenticated as HR, return only jobs posted by that HR. Otherwise return enabled jobs (public)."""
     try:
         user = getattr(request, 'user', None)
-        if user and user.get('role') == 'HR' and user.get('hrId'):
+        if user and user.get('role') in ('HR', 'head_hr') and user.get('hrId'):
             # Admin: only jobs posted by this HR
             jobs = db_all(
                 '''
@@ -220,7 +220,7 @@ def get_job(job_id: str):
         if not job:
             return jsonify({'error': 'Job not found'}), 404
         user = getattr(request, 'user', None)
-        if user and user.get('role') == 'HR':
+        if user and user.get('role') in ('HR', 'head_hr'):
             # HR may only view/edit jobs they posted
             if job.get('posted_by') != user.get('hrId'):
                 return jsonify({'error': 'Job not found or access denied'}), 404

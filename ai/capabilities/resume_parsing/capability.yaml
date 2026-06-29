@@ -15,8 +15,8 @@ capability:
   output_type: json
   dependencies: []
   schema:
-    id: resume_v1
-    file: schema.json
+    id: resume_milestone_v1
+    file: schema.milestone.json
   prompt:
     id: resume_parser_v1
     file: prompt.md

@@ -1,0 +1,36 @@
+# Production runtime — Ollama primary, Grok fallback.
+runtime:
+  settings:
+    default_timeout_seconds: 120
+    max_input_chars: 0
+
+  routing:
+    primary: ollama
+    fallback_chain:
+      - grok
+
+  providers:
+    ollama:
+      type: ollama
+      enabled: true
+      base_url: ${OLLAMA_HOST}
+      default_timeout_seconds: 120
+    grok:
+      type: grok
+      enabled: true
+      api_key: ${XAI_API_KEY}
+      model: ${XAI_MODEL}
+      base_url: ${XAI_BASE_URL}
+      default_timeout_seconds: 45
+
+  retry:
+    max_attempts: 3
+    backoff_seconds: 2
+    retry_on_status: [429, 500, 502, 503, 504]
+
+  validation:
+    fail_on_validation_error: false
+
+  capabilities_dir: ../../capabilities
+  tasks_config_path: tasks.default.yaml
+  models_config_path: models.default.yaml
