@@ -56,29 +56,29 @@ export default function Settings() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-8"
       >
-        <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-          <FiSettings className="w-7 h-7 text-purple-400" />
+        <h1 className="org-page-title flex items-center gap-3">
+          <FiSettings className="w-7 h-7 text-primary" />
           Settings
         </h1>
-        <p className="mt-1 text-zinc-400">Manage your account and security.</p>
+        <p className="org-page-subtitle">Manage your account and security.</p>
       </motion.div>
 
       <motion.section
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="glass-card rounded-2xl border border-white/10 overflow-hidden"
+        className="org-card overflow-hidden"
       >
-        <div className="px-6 py-4 border-b border-white/10 bg-white/5 flex items-center gap-3">
-          <FiShield className="w-5 h-5 text-purple-400" />
-          <h2 className="text-lg font-semibold text-white">Security</h2>
+        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-3">
+          <FiShield className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Security</h2>
         </div>
         <div className="p-6">
-          <h3 className="text-sm font-medium text-zinc-300 mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4 flex items-center gap-2">
             <FiLock className="w-4 h-4" />
             Change password
           </h3>
-          <p className="text-sm text-zinc-500 mb-4">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
             Enter your current password and choose a new one. The new password must meet all requirements below.
           </p>
           <ul className="mb-5 space-y-2">
@@ -87,11 +87,11 @@ export default function Settings() {
               return (
                 <li key={id} className="flex items-center gap-2 text-sm">
                   {pass ? (
-                    <FiCheck className="w-4 h-4 text-green-400 flex-shrink-0" aria-hidden />
+                    <FiCheck className="w-4 h-4 text-green-600 dark:text-green-400 flex-shrink-0" aria-hidden />
                   ) : (
-                    <FiX className="w-4 h-4 text-zinc-500 flex-shrink-0" aria-hidden />
+                    <FiX className="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden />
                   )}
-                  <span className={pass ? 'text-zinc-300' : 'text-zinc-500'}>{label}</span>
+                  <span className={pass ? 'text-slate-700 dark:text-slate-300' : 'text-slate-500'}>{label}</span>
                 </li>
               )
             })}
@@ -102,8 +102,8 @@ export default function Settings() {
               animate={{ opacity: 1, y: 0 }}
               className={`mb-5 flex items-center gap-3 px-4 py-3 rounded-xl text-sm ${
                 message.type === 'success'
-                  ? 'bg-green-500/10 border border-green-500/30 text-green-300'
-                  : 'bg-red-500/10 border border-red-500/30 text-red-300'
+                  ? 'bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-300'
+                  : 'bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300'
               }`}
             >
               {message.type === 'success' ? (

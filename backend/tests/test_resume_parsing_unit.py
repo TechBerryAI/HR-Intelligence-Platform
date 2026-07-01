@@ -11,7 +11,7 @@ BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from ai_runtime_adapter import _ensure_array, normalize_proposal, repair_resume_toon
+from ai_runtime_adapter import _ensure_array, canonicalize_resume_toon, normalize_proposal, repair_resume_toon
 from parsing_utils import collect_toon_validation_issues, validate_toon_format
 from resume_enrichment import ResumeEnrichmentContext, enrich_resume_toon
 from resume_inference import infer_resume_toon
@@ -124,7 +124,8 @@ def test_build_resume_toon_enriches_missing_email_for_candidate():
         "education": [{"degree": "BS", "institution": "State U", "year": "2020"}],
     }
     ctx = ResumeEnrichmentContext(email="trusted@example.com", name="Jane Doe")
-    toon = build_resume_toon(SAMPLE_RESUME_TEXT, llm_output, ctx)
+    # No raw text — enrichment must supply email when repair cannot infer it
+    toon = build_resume_toon("", llm_output, ctx)
     ok, err = validate_toon_format(toon, "resume")
     assert ok, err
     assert toon["person"]["email"] == "trusted@example.com"
@@ -285,3 +286,107 @@ def test_empty_resume_still_fails_after_full_pipeline():
     ok, err = validate_toon_format(toon, "resume")
     assert not ok
     assert err
+
+
+def test_build_resume_toon_regression_empty_skills_recovers_from_text():
+    """Production bug: skills must be non-empty when recoverable from raw text."""
+    llm_output = {
+        "type": "resume",
+        "person": {"name": "Jane", "email": "j@ex.com", "phone": ""},
+        "skills": [],
+        "experience": [{"title": "Dev", "company": "Acme", "from": "2020", "to": "2024"}],
+        "education": [{"degree": "BS", "institution": "U", "year": "2020"}],
+    }
+    raw_text = "**Technical Skills:**\n- Python\n- Docker"
+    toon = build_resume_toon(raw_text, llm_output)
+    ok, err = validate_toon_format(toon, "resume")
+    assert ok, err
+    assert "Python" in toon["skills"]
+    assert err != "skills must be a non-empty array"
+
+
+def test_repair_infers_email_from_raw_text():
+    llm_output = {
+        "type": "resume",
+        "person": {"name": "Jane", "email": "", "phone": ""},
+        "skills": ["Python"],
+        "experience": [],
+        "education": [{"degree": "BS", "institution": "U", "year": "2020"}],
+    }
+    raw_text = "Jane Doe\njane@example.com\nSkills: Python"
+    toon = build_resume_toon(raw_text, llm_output)
+    assert toon["person"]["email"] == "jane@example.com"
+
+
+def test_repair_merges_top_level_email_into_person():
+    llm_output = {
+        "type": "resume",
+        "person": {"name": "Jane"},
+        "email": "jane@example.com",
+        "skills": ["Python"],
+        "experience": [],
+        "education": [{"degree": "BS", "institution": "U", "year": "2020"}],
+    }
+    repaired, actions = repair_resume_toon(llm_output)
+    assert repaired["person"]["email"] == "jane@example.com"
+    assert "coalesced_top_level_email" in actions
+
+
+@pytest.mark.parametrize(
+    "skill_key,skill_value",
+    [
+        ("technologies", ["React", "Node"]),
+        ("tools", ["Docker", "Git"]),
+        ("frameworks", ["Django", "Flask"]),
+        ("expertise", "Python|SQL"),
+        ("tech_stack", ["Kubernetes", "AWS"]),
+    ],
+)
+def test_repair_merges_skill_aliases(skill_key, skill_value):
+    llm_output = {
+        "type": "resume",
+        "person": {"name": "Jane", "email": "j@ex.com", "phone": ""},
+        skill_key: skill_value,
+        "experience": [],
+        "education": [{"degree": "BS", "institution": "U", "year": "2020"}],
+    }
+    repaired, actions = repair_resume_toon(llm_output)
+    assert len(repaired["skills"]) > 0
+    assert f"coalesced_{skill_key}" in actions
+
+
+def test_build_resume_toon_preserves_object_identity():
+    llm_output = dict(SAMPLE_RESUME)
+    toon = build_resume_toon(SAMPLE_RESUME_TEXT, llm_output)
+    # build_resume_toon deep-copies input; identity stable from repair through return
+    repaired, _ = repair_resume_toon(dict(SAMPLE_RESUME))
+    carrier = dict(SAMPLE_RESUME)
+    start_id = id(carrier)
+    repair_resume_toon(carrier)
+    canonicalize_resume_toon(carrier)
+    assert id(carrier) == start_id
+
+
+def test_simple_fresher_resume_validates_with_text_inference():
+    llm_output = {
+        "type": "resume",
+        "person": {"name": "", "email": "", "phone": ""},
+        "skills": [],
+        "experience": [],
+        "education": [],
+    }
+    raw_text = """
+Alex Fresh
+alex@fresh.com
++1 555-9999
+
+Education
+B.S. Computer Science, State University, 2024
+
+Skills: Python, JavaScript, HTML
+"""
+    toon = build_resume_toon(raw_text, llm_output)
+    ok, err = validate_toon_format(toon, "resume")
+    assert ok, err
+    assert toon["person"]["email"] == "alex@fresh.com"
+    assert len(toon["skills"]) > 0

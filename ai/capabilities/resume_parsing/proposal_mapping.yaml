@@ -33,7 +33,19 @@ root:
     transform: trim_string_optional
   skills:
     canonical: skills
-    aliases: [technical_skills, core_competencies, competencies, skill_set]
+    aliases:
+      - technical_skills
+      - core_skills
+      - core_competencies
+      - key_skills
+      - competencies
+      - skill_set
+      - tools
+      - technologies
+      - frameworks
+      - programming_languages
+      - expertise
+      - tech_stack
     transform: skill_array
     required: true
   experience:

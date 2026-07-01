@@ -176,24 +176,90 @@ def _first_nonempty(source: dict[str, Any], *keys: str) -> Any:
     return None
 
 
+def _apply_resume_text_recovery(repaired: dict[str, Any], raw_resume_text: str | None, actions: list[str]) -> None:
+    """Fill empty canonical fields from raw resume text (mirrors JD repair pattern)."""
+    if not raw_resume_text:
+        return
+
+    from resume_text_inference import infer_resume_fields_from_text
+
+    inferred = infer_resume_fields_from_text(raw_resume_text)
+
+    skills = repaired.get("skills")
+    if not isinstance(skills, list) or len(skills) == 0:
+        new_skills = inferred.get("skills") or []
+        if new_skills:
+            repaired["skills"] = new_skills
+            actions.append("inferred_skills_from_text")
+
+    if not (repaired.get("summary") or "").strip():
+        summary = inferred.get("summary") or ""
+        if summary:
+            repaired["summary"] = summary
+            actions.append("inferred_summary_from_text")
+
+    person = repaired.get("person")
+    if not isinstance(person, dict):
+        person = {}
+        repaired["person"] = person
+
+    inferred_person = inferred.get("person") or {}
+    if not (person.get("email") or "").strip():
+        email = inferred_person.get("email") or ""
+        if email:
+            person["email"] = email
+            actions.append("inferred_email_from_text")
+
+    if not (person.get("phone") or "").strip():
+        phone = inferred_person.get("phone") or ""
+        if phone:
+            person["phone"] = phone
+            actions.append("inferred_phone_from_text")
+
+    # Name from first line of resume when missing
+    if not (person.get("name") or "").strip():
+        first_line = ""
+        for line in raw_resume_text.split("\n"):
+            stripped = line.strip()
+            if stripped and not stripped.startswith(("#", "*", "-", "•")):
+                if "@" not in stripped and not re.match(r"^\+?\d[\d\s\-().]{7,}$", stripped):
+                    first_line = stripped
+                    break
+        if first_line and 2 <= len(first_line) <= 80:
+            person["name"] = first_line
+            actions.append("inferred_name_from_text")
+
+    experience = repaired.get("experience")
+    if not isinstance(experience, list) or len(experience) == 0:
+        new_exp = inferred.get("experience") or []
+        if new_exp:
+            repaired["experience"] = new_exp
+            actions.append("inferred_experience_from_text")
+
+
 def _repair_resume_structure(data: dict[str, Any], raw_resume_text: str | None = None) -> tuple[dict[str, Any], list[str]]:
-    """Normalize common LLM shape drift into milestone resume schema. Returns (repaired, actions)."""
+    """Normalize common LLM shape drift into milestone resume schema. Mutates data in place."""
+    from toon_alias_registry import (
+        coalesce_root_field,
+        coalesce_skill_sources,
+        merge_top_level_person_fields,
+    )
+
     actions: list[str] = []
-    source = dict(data) if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        data = {}
 
-    person_raw = source.get("person") or source.get("candidate")
+    source = dict(data)
+
+    person_raw, person_actions = coalesce_root_field(source, "person")
     if not isinstance(person_raw, dict):
-        person_raw = {
-            "name": source.get("name", ""),
-            "email": source.get("email", ""),
-            "phone": source.get("phone", ""),
-            "location": source.get("location", ""),
-        }
-        if any(person_raw.values()):
-            actions.append("coalesced_top_level_person_fields")
+        person_raw = {}
+    person, top_actions = merge_top_level_person_fields(source, person_raw)
+    actions.extend(person_actions)
+    actions.extend(top_actions)
 
-    person = dict(person_raw) if isinstance(person_raw, dict) else {}
-    links_raw = source.get("links")
+    links_raw, links_actions = coalesce_root_field(source, "links")
+    actions.extend(links_actions)
     if isinstance(links_raw, dict):
         link_map = {
             "linkedin": ("linkedin", "linkedIn"),
@@ -215,7 +281,10 @@ def _repair_resume_structure(data: dict[str, Any], raw_resume_text: str | None =
             person["otherUrls"] = _ensure_array(other_urls)
             actions.append("coalesced_links_otherUrls")
 
-    languages = _first_nonempty(source, "languages") or []
+    languages, lang_actions = coalesce_root_field(source, "languages")
+    actions.extend(lang_actions)
+    if languages is None:
+        languages = []
     if isinstance(languages, dict):
         languages = [
             {"language": key, "proficiency": value}
@@ -230,41 +299,38 @@ def _repair_resume_structure(data: dict[str, Any], raw_resume_text: str | None =
         ]
         actions.append("coerced_languages_dict")
 
-    experience_raw = _first_nonempty(
-        source, "experience", "experiences", "work_experience", "employment",
+    experience_raw, exp_actions = coalesce_root_field(source, "experience")
+    actions.extend(exp_actions)
+
+    education_raw, edu_actions = coalesce_root_field(source, "education")
+    actions.extend(edu_actions)
+
+    projects_raw, proj_actions = coalesce_root_field(source, "projects")
+    actions.extend(proj_actions)
+
+    certs_raw, cert_actions = coalesce_root_field(source, "certifications")
+    actions.extend(cert_actions)
+
+    summary_raw, sum_actions = coalesce_root_field(source, "summary")
+    actions.extend(sum_actions)
+
+    skills, skill_actions = coalesce_skill_sources(
+        source,
+        normalize_skills=_normalize_skills,
+        dedupe_skills=_dedupe_skills_preserve_case,
     )
-    if experience_raw is not None and experience_raw != source.get("experience"):
-        actions.append("coalesced_experiences_alias")
-
-    education_raw = _first_nonempty(source, "education", "educations", "academic_background")
-    if education_raw is not None and education_raw != source.get("education"):
-        actions.append("coalesced_education_alias")
-
-    projects_raw = _first_nonempty(source, "projects", "personal_projects")
-    if projects_raw is not None and projects_raw != source.get("projects"):
-        actions.append("coalesced_projects_alias")
-
-    certs_raw = _first_nonempty(source, "certifications", "certificates", "licenses")
-    if certs_raw is not None and certs_raw != source.get("certifications"):
-        actions.append("coalesced_certifications_alias")
-
-    summary_raw = _first_nonempty(source, "summary", "objective", "profile_summary")
-    if summary_raw is not None and summary_raw != source.get("summary"):
-        actions.append("coalesced_summary_alias")
-
-    skills, skill_actions = _collect_skills_from_source(source)
     actions.extend(skill_actions)
 
     repaired = {
         "type": "resume",
         "person": person,
         "skills": skills,
-        "experience": _normalize_experience(experience_raw or []),
-        "education": _normalize_education(education_raw or []),
-        "projects": _ensure_array(projects_raw or []),
-        "certifications": _normalize_certifications(certs_raw or []),
+        "experience": experience_raw or [],
+        "education": education_raw or [],
+        "projects": projects_raw or [],
+        "certifications": certs_raw or [],
         "languages": languages if isinstance(languages, list) else _ensure_array(languages),
-        "summary": _str(summary_raw) if isinstance(summary_raw, str) else summary_raw,
+        "summary": _str(summary_raw) if isinstance(summary_raw, str) else (summary_raw or ""),
         "total_experience_years": source.get("total_experience_years"),
     }
 
@@ -278,8 +344,11 @@ def _repair_resume_structure(data: dict[str, Any], raw_resume_text: str | None =
             )
 
     _apply_resume_text_fields(repaired["person"], raw_resume_text, actions)
-    repaired["type"] = "resume"
-    return repaired, actions
+    _apply_resume_text_recovery(repaired, raw_resume_text, actions)
+
+    data.clear()
+    data.update(repaired)
+    return data, actions
 
 
 def repair_resume_toon(data: dict[str, Any], raw_resume_text: str | None = None) -> tuple[dict[str, Any], list[str]]:
@@ -508,18 +577,6 @@ def _normalize_skills(skills: Any) -> list:
     return normalized
 
 
-_SKILL_SOURCE_KEYS = (
-    "skills",
-    "technical_skills",
-    "core_skills",
-    "key_skills",
-    "tools",
-    "technologies",
-    "frameworks",
-    "programming_languages",
-)
-
-
 def _dedupe_skills_preserve_case(skills: list[str]) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
@@ -531,40 +588,6 @@ def _dedupe_skills_preserve_case(skills: list[str]) -> list[str]:
             seen.add(key)
             result.append(str(skill).strip())
     return result
-
-
-def _collect_skills_from_source(source: dict[str, Any]) -> tuple[list[str], list[str]]:
-    """Merge skills from common LLM keys and nested groups; dedupe case-insensitively."""
-    actions: list[str] = []
-    merged: list[str] = []
-
-    def extend_skills(raw: Any, action: str | None = None) -> None:
-        nonlocal merged
-        before = len(merged)
-        merged.extend(_normalize_skills(raw))
-        if action and len(merged) > before:
-            actions.append(action)
-
-    for key in _SKILL_SOURCE_KEYS:
-        raw = source.get(key)
-        if raw is None:
-            continue
-        if key == "skills" and isinstance(raw, dict):
-            for sub_val in raw.values():
-                extend_skills(sub_val, "flattened_nested_skills")
-            continue
-        action = None if key == "skills" else f"coalesced_{key}"
-        extend_skills(raw, action)
-
-    skill_groups = source.get("skill_groups")
-    if isinstance(skill_groups, dict):
-        for group_val in skill_groups.values():
-            extend_skills(group_val, "flattened_skill_groups")
-
-    if isinstance(source.get("skills"), str) and merged:
-        actions.append("coerced_skills_string")
-
-    return _dedupe_skills_preserve_case(merged), actions
 
 
 def _normalize_certifications(certs: Any) -> list:
@@ -633,23 +656,40 @@ def _normalize_person(person: Any) -> dict[str, Any]:
     }
 
 
+def canonicalize_resume_toon(toon: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Single canonicalization pass: coerce types, trim whitespace, ensure required keys. Mutates in place."""
+    actions: list[str] = []
+    if not isinstance(toon, dict):
+        return toon, actions
+
+    toon["type"] = "resume"
+    toon["person"] = _normalize_person(toon.get("person"))
+    toon["skills"] = _dedupe_skills_preserve_case(_normalize_skills(toon.get("skills")))
+    toon["experience"] = _normalize_experience(toon.get("experience"))
+    toon["education"] = _normalize_education(toon.get("education"))
+    toon["projects"] = _ensure_array(toon.get("projects"))
+    toon["certifications"] = _normalize_certifications(toon.get("certifications"))
+    toon["languages"] = _ensure_array(toon.get("languages"))
+    summary = _str(toon.get("summary"))
+    toon["summary"] = summary or None
+    if "total_experience_years" not in toon:
+        toon["total_experience_years"] = None
+
+    for key in ("person", "skills", "experience", "education"):
+        if key not in toon:
+            toon[key] = {} if key == "person" else []
+            actions.append(f"ensured_{key}")
+
+    return toon, actions
+
+
 def normalize_proposal(structured: dict[str, Any], doc_type: Literal["resume", "jd"]) -> dict[str, Any]:
     """Map runtime structured JSON to legacy TOON shape expected by backend validation."""
     if doc_type == "resume":
-        toon_type = "resume"
-        person = _normalize_person(structured.get("person") or structured.get("candidate"))
-        return {
-            "type": toon_type,
-            "person": person,
-            "skills": _normalize_skills(structured.get("skills")),
-            "experience": _normalize_experience(structured.get("experience")),
-            "education": _normalize_education(structured.get("education")),
-            "projects": _ensure_array(structured.get("projects")),
-            "certifications": _normalize_certifications(structured.get("certifications")),
-            "languages": _ensure_array(structured.get("languages")),
-            "summary": _str(structured.get("summary")) or None,
-            "total_experience_years": structured.get("total_experience_years"),
-        }
+        import copy
+        toon = copy.deepcopy(structured) if isinstance(structured, dict) else {}
+        canonicalize_resume_toon(toon)
+        return toon
 
     # JD parsing — preserve ATS-critical fields
     mandatory = _normalize_skills(structured.get("mandatory_skills") or structured.get("required_skills"))

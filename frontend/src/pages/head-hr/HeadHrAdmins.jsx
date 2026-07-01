@@ -126,8 +126,8 @@ export default function HeadHrAdmins() {
         <div
           className={`fixed top-20 right-5 z-50 flex items-center gap-2 px-4 py-3 rounded-lg shadow-xl text-sm font-medium transition-all ${
             toast.type === 'error'
-              ? 'bg-red-500/20 border border-red-500/30 text-red-300'
-              : 'bg-green-500/20 border border-green-500/30 text-green-300'
+              ? 'bg-red-50 dark:bg-red-500/20 border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300'
+              : 'bg-green-50 dark:bg-green-500/20 border border-green-200 dark:border-green-500/30 text-green-700 dark:text-green-300'
           }`}
         >
           {toast.msg}
@@ -237,16 +237,16 @@ export default function HeadHrAdmins() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <FiUsers className="w-5 h-5 text-zinc-300" /> HR Admins
+          <h1 className="org-page-title flex items-center gap-2">
+            <FiUsers className="org-page-icon" /> HR Admins
           </h1>
-          <p className="mt-0.5 text-sm text-zinc-400">{admins.length} admin{admins.length !== 1 ? 's' : ''} registered</p>
+          <p className="org-page-subtitle">{admins.length} admin{admins.length !== 1 ? 's' : ''} registered</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           {canManageAdmins && (
             <button
               onClick={() => setShowCreate(true)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 transition-colors border border-emerald-500/30"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 transition-colors border border-emerald-500/30 shadow-sm"
             >
               <FiPlus className="w-4 h-4" /> Create Admin
             </button>
@@ -254,7 +254,7 @@ export default function HeadHrAdmins() {
           <button
             onClick={() => runRefresh(load)}
             disabled={refreshLoading}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition-colors border border-zinc-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="org-btn-secondary"
           >
             {refreshLoading ? <Spinner /> : <FiRefreshCw className="w-4 h-4" />}
             {refreshLoading ? 'Refreshing…' : 'Refresh'}
@@ -272,67 +272,67 @@ export default function HeadHrAdmins() {
 
       {/* Search */}
       <div className="relative mb-5">
-        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           type="text"
           placeholder="Search by name, email, company or ID…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-white/40 transition-colors"
+          className="org-search-input"
         />
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">{error}</div>
+        <div className="org-error-banner">{error}</div>
       )}
 
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-16 rounded-xl bg-zinc-900/60 border border-zinc-800 animate-pulse" />
+            <div key={i} className="org-skeleton" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-zinc-500 text-sm">
+        <div className="org-empty-state">
           {search ? 'No admins match your search.' : 'No admins found.'}
         </div>
       ) : (
-        <div className="rounded-2xl border border-zinc-800 overflow-hidden">
+        <div className="org-table-wrap">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 bg-zinc-900/80">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                <tr className="org-table-head">
+                  <th className="org-th">
                     <button
                       type="button"
                       onClick={() => setIdOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
-                      className="flex items-center gap-1.5 hover:text-white transition-colors"
+                      className="flex items-center gap-1.5 hover:text-slate-900 dark:hover:text-white transition-colors"
                       title={idOrder === 'asc' ? 'Click for descending' : 'Click for ascending'}
                     >
                       ID
                       {idOrder === 'asc' ? <FiArrowUp className="w-3.5 h-3.5" /> : <FiArrowDown className="w-3.5 h-3.5" />}
                     </button>
                   </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Name</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Email</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Company</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Joined</th>
-                  {canManageAdmins && <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Actions</th>}
+                  <th className="org-th">Name</th>
+                  <th className="org-th">Email</th>
+                  <th className="org-th">Company</th>
+                  <th className="org-th">Joined</th>
+                  {canManageAdmins && <th className="org-th text-right">Actions</th>}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                 {sortedAdmins.map((admin) => (
-                  <tr key={admin.hrid} className="bg-zinc-900/30 hover:bg-zinc-800/40 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs text-amber-400">{admin.hrid}</td>
-                    <td className="px-4 py-3 text-zinc-100 font-medium">{admin.full_name || '—'}</td>
-                    <td className="px-4 py-3 text-zinc-400">{admin.email}</td>
-                    <td className="px-4 py-3 text-zinc-400">{admin.company || '—'}</td>
-                    <td className="px-4 py-3 text-zinc-500">{formatDate(admin.created_at)}</td>
+                  <tr key={admin.hrid} className="org-table-row">
+                    <td className="px-4 py-3 font-mono text-xs text-amber-600 dark:text-amber-400">{admin.hrid}</td>
+                    <td className="org-td-primary">{admin.full_name || '—'}</td>
+                    <td className="org-td-secondary">{admin.email}</td>
+                    <td className="org-td-secondary">{admin.company || '—'}</td>
+                    <td className="org-td-muted">{formatDate(admin.created_at)}</td>
                     {canManageAdmins && (
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => setConfirmDelete(admin)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 transition-all"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 border border-red-200 dark:border-red-500/30 hover:border-red-300 dark:hover:border-red-500/50 transition-all"
                         >
                           <FiTrash2 className="w-3.5 h-3.5" /> Delete
                         </button>

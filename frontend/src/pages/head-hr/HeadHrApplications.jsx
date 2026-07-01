@@ -21,15 +21,15 @@ function formatDate(ts) {
 
 function StatusBadge({ status }) {
   const map = {
-    pending: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/20',
-    shortlisted: 'bg-green-500/15 text-green-400 border-green-500/20',
-    rejected: 'bg-red-500/15 text-red-400 border-red-500/20',
-    reviewed: 'bg-blue-500/15 text-blue-400 border-blue-500/20',
+    pending: 'bg-yellow-50 dark:bg-yellow-500/15 text-yellow-700 dark:text-yellow-400 border-yellow-200 dark:border-yellow-500/20',
+    shortlisted: 'bg-green-50 dark:bg-green-500/15 text-green-700 dark:text-green-400 border-green-200 dark:border-green-500/20',
+    rejected: 'bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-400 border-red-200 dark:border-red-500/20',
+    reviewed: 'bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20',
   }
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${
-        map[status] || 'bg-zinc-700/50 text-zinc-400 border-zinc-700'
+        map[status] || 'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700'
       }`}
     >
       {status || 'pending'}
@@ -84,10 +84,10 @@ export default function HeadHrApplications() {
     <PanelShell>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <FiFileText className="w-5 h-5 text-zinc-300" /> All Applications
+          <h1 className="org-page-title flex items-center gap-2">
+            <FiFileText className="org-page-icon" /> All Applications
           </h1>
-          <p className="mt-0.5 text-sm text-zinc-400">
+          <p className="org-page-subtitle">
             {applications.length} total &bull; {shortlistedCount} shortlisted &bull; {pendingCount} pending
           </p>
         </div>
@@ -95,7 +95,7 @@ export default function HeadHrApplications() {
           <button
             onClick={() => runRefresh(load)}
             disabled={refreshLoading}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition-colors border border-zinc-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="org-btn-secondary"
           >
             {refreshLoading ? <Spinner /> : <FiRefreshCw className="w-4 h-4" />}
             {refreshLoading ? 'Refreshing…' : 'Refresh'}
@@ -120,7 +120,7 @@ export default function HeadHrApplications() {
       </div>
 
       {reportError && (
-        <div className="mb-4 px-4 py-2 rounded-lg bg-red-500/15 text-red-400 border border-red-500/30 text-sm">
+        <div className="org-error-banner mb-4">
           {reportError}
         </div>
       )}
@@ -128,19 +128,19 @@ export default function HeadHrApplications() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <div className="relative flex-1">
-          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
             placeholder="Search by candidate, job or admin…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-rose-500/50 transition-colors"
+            className="org-search-input"
           />
         </div>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-3 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-sm text-zinc-300 focus:outline-none focus:border-rose-500/50 transition-colors"
+          className="org-select-input"
         >
           <option value="all">All Statuses</option>
           <option value="pending">Pending</option>
@@ -151,35 +151,35 @@ export default function HeadHrApplications() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">{error}</div>
+        <div className="org-error-banner">{error}</div>
       )}
 
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-16 rounded-xl bg-zinc-900/60 border border-zinc-800 animate-pulse" />
+            <div key={i} className="org-skeleton" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-zinc-500 text-sm">
+        <div className="org-empty-state">
           {search || statusFilter !== 'all' ? 'No applications match your filters.' : 'No applications found.'}
         </div>
       ) : (
-        <div className="rounded-2xl border border-zinc-800 overflow-hidden">
+        <div className="org-table-wrap">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 bg-zinc-900/80">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">#</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Candidate</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Job</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">HR Admin</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Match</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Status</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Applied</th>
+                <tr className="org-table-head">
+                  <th className="org-th">#</th>
+                  <th className="org-th">Candidate</th>
+                  <th className="org-th">Job</th>
+                  <th className="org-th">HR Admin</th>
+                  <th className="org-th">Match</th>
+                  <th className="org-th">Status</th>
+                  <th className="org-th">Applied</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                 {filtered.map((app) => (
                   <tr
                     key={app.id}
@@ -187,39 +187,39 @@ export default function HeadHrApplications() {
                     tabIndex={0}
                     onClick={() => navigate(`${basePath}/applications/${app.id}`)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`${basePath}/applications/${app.id}`) } }}
-                    className="bg-zinc-900/30 hover:bg-zinc-800/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-rose-500/50"
+                    className="org-table-row-clickable"
                   >
-                    <td className="px-4 py-3 text-zinc-600 text-xs font-mono">#{app.id}</td>
+                    <td className="px-4 py-3 text-slate-500 text-xs font-mono">#{app.id}</td>
                     <td className="px-4 py-3">
-                      <p className="text-zinc-100 font-medium">{app.candidate_name || '—'}</p>
-                      <p className="text-zinc-500 text-xs">{app.candidate_email}</p>
+                      <p className="text-slate-900 dark:text-slate-100 font-medium">{app.candidate_name || '—'}</p>
+                      <p className="text-slate-500 text-xs">{app.candidate_email}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <p className="text-zinc-300 font-medium max-w-[160px] truncate">{app.job_title || '—'}</p>
-                      <p className="text-zinc-500 text-xs">{app.job_company}</p>
+                      <p className="text-slate-800 dark:text-slate-200 font-medium max-w-[160px] truncate">{app.job_title || '—'}</p>
+                      <p className="text-slate-500 text-xs">{app.job_company}</p>
                     </td>
-                    <td className="px-4 py-3 text-zinc-400 text-xs">{app.hr_name || '—'}</td>
+                    <td className="org-td-secondary text-xs">{app.hr_name || '—'}</td>
                     <td className="px-4 py-3">
                       {app.match_score != null ? (
                         <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 rounded-full bg-zinc-700 overflow-hidden">
+                          <div className="w-16 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
                             <div
                               className="h-full rounded-full bg-gradient-to-r from-amber-500 to-green-500"
                               style={{ width: `${Math.min(100, app.match_score)}%` }}
                             />
                           </div>
-                          <span className="text-xs text-zinc-400 tabular-nums">
+                          <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
                             {Math.round(app.match_score)}%
                           </span>
                         </div>
                       ) : (
-                        <span className="text-zinc-600 text-xs">—</span>
+                        <span className="text-slate-400 text-xs">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={app.shortlisted ? 'shortlisted' : app.status} />
                     </td>
-                    <td className="px-4 py-3 text-zinc-500">{formatDate(app.applied_at)}</td>
+                    <td className="org-td-muted">{formatDate(app.applied_at)}</td>
                   </tr>
                 ))}
               </tbody>

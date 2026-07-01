@@ -64,7 +64,7 @@ export default function HeadHrJobCandidateDetail() {
       <PanelShell>
         <div className="space-y-2 max-w-4xl mx-auto">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-16 rounded-xl bg-zinc-900/60 border border-zinc-800 animate-pulse" />
+            <div key={i} className="org-skeleton" />
           ))}
         </div>
       </PanelShell>
@@ -75,7 +75,7 @@ export default function HeadHrJobCandidateDetail() {
     return (
       <PanelShell>
         <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">{error || 'Not found'}</div>
-        <button type="button" onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(jdid)}`)} className="mt-4 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white">
+        <button type="button" onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(jdid)}`)} className="org-back-link !mb-0">
           <FiArrowLeft className="w-4 h-4" /> Back to job
         </button>
       </PanelShell>
@@ -88,7 +88,7 @@ export default function HeadHrJobCandidateDetail() {
         <button
           type="button"
           onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(jdid)}`)}
-          className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white mb-4 transition-colors"
+          className="org-back-link !mb-4"
         >
           <FiArrowLeft className="w-4 h-4" /> Back to {jobTitle}
         </button>
@@ -105,7 +105,7 @@ export default function HeadHrJobCandidateDetail() {
               className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                 tab === id
                   ? 'border-purple-500 text-white'
-                  : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-300'
               }`}
             >
               {label}

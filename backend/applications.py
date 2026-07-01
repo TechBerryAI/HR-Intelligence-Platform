@@ -1,13 +1,19 @@
 import os
 import re
-import threading
+import traceback
 import requests
 from flask import Blueprint, request, jsonify
-from db import db_get, db_run, db_all, BACKEND, TRUE_SQL
+from db import db_get, db_run, db_all, BACKEND, TRUE_SQL, get_conn, _pg_query
 from utils import authenticate_token, require_candidate
 from rbac import get_user_id
 from services.ats_service import match_candidate_to_job
 from toon import toon_loads_flex, toon_dumps
+from application_status import (
+    STATUS_APPLIED,
+    STATUS_SHORTLISTED,
+    STATUS_REJECTED,
+    normalize_status,
+)
 from jd_text_inference import (
     extract_experience_years,
     extract_qualifications_from_text,
@@ -18,50 +24,129 @@ from jd_text_inference import (
 applications_bp = Blueprint('applications', __name__)
 
 
-def _run_ats_and_update_application(candidate_id: str, job_id: str, parsed_resume: dict, parsed_jd: dict, app_id: str):
-    """Run ATS matching in background and update the application row. Does not block apply response."""
-    try:
-        ats_success, ats_result = match_candidate_to_job(
-            candidate_id, job_id, parsed_resume, parsed_jd, apply_id=app_id
-        )
-        if ats_success and ats_result:
-            json_out = ats_result.get('json_output') or {}
-            final_score = json_out.get('overall_match_score') or json_out.get('final_score')
-            decision = (json_out.get('decision') or '').lower()
-            rationale = json_out.get('final_reasoning') or json_out.get('rationale') or (ats_result.get('toon_output', '') or '')[:2000]
-            ats_analysis_toon = toon_dumps(ats_result) if isinstance(ats_result, dict) else None
-            _shortlisted = decision in ('shortlist', 'strong_match', 'partial_match')
-            shortlisted_val = _shortlisted if BACKEND == 'postgresql' else (1 if _shortlisted else 0)
-            status_after = 'shortlisted' if _shortlisted else 'applied'
-            db_run(
-                """
-                UPDATE applications SET match_score = ?, matching_percentage = ?, shortlisted = ?, ats_reasoning = ?, ats_analysis = ?, status = ?
-                WHERE candidate_id = ? AND job_id = ?
-                """,
-                (final_score, final_score, shortlisted_val, rationale, ats_analysis_toon, status_after, candidate_id, job_id)
+def _apply_debug(stage: str, **fields):
+    """Structured debug logging for POST /api/applications only."""
+    parts = [f"[APPLY][{stage}]"]
+    for key, value in fields.items():
+        parts.append(f"{key}={value}")
+    print(" ".join(parts))
+
+
+def _apply_log_exception(exc: Exception):
+    tb = traceback.extract_tb(exc.__traceback__)
+    location = f"{tb[-1].filename}:{tb[-1].lineno}" if tb else "unknown"
+    print(
+        f"[APPLY][EXCEPTION] type={type(exc).__name__} message={exc} file={location}"
+    )
+    traceback.print_exc()
+
+
+def _shortlisted_from_decision(decision: str) -> bool:
+    return (decision or '').lower() in ('shortlist', 'strong_match', 'partial_match')
+
+
+def _extract_ats_result(ats_result: dict) -> tuple:
+    """Return (final_score, shortlisted, rationale, ats_analysis_toon, status)."""
+    json_out = ats_result.get('json_output') or {}
+    final_score = json_out.get('overall_match_score') or json_out.get('final_score')
+    decision = (json_out.get('decision') or '').lower()
+    rationale = (
+        json_out.get('final_reasoning')
+        or json_out.get('rationale')
+        or (ats_result.get('toon_output', '') or '')[:2000]
+    )
+    ats_analysis_toon = toon_dumps(ats_result) if isinstance(ats_result, dict) else None
+    shortlisted = _shortlisted_from_decision(decision)
+    status = STATUS_SHORTLISTED if shortlisted else STATUS_APPLIED
+    return final_score, shortlisted, rationale, ats_analysis_toon, status
+
+
+def _persist_application_atomic(
+    candidate_id: str,
+    job_id: str,
+    parsed_resume_id,
+    parsed_jd_id,
+    status: str,
+    match_score,
+    shortlisted: bool,
+    ats_reasoning,
+    ats_analysis_toon,
+):
+    """
+    Atomically create match row + application row in a single transaction.
+    Rolls back entirely if either insert fails.
+    """
+    shortlisted_val = shortlisted if BACKEND == 'postgresql' else (1 if shortlisted else 0)
+    matching_pct = match_score if match_score is not None else 0
+
+    with get_conn() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                _pg_query(
+                    """
+                    UPDATE matches
+                    SET is_latest = false
+                    WHERE candidate_id = ? AND job_id = ? AND is_latest = true
+                    """
+                ),
+                (candidate_id, job_id),
             )
-        else:
-            err = ats_result.get('error', 'Unknown ATS error') if isinstance(ats_result, dict) else str(ats_result)
-            print(f"[APPLY] ATS background run failed (non-blocking): {err}")
-            db_run(
-                """
-                UPDATE applications SET status = ?, ats_reasoning = ?, match_score = NULL, matching_percentage = NULL
-                WHERE candidate_id = ? AND job_id = ?
-                """,
-                ('ats_failed', f'[ATS_FAILED] {err}', candidate_id, job_id)
+
+            cursor.execute(
+                _pg_query(
+                    """
+                    INSERT INTO matches (
+                        candidate_id, job_id, parsed_resume_id, parsed_jd_id,
+                        match_score, matching_percentage, match_type,
+                        rationale, analysis_toon, is_latest, created_by
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, 'ats', ?, ?, true, ?)
+                    RETURNING id
+                    """
+                ),
+                (
+                    candidate_id,
+                    job_id,
+                    parsed_resume_id,
+                    parsed_jd_id,
+                    match_score,
+                    matching_pct,
+                    ats_reasoning,
+                    ats_analysis_toon,
+                    candidate_id,
+                ),
             )
-    except Exception as e:
-        print(f"[APPLY] ATS background error: {e}")
-        try:
-            db_run(
-                """
-                UPDATE applications SET status = ?, ats_reasoning = ?, match_score = NULL, matching_percentage = NULL
-                WHERE candidate_id = ? AND job_id = ?
-                """,
-                ('ats_failed', f'[ATS_FAILED] {e}', candidate_id, job_id)
+            match_row = cursor.fetchone()
+            match_id = match_row[0] if match_row else None
+
+            cursor.execute(
+                _pg_query(
+                    """
+                    INSERT INTO applications (
+                        candidate_id, job_id, status, matching_percentage, match_score,
+                        shortlisted, ats_reasoning, ats_analysis, latest_match_id, created_by
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    RETURNING id
+                    """
+                ),
+                (
+                    candidate_id,
+                    job_id,
+                    status,
+                    matching_pct,
+                    match_score,
+                    shortlisted_val,
+                    ats_reasoning,
+                    ats_analysis_toon,
+                    match_id,
+                    candidate_id,
+                ),
             )
-        except Exception as db_err:
-            print(f"[APPLY] Failed to record ATS failure: {db_err}")
+            app_row = cursor.fetchone()
+            app_id = int(app_row[0]) if app_row else None
+
+    return app_id, match_id
 
 
 def _jd_toon_from_job_row(job):
@@ -161,147 +246,212 @@ def trigger_n8n(candidate_id, job_id, parsed_resume, parsed_jd):
 @require_candidate
 def apply_job():
     """
-    Apply to a job using ATS workflow
-    
-    NEW WORKFLOW:
-    1. Validates job and candidate profile
-    2. Fetches STORED parsed_resume and parsed_jd (NO re-parsing)
-    3. Creates application with status='applied'
-    4. Triggers n8n webhook with parsed data
-    5. n8n will analyze and send results back to /api/ats/result
+    Apply to a job: validate artifacts, run ATS matching, then atomically persist
+    application + match rows.
     """
+    candidate_id = None
+    job_id = None
     try:
+        _apply_debug('start', method='POST', path='/api/applications')
+
         data = request.get_json(force=True)
         job_id = data.get('jobId')
         candidate_id = get_user_id(request.user)
+        auth_user = getattr(request, 'user', {}) or {}
+        _apply_debug(
+            'auth',
+            candidate_id=candidate_id,
+            authenticated_user=auth_user.get('email') or auth_user.get('user_id'),
+            job_id=job_id,
+        )
+
         if not candidate_id:
             return jsonify({'error': 'Candidate access required'}), 403
-        
         if not job_id:
             return jsonify({'error': 'Job ID is required'}), 400
-        
-        # Validate job exists and is enabled (treat NULL enabled as available, consistent with list view)
-        job = db_get('SELECT * FROM jobs WHERE jdid = ? AND (enabled = ' + TRUE_SQL + ' OR enabled IS NULL)', (job_id,))
+
+        candidate = db_get('SELECT cid FROM candidate_signup WHERE cid = ?', (candidate_id,))
+        if not candidate:
+            _apply_debug('validation', candidate_exists=False)
+            return jsonify({'error': 'Candidate account not found'}), 404
+        _apply_debug('validation', candidate_exists=True)
+
+        job = db_get(
+            'SELECT * FROM jobs WHERE jdid = ? AND (enabled = ' + TRUE_SQL + ' OR enabled IS NULL)',
+            (job_id,),
+        )
         if not job:
+            _apply_debug('validation', job_exists=False, job_id=job_id)
             return jsonify({'error': 'Job not found or not available for applications'}), 404
-        
-        # Check for duplicate application
-        existing = db_get('SELECT id FROM applications WHERE candidate_id = ? AND job_id = ?', (candidate_id, job_id))
+        _apply_debug('validation', job_exists=True, job_id=job_id)
+
+        existing = db_get(
+            'SELECT id FROM applications WHERE candidate_id = ? AND job_id = ?',
+            (candidate_id, job_id),
+        )
+        application_exists = existing is not None
+        _apply_debug('validation', application_exists=application_exists)
         if existing:
             return jsonify({'error': 'Already applied to this job'}), 400
-        
-        # Validate candidate profile is complete
-        profile = db_get('SELECT * FROM candidate_profiles WHERE candidate_id = ? AND completed = ' + TRUE_SQL, (candidate_id,))
+
+        profile = db_get(
+            'SELECT * FROM candidate_profiles WHERE candidate_id = ? AND completed = ' + TRUE_SQL,
+            (candidate_id,),
+        )
         if not profile:
             return jsonify({'error': 'Please complete your profile before applying'}), 400
-        
-        # ========================================================================
-        # FETCH STORED PARSED DATA (NO RE-PARSING)
-        # ========================================================================
-        
-        # Fetch the most recent parsed resume for this candidate (by candidate_id or by uploader)
+
+        resume_bytes = profile.get('resume')
+        if isinstance(resume_bytes, memoryview):
+            resume_bytes = resume_bytes.tobytes()
+        has_resume = bool(resume_bytes)
+        _apply_debug(
+            'validation',
+            resume_exists=has_resume,
+            resume_bytes=len(resume_bytes) if resume_bytes else 0,
+        )
+        if not has_resume:
+            return jsonify({
+                'error': 'No resume on file. Please upload your resume before applying.'
+            }), 400
+
         parsed_resume_record = db_get(
             """
-            SELECT toon, confidence, id
+            SELECT toon, confidence, id, raw_file_id
             FROM parsed_resumes
             WHERE candidate_id = ?
             ORDER BY created_at DESC
             """,
-            (candidate_id,)
+            (candidate_id,),
         )
-        # Fallback: resume may have been parsed before candidate_id was linked (e.g. from profile upload)
         if not parsed_resume_record:
             parsed_resume_record = db_get(
                 """
-                SELECT pr.toon, pr.confidence, pr.id
+                SELECT pr.toon, pr.confidence, pr.id, pr.raw_file_id
                 FROM parsed_resumes pr
                 INNER JOIN raw_files rf ON pr.raw_file_id = rf.id
                 WHERE rf.uploader_id = ?
                 ORDER BY pr.created_at DESC
                 """,
-                (candidate_id,)
+                (candidate_id,),
             )
             if parsed_resume_record:
-                # Link this parse to candidate so future applies use direct query
                 db_run(
                     'UPDATE parsed_resumes SET candidate_id = ? WHERE id = ?',
-                    (candidate_id, parsed_resume_record['id'])
+                    (candidate_id, parsed_resume_record['id']),
                 )
+        parsed_resume_id = (parsed_resume_record or {}).get('id')
+        resume_raw_file_id = (parsed_resume_record or {}).get('raw_file_id')
+        _apply_debug(
+            'validation',
+            parsed_resume_id=parsed_resume_id,
+            resume_raw_file_id=resume_raw_file_id,
+            parsed_resume_exists=parsed_resume_record is not None,
+        )
         if not parsed_resume_record:
             return jsonify({
                 'error': 'No parsed resume found. Please upload and parse your resume first.'
             }), 400
-        
-        # Fetch the most recent parsed JD for this job (if HR uploaded a JD file)
+
         parsed_jd_record = db_get(
             """
-            SELECT toon, confidence 
-            FROM parsed_jds 
-            WHERE job_id = ? 
+            SELECT toon, confidence, id
+            FROM parsed_jds
+            WHERE job_id = ?
             ORDER BY created_at DESC
             """,
-            (job_id,)
+            (job_id,),
         )
-        
+        parsed_jd_id = (parsed_jd_record or {}).get('id')
+        _apply_debug(
+            'validation',
+            parsed_jd_id=parsed_jd_id,
+            parsed_jd_exists=parsed_jd_record is not None,
+        )
+
         if parsed_jd_record:
             parsed_jd = toon_loads_flex(parsed_jd_record['toon'])
             if not parsed_jd:
-                print("[APPLY] ERROR: Failed to parse stored JD TOON")
-                return jsonify({'error': 'Invalid stored parsing data'}), 500
+                _apply_debug('validation', parsed_jd_toon_valid=False)
+                return jsonify({'error': 'Invalid stored job description parsing data'}), 400
         else:
-            # No parsed JD file for this job: build minimal TOON from job row so integrated ATS still runs
             parsed_jd = _jd_toon_from_job_row(job)
-            print(f"[APPLY] No parsed_jd for job {job_id}; using minimal TOON from job row for ATS")
-        
+            _apply_debug(
+                'validation',
+                parsed_jd_source='job_row_fallback',
+                parsed_jd_id=None,
+            )
+
         parsed_resume = toon_loads_flex(parsed_resume_record['toon'])
         if not parsed_resume:
-            print("[APPLY] ERROR: Failed to parse stored resume TOON")
-            return jsonify({'error': 'Invalid stored parsing data'}), 500
-        
-        # ========================================================================
-        # CREATE APPLICATION WITH STATUS='applied'
-        # ========================================================================
-        
-        print(f"[APPLY] Creating application for candidate {candidate_id} to job {job_id}")
-        
-        _shortlisted_init = False if BACKEND == 'postgresql' else 0
-        db_run(
-            """
-            INSERT INTO applications
-            (candidate_id, job_id, status, matching_percentage, match_score, shortlisted, ats_reasoning)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (candidate_id, job_id, 'applied', 0, None, _shortlisted_init, None)  # Status set to 'applied', ATS fields null initially
+            _apply_debug('validation', parsed_resume_toon_valid=False)
+            return jsonify({'error': 'Invalid stored resume parsing data'}), 400
+
+        if not isinstance(parsed_resume, dict) or not isinstance(parsed_jd, dict):
+            return jsonify({'error': 'Resume or job description data is not in a valid format'}), 400
+
+        _apply_debug(
+            'matching',
+            matching_started=True,
+            candidate_id=candidate_id,
+            job_id=job_id,
+            parsed_resume_id=parsed_resume_id,
+            parsed_jd_id=parsed_jd_id,
         )
-        
-        # Get the just-inserted application id (for ATS update and later n8n)
-        app_row = db_get(
-            'SELECT id FROM applications WHERE candidate_id = ? AND job_id = ? ORDER BY id DESC',
-            (candidate_id, job_id)
+        ats_success, ats_result = match_candidate_to_job(
+            candidate_id, job_id, parsed_resume, parsed_jd
         )
-        app_id = str(app_row['id']) if app_row else None
-        
-        # ========================================================================
-        # Return immediately; run ATS in background so apply feels instant
-        # ========================================================================
-        thread = threading.Thread(
-            target=_run_ats_and_update_application,
-            args=(candidate_id, job_id, parsed_resume, parsed_jd, app_id),
-            daemon=True,
+        if not ats_success or not ats_result:
+            err = (
+                ats_result.get('error', 'Unknown ATS error')
+                if isinstance(ats_result, dict)
+                else str(ats_result)
+            )
+            _apply_debug('matching', matching_completed=False, error=err)
+            return jsonify({'error': f'ATS matching failed: {err}'}), 502
+
+        final_score, shortlisted, rationale, ats_analysis_toon, status = _extract_ats_result(
+            ats_result
         )
-        thread.start()
-        
-        return jsonify({
+        _apply_debug(
+            'matching',
+            matching_completed=True,
+            match_score=final_score,
+            shortlisted=shortlisted,
+            status=status,
+        )
+
+        _apply_debug('transaction', database_transaction_started=True)
+        app_id, match_id = _persist_application_atomic(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            parsed_resume_id=parsed_resume_id,
+            parsed_jd_id=parsed_jd_id,
+            status=status,
+            match_score=final_score,
+            shortlisted=shortlisted,
+            ats_reasoning=rationale,
+            ats_analysis_toon=ats_analysis_toon,
+        )
+        _apply_debug(
+            'transaction',
+            database_committed=True,
+            application_id=app_id,
+            match_id=match_id,
+        )
+
+        response_body = {
             'message': 'Application submitted successfully',
-            'status': 'applied',
-            'matchScore': None,
-            'shortlisted': False,
-        }), 201
-        
+            'status': status.lower(),
+            'matchScore': final_score,
+            'shortlisted': shortlisted,
+            'applicationId': app_id,
+        }
+        _apply_debug('response', returned_response=True, http_status=200)
+        return jsonify(response_body), 200
+
     except Exception as e:
-        print(f"[APPLY] ERROR in apply_job: {e}")
-        import traceback
-        traceback.print_exc()
+        _apply_log_exception(e)
         return jsonify({'error': 'Internal server error'}), 500
 
 
@@ -485,11 +635,10 @@ def receive_ats_result():
             print(f"[ATS_RESULT] WARNING: Application not found for candidate {candidate_id}, job {job_id}")
             return jsonify({'error': 'Application not found'}), 404
         
-        # Determine new status based on shortlisted flag
-        # Only update status if it's still 'applied' (don't override manual status changes)
-        new_status = application['status']
-        if application['status'] == 'applied':
-            new_status = 'shortlisted' if shortlisted else 'rejected'
+        # Determine new status based on shortlisted flag (canonical PostgreSQL values)
+        new_status = normalize_status(application['status'])
+        if normalize_status(application['status']) == STATUS_APPLIED:
+            new_status = STATUS_SHORTLISTED if shortlisted else STATUS_REJECTED
         
         # ========================================================================
         # STORE DETAILED ATS ANALYSIS IN DATABASE

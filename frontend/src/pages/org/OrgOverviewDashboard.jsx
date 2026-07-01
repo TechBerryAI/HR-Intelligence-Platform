@@ -318,9 +318,9 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
       )}
 
       {!loading && !showAnalytics && !showJobPosting && (
-        <div className="mt-10 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-          <h2 className="text-sm font-semibold text-zinc-300 mb-2">Quick access</h2>
-          <p className="text-sm text-zinc-500 mb-4">
+        <div className="mt-10 org-card p-5">
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Quick access</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
             Use the sidebar to manage HR admins, jobs, and platform settings.
             Open a job to review candidates who applied and their match scores.
           </p>
@@ -334,7 +334,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                 key={segment}
                 type="button"
                 onClick={() => go(segment)}
-                className="px-4 py-2 rounded-xl text-sm font-medium border border-zinc-700 text-zinc-300 hover:text-white hover:border-zinc-500 hover:bg-zinc-800/60 transition-colors"
+                className="px-4 py-2 rounded-xl text-sm font-medium border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
               >
                 {label}
               </button>
@@ -345,12 +345,12 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
 
       {!loading && showAnalytics && (
         <div className="mt-10 space-y-6">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <FiBarChart2 className="w-5 h-5 text-purple-400" /> Analytics
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+            <FiBarChart2 className="w-5 h-5 text-primary" /> Analytics
           </h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-              <h3 className="text-sm font-semibold text-zinc-300 flex items-center gap-2 mb-4">
+            <div className="org-card p-5">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2 mb-4">
                 <FiPieChart className="w-4 h-4" /> Applications by status
               </h3>
               <div className="space-y-1">
@@ -363,32 +363,32 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                   <BarRow key={key} label={label} count={analytics.byStatus[key] || 0} total={analytics.total} colorClass={color} />
                 ))}
               </div>
-              {analytics.total === 0 && <p className="text-sm text-zinc-500 py-4">No applications yet</p>}
+              {analytics.total === 0 && <p className="text-sm text-slate-500 py-4">No applications yet</p>}
             </div>
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-              <h3 className="text-sm font-semibold text-zinc-300 mb-4">Match score & shortlist rate</h3>
+            <div className="org-card p-5">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-4">Match score & shortlist rate</h3>
               <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="rounded-xl bg-zinc-800/50 p-4 border border-zinc-700/50">
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider">Avg. match score</p>
-                  <p className="text-2xl font-bold text-white mt-1 tabular-nums">{analytics.avgScore != null ? `${analytics.avgScore}%` : '—'}</p>
-                  <p className="text-xs text-zinc-500 mt-0.5">{analytics.scoreCount} with score</p>
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-4 border border-slate-200 dark:border-slate-700/50">
+                  <p className="text-xs text-slate-500 uppercase tracking-wider">Avg. match score</p>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-white mt-1 tabular-nums">{analytics.avgScore != null ? `${analytics.avgScore}%` : '—'}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">{analytics.scoreCount} with score</p>
                 </div>
-                <div className="rounded-xl bg-zinc-800/50 p-4 border border-zinc-700/50">
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider">Shortlist rate</p>
+                <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-4 border border-slate-200 dark:border-slate-700/50">
+                  <p className="text-xs text-slate-500 uppercase tracking-wider">Shortlist rate</p>
                   <p className="text-2xl font-bold text-green-400 mt-1 tabular-nums">{analytics.shortlistRate}%</p>
-                  <p className="text-xs text-zinc-500 mt-0.5">of applications</p>
+                  <p className="text-xs text-slate-500 mt-0.5">of applications</p>
                 </div>
               </div>
               <div>
-                <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Score distribution</p>
+                <p className="text-xs text-slate-500 uppercase tracking-wider mb-2">Score distribution</p>
                 <div className="flex gap-2">
-                  <div className="flex-1 rounded-lg overflow-hidden bg-zinc-800 h-8 flex">
+                  <div className="flex-1 rounded-lg overflow-hidden bg-slate-200 dark:bg-slate-800 h-8 flex">
                     <div className="bg-red-500/80 transition-all duration-500" style={{ width: `${analytics.scoreCount ? (analytics.scoreBuckets.low / analytics.scoreCount) * 100 : 0}%` }} />
                     <div className="bg-amber-500/80 transition-all duration-500" style={{ width: `${analytics.scoreCount ? (analytics.scoreBuckets.medium / analytics.scoreCount) * 100 : 0}%` }} />
                     <div className="bg-green-500/80 transition-all duration-500" style={{ width: `${analytics.scoreCount ? (analytics.scoreBuckets.high / analytics.scoreCount) * 100 : 0}%` }} />
                   </div>
                 </div>
-                <div className="flex gap-4 mt-2 text-xs text-zinc-500">
+                <div className="flex gap-4 mt-2 text-xs text-slate-500">
                   <span><span className="inline-block w-2 h-2 rounded bg-red-500/80 mr-1" /> Low (&lt;30%)</span>
                   <span><span className="inline-block w-2 h-2 rounded bg-amber-500/80 mr-1" /> Medium (30–60%)</span>
                   <span><span className="inline-block w-2 h-2 rounded bg-green-500/80 mr-1" /> High (60%+)</span>
@@ -396,9 +396,9 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
               </div>
             </div>
           </div>
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
-            <h3 className="text-sm font-semibold text-zinc-300 mb-1">Job-level insight</h3>
-            <p className="text-xs text-zinc-500 mb-4">Applications, shortlisted count, and average match score per job.</p>
+          <div className="org-card p-5">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Job-level insight</h3>
+            <p className="text-xs text-slate-500 mb-4">Applications, shortlisted count, and average match score per job.</p>
             {analytics.topJobs.length > 0 ? (
               <div className="space-y-2">
                 {analytics.topJobs.map(({ id, title, count, shortlisted, reviewed, rejected, avgScore }) => (
@@ -406,11 +406,11 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                     key={id}
                     type="button"
                     onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(id)}?tab=candidates`)}
-                    className="w-full flex flex-wrap items-center gap-x-4 gap-y-1 py-3 px-3 rounded-xl bg-zinc-800/50 border border-zinc-700/50 hover:border-purple-500/30 hover:bg-zinc-800 transition-colors text-left"
+                    className="w-full flex flex-wrap items-center gap-x-4 gap-y-1 py-3 px-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 hover:border-primary/30 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
                   >
-                    <span className="text-sm font-medium text-zinc-200 truncate flex-1 min-w-0">{title || id}</span>
-                    <span className="text-xs text-zinc-400 tabular-nums">
-                      <span className="text-zinc-300">{count}</span> applied
+                    <span className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate flex-1 min-w-0">{title || id}</span>
+                    <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
+                      <span className="text-slate-700 dark:text-slate-300">{count}</span> applied
                       {(reviewed || 0) > 0 && <span className="text-amber-400 ml-2">{reviewed} reviewed</span>}
                       {shortlisted > 0 && <span className="text-green-400 ml-2">{shortlisted} shortlisted</span>}
                       {(rejected || 0) > 0 && <span className="text-red-400 ml-2">{rejected} rejected</span>}
@@ -420,7 +420,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-zinc-500 py-4">No applications yet</p>
+              <p className="text-sm text-slate-500 py-4">No applications yet</p>
             )}
           </div>
         </div>

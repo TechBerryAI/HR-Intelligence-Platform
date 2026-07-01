@@ -56,6 +56,95 @@ h1, h2, h3, h4, h5, h6 {
     @apply min-h-[7rem] h-auto py-3;
   }
 
+  /* Org panel pages (Head HR / CEO) — light-first inside OrgPanelLayout */
+  .org-page-title {
+    @apply text-2xl font-bold text-slate-900 dark:text-white;
+  }
+
+  .org-page-subtitle {
+    @apply mt-0.5 text-sm text-slate-500 dark:text-slate-400;
+  }
+
+  .org-page-icon {
+    @apply w-5 h-5 text-slate-500 dark:text-slate-400;
+  }
+
+  .org-search-input {
+    @apply w-full pl-9 pr-4 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-colors;
+  }
+
+  .org-select-input {
+    @apply px-3 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-colors;
+  }
+
+  .org-table-wrap {
+    @apply rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800/80 shadow-card;
+  }
+
+  .org-table-head {
+    @apply border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80;
+  }
+
+  .org-th {
+    @apply text-left px-4 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider;
+  }
+
+  .org-table-row {
+    @apply bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors;
+  }
+
+  .org-table-row-clickable {
+    @apply bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500/40;
+  }
+
+  .org-td-primary {
+    @apply px-4 py-3 text-slate-900 dark:text-slate-100 font-medium;
+  }
+
+  .org-td-secondary {
+    @apply px-4 py-3 text-slate-600 dark:text-slate-400;
+  }
+
+  .org-td-muted {
+    @apply px-4 py-3 text-slate-500;
+  }
+
+  .org-btn-secondary {
+    @apply flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-600 disabled:opacity-60 disabled:cursor-not-allowed shadow-sm;
+  }
+
+  .org-section {
+    @apply rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 p-4 shadow-card;
+  }
+
+  .org-section-label {
+    @apply text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider;
+  }
+
+  .org-section-value {
+    @apply text-sm text-slate-700 dark:text-slate-200 mt-0.5;
+  }
+
+  .org-skeleton {
+    @apply h-16 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 animate-pulse;
+  }
+
+  .org-empty-state {
+    @apply text-center py-16 text-slate-500 dark:text-slate-400 text-sm;
+  }
+
+  .org-back-link {
+    @apply inline-flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white mb-6 transition-colors;
+  }
+
+  .org-error-banner {
+    @apply mb-4 rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 px-4 py-3 text-sm text-red-600 dark:text-red-400;
+  }
+
+  .org-card {
+    @apply rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 shadow-card;
+  }
+
   /* Hero 3D dashboard — tint neon artwork to brand blues / slate */
   .hero-visual-image {
     filter: saturate(1.05) contrast(1.08) brightness(1.02);

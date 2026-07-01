@@ -125,16 +125,16 @@ export default function HeadHrCandidates() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <FiUser className="w-5 h-5 text-zinc-300" /> Candidates
+          <h1 className="org-page-title flex items-center gap-2">
+            <FiUser className="org-page-icon" /> Candidates
           </h1>
-          <p className="mt-0.5 text-sm text-zinc-400">{candidates.length} candidate{candidates.length !== 1 ? 's' : ''} registered</p>
+          <p className="org-page-subtitle">{candidates.length} candidate{candidates.length !== 1 ? 's' : ''} registered</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => runRefresh(load)}
             disabled={refreshLoading}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition-colors border border-zinc-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="org-btn-secondary"
           >
             {refreshLoading ? <Spinner /> : <FiRefreshCw className="w-4 h-4" />}
             {refreshLoading ? 'Refreshing…' : 'Refresh'}
@@ -152,48 +152,48 @@ export default function HeadHrCandidates() {
 
       {/* Search */}
       <div className="relative mb-5">
-        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           type="text"
           placeholder="Search by name, email or ID…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-700 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-blue-500/50 transition-colors"
+          className="org-search-input"
         />
       </div>
 
       {error && (
-        <div className="mb-4 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">{error}</div>
+        <div className="org-error-banner">{error}</div>
       )}
 
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-16 rounded-xl bg-zinc-900/60 border border-zinc-800 animate-pulse" />
+            <div key={i} className="org-skeleton" />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-zinc-500 text-sm">
+        <div className="org-empty-state">
           {search ? 'No candidates match your search.' : 'No candidates found.'}
         </div>
       ) : (
-        <div className="rounded-2xl border border-zinc-800 overflow-hidden">
+        <div className="org-table-wrap">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-zinc-800 bg-zinc-900/80">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">ID</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Name</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Email</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Location</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Profile</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Joined</th>
+                <tr className="org-table-head">
+                  <th className="org-th">ID</th>
+                  <th className="org-th">Name</th>
+                  <th className="org-th">Email</th>
+                  <th className="org-th">Location</th>
+                  <th className="org-th">Profile</th>
+                  <th className="org-th">Joined</th>
                   {!readOnly && (
-                    <th className="text-right px-4 py-3 text-xs font-semibold text-zinc-400 uppercase tracking-wider">Actions</th>
+                    <th className="org-th text-right">Actions</th>
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-800">
+              <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
                 {filtered.map((c) => (
                   <tr
                     key={c.cid}
@@ -201,29 +201,29 @@ export default function HeadHrCandidates() {
                     tabIndex={0}
                     onClick={() => navigate(`${basePath}/candidates/${encodeURIComponent(c.cid)}`)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`${basePath}/candidates/${encodeURIComponent(c.cid)}`) } }}
-                    className="bg-zinc-900/30 hover:bg-zinc-800/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-rose-500/50"
+                    className="org-table-row-clickable"
                   >
-                    <td className="px-4 py-3 font-mono text-xs text-blue-400">{c.cid}</td>
-                    <td className="px-4 py-3 text-zinc-100 font-medium">{c.full_name || c.name || '—'}</td>
-                    <td className="px-4 py-3 text-zinc-400">{c.email}</td>
-                    <td className="px-4 py-3 text-zinc-500 text-xs">{c.current_location || '—'}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-blue-600 dark:text-blue-400">{c.cid}</td>
+                    <td className="org-td-primary">{c.full_name || c.name || '—'}</td>
+                    <td className="org-td-secondary">{c.email}</td>
+                    <td className="org-td-muted text-xs">{c.current_location || '—'}</td>
                     <td className="px-4 py-3">
                       {c.completed ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-green-400">
+                        <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
                           <FiCheckCircle className="w-3.5 h-3.5" /> Complete
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
+                        <span className="inline-flex items-center gap-1 text-xs text-slate-500">
                           <FiXCircle className="w-3.5 h-3.5" /> Incomplete
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-zinc-500">{formatDate(c.created_at)}</td>
+                    <td className="org-td-muted">{formatDate(c.created_at)}</td>
                     {!readOnly && (
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={(e) => { e.stopPropagation(); setConfirmDelete(c) }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-400 hover:bg-red-500/10 hover:text-red-300 border border-red-500/20 hover:border-red-500/40 transition-all"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 border border-red-200 dark:border-red-500/30 transition-all"
                       >
                         <FiTrash2 className="w-3.5 h-3.5" /> Delete
                       </button>

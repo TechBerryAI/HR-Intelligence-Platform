@@ -67,7 +67,7 @@ export default function HeadHrApplicationDetail() {
       <PanelShell>
         <div className="space-y-2">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-16 rounded-xl bg-zinc-900/60 border border-zinc-800 animate-pulse" />
+            <div key={i} className="org-skeleton" />
           ))}
         </div>
       </PanelShell>
@@ -83,7 +83,7 @@ export default function HeadHrApplicationDetail() {
         <button
           type="button"
           onClick={() => navigate(`${basePath}/applications`)}
-          className="mt-4 inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white"
+          className="org-back-link !mb-0"
         >
           <FiArrowLeft className="w-4 h-4" /> Back to Applications
         </button>
@@ -137,41 +137,39 @@ export default function HeadHrApplicationDetail() {
         <button
           type="button"
           onClick={() => navigate(`${basePath}/applications`)}
-          className="inline-flex items-center gap-2 text-sm text-zinc-400 hover:text-white mb-6 transition-colors"
+          className="org-back-link"
         >
           <FiArrowLeft className="w-4 h-4" /> Back to Applications
         </button>
 
         <div className="flex items-center gap-2 mb-4">
-          <FiFileText className="w-5 h-5 text-zinc-400" />
-          <h1 className="text-xl font-bold text-white">Application #{application.id}</h1>
+          <FiFileText className="w-5 h-5 text-slate-400" />
+          <h1 className="text-xl font-bold text-slate-900 dark:text-white">Application #{application.id}</h1>
         </div>
 
-        {/* Application meta */}
-        <div className="rounded-xl bg-zinc-900/60 border border-zinc-800 p-4 mb-6 space-y-2 text-sm">
+        <div className="org-section mb-6 space-y-2 text-sm">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
-              <span className="text-zinc-500">Job</span>
-              <p className="text-zinc-100 font-medium">{application.job_title || '—'}</p>
-              <p className="text-zinc-500 text-xs">{application.job_company}</p>
+              <span className="org-section-label">Job</span>
+              <p className="text-slate-900 dark:text-slate-100 font-medium">{application.job_title || '—'}</p>
+              <p className="text-slate-500 text-xs">{application.job_company}</p>
             </div>
             <div>
-              <span className="text-zinc-500">HR Admin</span>
-              <p className="text-zinc-300">{application.hr_name || '—'}</p>
+              <span className="org-section-label">HR Admin</span>
+              <p className="org-section-value">{application.hr_name || '—'}</p>
             </div>
             <div>
-              <span className="text-zinc-500">Status</span>
-              <p className="text-zinc-300 capitalize">{application.shortlisted ? 'Shortlisted' : application.status || '—'}</p>
+              <span className="org-section-label">Status</span>
+              <p className="org-section-value capitalize">{application.shortlisted ? 'Shortlisted' : application.status || '—'}</p>
             </div>
             <div>
-              <span className="text-zinc-500">Applied</span>
-              <p className="text-zinc-300">{formatDate(application.applied_at)}</p>
+              <span className="org-section-label">Applied</span>
+              <p className="org-section-value">{formatDate(application.applied_at)}</p>
             </div>
           </div>
         </div>
 
-        {/* Match explanation card */}
-        <div className="rounded-2xl border border-zinc-800 overflow-hidden bg-zinc-900/30">
+        <div className="org-card overflow-hidden">
           <MatchHeader
             score={score ?? 0}
             candidateName={application.candidate_name || 'Candidate'}
@@ -180,16 +178,16 @@ export default function HeadHrApplicationDetail() {
             onClose={() => navigate(`${basePath}/applications`)}
           />
           <div className="p-6 space-y-6">
-            <div className="rounded-xl bg-zinc-800/50 ring-1 ring-zinc-700/50 px-4 py-3">
-              <p className="text-sm font-medium text-zinc-300 leading-snug">
-                <span className="text-zinc-500 font-semibold uppercase tracking-wider text-xs">Why this verdict</span>
-                <span className="block mt-1.5 text-white">{getVerdictReason()}</span>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 ring-1 ring-slate-200 dark:ring-slate-700 px-4 py-3">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-snug">
+                <span className="org-section-label">Why this verdict</span>
+                <span className="block mt-1.5 text-slate-900 dark:text-white">{getVerdictReason()}</span>
               </p>
             </div>
 
             {hasMatchDetails && (breakdown.skills != null || breakdown.experience != null || breakdown.education != null || breakdown.location != null) && (
               <div>
-                <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Score breakdown</h3>
+                <h3 className="org-section-label mb-3">Score breakdown</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {SCORE_FACTORS.map(({ name, key, weight }) => {
                     const value = breakdown[key]
@@ -215,8 +213,8 @@ export default function HeadHrApplicationDetail() {
                 <div className="space-y-4 text-sm">
                   {decisionBullets.length > 0 && (
                     <div>
-                      <p className="text-zinc-500 font-semibold uppercase tracking-wider text-xs mb-2">Decision logic</p>
-                      <ul className="list-disc list-inside space-y-1 text-zinc-300">
+                      <p className="org-section-label mb-2">Decision logic</p>
+                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
                         {decisionBullets.map((bullet, i) => (
                           <li key={i} className="leading-relaxed">{bullet}</li>
                         ))}
@@ -224,27 +222,27 @@ export default function HeadHrApplicationDetail() {
                     </div>
                   )}
                   {(experienceAssessment.relevant_experience_summary || experienceAssessment.gaps_vs_role_expectations) && (
-                    <div className="pt-3 border-t border-zinc-600/50">
-                      <p className="text-zinc-500 font-semibold uppercase tracking-wider text-xs mb-2">Experience</p>
-                      <div className="space-y-1.5 text-zinc-300">
+                    <div className="pt-3 border-t border-slate-200 dark:border-slate-600/50">
+                      <p className="org-section-label mb-2">Experience</p>
+                      <div className="space-y-1.5 text-slate-700 dark:text-slate-300">
                         {experienceAssessment.relevant_experience_summary && (
-                          <p><span className="text-zinc-400">Relevant:</span> {experienceAssessment.relevant_experience_summary}</p>
+                          <p><span className="text-slate-500">Relevant:</span> {experienceAssessment.relevant_experience_summary}</p>
                         )}
                         {experienceAssessment.gaps_vs_role_expectations && (
-                          <p><span className="text-zinc-400">Gaps:</span> {experienceAssessment.gaps_vs_role_expectations}</p>
+                          <p><span className="text-slate-500">Gaps:</span> {experienceAssessment.gaps_vs_role_expectations}</p>
                         )}
                       </div>
                     </div>
                   )}
                   {educationAssessment != null && String(educationAssessment).trim() !== '' && (
-                    <div className="pt-3 border-t border-zinc-600/50">
-                      <p className="text-zinc-500 font-semibold uppercase tracking-wider text-xs mb-2">Education & certifications</p>
-                      <p className="text-zinc-300 leading-relaxed">{educationAssessment}</p>
+                    <div className="pt-3 border-t border-slate-200 dark:border-slate-600/50">
+                      <p className="org-section-label mb-2">Education & certifications</p>
+                      <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{educationAssessment}</p>
                     </div>
                   )}
-                  <div className="pt-3 border-t border-zinc-600/50">
-                    <p className="text-zinc-500 font-semibold uppercase tracking-wider text-xs mb-2">Full reasoning</p>
-                    <p className="text-zinc-300 leading-relaxed whitespace-pre-wrap">{finalReasoning}</p>
+                  <div className="pt-3 border-t border-slate-200 dark:border-slate-600/50">
+                    <p className="org-section-label mb-2">Full reasoning</p>
+                    <p className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{finalReasoning}</p>
                   </div>
                 </div>
               </CollapsibleSection>
