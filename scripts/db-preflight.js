@@ -88,26 +88,63 @@ function testFromWindows(host, port) {
   };
 }
 
-/** Run psql for PostgreSQL-level errors (auth, pg_hba, wrong db) */
+function resolveBackendPython() {
+  const backendDir = path.join(__dirname, '..', 'apps', 'backend');
+  const venvPy =
+    process.platform === 'win32'
+      ? path.join(backendDir, 'venv', 'Scripts', 'python.exe')
+      : path.join(backendDir, 'venv', 'bin', 'python');
+  if (fs.existsSync(venvPy)) return venvPy;
+  return process.platform === 'win32' ? 'python' : 'python3';
+}
+
+/**
+ * PostgreSQL auth / pg_hba / db check via backend psycopg (no local psql needed).
+ */
 function probePostgres(cfg) {
-  const r = spawnSync(
-    'psql',
-    [
-      '-h', cfg.host,
-      '-p', String(cfg.port),
-      '-U', cfg.user,
-      '-d', cfg.db,
-      '-c', 'SELECT 1',
-    ],
-    {
-      encoding: 'utf8',
-      timeout: 12000,
-      env: { ...process.env, PGPASSWORD: cfg.password },
-    }
-  );
+  const py = resolveBackendPython();
+  const code = [
+    'import sys',
+    'try:',
+    '    import psycopg',
+    'except ImportError:',
+    '    print("psycopg not installed — run: node start.js (or pip install psycopg[binary] in apps/backend/venv)", file=sys.stderr)',
+    '    sys.exit(2)',
+    'try:',
+    '    with psycopg.connect(',
+    `        host=${JSON.stringify(cfg.host)},`,
+    `        port=${Number(cfg.port)},`,
+    `        dbname=${JSON.stringify(cfg.db)},`,
+    `        user=${JSON.stringify(cfg.user)},`,
+    `        password=${JSON.stringify(cfg.password)},`,
+    '        connect_timeout=10,',
+    '    ) as conn:',
+    '        with conn.cursor() as cur:',
+    '            cur.execute("SELECT 1")',
+    '            cur.fetchone()',
+    '    print("OK")',
+    'except Exception as e:',
+    '    print(str(e), file=sys.stderr)',
+    '    sys.exit(1)',
+  ].join('\n');
+
+  const r = spawnSync(py, ['-c', code], {
+    encoding: 'utf8',
+    timeout: 15000,
+  });
+
+  if (r.error) {
+    return {
+      ok: false,
+      errorMessage:
+        r.error.code === 'ENOENT'
+          ? `Python not found (${py}). Install Python 3 or create apps/backend/venv.`
+          : r.error.message,
+    };
+  }
   if (r.status === 0) return { ok: true };
   const err = (r.stderr || r.stdout || '').trim();
-  return { ok: false, errorMessage: err || `psql exited with code ${r.status}` };
+  return { ok: false, errorMessage: err || `DB probe exited with code ${r.status}` };
 }
 
 function explainTcp(code, host, port) {
@@ -147,13 +184,20 @@ function explainTcp(code, host, port) {
       return {
         summary: `TCP failed (${code})`,
         causes: ['See error message below'],
-        fix: `Test: psql -h ${host} -p ${port} -U postgres -d hrms -c "SELECT 1"`,
+        fix: `Test connectivity: node scripts/db-preflight.js`,
       };
   }
 }
 
 function explainPsql(msg) {
   const m = msg.toLowerCase();
+  if (m.includes('psycopg not installed') || m.includes('python not found')) {
+    return {
+      summary: 'DB client missing on this machine (backend Python/psycopg)',
+      causes: [msg],
+      fix: 'From repo root run: node start.js  (creates venv + installs deps including psycopg)',
+    };
+  }
   if (m.includes('no pg_hba.conf entry')) {
     const hostMatch = msg.match(/host "([^"]+)"/);
     const clientIp = hostMatch ? hostMatch[1] : 'your PC IP';
