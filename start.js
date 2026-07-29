@@ -224,7 +224,9 @@ async function main() {
 
   checkEnv();
   setupEnv();
+  await setupBackend();
 
+  // After venv/deps so preflight can use psycopg (no local PostgreSQL client needed)
   const preflight = spawnSync('node', [path.join(ROOT, 'scripts', 'db-preflight.js')], {
     encoding: 'utf8',
     stdio: ['inherit', 'pipe', 'inherit'],
@@ -232,7 +234,6 @@ async function main() {
   if (preflight.stdout) process.stdout.write(preflight.stdout);
   if (preflight.status !== 0) process.exit(1);
 
-  await setupBackend();
   await setupFrontend();
 
   process.on('SIGINT', onExit);
