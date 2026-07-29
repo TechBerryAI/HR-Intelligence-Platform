@@ -8,7 +8,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const isWSL = !!(process.env.WSL_DISTRO_NAME || process.env.WSLENV);
-const envPath = path.join(__dirname, '..', 'backend', '.env');
+const envPath = path.join(__dirname, '..', 'apps', 'backend', '.env');
 
 function readEnv() {
   const text = fs.readFileSync(envPath, 'utf8');

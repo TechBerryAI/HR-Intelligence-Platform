@@ -12,8 +12,8 @@ const { spawn, spawnSync, execSync: nodeExecSync } = require('child_process');
 const http = require('http');
 
 const ROOT = path.resolve(__dirname);
-const BACKEND_DIR = path.join(ROOT, 'backend');
-const FRONTEND_DIR = path.join(ROOT, 'frontend');
+const BACKEND_DIR = path.join(ROOT, 'apps', 'backend');
+const FRONTEND_DIR = path.join(ROOT, 'apps', 'frontend');
 const BACKEND_ENV = path.join(BACKEND_DIR, '.env');
 const BACKEND_ENV_EXAMPLE = path.join(BACKEND_DIR, '.env.example');
 const VENV_PYTHON = path.join(
@@ -73,16 +73,16 @@ function checkEnv() {
 }
 
 function setupEnv() {
-  logStep(2, 6, 'Checking backend/.env');
+  logStep(2, 6, 'Checking apps/backend/.env');
   if (!fs.existsSync(BACKEND_ENV)) {
     if (!fs.existsSync(BACKEND_ENV_EXAMPLE)) {
-      log('backend/.env.example not found', 'err');
+      log('apps/backend/.env.example not found', 'err');
       process.exit(1);
     }
     fs.copyFileSync(BACKEND_ENV_EXAMPLE, BACKEND_ENV);
-    log('Created backend/.env from template. Configure POSTGRES_* or DATABASE_URL in backend/.env');
+    log('Created apps/backend/.env from template. Configure POSTGRES_* or DATABASE_URL in apps/backend/.env');
   } else {
-    log('backend/.env exists');
+    log('apps/backend/.env exists');
   }
 }
 
@@ -119,7 +119,7 @@ function startBackend() {
     PYTHONPATH: path.join(ROOT, 'ai'),
     AI_RUNTIME_CONFIG: path.join(ROOT, 'ai', 'runtime', 'config', 'runtime.production.yaml'),
   };
-  backendProcess = spawn(VENV_PYTHON, ['app.py'], {
+  backendProcess = spawn(VENV_PYTHON, ['wsgi.py'], {
     cwd: BACKEND_DIR,
     stdio: 'inherit',
     shell: false,

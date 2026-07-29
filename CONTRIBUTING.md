@@ -4,7 +4,7 @@ Thank you for contributing. This repository contains two coordinated systems:
 
 | System | Path | Documentation |
 |--------|------|---------------|
-| HRMS application | `frontend/`, `backend/`, `electron/` | [docs/](docs/) |
+| HRMS application | `apps/frontend/`, `apps/backend/`, `apps/desktop/` | [docs/](docs/) |
 | AI platform | `ai/` | [ai/README.md](ai/README.md) |
 
 ## Before you start
@@ -17,9 +17,9 @@ Thank you for contributing. This repository contains two coordinated systems:
 
 | Owner | Responsibility |
 |-------|----------------|
-| `frontend/` | Presentation only |
-| `backend/` | Business logic, APIs, TOON runtime (`toon.py`) |
-| `electron/` | Desktop integration only (dialogs, IPC, FS) |
+| `apps/frontend/` | Presentation only |
+| `apps/backend/` | Business logic, APIs, TOON runtime (`app/ai/toon/`) |
+| `apps/desktop/` | Desktop integration only (dialogs, IPC, FS) |
 | `ai/` | All AI intelligence (runtime, providers, capabilities, dataset, TOON) |
 
 **Do not** place AI-specific code outside `ai/`. **Do not** place business logic in Electron.
@@ -46,8 +46,8 @@ Thank you for contributing. This repository contains two coordinated systems:
 | Component | Command |
 |-----------|---------|
 | AI platform | `cd ai && pytest` |
-| Frontend build | `cd frontend && npm run build` |
-| Backend | Manual / integration via `node start.js` |
+| Frontend build | `cd apps/frontend && npm run build` |
+| Backend unit tests | `pytest tests/backend/` |
 | Database | `node scripts/db-preflight.js` |
 
 Component tests are colocated. See [tests/README.md](tests/README.md).
