@@ -69,32 +69,40 @@ From repository root:
 
 ```bash
 # 1. Copy backend env (or start.js will create from .env.example)
-cp backend/.env.example backend/.env
+cp apps/backend/.env.example apps/backend/.env
 
-# 2. Edit backend/.env: set POSTGRES_* or DATABASE_URL
+# 2. Edit apps/backend/.env: set POSTGRES_* or DATABASE_URL
 
 # 3. Run app (installs deps, starts backend + frontend, opens browser)
 node start.js
 ```
 
-`start.js` creates backend venv, runs pip install, npm install in frontend, starts Flask (port 3000) and Vite (port 5173), waits for both to be ready, then opens http://localhost:5173. Use **Ctrl+C** to stop.
+`start.js` creates the backend venv, runs pip install, npm install in the frontend, starts Flask (port 3000) and Vite (port 5173), waits for both to be ready, then opens http://localhost:5173. Use **Ctrl+C** to stop.
+
+Canonical app locations (no root-level duplicates):
+
+| App | Path |
+|-----|------|
+| Backend (Flask) | `apps/backend/` |
+| Frontend (React/Vite) | `apps/frontend/` |
+| Desktop (Electron) | `apps/desktop/` |
 
 ### Manual Run
 
 **Backend:**
 
 ```bash
-cd backend
+cd apps/backend
 python -m venv venv
 # Windows: .\venv\Scripts\Activate  |  macOS/Linux: source venv/bin/activate
 pip install -r requirements.txt
-python app.py
+python wsgi.py
 ```
 
 **Frontend:**
 
 ```bash
-cd frontend
+cd apps/frontend
 npm install
 npm run dev
 ```
@@ -102,13 +110,13 @@ npm run dev
 - **Frontend:** http://localhost:5173  
 - **Backend / Health:** http://localhost:3000, http://localhost:3000/health  
 
-Database and tables are created automatically on first backend run from `backend/schema_pg/*.sql`.
+Database and tables are created automatically on first backend run from `apps/backend/schema_pg/*.sql`.
 
 ---
 
 ## Environment Variables
 
-### Backend (`backend/.env`)
+### Backend (`apps/backend/.env`)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -123,7 +131,7 @@ Database and tables are created automatically on first backend run from `backend
 
 \* Either POSTGRES_* or DATABASE_URL.
 
-### Frontend (`frontend/.env`)
+### Frontend (`apps/frontend/.env`)
 
 | Variable | Default | Description |
 |----------|---------|-------------|

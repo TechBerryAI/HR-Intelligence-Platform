@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Quick PostgreSQL connectivity check using backend/.env settings."""
+"""Quick PostgreSQL connectivity check using apps/backend/.env settings."""
 from __future__ import annotations
 
 import os
@@ -8,7 +8,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-BACKEND = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
+BACKEND = ROOT / "apps" / "backend"
 load_dotenv(BACKEND / ".env")
 
 host = os.getenv("POSTGRES_HOST", "localhost")
