@@ -37,7 +37,7 @@ def create_app() -> Flask:
     is_valid, errors, warnings = EnvValidator.validate()
     if not is_valid:
         EnvValidator.print_report()
-        print("💡 TIP: Copy backend/.env.example to backend/.env and configure it.\n")
+        print("💡 TIP: Copy apps/backend/.env.example to apps/backend/.env and configure it.\n")
         sys.exit(1)
     elif warnings:
         EnvValidator.print_report()
@@ -97,7 +97,7 @@ def create_app() -> Flask:
     ):
         print(
             "[MAIL] Suppressed or missing creds — emails will NOT be sent. "
-            "Check backend/.env and MAIL_USERNAME/MAIL_PASSWORD."
+            "Check apps/backend/.env and MAIL_USERNAME/MAIL_PASSWORD."
         )
     else:
         print(

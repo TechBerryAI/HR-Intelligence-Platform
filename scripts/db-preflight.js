@@ -131,7 +131,7 @@ function explainTcp(code, host, port) {
           'Your PC is on a different subnet / VPN / Wi‑Fi network',
           'VM IP changed (e.g. was 192.168.1.134, now 192.168.1.120)',
         ],
-        fix: `Verify VM IP in pgAdmin or VM console, update POSTGRES_HOST in backend/.env, ping ${host}`,
+        fix: `Verify VM IP in pgAdmin or VM console, update POSTGRES_HOST in apps/backend/.env, ping ${host}`,
       };
     case 'ETIMEDOUT':
       return {
@@ -166,7 +166,7 @@ function explainPsql(msg) {
   if (m.includes('password authentication failed')) {
     return {
       summary: 'Wrong password — TCP works but credentials failed',
-      causes: ['POSTGRES_PASSWORD in backend/.env does not match VM postgres password'],
+      causes: ['POSTGRES_PASSWORD in apps/backend/.env does not match VM postgres password'],
       fix: 'Update POSTGRES_PASSWORD to match pgAdmin / VM postgres user password',
     };
   }
@@ -174,7 +174,7 @@ function explainPsql(msg) {
     return {
       summary: 'Database name not found on server',
       causes: ['POSTGRES_DB in .env does not exist on this PostgreSQL instance'],
-      fix: 'Create the database on VM or fix POSTGRES_DB in backend/.env',
+      fix: 'Create the database on VM or fix POSTGRES_DB in apps/backend/.env',
     };
   }
   return {

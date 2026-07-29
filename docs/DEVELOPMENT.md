@@ -6,14 +6,16 @@ Local setup, workflows, and navigation for engineers new to the repository.
 
 ```
 HR Job Portal
-├── frontend/     React SPA (Vite) — what users see
-├── backend/      Flask API — business logic + PostgreSQL
-├── electron/     Desktop shell — native folder dialogs only
-├── ai/           AI platform — runtime, capabilities, dataset, TOON
-├── docs/         HRMS documentation
-├── scripts/      Dev utilities (db-preflight, DB tests)
-├── tests/        Test index (tests live with their owners)
-└── tools/        CLI entry-point index
+├── apps/
+│   ├── frontend/   React SPA (Vite) — what users see
+│   ├── backend/    Flask API — business logic + PostgreSQL
+│   └── desktop/    Electron shell — native folder dialogs only
+├── ai/             AI platform — runtime, capabilities, dataset, TOON
+├── docs/           HRMS documentation
+├── scripts/        Dev utilities (db-preflight, DB tests)
+├── tests/          Test index (tests live with their owners)
+├── packages/       Cross-app shims
+└── infrastructure/ Docker + CI templates
 ```
 
 **Start here:** [DOCUMENTATION_MAP.md](DOCUMENTATION_MAP.md)
@@ -29,8 +31,8 @@ HR Job Portal
 ## Quick start (HRMS)
 
 ```bash
-cp backend/.env.example backend/.env
-# Edit backend/.env — set DATABASE_URL or POSTGRES_*
+cp apps/backend/.env.example apps/backend/.env
+# Edit apps/backend/.env — set DATABASE_URL or POSTGRES_*
 
 node start.js
 ```
@@ -52,19 +54,19 @@ pytest
 ### Run frontend only
 
 ```bash
-cd frontend && npm install && npm run dev
+cd apps/frontend && npm install && npm run dev
 ```
 
 ### Run backend only
 
 ```bash
-cd backend && source venv/bin/activate && python app.py
+cd apps/backend && source venv/bin/activate && python wsgi.py
 ```
 
 ### Run Electron (bulk parser)
 
 ```bash
-# Terminal 1: cd frontend && npm run dev
+# Terminal 1: cd apps/frontend && npm run dev
 # Terminal 2: npm run electron   (from repo root)
 ```
 

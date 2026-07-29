@@ -2,6 +2,8 @@
 
 Flask REST API for the HR Job Portal application.
 
+Canonical location: `apps/backend/` (repository root).
+
 ## What is this?
 
 The backend provides authentication, job management, applications, resume/JD parsing, ATS matching, admin tools, and Head of HR APIs. It uses PostgreSQL via a connection pool and raw SQL helpers.
@@ -14,21 +16,16 @@ All HRMS business logic and data persistence live here. The frontend and Electro
 
 | Path | Purpose |
 |------|---------|
-| `app.py` | Application entry, CORS, blueprint registration |
-| `auth.py`, `candidate.py`, `jobs.py`, … | Route blueprints |
-| `db.py` | PostgreSQL pool and query helpers |
-| `toon.py` | TOON serialize/parse (production wire format) |
-| `llm_service.py` | HRMS LLM parsing prompts |
-| `parsing_utils.py` | TOON validation and persistence |
+| `wsgi.py` / `app.py` | Application entry |
+| `app/` | Modular monolith (`domains/*`, bootstrap, config) |
 | `schema_pg/` | PostgreSQL DDL and seeds |
-| `services/` | ATS, bulk parsing, notifications |
-| `helpers/` | Email templates and OTP |
+| Root `*.py` shims | Compatibility re-exports from `app.*` |
 
 ## What should never be placed here?
 
-- React components → `frontend/`
+- React components → `apps/frontend/`
 - AI runtime / capabilities → `ai/`
-- Desktop shell logic → `electron/`
+- Desktop shell logic → `apps/desktop/`
 
 ## Dependencies
 
@@ -49,17 +46,17 @@ All HRMS business logic and data persistence live here. The frontend and Electro
 ## Quick start
 
 ```bash
-cd backend
-cp .env.example .env   # configure DATABASE_URL
+cd apps/backend
+cp .env.example .env   # configure DATABASE_URL or POSTGRES_*
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-python app.py          # or: gunicorn -c gunicorn.conf.py app:app
+python wsgi.py         # or: gunicorn -c gunicorn.conf.py wsgi:app
 ```
 
 Or from repo root: `node start.js`
 
 ## Related documentation
 
-- [Backend documentation](../docs/BACKEND_DOCUMENTATION.md)
-- [Technical documentation](../docs/TECHNICAL_DOCUMENTATION.md)
-- [Database test script](../scripts/database/test_db_connection.py)
+- [Backend documentation](../../docs/BACKEND_DOCUMENTATION.md)
+- [Technical documentation](../../docs/TECHNICAL_DOCUMENTATION.md)
+- [Database test script](../../scripts/database/test_db_connection.py)

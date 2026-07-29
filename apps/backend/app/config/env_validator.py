@@ -66,7 +66,7 @@ class EnvValidator:
             for error in errors:
                 print(error)
             print("\n📋 To fix:")
-            print("   1. Copy backend/.env.example to backend/.env")
+            print("   1. Copy apps/backend/.env.example to apps/backend/.env")
             print("   2. Set DATABASE_URL or POSTGRES_* variables")
             print("   3. Restart the application")
 
@@ -92,7 +92,7 @@ def validate_env_or_exit(strict: bool = False):
     load_dotenv()
 
     if not EnvValidator.print_report(strict):
-        print("💡 TIP: Copy backend/.env.example to backend/.env and configure it.\n")
+        print("💡 TIP: Copy apps/backend/.env.example to apps/backend/.env and configure it.\n")
         sys.exit(1)
 
 

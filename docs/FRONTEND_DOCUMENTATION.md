@@ -7,7 +7,7 @@ This document describes the frontend directory structure, the purpose of each fi
 ## 1. Frontend Directory Structure
 
 ```
-frontend/
+apps/frontend/
 ├── index.html              # HTML shell; mounts React via /src/main.jsx
 ├── package.json            # Dependencies and scripts (dev, build, preview)
 ├── vite.config.js          # Vite config: React plugin, @ alias, server port 5173

@@ -53,5 +53,6 @@ docs/
 
 ## Compatibility
 
-Root symlinks `backend`, `frontend`, and `electron` point to `apps/*` for backward-compatible paths.
+Use `apps/backend`, `apps/frontend`, and `apps/desktop` as the only app locations.
+Root-level `backend` / `frontend` / `electron` symlinks were removed to avoid duplicate folders in the IDE.
 Legacy `apps/backend/*.py` shims re-export from `app.*` package modules.

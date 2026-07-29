@@ -1,52 +1,38 @@
-# Electron
+# Desktop (Electron)
 
-Native desktop shell for the HR Job Portal.
+Native shell for bulk resume parsing folder dialogs. Canonical location: `apps/desktop/`.
 
-## What is this?
+## What belongs here?
 
-Electron wraps the React frontend in a desktop window and exposes native OS capabilities through secure IPC.
-
-## Why does it exist?
-
-Browser file pickers restrict folder access. Bulk resume parsing requires selecting input/output directories — Electron provides native folder dialogs.
-
-## Responsibilities (only)
-
-| Capability | Implementation |
-|------------|----------------|
-| Native folder dialogs | `ipc-handlers.js` |
-| File system access | IPC to main process |
-| Window management | `main.js` |
-| Secure preload bridge | `preload.js` |
+- BrowserWindow / IPC for native folder pickers
+- Loading the Vite frontend (dev) or `apps/frontend/dist` (production)
 
 ## What should never be placed here?
 
-- Business logic → `backend/`
-- UI components → `frontend/`
-- AI parsing → `ai/`
-- API calls → `frontend/` (renderer)
+- Business logic → `apps/backend/`
+- UI components → `apps/frontend/`
+- API calls → `apps/frontend/` (renderer)
 
-## Architecture
+## Layout
 
 ```
-main.js          → BrowserWindow, loads Vite dev server or frontend/dist
-preload.js       → contextBridge exposes safe IPC API
-ipc-handlers.js  → dialog.showOpenDialog for bulk parser folders
+main.js          → BrowserWindow, loads Vite or frontend/dist
+preload.js       → contextBridge for IPC
+ipc-handlers.js  → native dialogs
 ```
 
 ## Quick start
 
 ```bash
 # Terminal 1
-cd frontend && npm run dev
+cd apps/frontend && npm run dev
 
 # Terminal 2 (repo root)
-npm install && npm run electron
+npm run electron
 ```
 
-Production loads `frontend/dist/index.html` when not in development mode.
+Production loads `apps/frontend/dist/index.html` when not in development mode.
 
-## Related documentation
+## Related
 
-- [Root README](../README.md#bulk-resume-parser-electron)
 - [Frontend](../frontend/package.json)

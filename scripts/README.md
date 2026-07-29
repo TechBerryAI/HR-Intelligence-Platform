@@ -10,7 +10,7 @@ Root-level scripts that support local development, CI preflight, and database co
 
 | Script | Purpose |
 |--------|---------|
-| `db-preflight.js` | PostgreSQL connectivity diagnostics (reads `backend/.env`, WSL-aware) |
+| `db-preflight.js` | PostgreSQL connectivity diagnostics (reads `apps/backend/.env`, WSL-aware) |
 | `database/test_db_connection.py` | Python DB connection test |
 
 ## What belongs here?
@@ -21,8 +21,8 @@ Root-level scripts that support local development, CI preflight, and database co
 ## What should never be placed here?
 
 - AI platform CLIs → `ai/runtime/cli/`, `ai/dataset/*/cli/`
-- Backend one-offs tied to Flask → prefer `backend/` or document here explicitly
-- Production deployment scripts → future `tools/` or CI workflows
+- Backend one-offs tied to Flask → prefer `apps/backend/` or document here explicitly
+- Production deployment scripts → CI workflows under `infrastructure/`
 
 ## Quick start
 
@@ -31,8 +31,8 @@ Root-level scripts that support local development, CI preflight, and database co
 node scripts/db-preflight.js
 
 # Database test (Python)
-cd backend && source venv/bin/activate
-python ../scripts/database/test_db_connection.py
+cd apps/backend && source venv/bin/activate
+python ../../scripts/database/test_db_connection.py
 ```
 
 ## Resume parsing smoke test (Ollama)
@@ -45,7 +45,7 @@ ollama pull qwen2.5:7b-instruct
 ollama serve   # if not already running
 
 # Install backend + AI runtime deps
-cd backend && source venv/bin/activate
+cd apps/backend && source venv/bin/activate
 pip install -r requirements.txt
 
 # Run integration smoke test (requires Ollama)
@@ -59,4 +59,4 @@ node start.js
 ## Related documentation
 
 - [Development guide](../docs/DEVELOPMENT.md)
-- [Backend README](../backend/README.md)
+- [Backend README](../apps/backend/README.md)
