@@ -19,15 +19,20 @@ export default defineConfig(({ mode }) => ({
     port: 5173,
     strictPort: true,
     proxy: {
-      // Optional: Proxy API requests during development
-      // Uncomment if you want to use proxy instead of CORS
-      // '/api': {
-      //   target: 'http://localhost:3000',
-      //   changeOrigin: true,
-      //   secure: false,
-      // }
-    }
-  }
+      // Same-origin API: browser calls /api and /health; Vite forwards to Flask.
+      // Works from phones/other devices on the LAN without changing VITE_API_URL.
+      '/api': {
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/health': {
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 }))
 
 

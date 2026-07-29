@@ -123,6 +123,8 @@ Database and tables are created automatically on first backend run from `apps/ba
 | `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Yes* | PostgreSQL connection |
 | `DATABASE_URL` | Yes* | Alternative: full URL (e.g. `postgresql://user:pass@host:5432/JobPortal`) |
 | `PORT` | No | Server port (default `3000`) |
+| `FRONTEND_URL` / `FRONTEND_URLS` | Prod | Public SPA origin(s) for CORS when not same-origin proxied |
+| `GUNICORN_BIND` | No | Default `127.0.0.1:3000` (correct behind reverse proxy) |
 | `JWT_SECRET` | Yes | Secret for JWT signing (change in production) |
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | For OTP | SMTP (e.g. Gmail App Password); set `MAIL_SUPPRESS_SEND=true` to disable |
 | `XAI_MODEL`, `HRMS_API_KEY_1`… | For parsing | LLM (e.g. Grok) for resume/JD parsing |
@@ -135,9 +137,19 @@ Database and tables are created automatically on first backend run from `apps/ba
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VITE_API_URL` | `http://localhost:3000` | Backend API base URL |
+| `VITE_API_URL` | _(empty)_ | API base URL. **Leave empty** for same-origin (recommended). Vite proxies `/api` and `/health` to Flask in dev; set an absolute URL only for split-origin setups |
 | `VITE_API_TIMEOUT_MS` | `30000` | Request timeout (ms) |
-| `VITE_PARSING_API_URL` | — | Optional separate parsing service URL |
+
+Copy from [`apps/frontend/.env.example`](apps/frontend/.env.example).
+
+#### Multi-device (LAN) development
+
+1. Leave `VITE_API_URL` empty.
+2. Start backend + frontend (`node start.js` or manual).
+3. On another device on the same network, open `http://<host-lan-ip>:5173` (Vite listens on `0.0.0.0`).
+4. The browser calls `/api` and `/health` on that same host; Vite proxies to Flask on `127.0.0.1:3000`. No per-device IP in env.
+
+With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-proxied) API CORS.
 
 ---
 
@@ -206,8 +218,13 @@ Full endpoint list, request/response shapes, and auth requirements: **[docs/TECH
 
 ## Deployment
 
-- **Frontend:** Build with `npm run build`; serve `frontend/dist` as a static SPA (configure fallback to `index.html` for client-side routing). Set `VITE_API_URL` to your backend URL.
-- **Backend:** Run with Gunicorn (see `backend/gunicorn.conf.py`) or equivalent. Set `FRONTEND_URL`/`FRONTEND_URLS` for CORS. Use a strong `JWT_SECRET` and, in production, consider HttpOnly cookies for tokens (see technical doc).
+Same-origin (recommended): serve the SPA and proxy API on one public origin.
+
+1. **Frontend build:** Leave `VITE_API_URL` empty, then `cd apps/frontend && npm run build`. Serve `apps/frontend/dist` as a static SPA (fallback to `index.html` for client routes).
+2. **Reverse proxy:** Forward `/api` and `/health` to gunicorn (`127.0.0.1:3000` by default). Serve static assets from `dist/`.
+3. **Backend:** Run with Gunicorn (`apps/backend/gunicorn.conf.py`). Set `FRONTEND_URL` to the public origin, `FLASK_DEBUG=false`, and a strong `JWT_SECRET`. Keep `GUNICORN_BIND=127.0.0.1:3000` behind the proxy.
+
+Split-origin is supported by setting an absolute `VITE_API_URL` at build time and listing that frontend origin in `FRONTEND_URLS`, but same-origin avoids device-specific and CORS issues.
 
 ---
 
@@ -227,7 +244,8 @@ Electron opens a window that loads the app and uses OS folder dialogs.
 - **Env validation failed:** Run `cd backend && python env_validator.py`; fix `DATABASE_URL` or `POSTGRES_*` in `backend/.env`.
 - **Database connection failed:** Ensure PostgreSQL is running and credentials are correct. Test: `psql -h localhost -U postgres -d JobPortal -c "SELECT 1"`.
 - **Port in use:** Stop process on 3000 (backend) or 5173 (frontend). On Windows: `Get-NetTCPConnection -LocalPort 3000 | Select-Object -ExpandProperty OwningProcess | Stop-Process -Force`.
-- **Email not sending:** Set `MAIL_SUPPRESS_SEND=true` in `backend/.env` for testing.
+- **Email not sending:** Set `MAIL_SUPPRESS_SEND=true` in `apps/backend/.env` for testing.
+- **Other device cannot reach API:** Leave `VITE_API_URL` empty and open the Vite URL (`http://<host-ip>:5173`), not a hardcoded `localhost` API URL. Ensure firewall allows port 5173.
 
 More troubleshooting: [docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md).
 

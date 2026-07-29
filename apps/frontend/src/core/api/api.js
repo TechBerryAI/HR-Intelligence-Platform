@@ -1,16 +1,12 @@
-// API client with robust retry logic and error handling
-// Backend CORS requirements for local dev:
-//   app.use(cors({
-//     origin: 'http://localhost:5173',
-//     credentials: true,
-//   }))
-// If you migrate auth to HttpOnly cookies, ensure the backend sets them and
-// keep `credentials: 'include'` (already set below). You may then stop
-// attaching Authorization headers and persisting tokens.
+// API client with robust retry logic and error handling.
+// Same-origin by default: leave VITE_API_URL empty so requests go to /api and /health
+// on whatever host opened the UI. Vite proxies those paths in dev; production reverse
+// proxy should do the same. Set an absolute VITE_API_URL only for rare split-origin setups.
+// If you migrate auth to HttpOnly cookies, keep `credentials: 'include'` (already set below).
 import { tokenService } from '@/core/auth/tokenService.js';
 
-// Default to localhost:3000 if VITE_API_URL is not set (for development)
-export const BASE_URL = (import.meta.env?.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '');
+// Empty string = same-origin relative URLs (recommended)
+export const BASE_URL = (import.meta.env?.VITE_API_URL ?? '').replace(/\/$/, '');
 
 // Retry configuration
 const RETRY_CONFIG = {
@@ -22,7 +18,7 @@ const RETRY_CONFIG = {
 
 // Log the configured BASE_URL in development
 if (import.meta.env?.DEV) {
-  console.log('API BASE_URL configured:', BASE_URL || 'NOT SET - requests will fail');
+  console.log('API BASE_URL configured:', BASE_URL || '(same-origin)');
 }
 
 // Helper to wait with exponential backoff
@@ -54,12 +50,10 @@ export function setOnTokensRefreshed(fn) {
 }
 
 function joinUrl(base, path) {
-  if (!base) {
-    console.warn('BASE_URL is not set! API requests will fail. Set VITE_API_URL in .env file.');
-    return path;
-  }
   if (/^https?:\/\//i.test(path)) return path;
   const p = path.startsWith('/') ? path : `/${path}`;
+  // Empty base = same-origin relative path (intentional)
+  if (!base) return p;
   return `${base}${p}`;
 }
 

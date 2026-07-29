@@ -13,8 +13,7 @@ import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import { useToast } from '@/shared/components/Toast.jsx'
 import { useApp } from '@/core/context/AppContext.jsx'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+import { BASE_URL } from '@/core/api/api.js'
 
 const FEEDBACK_TYPES = [
   { value: 'Bug Report', label: 'Bug Report' },
@@ -129,7 +128,7 @@ export default function HRMSTestingFeedback() {
         fd.append('description', form.description.trim())
         if (form.feedback_type === 'Bug Report') fd.append('severity', form.severity)
         fd.append('screenshot', screenshotFile)
-        response = await fetch(`${API_BASE_URL}/api/feedback/submit`, {
+        response = await fetch(`${BASE_URL}/api/feedback/submit`, {
           method: 'POST',
           body: fd,
         })
@@ -143,7 +142,7 @@ export default function HRMSTestingFeedback() {
           description: form.description.trim(),
         }
         if (form.feedback_type === 'Bug Report') payload.severity = form.severity
-        response = await fetch(`${API_BASE_URL}/api/feedback/submit`, {
+        response = await fetch(`${BASE_URL}/api/feedback/submit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),

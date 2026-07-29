@@ -2,8 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { FiFilter, FiRefreshCw, FiMessageSquare, FiChevronDown } from 'react-icons/fi'
 import { useToast } from '@/shared/components/Toast.jsx'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+import { BASE_URL } from '@/core/api/api.js'
 
 const FEEDBACK_TYPES = ['Bug Report', 'Feature Request', 'General Feedback', 'Appreciation']
 const MODULES = ['Leave Management', 'Payroll', 'Attendance', 'Dashboard', 'Other']
@@ -31,7 +30,7 @@ export default function FeedbackAdmin() {
       Object.entries(filters).forEach(([k, v]) => {
         if (v && v.trim()) params.set(k, v.trim())
       })
-      const url = `${API_BASE_URL}/api/feedback/list${params.toString() ? `?${params}` : ''}`
+      const url = `${BASE_URL}/api/feedback/list${params.toString() ? `?${params}` : ''}`
       const res = await fetch(url)
       const data = await res.json()
       if (res.ok && data.success) {

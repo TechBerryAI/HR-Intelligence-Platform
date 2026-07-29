@@ -2,7 +2,7 @@
  * Bulk Resume Parsing API - calls backend /api/admin/bulk-parse (proxy to Bulk-Resume-Parser).
  * Admin only; requires HR token.
  */
-import { apiRequest } from '@/core/api/api.js'
+import { apiRequest, BASE_URL } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
 
 export async function uploadBulkResumes(files, append = false) {
@@ -25,16 +25,14 @@ export async function getBulkProgress(jobId) {
  * Returns URL for downloading Excel (same-origin; backend streams from Bulk-Resume-Parser).
  */
 export function getBulkDownloadUrl(jobId) {
-  const base = (import.meta.env?.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '')
-  return `${base}/api/admin/bulk-parse/download/${jobId}`
+  return `${BASE_URL}/api/admin/bulk-parse/download/${jobId}`
 }
 
 /**
  * Download Excel file (requires token via apiRequest). Fetches blob and triggers download.
  */
 export async function downloadBulkResult(jobId, filename = 'Parsed_Resumes.xlsx') {
-  const base = (import.meta.env?.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '')
-  const url = `${base}/api/admin/bulk-parse/download/${jobId}`
+  const url = `${BASE_URL}/api/admin/bulk-parse/download/${jobId}`
   const token = tokenService.getToken()
   const res = await fetch(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},

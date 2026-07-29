@@ -29,7 +29,16 @@ def _build_allowed_origins():
         except OSError:
             pass
     if os.getenv('FLASK_DEBUG', 'false').lower() == 'true':
-        origins.extend([r'http://localhost:\d+', r'http://127.0.0.1:\d+'])
+        # Localhost any port + private LAN (for direct API access without editing .env)
+        origins.extend(
+            [
+                r'http://localhost:\d+',
+                r'http://127\.0\.0\.1:\d+',
+                r'http://192\.168\.\d+\.\d+:\d+',
+                r'http://10\.\d+\.\d+\.\d+:\d+',
+                r'http://172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+:\d+',
+            ]
+        )
     return origins
 
 
