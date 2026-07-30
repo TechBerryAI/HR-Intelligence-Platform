@@ -24,7 +24,7 @@ from app.integrations.openai.llm_service import call_llm, classify_document
 
 parsing_bp = Blueprint('parsing', __name__)
 
-ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx'}
+ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 # Simple in-memory rate limit for public resume parse: N requests per window per IP

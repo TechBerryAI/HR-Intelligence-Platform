@@ -199,7 +199,7 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.doc,.docx"
+                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
                 onChange={handleFileChange}
                 disabled={isUploading}
                 className="hidden"
@@ -234,7 +234,7 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
                   <div className="flex items-center gap-4 text-xs text-zinc-500">
                     <div className="flex items-center gap-1">
                       <FiFile className="w-4 h-4" />
-                      <span>PDF, DOC, DOCX</span>
+                      <span>PDF, DOC, DOCX, PNG, JPG, WEBP</span>
                     </div>
                     <div className="w-1 h-1 bg-zinc-600 rounded-full" />
                     <span>Max 10MB</span>

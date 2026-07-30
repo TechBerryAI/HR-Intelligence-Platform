@@ -1,168 +1,354 @@
 """
-Text Extraction from PDF and DOCX files
-"""
-import io
-import os
-from typing import Optional
-import PyPDF2
-from docx import Document
-import requests
+Text Extraction from PDF, DOCX, and image files.
 
-# Parsing API configuration
+Prefers PyMuPDF for digital PDF text; falls back to OCR for scanned/image PDFs
+and direct image uploads. OCR uses RapidOCR (pip-only via requirements.txt);
+optional system Tesseract is a secondary fallback. Optional PARSING_API is last resort.
+"""
+from __future__ import annotations
+
+import io
+import logging
+import os
+import shutil
+from typing import Any
+
+import requests
+from docx import Document
+
+logger = logging.getLogger(__name__)
+
 PARSING_API_URL = os.getenv('PARSING_API_URL', 'http://localhost:4000')
 PARSING_API_KEY = os.getenv('PARSING_API_KEY', 'your-api-key-here')
-# Max PDF pages to extract (0 = all). Limits long PDFs for faster parsing; 25 is plenty for resumes.
 PDF_MAX_PAGES = max(0, int(os.getenv('PDF_MAX_PAGES', '0')))
+OCR_ENABLED = os.getenv('OCR_ENABLED', 'true').lower() in ('1', 'true', 'yes')
+OCR_LANG = os.getenv('OCR_LANG', 'eng')
+OCR_DPI = max(72, int(os.getenv('OCR_DPI', '250')))
+MIN_TEXT_CHARS = 30
+# Per-page digital text below this with images present triggers OCR for that page.
+PAGE_OCR_TEXT_THRESHOLD = 20
+
+IMAGE_EXTENSIONS = frozenset({'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp'})
+
+_rapidocr_engine: Any = None
+
+
+def _tesseract_available() -> bool:
+    return bool(shutil.which('tesseract'))
+
+
+def _get_rapidocr_engine() -> Any:
+    """Lazy-load RapidOCR (bundled ONNX models via pip)."""
+    global _rapidocr_engine
+    if _rapidocr_engine is not None:
+        return _rapidocr_engine
+    from rapidocr_onnxruntime import RapidOCR
+
+    _rapidocr_engine = RapidOCR()
+    return _rapidocr_engine
+
+
+def _ocr_with_rapidocr(image_bytes: bytes) -> str:
+    """OCR via RapidOCR (pip-installable, no system binary)."""
+    import numpy as np
+    from PIL import Image
+
+    image = Image.open(io.BytesIO(image_bytes))
+    if image.mode not in ('RGB', 'L'):
+        image = image.convert('RGB')
+    arr = np.array(image)
+    engine = _get_rapidocr_engine()
+    result, _ = engine(arr)
+    if not result:
+        return ''
+    lines: list[str] = []
+    for item in result:
+        # RapidOCR returns [box, text, score]
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            text = item[1]
+            if text and str(text).strip():
+                lines.append(str(text).strip())
+    return '\n'.join(lines).strip()
+
+
+def _ocr_with_tesseract(image_bytes: bytes, *, lang: str | None = None) -> str:
+    """OCR via system Tesseract + pytesseract (optional fallback)."""
+    import pytesseract
+    from PIL import Image
+
+    image = Image.open(io.BytesIO(image_bytes))
+    if image.mode not in ('RGB', 'L'):
+        image = image.convert('RGB')
+    text = pytesseract.image_to_string(image, lang=lang or OCR_LANG)
+    return (text or '').strip()
+
+
+def _ocr_image_bytes(image_bytes: bytes, *, lang: str | None = None) -> str:
+    """
+    Run OCR on raw image bytes.
+
+    Primary: RapidOCR (installed via requirements.txt).
+    Secondary: system Tesseract if available.
+    """
+    if not OCR_ENABLED:
+        raise ValueError('OCR is disabled (OCR_ENABLED=false)')
+
+    errors: list[str] = []
+
+    try:
+        text = _ocr_with_rapidocr(image_bytes)
+        if text:
+            return text
+        errors.append('RapidOCR returned empty text')
+    except ImportError as exc:
+        errors.append(
+            f'RapidOCR not installed ({exc}). Run: pip install -r requirements.txt'
+        )
+    except Exception as exc:
+        errors.append(f'RapidOCR failed: {exc}')
+        logger.warning('RapidOCR failed, trying Tesseract if available: %s', exc)
+
+    if _tesseract_available():
+        try:
+            text = _ocr_with_tesseract(image_bytes, lang=lang)
+            if text:
+                return text
+            errors.append('Tesseract returned empty text')
+        except Exception as exc:
+            errors.append(f'Tesseract failed: {exc}')
+
+    detail = '; '.join(errors) if errors else 'no OCR engine available'
+    raise ValueError(
+        f'OCR failed ({detail}). Ensure backend deps are installed: '
+        f'pip install -r requirements.txt (includes rapidocr-onnxruntime).'
+    )
+
+
+def extract_text_from_image(file_data: bytes, filename: str = 'image.png') -> str:
+    """Extract text from a standalone image via OCR."""
+    text = _ocr_image_bytes(file_data)
+    if len(text) < MIN_TEXT_CHARS:
+        raise ValueError(
+            f'OCR extracted only {len(text)} characters from image {filename}. '
+            'The image may be blank, too low-resolution, or unreadable.'
+        )
+    logger.info('OCR extracted %s characters from image %s', len(text), filename)
+    return text
+
+
+def _render_page_png(page, dpi: int = OCR_DPI) -> bytes:
+    """Render a PyMuPDF page to PNG bytes."""
+    import fitz
+
+    zoom = dpi / 72.0
+    matrix = fitz.Matrix(zoom, zoom)
+    pix = page.get_pixmap(matrix=matrix, alpha=False)
+    return pix.tobytes('png')
+
+
+def _page_needs_ocr(page, digital_text: str) -> bool:
+    """True when digital text is thin and the page appears image-based."""
+    if len((digital_text or '').strip()) >= PAGE_OCR_TEXT_THRESHOLD:
+        return False
+    try:
+        images = page.get_images(full=True)
+        if images:
+            return True
+    except Exception:
+        pass
+    # No extractable text at all — still try OCR (blank digital layer).
+    return len((digital_text or '').strip()) < MIN_TEXT_CHARS
+
+
+def extract_text_from_pdf_pymupdf(file_data: bytes) -> str:
+    """
+    Extract text from PDF via PyMuPDF, with per-page OCR when needed.
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError as exc:
+        raise ValueError('PyMuPDF (pymupdf) is not installed') from exc
+
+    doc = fitz.open(stream=file_data, filetype='pdf')
+    try:
+        page_count = len(doc)
+        if PDF_MAX_PAGES:
+            page_count = min(page_count, PDF_MAX_PAGES)
+
+        text_parts: list[str] = []
+        used_ocr = False
+
+        for page_num in range(page_count):
+            page = doc[page_num]
+            digital = (page.get_text('text') or '').strip()
+
+            if _page_needs_ocr(page, digital):
+                if OCR_ENABLED:
+                    try:
+                        png = _render_page_png(page)
+                        ocr_text = _ocr_image_bytes(png)
+                        if ocr_text:
+                            text_parts.append(ocr_text)
+                            used_ocr = True
+                            continue
+                    except ValueError as ocr_err:
+                        logger.warning(
+                            'OCR failed for PDF page %s: %s', page_num + 1, ocr_err
+                        )
+                        if digital:
+                            text_parts.append(digital)
+                        continue
+                elif digital:
+                    text_parts.append(digital)
+            elif digital:
+                text_parts.append(digital)
+
+        extracted = '\n\n'.join(text_parts).strip()
+        if len(extracted) < MIN_TEXT_CHARS:
+            raise ValueError(
+                'Insufficient text extracted - PDF may be image-based or corrupted'
+            )
+        if used_ocr:
+            logger.info(
+                'Extracted %s characters from PDF (%s pages, OCR used)',
+                len(extracted),
+                page_count,
+            )
+        return extracted
+    finally:
+        doc.close()
+
+
+def extract_text_from_pdf_pypdf2(file_data: bytes) -> str:
+    """Legacy PyPDF2 extraction (fallback when PyMuPDF unavailable)."""
+    import PyPDF2
+
+    pdf_file = io.BytesIO(file_data)
+    pdf_reader = PyPDF2.PdfReader(pdf_file)
+    pages = pdf_reader.pages
+    if PDF_MAX_PAGES:
+        pages = pages[:PDF_MAX_PAGES]
+    text_parts = []
+    for page_num, page in enumerate(pages):
+        try:
+            text = page.extract_text()
+            if text and text.strip():
+                text_parts.append(text)
+        except Exception as e:
+            logger.warning('Failed to extract text from page %s: %s', page_num + 1, e)
+            continue
+    extracted_text = '\n\n'.join(text_parts)
+    if len(extracted_text.strip()) < MIN_TEXT_CHARS:
+        raise ValueError('Insufficient text extracted - PDF may be image-based or corrupted')
+    return extracted_text
 
 
 def extract_text_from_pdf_via_api(file_data: bytes, filename: str) -> str:
-    """
-    Fallback: Extract text from PDF using parsing API's parse endpoint
-    We call the parse endpoint and extract just the raw_text from the response
-    
-    Args:
-        file_data: PDF file bytes
-        filename: Original filename
-    
-    Returns:
-        Extracted text
-    """
+    """Fallback: Extract text from PDF using external parsing API."""
     try:
         endpoint = f"{PARSING_API_URL}/api/v1/parse/resume"
         headers = {}
         if PARSING_API_KEY and PARSING_API_KEY != 'your-api-key-here':
             headers['X-API-Key'] = PARSING_API_KEY
-        
+
         files = {'file': (filename, file_data, 'application/pdf')}
         response = requests.post(endpoint, files=files, headers=headers, timeout=60)
-        
+
         if response.status_code == 200:
             data = response.json()
-            # Extract raw_text from the parsing response
             raw_text = data.get('raw_text', '')
-            if raw_text and len(raw_text.strip()) >= 30:
-                print(f"[INFO] Successfully extracted {len(raw_text.strip())} characters via parsing API")
+            if raw_text and len(raw_text.strip()) >= MIN_TEXT_CHARS:
+                logger.info(
+                    'Successfully extracted %s characters via parsing API',
+                    len(raw_text.strip()),
+                )
                 return raw_text
-            else:
-                raise ValueError("Parsing API returned insufficient text")
-        else:
-            error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
-            error_msg = error_data.get('error', f"Parsing API returned status {response.status_code}")
-            raise ValueError(f"Parsing API error: {error_msg}")
+            raise ValueError('Parsing API returned insufficient text')
+        error_data = (
+            response.json()
+            if response.headers.get('content-type', '').startswith('application/json')
+            else {}
+        )
+        error_msg = error_data.get('error', f'Parsing API returned status {response.status_code}')
+        raise ValueError(f'Parsing API error: {error_msg}')
     except requests.exceptions.RequestException as e:
-        print(f"[WARN] Parsing API request failed: {str(e)}")
-        raise ValueError(f"Failed to extract text via API: {str(e)}")
+        logger.warning('Parsing API request failed: %s', e)
+        raise ValueError(f'Failed to extract text via API: {e}') from e
+    except ValueError:
+        raise
     except Exception as e:
-        print(f"[WARN] Parsing API extraction failed: {str(e)}")
-        raise ValueError(f"Failed to extract text via API: {str(e)}")
+        logger.warning('Parsing API extraction failed: %s', e)
+        raise ValueError(f'Failed to extract text via API: {e}') from e
 
 
 def extract_text_from_pdf(file_data: bytes) -> str:
-    """
-    Extract text from PDF file
-    
-    Args:
-        file_data: PDF file bytes
-    
-    Returns:
-        Extracted text
-    """
+    """Extract text from PDF: PyMuPDF (+OCR) → PyPDF2 → raise."""
     try:
-        pdf_file = io.BytesIO(file_data)
-        pdf_reader = PyPDF2.PdfReader(pdf_file)
-        pages = pdf_reader.pages
-        if PDF_MAX_PAGES:
-            pages = pages[:PDF_MAX_PAGES]
-        text_parts = []
-        for page_num, page in enumerate(pages):
-            try:
-                text = page.extract_text()
-                if text and text.strip():
-                    text_parts.append(text)
-            except Exception as e:
-                print(f"[WARN] Failed to extract text from page {page_num + 1}: {str(e)}")
-                continue
-        extracted_text = '\n\n'.join(text_parts)
-        
-        # If we got very little text, it might be an image-based PDF
-        # Lowered threshold to 30 characters to be more lenient
-        if len(extracted_text.strip()) < 30:
-            print(f"[WARN] Extracted only {len(extracted_text.strip())} characters, PDF might be image-based")
-            raise ValueError("Insufficient text extracted - PDF may be image-based or corrupted")
-        
-        return extracted_text
-    except ValueError:
-        # Re-raise ValueError (our custom error)
+        return extract_text_from_pdf_pymupdf(file_data)
+    except ValueError as e:
+        # If PyMuPDF missing, try PyPDF2; otherwise re-raise for OCR/API fallback chain.
+        if 'pymupdf' in str(e).lower() or 'PyMuPDF' in str(e):
+            logger.warning('PyMuPDF unavailable, falling back to PyPDF2: %s', e)
+            return extract_text_from_pdf_pypdf2(file_data)
         raise
     except Exception as e:
-        raise ValueError(f"Failed to extract text from PDF: {str(e)}")
+        # Unexpected PyMuPDF errors — try PyPDF2 before failing.
+        logger.warning('PyMuPDF extraction error, trying PyPDF2: %s', e)
+        try:
+            return extract_text_from_pdf_pypdf2(file_data)
+        except Exception:
+            raise ValueError(f'Failed to extract text from PDF: {e}') from e
 
 
 def extract_text_from_docx(file_data: bytes) -> str:
-    """
-    Extract text from DOCX file
-    
-    Args:
-        file_data: DOCX file bytes
-    
-    Returns:
-        Extracted text
-    """
+    """Extract text from DOCX file (paragraphs + tables)."""
     try:
         docx_file = io.BytesIO(file_data)
         doc = Document(docx_file)
-        
+
         text_parts = []
         for paragraph in doc.paragraphs:
             if paragraph.text.strip():
                 text_parts.append(paragraph.text)
-        
-        # Also extract text from tables
+
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     if cell.text.strip():
                         text_parts.append(cell.text)
-        
+
         return '\n\n'.join(text_parts)
     except Exception as e:
-        raise ValueError(f"Failed to extract text from DOCX: {str(e)}")
+        raise ValueError(f'Failed to extract text from DOCX: {e}') from e
 
 
 def extract_text(file_data: bytes, filename: str) -> str:
     """
-    Extract text from file based on extension
-    Tries local extraction first, falls back to parsing API if needed
-    
-    Args:
-        file_data: File bytes
-        filename: Original filename
-    
-    Returns:
-        Extracted text
+    Extract text from file based on extension.
+    Tries local extraction (with OCR) first, falls back to parsing API for PDFs.
     """
     ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
-    
+
+    if ext in IMAGE_EXTENSIONS:
+        return extract_text_from_image(file_data, filename)
+
     if ext == 'pdf':
         try:
-            # Try local extraction first
             return extract_text_from_pdf(file_data)
         except ValueError as e:
             error_msg = str(e)
-            # If local extraction failed or returned insufficient text, try API fallback
-            if 'Insufficient text' in error_msg or 'Failed to extract' in error_msg:
-                print(f"[INFO] Local PDF extraction failed, trying parsing API fallback...")
+            if 'Insufficient text' in error_msg or 'Failed to extract' in error_msg or 'OCR' in error_msg:
+                logger.info('Local PDF extraction failed, trying parsing API fallback...')
                 try:
                     return extract_text_from_pdf_via_api(file_data, filename)
                 except Exception as api_error:
-                    # If API also fails, raise the original error
-                    raise ValueError(f"Local extraction failed: {error_msg}. API fallback also failed: {str(api_error)}")
-            else:
-                raise
-    elif ext == 'doc':
+                    raise ValueError(
+                        f'Local extraction failed: {error_msg}. '
+                        f'API fallback also failed: {api_error}'
+                    ) from api_error
+            raise
+    if ext == 'doc':
         raise ValueError('Legacy .doc format is not supported. Please use DOCX or PDF.')
-    elif ext == 'docx':
+    if ext == 'docx':
         return extract_text_from_docx(file_data)
-    else:
-        raise ValueError(f"Unsupported file type: {ext}")
-
+    raise ValueError(f'Unsupported file type: {ext}')
