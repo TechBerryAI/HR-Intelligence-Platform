@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
 import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
-import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiRefreshCw, FiHome } from 'react-icons/fi'
+import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiRefreshCw, FiHome, FiPlus, FiArrowRight } from 'react-icons/fi'
 import RecruiterJobDashboard from '@/features/dashboard/components/recruiter/RecruiterJobDashboard.jsx'
 
 const ACCENT_ICON = {
@@ -93,7 +93,8 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
       const token = tokenService.getToken()
       const statsRes = await apiRequest('/api/head-hr/stats', { method: 'GET', token })
       setStats(statsRes)
-      if (showAnalytics) {
+      // Jobs + applications for CEO analytics and Head HR overview (recent jobs / activity)
+      if (showAnalytics || showJobPosting) {
         const [appsRes, jobsRes] = await Promise.all([
           apiRequest('/api/head-hr/applications', { method: 'GET', token }),
           apiRequest('/api/head-hr/jobs', { method: 'GET', token }),
@@ -110,7 +111,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
       setLoading(false)
       setRefreshing(false)
     }
-  }, [showAnalytics])
+  }, [showAnalytics, showJobPosting])
 
   useEffect(() => {
     load()
@@ -196,6 +197,93 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
     else navigate(basePath)
   }
 
+  const draftJobsCount = Math.max(0, (stats?.totalJobs ?? 0) - (stats?.activeJobs ?? 0))
+
+  const appsByJobId = useMemo(() => {
+    const map = {}
+    applications.forEach((a) => {
+      const id = String(a.job_id || a.jobId || '')
+      if (!id) return
+      map[id] = (map[id] || 0) + 1
+    })
+    return map
+  }, [applications])
+
+  const recentJobs = useMemo(() => {
+    return [...jobs]
+      .sort((a, b) => new Date(b.posted_on || 0) - new Date(a.posted_on || 0))
+      .slice(0, 5)
+  }, [jobs])
+
+  const recentActivity = useMemo(() => {
+    const items = []
+    applications.forEach((a) => {
+      const ts = a.applied_at || a.created_at
+      if (!ts) return
+      items.push({
+        id: `app-${a.id || a.application_id}-${ts}`,
+        at: new Date(ts).getTime(),
+        text: a.candidate_name
+          ? `${a.candidate_name} applied${a.job_title ? ` to ${a.job_title}` : ''}`
+          : 'New candidate applied',
+      })
+    })
+    jobs.forEach((j) => {
+      const ts = j.posted_on || j.created_at
+      if (!ts) return
+      items.push({
+        id: `job-${j.jdid || j.id}-${ts}`,
+        at: new Date(ts).getTime(),
+        text: j.enabled === false
+          ? `Job draft/disabled: ${j.title || 'Untitled'}`
+          : `Job posted: ${j.title || 'Untitled'}`,
+      })
+    })
+    return items.sort((a, b) => b.at - a.at).slice(0, 6)
+  }, [applications, jobs])
+
+  const formatShortDate = (ts) => {
+    if (!ts) return '—'
+    return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  const scrollToJobPosting = () => {
+    document.getElementById('job-posting-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const overviewMetrics = [
+    {
+      label: 'Active Jobs',
+      value: stats?.activeJobs,
+      onClick: () => go('jobs'),
+    },
+    {
+      label: 'Candidates',
+      value: stats?.totalCandidates,
+      onClick: () => go('jobs'),
+    },
+    {
+      label: 'HR Admins',
+      value: stats?.totalAdmins,
+      disabled: isCeo,
+      onClick: isCeo ? undefined : () => go('admins'),
+    },
+    {
+      label: 'Draft Jobs',
+      value: draftJobsCount,
+      onClick: () => go('jobs'),
+    },
+  ]
+
+  const snapshotItems = [
+    { label: 'Active Jobs', value: stats?.activeJobs },
+    { label: 'Candidates', value: stats?.totalCandidates },
+    { label: 'HR Admins', value: stats?.totalAdmins },
+    { label: 'Total Jobs', value: stats?.totalJobs },
+    { label: 'Applications', value: stats?.totalApplications },
+    { label: 'Shortlisted', value: stats?.shortlistedApplications },
+  ]
+
   const statItems = [
     {
       icon: FiUsers,
@@ -226,29 +314,9 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
       />
     ))
 
-  const renderStatsSidebar = () => (
-    <aside className="org-glass-panel p-[18px]">
-      <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-3 px-0.5">
-        Organization Snapshot
-      </h2>
-      <div className="space-y-2">
-        {loading
-          ? Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-14 rounded-[14px] border border-white/[0.08] bg-white/[0.035] animate-pulse" />
-            ))
-          : renderStatCards(true)}
-      </div>
-      {!loading && !isCeo && (
-        <p className="mt-4 text-xs text-[#71808E] leading-relaxed px-0.5">
-          CEO accounts are excluded from HR admin totals. Tap a metric to jump to the relevant section.
-        </p>
-      )}
-    </aside>
-  )
-
   return (
     <>
-      <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="org-page-title">
             {isCeo ? 'Executive Dashboard' : 'Admin Dashboard'}
@@ -262,6 +330,16 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {showJobPosting && !isCeo && (
+            <button
+              type="button"
+              onClick={scrollToJobPosting}
+              className="org-btn-primary"
+            >
+              <FiPlus className="w-4 h-4" />
+              Create Job
+            </button>
+          )}
           <button
             type="button"
             onClick={() => navigate('/')}
@@ -288,6 +366,32 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
         </div>
       )}
 
+      {showJobPosting && (
+        <div className="mb-7 grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {loading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-[72px] rounded-[14px] border border-white/[0.08] bg-white/[0.035] animate-pulse" />
+              ))
+            : overviewMetrics.map(({ label, value, onClick, disabled }) => {
+                const className = `org-glass-card text-left p-4 ${disabled ? 'cursor-default' : 'cursor-pointer'}`
+                const inner = (
+                  <>
+                    <p className="text-2xl font-bold text-[#F5F7FA] tabular-nums leading-none">{value ?? '—'}</p>
+                    <p className="mt-2 text-xs font-medium text-[#8E9BA8]">{label}</p>
+                  </>
+                )
+                if (disabled || !onClick) {
+                  return <div key={label} className={className}>{inner}</div>
+                }
+                return (
+                  <button key={label} type="button" onClick={onClick} className={className}>
+                    {inner}
+                  </button>
+                )
+              })}
+        </div>
+      )}
+
       {!showJobPosting && loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -307,12 +411,129 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
       )}
 
       {showJobPosting && (
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(260px,320px)] gap-7 items-start">
-          <div className="min-w-0">
-            <RecruiterJobDashboard embedded onJobChange={() => load(true)} />
+        <div className="space-y-7">
+          <div id="job-posting-section" className="scroll-mt-6">
+            <RecruiterJobDashboard embedded hideJobList onJobChange={() => load(true)} />
           </div>
-          <div className="lg:sticky lg:top-6">
-            {renderStatsSidebar()}
+
+          <section className="org-glass-panel p-5 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div>
+                <h2 className="font-display text-[18px] font-semibold text-[#F5F7FA] tracking-tight">
+                  Recent / Active Jobs
+                </h2>
+                <p className="mt-0.5 text-sm text-[#8E9BA8]">Latest postings across the organization</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => go('jobs')}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-[#55B9FF] hover:text-white transition-colors"
+              >
+                View all jobs
+                <FiArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {loading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-12 rounded-xl bg-white/[0.04] animate-pulse" />
+                ))}
+              </div>
+            ) : recentJobs.length === 0 ? (
+              <p className="text-sm text-[#71808E] py-6 text-center">No jobs yet. Create one above.</p>
+            ) : (
+              <div className="overflow-x-auto -mx-1">
+                <table className="w-full min-w-[560px] text-left">
+                  <thead>
+                    <tr className="border-b border-white/[0.08] text-[11px] uppercase tracking-[0.08em] text-[#738394]">
+                      <th className="pb-3 pr-4 font-semibold">Job</th>
+                      <th className="pb-3 pr-4 font-semibold">Status</th>
+                      <th className="pb-3 pr-4 font-semibold">Candidates</th>
+                      <th className="pb-3 font-semibold">Posted</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentJobs.map((job) => {
+                      const jdid = job.jdid || job.id
+                      const count = appsByJobId[String(jdid)] || 0
+                      const active = job.enabled !== false
+                      return (
+                        <tr
+                          key={jdid}
+                          className="border-b border-white/[0.05] last:border-0 hover:bg-white/[0.03] cursor-pointer transition-colors"
+                          onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(jdid)}`)}
+                        >
+                          <td className="py-3.5 pr-4 text-sm font-medium text-[#F2F5F8]">{job.title || '—'}</td>
+                          <td className="py-3.5 pr-4">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                active
+                                  ? 'bg-[rgba(54,214,160,0.12)] text-[#67DFB4]'
+                                  : 'bg-white/[0.06] text-[#8E9BA8]'
+                              }`}
+                            >
+                              {active ? 'Active' : 'Draft'}
+                            </span>
+                          </td>
+                          <td className="py-3.5 pr-4 text-sm tabular-nums text-[#A0ABB6]">
+                            {count > 0 ? count : '—'}
+                          </td>
+                          <td className="py-3.5 text-sm text-[#8E9BA8]">{formatShortDate(job.posted_on)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <section className="org-glass-panel p-5 sm:p-6">
+              <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-4">
+                Recent Activity
+              </h2>
+              {loading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="h-8 rounded-lg bg-white/[0.04] animate-pulse" />
+                  ))}
+                </div>
+              ) : recentActivity.length === 0 ? (
+                <p className="text-sm text-[#71808E]">No recent activity yet.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {recentActivity.map((item) => (
+                    <li key={item.id} className="flex items-start gap-3 text-sm text-[#C5D0DA]">
+                      <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[#00A6FF] flex-shrink-0" aria-hidden />
+                      <span className="min-w-0 leading-relaxed">{item.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <aside className="org-glass-panel p-5 sm:p-6">
+              <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-4">
+                Organization Snapshot
+              </h2>
+              <div className="space-y-2.5">
+                {loading
+                  ? Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="h-10 rounded-xl bg-white/[0.04] animate-pulse" />
+                    ))
+                  : snapshotItems.map(({ label, value }) => (
+                      <div
+                        key={label}
+                        className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.025] px-3.5 py-2.5"
+                      >
+                        <span className="text-sm text-[#8E9BA8]">{label}</span>
+                        <span className="text-sm font-semibold tabular-nums text-[#F5F7FA]">{value ?? '—'}</span>
+                      </div>
+                    ))}
+              </div>
+            </aside>
           </div>
         </div>
       )}

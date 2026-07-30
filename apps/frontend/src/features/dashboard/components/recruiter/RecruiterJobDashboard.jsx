@@ -18,7 +18,7 @@ const formatDisplayDate = (dateString) => {
   }
 }
 
-export default function RecruiterJobDashboard({ embedded = false, onJobChange }) {
+export default function RecruiterJobDashboard({ embedded = false, onJobChange, hideJobList = false }) {
   const { jobs, addJob, setJobEnabled, updateJob, user } = useApp()
   const [title, setTitle] = useState('')
   const [company, setCompany] = useState(user?.company || '')
@@ -266,6 +266,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange })
         </Card>
       </AnimatedContainer>
 
+      {!hideJobList && (
       <AnimatedContainer animation="fadeIn" delay={embedded ? 0.1 : 0.4}>
         <div className={embedded ? 'mt-7' : 'mt-10'}>
           <h3 className={`text-lg font-semibold mb-4 ${embedded ? 'text-[#F5F7FA]' : 'text-slate-900 dark:text-white'}`}>Your Job Posts</h3>
@@ -380,6 +381,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange })
           </div>
         </div>
       </AnimatedContainer>
+      )}
 
       <AnimatePresence>
         {editingJobId && (
