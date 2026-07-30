@@ -119,7 +119,7 @@ export default function HeadHrJobDetail() {
           </span>
         </div>
 
-        <div className="flex gap-1 mb-6 border-b border-zinc-800">
+        <div className="flex gap-6 mb-6 border-b border-white/[0.08]">
           {[
             { id: 'details', label: 'Job Details' },
             { id: 'candidates', label: `Candidates (${applicants.length})` },
@@ -128,13 +128,20 @@ export default function HeadHrJobDetail() {
               key={id}
               type="button"
               onClick={() => setTab(id)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              className={`relative px-1 py-3 text-sm font-medium transition-colors duration-[180ms] ${
                 tab === id
-                  ? 'border-purple-500 text-white'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-300'
+                  ? 'text-white'
+                  : 'text-[#77899B] hover:text-[#DCE3EA]'
               }`}
             >
               {label}
+              {tab === id && (
+                <span
+                  className="absolute left-0 right-0 bottom-0 h-0.5 rounded-full"
+                  style={{ background: 'linear-gradient(90deg, #00A6FF, #7657FF)' }}
+                  aria-hidden
+                />
+              )}
             </button>
           ))}
         </div>
@@ -196,8 +203,8 @@ export default function HeadHrJobDetail() {
               <div className="mt-3">
                 <JobDescriptionView
                   description={job.description}
-                  titleClassName="text-slate-500 dark:text-slate-400"
-                  textClassName="text-slate-700 dark:text-slate-300"
+                  titleClassName="text-[#DCE3EA]"
+                  textClassName="text-[#A0ABB6]"
                 />
               </div>
             </div>
@@ -211,20 +218,20 @@ export default function HeadHrJobDetail() {
               <span className="text-xs text-slate-500">{applicants.length} applicant{applicants.length === 1 ? '' : 's'}</span>
             </div>
             {applicants.length === 0 ? (
-              <p className="text-sm text-slate-500 py-4">No applications for this job yet.</p>
+              <p className="text-sm text-[#8796A5] py-4">No applications for this job yet.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-zinc-800 text-left">
-                      <th className="pb-2 text-xs font-semibold text-slate-500 uppercase">Candidate</th>
-                      <th className="pb-2 text-xs font-semibold text-slate-500 uppercase">Email</th>
-                      <th className="pb-2 text-xs font-semibold text-slate-500 uppercase">Match</th>
-                      <th className="pb-2 text-xs font-semibold text-slate-500 uppercase">Status</th>
-                      <th className="pb-2 text-xs font-semibold text-slate-500 uppercase">Applied</th>
+                    <tr className="border-b border-white/[0.08] text-left">
+                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[#83909C] uppercase tracking-[0.08em]">Candidate</th>
+                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[#83909C] uppercase tracking-[0.08em]">Email</th>
+                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[#83909C] uppercase tracking-[0.08em]">Match</th>
+                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[#83909C] uppercase tracking-[0.08em]">Status</th>
+                      <th className="pb-2.5 text-[11px] font-semibold text-[#83909C] uppercase tracking-[0.08em]">Applied</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-800">
+                  <tbody className="divide-y divide-white/[0.06]">
                     {applicants.map((app) => {
                       const score = app.match_score != null ? Math.round(Number(app.match_score)) : null
                       const status = String(app.status || 'applied').toLowerCase()
@@ -240,21 +247,21 @@ export default function HeadHrJobDetail() {
                               openCandidate(app.candidate_id)
                             }
                           }}
-                          className="cursor-pointer hover:bg-slate-100 dark:bg-slate-800/40 transition-colors"
+                          className="cursor-pointer transition-colors duration-[180ms] hover:bg-white/[0.05] focus:outline-none focus-visible:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#3AA9FF]/35"
                         >
-                          <td className="py-3 pr-3 text-slate-900 dark:text-slate-100 font-medium">{app.candidate_name || app.candidate_id}</td>
-                          <td className="py-3 pr-3 text-slate-500 dark:text-slate-400">{app.candidate_email || '—'}</td>
-                          <td className="py-3 pr-3 tabular-nums">
+                          <td className="py-3 pr-3 text-[#F5F7FA] font-medium">{app.candidate_name || app.candidate_id}</td>
+                          <td className="py-3 pr-3 text-[#A0ABB6]">{app.candidate_email || '—'}</td>
+                          <td className="py-3 pr-3 tabular-nums font-semibold">
                             {score != null ? (
-                              <span className={score >= 60 ? 'text-green-400' : 'text-amber-400'}>{score}%</span>
+                              <span className={score >= 60 ? 'text-[#36D6A0]' : 'text-[#F5B94C]'}>{score}%</span>
                             ) : (
-                              <span className="text-slate-500">—</span>
+                              <span className="text-[#738394]">—</span>
                             )}
                           </td>
-                          <td className="py-3 pr-3 capitalize text-slate-500 dark:text-slate-400">
+                          <td className="py-3 pr-3 capitalize text-[#A0ABB6]">
                             {app.shortlisted ? 'Shortlisted' : status === 'ats_failed' ? 'ATS failed' : status}
                           </td>
-                          <td className="py-3 text-slate-500">{formatDate(app.applied_at)}</td>
+                          <td className="py-3 text-[#8796A5]">{formatDate(app.applied_at)}</td>
                         </tr>
                       )
                     })}

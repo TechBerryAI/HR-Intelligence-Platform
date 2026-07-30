@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useApp } from '@/core/context/AppContext.jsx'
 import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
 import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
@@ -76,7 +75,6 @@ function BarRow({ label, count, total, colorClass }) {
 }
 
 export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosting = false }) {
-  const { auth } = useApp()
   const { basePath, readOnly } = useOrgPanel()
   const navigate = useNavigate()
   const isCeo = variant === 'ceo' || readOnly
@@ -264,13 +262,6 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {auth?.email && (
-            <span className="org-account-pill">
-              <span className="text-[#00A6FF] font-semibold">{isCeo ? 'Exec' : 'Admin'}</span>
-              <span className="text-white/25">•</span>
-              <span className="truncate max-w-[220px]">{auth.email}</span>
-            </span>
-          )}
           <button
             type="button"
             onClick={() => load(true)}

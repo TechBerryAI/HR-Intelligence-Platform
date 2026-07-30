@@ -1,5 +1,6 @@
 import React from 'react'
 import { parseJobDescriptionBlocks } from '@/shared/lib/jobDescription.js'
+import { cn } from '@/shared/lib/utils.js'
 
 /**
  * Renders job description with structured sections (**Title:**) and bullet lists (•).
@@ -11,14 +12,14 @@ export default function JobDescriptionView({ description, className = '', titleC
   }
   const blocks = parseJobDescriptionBlocks(description)
   if (blocks.length === 0) {
-    return <p className={`whitespace-pre-wrap ${textClassName}`}>{description}</p>
+    return <p className={cn('whitespace-pre-wrap', textClassName)}>{description}</p>
   }
   return (
-    <div className={`text-sm leading-relaxed space-y-4 ${className}`}>
+    <div className={cn('text-sm leading-relaxed space-y-4', className)}>
       {blocks.map((block, bi) => (
         <section key={bi} className="space-y-2">
           {block.title && (
-            <h4 className={`text-sm font-semibold text-slate-800 mt-4 first:mt-0 ${titleClassName}`}>
+            <h4 className={cn('text-sm font-semibold text-slate-800 mt-4 first:mt-0', titleClassName)}>
               {block.title}
             </h4>
           )}
