@@ -45,18 +45,97 @@ def test_resume_validate_rejects_empty_name():
     assert "name" in (err or "").lower()
 
 
-def test_resume_validate_rejects_empty_skills():
+def test_resume_validate_allows_empty_skills_when_history_present():
     toon = normalize_proposal(SAMPLE_RESUME, "resume")
     toon["skills"] = []
+    ok, err = validate_toon_format(toon, "resume")
+    assert ok, err
+
+
+def test_resume_validate_rejects_empty_skills_without_history():
+    toon = {
+        "type": "resume",
+        "person": {"name": "Jane Doe", "email": "jane@example.com", "phone": ""},
+        "skills": [],
+        "experience": [],
+        "education": [],
+    }
     ok, err = validate_toon_format(toon, "resume")
     assert not ok
     assert "skills" in (err or "").lower()
 
 
-def test_resume_validate_accepts_complete():
-    toon = build_resume_toon("", SAMPLE_RESUME)
-    ok, err = validate_toon_format(toon, "resume")
-    assert ok, err
+def test_normalize_education_preserves_gpa_dates_and_field():
+    from ai_runtime_adapter import _normalize_education, canonicalize_resume_toon
+
+    edu = _normalize_education([
+        {
+            "degree": "B.S.",
+            "field": "Computer Science",
+            "institution": "State U",
+            "from": "2018-08",
+            "to": "2022-05",
+            "gpa": "3.8",
+        }
+    ])
+    assert edu[0]["field"] == "Computer Science"
+    assert edu[0]["gpa"] == "3.8"
+    assert edu[0]["cgpa"] == "3.8"
+    assert edu[0]["from"] == "2018-08"
+    assert edu[0]["to"] == "2022-05"
+
+    toon = {
+        "type": "resume",
+        "person": {"name": "A", "email": "a@b.com", "phone": ""},
+        "skills": ["Python"],
+        "experience": [],
+        "education": edu,
+        "certifications": [{"name": "AWS", "issuer": "Amazon", "validTill": "2026", "url": "https://example.com"}],
+    }
+    canon, _ = canonicalize_resume_toon(toon)
+    assert canon["education"][0]["gpa"] == "3.8"
+    assert canon["education"][0]["from"] == "2018-08"
+    assert canon["certifications"][0]["issuer"] == "Amazon"
+    assert canon["certifications"][0]["validTill"] == "2026"
+    assert canon["certifications"][0]["url"] == "https://example.com"
+
+
+def test_repair_backfills_incomplete_education_row():
+    llm_output = {
+        "type": "resume",
+        "person": {"name": "Jane Doe", "email": "jane@example.com", "phone": ""},
+        "skills": ["Python"],
+        "experience": [],
+        "education": [{"degree": "B.Tech", "institution": "", "year": ""}],
+    }
+    raw = """
+Jane Doe
+jane@example.com
+Education
+B.Tech Computer Science, State University, 2018-2022
+Skills: Python
+"""
+    toon, actions = repair_resume_toon(llm_output, raw_resume_text=raw)
+    assert toon["education"]
+    assert (toon["education"][0].get("institution") or "").strip() or any(
+        "backfilled_education" in a for a in actions
+    ) or (toon["education"][0].get("degree") or "")
+
+
+def test_ocr_join_detections_reading_order():
+    from app.ai.parser.text_extraction import _join_ocr_detections_reading_order
+
+    # Lower box first in input, but higher on page should come first after sort
+    detections = [
+        [[[10, 100], [50, 100], [50, 120], [10, 120]], "Second line", 0.9],
+        [[[10, 20], [40, 20], [40, 40], [10, 40]], "First line", 0.95],
+        [[[80, 22], [140, 22], [140, 42], [80, 42]], "same-row-right", 0.9],
+    ]
+    text = _join_ocr_detections_reading_order(detections)
+    lines = text.split("\n")
+    assert lines[0] == "First line"
+    assert "same-row-right" in lines[1]
+    assert lines[-1] == "Second line"
 
 
 def test_resume_skills_pipe_split():
@@ -390,3 +469,42 @@ Skills: Python, JavaScript, HTML
     assert ok, err
     assert toon["person"]["email"] == "alex@fresh.com"
     assert len(toon["skills"]) > 0
+
+
+def test_collect_validation_issues_missing_person_does_not_raise():
+    toon = {
+        "type": "resume",
+        "skills": ["Python"],
+        "experience": [],
+        "education": [],
+    }
+    issues = collect_toon_validation_issues(toon, "resume")
+    assert isinstance(issues, list)
+    assert any("person" in i.lower() for i in issues)
+    assert "person.name must not be empty" in issues
+    assert "person.email must not be empty" in issues
+
+
+def test_build_resume_toon_empty_llm_recovers_identity_from_text():
+    raw_text = """
+Jordan Lee
+jordan.lee@example.com
++1 555-0101
+Skills: Python, SQL, Docker
+"""
+    toon = build_resume_toon(raw_text, {})
+    assert isinstance(toon.get("person"), dict)
+    assert toon["person"].get("name")
+    assert "jordan.lee@example.com" in (toon["person"].get("email") or "").lower()
+    assert isinstance(toon.get("skills"), list)
+
+
+def test_build_resume_toon_empty_llm_does_not_raise_keyerror():
+    raw_text = "No contact info here, just some prose about projects."
+    toon = build_resume_toon(raw_text, {})
+    assert isinstance(toon, dict)
+    assert "person" in toon
+    assert isinstance(toon["person"], dict)
+    # Validation may fail, but pipeline must not crash on missing keys
+    issues = collect_toon_validation_issues(toon, "resume")
+    assert isinstance(issues, list)

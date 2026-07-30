@@ -134,8 +134,8 @@ def build_resume_toon(
     toon_id = id(toon)
 
     log_resume_toon_stage("raw_extracted_text", raw_resume_text=raw_resume_text or "")
-    log_resume_toon_stage("raw_toon", payload=toon, object_id=toon_id)
 
+    # Repair first so skeleton exists before any validation-aware stage logging.
     toon, repair_actions = repair_resume_toon(toon, raw_resume_text=raw_resume_text or "")
     log_resume_toon_stage(
         "repaired_toon",
