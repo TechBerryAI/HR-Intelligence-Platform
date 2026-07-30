@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
 import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
-import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiRefreshCw, FiHome, FiPlus, FiArrowRight } from 'react-icons/fi'
+import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiRefreshCw, FiHome, FiArrowRight } from 'react-icons/fi'
 import RecruiterJobDashboard from '@/features/dashboard/components/recruiter/RecruiterJobDashboard.jsx'
 
 const ACCENT_ICON = {
@@ -247,10 +247,6 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
     return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
 
-  const scrollToJobPosting = () => {
-    document.getElementById('job-posting-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-
   const overviewMetrics = [
     {
       label: 'Active Jobs',
@@ -330,16 +326,6 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {showJobPosting && !isCeo && (
-            <button
-              type="button"
-              onClick={scrollToJobPosting}
-              className="org-btn-primary"
-            >
-              <FiPlus className="w-4 h-4" />
-              Create Job
-            </button>
-          )}
           <button
             type="button"
             onClick={() => navigate('/')}
