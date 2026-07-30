@@ -48,6 +48,22 @@ function runCmd(cmd, args, cwd = ROOT, env = process.env, useShell = false) {
   });
 }
 
+const CRITICAL_SOURCE_FILES = [
+  path.join(FRONTEND_DIR, 'src', 'shared', 'lib', 'utils.js'),
+  path.join(FRONTEND_DIR, 'src', 'shared', 'lib', 'jobDescription.js'),
+  path.join(BACKEND_DIR, 'app', 'domains', 'identity', 'sessions', 'service.py'),
+];
+
+function checkCriticalSource() {
+  const missing = CRITICAL_SOURCE_FILES.filter((p) => !fs.existsSync(p));
+  if (missing.length === 0) return;
+  log('Critical source files missing (repo may be incomplete or .gitignore is too broad):', 'err');
+  for (const p of missing) {
+    log(`  - ${path.relative(ROOT, p)}`, 'err');
+  }
+  process.exit(1);
+}
+
 function checkEnv() {
   logStep(1, 6, 'Checking environment');
   try {
@@ -69,6 +85,7 @@ function checkEnv() {
       process.exit(1);
     }
   }
+  checkCriticalSource();
   log('Environment check OK');
 }
 

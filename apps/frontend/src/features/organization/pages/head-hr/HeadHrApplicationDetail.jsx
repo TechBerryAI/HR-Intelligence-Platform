@@ -171,6 +171,7 @@ export default function HeadHrApplicationDetail() {
 
         <div className="org-card overflow-hidden">
           <MatchHeader
+            variant="enterprise"
             score={score ?? 0}
             candidateName={application.candidate_name || 'Candidate'}
             candidateEmail={application.candidate_email || ''}
@@ -178,16 +179,16 @@ export default function HeadHrApplicationDetail() {
             onClose={() => navigate(`${basePath}/applications`)}
           />
           <div className="p-6 space-y-6">
-            <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 ring-1 ring-slate-200 dark:ring-slate-700 px-4 py-3">
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-snug">
-                <span className="org-section-label">Why this verdict</span>
-                <span className="block mt-1.5 text-slate-900 dark:text-white">{getVerdictReason()}</span>
+            <div className="rounded-[14px] bg-[rgba(255,82,105,0.035)] border border-[rgba(255,82,105,0.12)] border-l-[3px] border-l-[rgba(255,82,105,0.65)] px-4 py-3">
+              <p className="text-sm font-medium text-[#A0ABB6] leading-snug">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#83909C]">Why this verdict</span>
+                <span className="block mt-1.5 text-[#F2F5F8]">{getVerdictReason()}</span>
               </p>
             </div>
 
             {hasMatchDetails && (breakdown.skills != null || breakdown.experience != null || breakdown.education != null || breakdown.location != null) && (
               <div>
-                <h3 className="org-section-label mb-3">Score breakdown</h3>
+                <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-3">Score breakdown</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {SCORE_FACTORS.map(({ name, key, weight }) => {
                     const value = breakdown[key]
@@ -195,9 +196,11 @@ export default function HeadHrApplicationDetail() {
                     return (
                       <ScoreCard
                         key={key}
+                        variant="enterprise"
                         factorName={name}
                         scorePct={value}
                         weightPct={weight}
+                        badge={key === 'skills' ? 'Mandatory' : undefined}
                       />
                     )
                   })}
@@ -205,16 +208,16 @@ export default function HeadHrApplicationDetail() {
               </div>
             )}
 
-            <ChipGroup title="Strengths" items={strengthChips} variant="strength" id="detail-strengths" />
-            <ChipGroup title="Gaps" items={gapChips} variant="gap" id="detail-gaps" />
+            <ChipGroup theme="enterprise" title="Strengths" items={strengthChips} variant="strength" id="detail-strengths" />
+            <ChipGroup theme="enterprise" title="Gaps" items={gapChips} variant="gap" id="detail-gaps" />
 
             {hasMatchDetails && (
-              <CollapsibleSection label="Detailed Analysis">
+              <CollapsibleSection label="Detailed Analysis" variant="enterprise">
                 <div className="space-y-4 text-sm">
                   {decisionBullets.length > 0 && (
                     <div>
-                      <p className="org-section-label mb-2">Decision logic</p>
-                      <ul className="list-disc list-inside space-y-1 text-slate-700 dark:text-slate-300">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-2">Decision logic</p>
+                      <ul className="list-disc list-inside space-y-1 text-[#A0ABB6]">
                         {decisionBullets.map((bullet, i) => (
                           <li key={i} className="leading-relaxed">{bullet}</li>
                         ))}
@@ -222,27 +225,27 @@ export default function HeadHrApplicationDetail() {
                     </div>
                   )}
                   {(experienceAssessment.relevant_experience_summary || experienceAssessment.gaps_vs_role_expectations) && (
-                    <div className="pt-3 border-t border-slate-200 dark:border-slate-600/50">
-                      <p className="org-section-label mb-2">Experience</p>
-                      <div className="space-y-1.5 text-slate-700 dark:text-slate-300">
+                    <div className="pt-3 border-t border-white/[0.08]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-2">Experience</p>
+                      <div className="space-y-1.5 text-[#A0ABB6]">
                         {experienceAssessment.relevant_experience_summary && (
-                          <p><span className="text-slate-500">Relevant:</span> {experienceAssessment.relevant_experience_summary}</p>
+                          <p><span className="text-[#738394]">Relevant:</span> {experienceAssessment.relevant_experience_summary}</p>
                         )}
                         {experienceAssessment.gaps_vs_role_expectations && (
-                          <p><span className="text-slate-500">Gaps:</span> {experienceAssessment.gaps_vs_role_expectations}</p>
+                          <p><span className="text-[#738394]">Gaps:</span> {experienceAssessment.gaps_vs_role_expectations}</p>
                         )}
                       </div>
                     </div>
                   )}
                   {educationAssessment != null && String(educationAssessment).trim() !== '' && (
-                    <div className="pt-3 border-t border-slate-200 dark:border-slate-600/50">
-                      <p className="org-section-label mb-2">Education & certifications</p>
-                      <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{educationAssessment}</p>
+                    <div className="pt-3 border-t border-white/[0.08]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-2">Education & certifications</p>
+                      <p className="text-[#A0ABB6] leading-relaxed">{educationAssessment}</p>
                     </div>
                   )}
-                  <div className="pt-3 border-t border-slate-200 dark:border-slate-600/50">
-                    <p className="org-section-label mb-2">Full reasoning</p>
-                    <p className="text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{finalReasoning}</p>
+                  <div className="pt-3 border-t border-white/[0.08]">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-2">Full reasoning</p>
+                    <p className="text-[#A0ABB6] leading-relaxed whitespace-pre-wrap">{finalReasoning}</p>
                   </div>
                 </div>
               </CollapsibleSection>

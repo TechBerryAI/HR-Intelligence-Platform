@@ -27,8 +27,8 @@ const PremiumInput = forwardRef(({
   const Component = as === 'select' ? 'select' : as === 'textarea' ? 'textarea' : 'input';
 
   const labelClass = isFocused
-    ? 'block text-sm font-semibold text-blue-600 dark:text-blue-400 mb-2'
-    : 'block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2';
+    ? 'block text-sm font-semibold text-[#3AA9FF] mb-2'
+    : 'block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 org-field-label';
 
   const fieldClass = `
     premium-input w-full
@@ -44,13 +44,13 @@ const PremiumInput = forwardRef(({
       {label && (
         <label className={labelClass}>
           {label}
-          {props.required && <span className="text-red-500 ml-1">*</span>}
+          {props.required && <span className="text-[#FF6B81] ml-1">*</span>}
         </label>
       )}
       
       <div className="relative">
         {Icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 z-10 pointer-events-none">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 z-10 pointer-events-none org-field-icon">
             <Icon className="w-5 h-5" />
           </div>
         )}
