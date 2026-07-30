@@ -42,7 +42,7 @@ export default function ForgotPasswordVerify() {
     ? 'Enter the OTP sent to your admin email.'
     : 'Enter the OTP sent to your email.'
 
-  const loginPath = isAdmin ? '/login/admin' : '/login/applicant'
+  const loginPath = isAdmin ? '/login/admin' : '/login'
 
   return (
     <section className="relative min-h-[calc(100vh-180px)] flex items-center justify-center px-4 py-10 overflow-hidden">

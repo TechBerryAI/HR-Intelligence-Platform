@@ -1,5 +1,5 @@
 /**
- * Role guard: only Candidate (Applicant) can access. Redirects others to applicant login.
+ * Role guard: only Candidate (Applicant) can access. Redirects others to login.
  */
 import { Navigate } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
@@ -12,7 +12,7 @@ export default function CandidateGuard({ children }) {
   const isCeoUser = auth?.isLoggedIn && isCeo(auth)
   const isCandidate = applicantAuth?.isLoggedIn && !isStaff && !isCeoUser
   if (!isCandidate) {
-    return <Navigate to="/login/applicant" replace />
+    return <Navigate to="/login" replace />
   }
   return children
 }
