@@ -160,7 +160,7 @@ export default function Jobs() {
                       setApplyError('')
                       if (!applicantAuth.isLoggedIn) {
                         const qs = new URLSearchParams({ redirect: window.location.pathname + window.location.search, applyFor: job.id }).toString()
-                        navigate(`/login/applicant?${qs}`)
+                        navigate(`/login?${qs}`)
                         return
                       }
                       if (!applicantProfile.completed) {
@@ -184,7 +184,7 @@ export default function Jobs() {
                     }}
                     onToggleSave={() => {
                       if (!applicantAuth.isLoggedIn) {
-                        navigate('/login/applicant')
+                        navigate('/login')
                         return
                       }
                       toggleSaveJob(job.id)

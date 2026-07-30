@@ -33,7 +33,7 @@ export default function ForgotPasswordRequest() {
   const subtitle = isAdmin
     ? 'Enter the admin email to receive an OTP for reset.'
     : 'Enter your email to receive an OTP for reset.'
-  const loginPath = isAdmin ? '/login/admin' : '/login/applicant'
+  const loginPath = isAdmin ? '/login/admin' : '/login'
 
   return (
     <section className="relative min-h-[calc(100vh-180px)] flex items-center justify-center px-4 py-10 overflow-hidden">

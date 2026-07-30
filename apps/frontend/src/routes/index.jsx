@@ -9,12 +9,10 @@ import { useApp } from '@/core/context/AppContext.jsx'
 const Home = lazy(() => import('@/features/jobs/pages/Home.jsx'))
 const Jobs = lazy(() => import('@/features/jobs/pages/Jobs.jsx'))
 const Login = lazy(() => import('@/features/auth/pages/Login.jsx'))
-const LoginApplicant = lazy(() => import('@/features/auth/pages/LoginApplicant.jsx'))
 const LoginAdmin = lazy(() => import('@/features/auth/pages/LoginAdmin.jsx'))
 const ForgotPasswordRequest = lazy(() => import('@/features/auth/pages/ForgotPasswordRequest.jsx'))
 const ForgotPasswordVerify = lazy(() => import('@/features/auth/pages/ForgotPasswordVerify.jsx'))
 const ForgotPasswordReset = lazy(() => import('@/features/auth/pages/ForgotPasswordReset.jsx'))
-const SignupApplicant = lazy(() => import('@/features/auth/pages/SignupApplicant.jsx'))
 const SignupAdmin = lazy(() => import('@/features/auth/pages/SignupAdmin.jsx'))
 const Dashboard = lazy(() => import('@/features/dashboard/pages/Dashboard.jsx'))
 const ApplicantProfile = lazy(() => import('@/features/candidate/pages/ApplicantProfile.jsx'))
@@ -53,7 +51,7 @@ export default function AppRoutes() {
       <Route path="/support/contact" element={<ContactUs />} />
       <Route path="/support/hrms-feedback" element={<HRMSTestingFeedback />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/login/applicant" element={<LoginApplicant />} />
+      <Route path="/login/applicant" element={<Navigate to="/login" replace />} />
       <Route path="/login/admin" element={<LoginAdmin />} />
       <Route path="/profile/applicant" element={<CandidateGuard><ApplicantProfile /></CandidateGuard>} />
       <Route path="/settings/applicant" element={<CandidateGuard><Settings /></CandidateGuard>} />
@@ -61,8 +59,8 @@ export default function AppRoutes() {
       <Route path="/forgot-password/:variant/verify" element={<ForgotPasswordVerify />} />
       <Route path="/forgot-password/:variant/reset" element={<ForgotPasswordReset />} />
       <Route path="/applications" element={<CandidateGuard><ApplicationStatus /></CandidateGuard>} />
-      <Route path="/signup" element={<Navigate to="/signup/applicant" replace />} />
-      <Route path="/signup/applicant" element={<SignupApplicant />} />
+      <Route path="/signup" element={<Navigate to="/signup/admin" replace />} />
+      <Route path="/signup/applicant" element={<Navigate to="/login" replace />} />
       <Route path="/signup/admin" element={<SignupAdmin />} />
       <Route path="/dashboard" element={<RecruiterGuard><Dashboard /></RecruiterGuard>} />
       <Route path="/candidates" element={<RecruiterGuard><AppliedCandidates /></RecruiterGuard>} />

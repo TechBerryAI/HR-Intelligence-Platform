@@ -47,7 +47,7 @@ export default function ForgotPasswordReset() {
     setLoading(false)
     if (res.ok) {
       setStatus('Password updated successfully. Redirecting to login...')
-      setTimeout(() => navigate(isAdmin ? '/login/admin' : '/login/applicant'), 1200)
+      setTimeout(() => navigate(isAdmin ? '/login/admin' : '/login'), 1200)
     } else {
       setError(res.message || 'Failed to reset password')
     }
