@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
 import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
-import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiRefreshCw } from 'react-icons/fi'
+import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiRefreshCw, FiHome } from 'react-icons/fi'
 import RecruiterJobDashboard from '@/features/dashboard/components/recruiter/RecruiterJobDashboard.jsx'
 
 const ACCENT_ICON = {
@@ -262,6 +262,14 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="org-btn-ghost"
+          >
+            <FiHome className="w-4 h-4" />
+            Home
+          </button>
           <button
             type="button"
             onClick={() => load(true)}
