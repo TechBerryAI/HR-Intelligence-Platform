@@ -12,17 +12,21 @@ from typing import Any, Literal
 
 from dotenv import load_dotenv
 
-_BACKEND_ROOT = Path(__file__).resolve().parents[3]
-_REPO_ROOT = _BACKEND_ROOT.parent
+_BACKEND_ROOT = Path(__file__).resolve().parents[3]  # apps/backend
+_REPO_ROOT = _BACKEND_ROOT.parent.parent  # repository root (not apps/)
 _AI_ROOT = _REPO_ROOT / "ai"
 _RUNTIME_CONFIG = _AI_ROOT / "runtime" / "config" / "runtime.production.yaml"
 
 if str(_AI_ROOT) not in sys.path:
     sys.path.insert(0, str(_AI_ROOT))
 
-# Load AI workspace env (Ollama, XAI) then backend env overrides.
+# Load AI workspace env (Ollama, XAI) then backend env.
+# Do not override absolute AI_RUNTIME_CONFIG already set by start.js.
+_existing_runtime_config = (os.getenv("AI_RUNTIME_CONFIG") or "").strip()
 load_dotenv(_AI_ROOT / ".env")
 load_dotenv(_BACKEND_ROOT / ".env", override=True)
+if _existing_runtime_config and Path(_existing_runtime_config).is_absolute():
+    os.environ["AI_RUNTIME_CONFIG"] = _existing_runtime_config
 
 _last_model_version: str = "ai-runtime-v1"
 
@@ -33,32 +37,36 @@ _TASK_MAP = {
 
 
 def _resolve_runtime_config() -> Path:
-    """Resolve runtime YAML; supports repo-relative and backend-relative paths."""
+    """Resolve runtime YAML; supports absolute, repo-relative, and backend-relative paths."""
     try:
-        from pathlib import Path as _Path
-        import sys
-        _packages = _Path(__file__).resolve().parents[4] / "packages"
-        if _packages.exists() and str(_packages) not in sys.path:
-            sys.path.insert(0, str(_packages))
+        packages = _REPO_ROOT / "packages"
+        if packages.exists() and str(packages) not in sys.path:
+            sys.path.insert(0, str(packages))
         from ai_runtime import get_runtime_config_path
+
         shim = get_runtime_config_path()
         if shim.exists():
             return shim
     except Exception:
         pass
+
     explicit = (os.getenv("AI_RUNTIME_CONFIG") or "").strip()
     if explicit:
         path = Path(explicit)
+        candidates: list[Path] = []
         if path.is_absolute():
-            resolved = path.resolve()
-        elif explicit.startswith(".."):
-            # backend/.env style: ../ai/runtime/config/...
-            resolved = (_BACKEND_ROOT / path).resolve()
+            candidates.append(path)
         else:
-            # repo-root style: ai/runtime/config/...
-            resolved = (_REPO_ROOT / path).resolve()
-        if resolved.exists():
-            return resolved
+            # Prefer repo-root style: ai/runtime/config/...
+            candidates.append((_REPO_ROOT / path).resolve())
+            # Backend-relative: ../../ai/... or ../ai/...
+            candidates.append((_BACKEND_ROOT / path).resolve())
+            # CWD-relative (last resort)
+            candidates.append(path.resolve())
+        for resolved in candidates:
+            if resolved.exists():
+                return resolved
+
     if _RUNTIME_CONFIG.exists():
         return _RUNTIME_CONFIG
     raise FileNotFoundError(
@@ -90,6 +98,8 @@ def _apply_resume_text_fields(person: dict[str, Any], raw_resume_text: str | Non
     """Extract URLs and location from raw resume text when LLM missed them."""
     if not raw_resume_text:
         return
+
+    from app.ai.parser.enrichment.resume_text_inference import extract_location_from_text
 
     url_pattern = (
         r'(https?://[^\s<>"\'\)]+|www\.[^\s<>"\'\)]+|linkedin\.com/[^\s<>"\'\)]+|'
@@ -149,31 +159,10 @@ def _apply_resume_text_fields(person: dict[str, Any], raw_resume_text: str | Non
             person['otherUrls'].append(url_final)
 
     if not person.get('location') or not str(person.get('location', '')).strip():
-        location_patterns = [
-            r'(?:location|current\s*location|address|city|based\s*in)\s*[:\-]\s*([A-Za-z\s,\.\-]+?)(?:\n|$|\.|;)',
-            r'(?:location|address|city)\s*[:\-]\s*([A-Za-z\s,\.\-]+)',
-        ]
-        for pat in location_patterns:
-            m = re.search(pat, raw_resume_text, re.IGNORECASE)
-            if m and m.group(1):
-                loc = m.group(1).strip().strip('.,;:')
-                if 2 <= len(loc) <= 80:
-                    person['location'] = loc
-                    actions.append('extracted_location_from_text')
-                    break
-
-        if not person.get('location') or not str(person.get('location', '')).strip():
-            header_text = raw_resume_text[:500] if len(raw_resume_text) > 500 else raw_resume_text
-            cities = [
-                'Mumbai', 'Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
-                'Kolkata', 'Pune', 'Ahmedabad', 'Gurgaon', 'Gurugram', 'Noida',
-                'Faridabad', 'Jaipur', 'Lucknow',
-            ]
-            for city in cities:
-                if city in header_text:
-                    person['location'] = city
-                    actions.append('extracted_location_from_header')
-                    break
+        loc = extract_location_from_text(raw_resume_text)
+        if loc:
+            person['location'] = loc
+            actions.append('extracted_location_from_text')
 
 
 def _first_nonempty(source: dict[str, Any], *keys: str) -> Any:
@@ -194,7 +183,11 @@ def _apply_resume_text_recovery(repaired: dict[str, Any], raw_resume_text: str |
     if not raw_resume_text:
         return
 
-    from app.ai.parser.enrichment.resume_text_inference import infer_resume_fields_from_text
+    from app.ai.parser.enrichment.resume_text_inference import (
+        compute_total_experience_years,
+        extract_date_range_from_line,
+        infer_resume_fields_from_text,
+    )
 
     inferred = infer_resume_fields_from_text(raw_resume_text)
 
@@ -229,18 +222,17 @@ def _apply_resume_text_recovery(repaired: dict[str, Any], raw_resume_text: str |
             person["phone"] = phone
             actions.append("inferred_phone_from_text")
 
-    # Name from first line of resume when missing
     if not (person.get("name") or "").strip():
-        first_line = ""
-        for line in raw_resume_text.split("\n"):
-            stripped = line.strip()
-            if stripped and not stripped.startswith(("#", "*", "-", "•")):
-                if "@" not in stripped and not re.match(r"^\+?\d[\d\s\-().]{7,}$", stripped):
-                    first_line = stripped
-                    break
-        if first_line and 2 <= len(first_line) <= 80:
-            person["name"] = first_line
+        name = inferred_person.get("name") or ""
+        if name:
+            person["name"] = name
             actions.append("inferred_name_from_text")
+
+    if not (person.get("location") or "").strip():
+        loc = inferred_person.get("location") or ""
+        if loc:
+            person["location"] = loc
+            actions.append("inferred_location_from_text")
 
     experience = repaired.get("experience")
     if not isinstance(experience, list) or len(experience) == 0:
@@ -248,6 +240,45 @@ def _apply_resume_text_recovery(repaired: dict[str, Any], raw_resume_text: str |
         if new_exp:
             repaired["experience"] = new_exp
             actions.append("inferred_experience_from_text")
+    elif isinstance(experience, list):
+        # Backfill missing dates on LLM experience rows from description/title lines
+        for exp in experience:
+            if not isinstance(exp, dict):
+                continue
+            if (exp.get("from") or "").strip() and (exp.get("to") or "").strip():
+                continue
+            blob = " ".join(
+                str(exp.get(k) or "") for k in ("title", "company", "description", "from", "to")
+            )
+            from_d, to_d = extract_date_range_from_line(blob)
+            if from_d and not (exp.get("from") or "").strip():
+                exp["from"] = from_d
+            if to_d and not (exp.get("to") or "").strip():
+                exp["to"] = to_d
+
+    education = repaired.get("education")
+    if not isinstance(education, list) or len(education) == 0:
+        new_edu = inferred.get("education") or []
+        if new_edu:
+            repaired["education"] = new_edu
+            actions.append("inferred_education_from_text")
+
+    certifications = repaired.get("certifications")
+    if not isinstance(certifications, list) or len(certifications) == 0:
+        new_certs = inferred.get("certifications") or []
+        if new_certs:
+            repaired["certifications"] = new_certs
+            actions.append("inferred_certifications_from_text")
+
+    if repaired.get("total_experience_years") in (None, "", 0):
+        years = inferred.get("total_experience_years")
+        if years is None:
+            years = compute_total_experience_years(
+                repaired.get("experience") if isinstance(repaired.get("experience"), list) else []
+            )
+        if years is not None:
+            repaired["total_experience_years"] = years
+            actions.append("inferred_total_experience_years")
 
 
 def _repair_resume_structure(data: dict[str, Any], raw_resume_text: str | None = None) -> tuple[dict[str, Any], list[str]]:
@@ -444,27 +475,60 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
                 actions.append("inferred_responsibilities_from_description")
 
     if not repaired["responsibilities"] and raw_jd_text:
-        from app.ai.parser.enrichment.jd_text_inference import extract_responsibilities_from_text, infer_jd_fields_from_text
+        from app.ai.parser.enrichment.jd_text_inference import extract_responsibilities_from_text
         inferred = extract_responsibilities_from_text(raw_jd_text)
         if inferred:
             repaired["responsibilities"] = inferred
             actions.append("inferred_responsibilities_from_raw_text")
-        inferred_fields = infer_jd_fields_from_text(raw_jd_text)
+
+    infer_source = (repaired.get("description") or raw_jd_text or "").strip()
+    if infer_source:
+        from app.ai.parser.enrichment.jd_text_inference import (
+            extract_experience_years,
+            extract_qualifications_from_text,
+            infer_jd_fields_from_text,
+        )
+
+        inferred_fields = infer_jd_fields_from_text(infer_source)
+
+        if not repaired.get("title") and inferred_fields.get("title"):
+            repaired["title"] = inferred_fields["title"]
+            actions.append("inferred_title_from_text")
+        if not repaired.get("company") and inferred_fields.get("company"):
+            repaired["company"] = inferred_fields["company"]
+            actions.append("inferred_company_from_text")
         if not repaired.get("location") and inferred_fields.get("location"):
             repaired["location"] = inferred_fields["location"]
             actions.append("inferred_location_from_raw_text")
         if not repaired.get("skills") and inferred_fields.get("skills"):
             repaired["skills"] = inferred_fields["skills"]
-            repaired["mandatory_skills"] = inferred_fields.get("mandatory_skills") or inferred_fields["skills"]
+            repaired["mandatory_skills"] = (
+                inferred_fields.get("mandatory_skills") or inferred_fields["skills"]
+            )
             if inferred_fields.get("preferred_skills"):
                 repaired["preferred_skills"] = inferred_fields["preferred_skills"]
             actions.append("inferred_skills_from_raw_text")
+        if not repaired.get("salary_range") and inferred_fields.get("salary_range"):
+            repaired["salary_range"] = inferred_fields["salary_range"]
+            actions.append("inferred_salary_from_text")
+        if not repaired.get("employment_type") and inferred_fields.get("employment_type"):
+            repaired["employment_type"] = inferred_fields["employment_type"]
+            actions.append("inferred_employment_type_from_text")
 
-    if not repaired.get("qualifications"):
-        desc = repaired.get("description") or raw_jd_text or ""
-        if desc:
-            from app.ai.parser.enrichment.jd_text_inference import extract_qualifications_from_text
-            quals = extract_qualifications_from_text(desc)
+        if repaired.get("min_experience_years") in (None, "") or repaired.get("max_experience_years") in (None, ""):
+            min_y = inferred_fields.get("min_experience_years")
+            max_y = inferred_fields.get("max_experience_years")
+            if min_y is None and max_y is None:
+                min_y, max_y = extract_experience_years(infer_source)
+            if repaired.get("min_experience_years") in (None, "") and min_y is not None:
+                repaired["min_experience_years"] = min_y
+                actions.append("inferred_min_experience_years")
+            if repaired.get("max_experience_years") in (None, "") and max_y is not None:
+                repaired["max_experience_years"] = max_y
+                actions.append("inferred_max_experience_years")
+
+        if not repaired.get("qualifications"):
+            quals = inferred_fields.get("qualifications") or extract_qualifications_from_text(infer_source)
             if quals:
                 repaired["qualifications"] = quals
                 actions.append("inferred_qualifications_from_text")

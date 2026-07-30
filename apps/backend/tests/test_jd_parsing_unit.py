@@ -180,3 +180,39 @@ def test_validate_toon_format_jd_accepts_complete():
     toon = build_jd_toon("", SAMPLE_JD_RAW)
     ok, err = validate_toon_format(toon, "job_description")
     assert ok, err
+
+
+def test_repair_infers_experience_years_salary_and_title_from_text():
+    jd_text = """
+Senior Backend Engineer
+Company: Acme Labs
+Location: Remote
+Employment Type: Full-time
+Experience: 3-5 years
+Salary: 12-18 LPA
+
+Requirements:
+• Bachelor's degree in CS
+• Strong Python skills
+
+Responsibilities:
+• Build scalable APIs
+"""
+    llm_output = {
+        "type": "job_description",
+        "title": "",
+        "location": "",
+        "skills": [],
+        "responsibilities": [],
+        "min_experience_years": None,
+        "max_experience_years": None,
+        "salary_range": "",
+    }
+    repaired, actions = repair_jd_toon(llm_output, raw_jd_text=jd_text)
+    assert repaired["title"]
+    assert repaired["location"]
+    assert repaired["min_experience_years"] == 3.0
+    assert repaired["max_experience_years"] == 5.0
+    assert repaired["salary_range"]
+    assert "LPA" in repaired["salary_range"].upper() or "12" in repaired["salary_range"]
+    assert any("inferred_min_experience" in a or "inferred_title" in a for a in actions)

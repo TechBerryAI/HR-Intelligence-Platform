@@ -17,7 +17,7 @@ function ensureArray(value) {
 
 /**
  * Normalize a date value from parser/API to YYYY-MM for MonthYearPicker.
- * Parser may return: year only ("2025"), "Jan 2025", "2025-01", or object with month/year.
+ * Parser may return: year only ("2025"), "Jan 2025", "2025-01", MM/YYYY, ranges, Present, or object.
  * @param {*} value - Raw date (string, number, or { year, month } object)
  * @returns {string} - "YYYY-MM" or ""
  */
@@ -44,12 +44,42 @@ function normalizeToYYYYMM(value) {
     }
     return '';
   }
-  const s = String(value).trim();
+  let s = String(value).trim();
   if (!s) return '';
+  if (/^(present|current|now)$/i.test(s)) return '';
+
+  // Take the start of a range like "2020-2024" or "Jan 2020 - Present"
+  const rangeMatch = s.match(
+    /^((?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{4}|\d{1,2}[/\-]\d{4}|\d{4}[/\-]\d{1,2}|\d{4}-\d{2}|\d{4})\s*(?:[-–—]|to)\s*/i
+  );
+  if (rangeMatch) {
+    s = rangeMatch[1];
+  }
+
   // Already YYYY-MM
   if (/^\d{4}-\d{2}$/.test(s)) return s;
   // Year only (e.g. "2025") -> treat as January
   if (/^\d{4}$/.test(s)) return `${s}-01`;
+  // MM/YYYY or MM-YYYY
+  const mmyyyy = s.match(/^(\d{1,2})[/\-](\d{4})$/);
+  if (mmyyyy) {
+    const month = Number(mmyyyy[1]);
+    if (month >= 1 && month <= 12) return `${mmyyyy[2]}-${String(month).padStart(2, '0')}`;
+  }
+  // YYYY/MM or YYYY-M
+  const yyyymm = s.match(/^(\d{4})[/\-](\d{1,2})$/);
+  if (yyyymm) {
+    const month = Number(yyyymm[2]);
+    if (month >= 1 && month <= 12) return `${yyyymm[1]}-${String(month).padStart(2, '0')}`;
+  }
+  // Mon YYYY / Month YYYY
+  const monYear = s.match(/^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{4})$/i);
+  if (monYear) {
+    const monthNames = 'jan feb mar apr may jun jul aug sep oct nov dec'.split(' ');
+    const key = monYear[1].toLowerCase().startsWith('sept') ? 'sep' : monYear[1].toLowerCase().slice(0, 3);
+    const idx = monthNames.indexOf(key);
+    if (idx >= 0) return `${monYear[2]}-${String(idx + 1).padStart(2, '0')}`;
+  }
   // Try parsing common formats (e.g. "Jan 2025", "January 2025", "2025-01")
   const d = new Date(s);
   if (!Number.isNaN(d.getTime())) {
@@ -199,7 +229,7 @@ export function mapResumeTOONToForm(toon) {
     const rawEnd = edu.year ?? edu.end ?? edu.end_date ?? edu.to ?? edu.endMonth;
     return {
       degree: str(edu.degree || edu.qualification || edu.program),
-      institution: str(edu.institution || edu.school || edu.university || edu.field),
+      institution: str(edu.institution || edu.school || edu.university),
       cgpa: str(edu.gpa || edu.cgpa || edu.percentage || edu.score),
       startMonth: normalizeToYYYYMM(rawStart),
       endMonth: normalizeToYYYYMM(rawEnd),
@@ -212,7 +242,12 @@ export function mapResumeTOONToForm(toon) {
     }
     const rawStart = exp.from ?? exp.start ?? exp.start_date ?? exp.startMonth;
     const rawEnd = exp.to ?? exp.end ?? exp.end_date ?? exp.endMonth;
-    const isPresent = exp.to === 'Present' || exp.to === 'present' || exp.isCurrent || exp.present === true || exp.present === 'yes';
+    const endStr = rawEnd == null ? '' : String(rawEnd).trim();
+    const isPresent =
+      /^(present|current|now)$/i.test(endStr) ||
+      exp.isCurrent === true ||
+      exp.present === true ||
+      exp.present === 'yes';
     return {
       company: str(exp.company || exp.employer || exp.organization),
       role: str(exp.title || exp.role || exp.position),
@@ -367,8 +402,12 @@ export function mapJDTOONToForm(toon) {
   const str = (v) => (v == null || v === '') ? '' : String(v).trim();
   let experienceFrom = '';
   let experienceTo = '';
-  if (toon.min_experience_years !== undefined) experienceFrom = String(toon.min_experience_years);
-  if (toon.max_experience_years !== undefined) experienceTo = String(toon.max_experience_years);
+  if (toon.min_experience_years != null && toon.min_experience_years !== '') {
+    experienceFrom = String(toon.min_experience_years);
+  }
+  if (toon.max_experience_years != null && toon.max_experience_years !== '') {
+    experienceTo = String(toon.max_experience_years);
+  }
 
   return {
     title: str(toon.title),
@@ -396,7 +435,28 @@ function formatJDDescription(toon) {
   const responsibilities = ensureStringArray(toon?.responsibilities);
   const skills = ensureStringArray(toon?.skills);
   const qualifications = ensureStringArray(toon?.qualifications);
+  const benefits = ensureStringArray(toon?.benefits);
+  const narrative = str(toon?.description);
   let description = '';
+
+  // Prefer structured sections; include narrative overview when present and not already covered.
+  if (narrative) {
+    const looksStructured =
+      /\*\*Responsibilities:\*\*/i.test(narrative) ||
+      /\*\*Required Skills:\*\*/i.test(narrative) ||
+      /\*\*Qualifications:\*\*/i.test(narrative);
+    if (looksStructured) {
+      description = narrative;
+      if (benefits.length > 0 && !/\*\*Benefits:\*\*/i.test(narrative)) {
+        description += '\n\n**Benefits:**\n';
+        benefits.forEach((b) => {
+          description += `• ${str(b)}\n`;
+        });
+      }
+      return description.trim();
+    }
+    description += `${narrative}\n\n`;
+  }
 
   if (responsibilities.length > 0) {
     description += '**Responsibilities:**\n';
@@ -417,6 +477,14 @@ function formatJDDescription(toon) {
     qualifications.forEach((qual) => {
       description += `• ${str(qual)}\n`;
     });
+    description += '\n';
+  }
+
+  if (benefits.length > 0) {
+    description += '**Benefits:**\n';
+    benefits.forEach((b) => {
+      description += `• ${str(b)}\n`;
+    });
   }
 
   return description.trim();
@@ -432,9 +500,12 @@ export function validateFileForParsing(file) {
     'application/pdf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/msword',
+    'image/png',
+    'image/jpeg',
+    'image/webp',
   ];
   
-  const allowedExtensions = ['pdf', 'docx', 'doc'];
+  const allowedExtensions = ['pdf', 'docx', 'doc', 'png', 'jpg', 'jpeg', 'webp'];
   const maxSize = 10 * 1024 * 1024; // 10MB
 
   // Get file extension (always check extension as primary validation)
@@ -444,7 +515,7 @@ export function validateFileForParsing(file) {
   if (!allowedExtensions.includes(extension)) {
     return {
       valid: false,
-      error: 'Invalid file type. Please upload PDF, DOC, or DOCX files only.',
+      error: 'Invalid file type. Please upload PDF, DOC, DOCX, PNG, JPG, or WEBP files only.',
     };
   }
 
