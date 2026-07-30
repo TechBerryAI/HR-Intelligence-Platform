@@ -236,13 +236,13 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: -10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="border border-[rgba(255,183,77,0.3)] bg-[rgba(255,183,77,0.08)] px-4 py-3 rounded-xl"
+              className="border border-amber-400 bg-amber-50 px-4 py-3 rounded-xl"
             >
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center">
-                  <FiAlertCircle className="w-4 h-4 text-[#0B1118]" />
+                  <FiAlertCircle className="w-4 h-4 text-white" />
                 </div>
-                <p className="text-sm text-amber-200 flex-1">{parseError}</p>
+                <p className="text-sm text-amber-950 font-medium flex-1">{parseError}</p>
               </div>
             </motion.div>
           )}

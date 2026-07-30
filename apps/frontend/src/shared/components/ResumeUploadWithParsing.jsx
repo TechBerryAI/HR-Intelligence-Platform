@@ -292,13 +292,13 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="glass-card border-2 border-yellow-500/30 bg-yellow-500/10 px-5 py-4 rounded-xl"
+            className="border-2 border-amber-400 bg-amber-50 px-5 py-4 rounded-xl"
           >
             <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-10 h-10 bg-yellow-500 rounded-full flex items-center justify-center">
+              <div className="flex-shrink-0 w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center">
                 <FiAlertCircle className="w-5 h-5 text-white" />
               </div>
-              <p className="text-sm text-yellow-300 flex-1">{parseError}</p>
+              <p className="text-sm text-amber-950 font-medium flex-1">{parseError}</p>
             </div>
           </motion.div>
         )}

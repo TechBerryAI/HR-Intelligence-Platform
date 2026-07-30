@@ -121,29 +121,43 @@ def collect_toon_validation_issues(toon: Dict[str, Any], document_type: str) -> 
             if field not in toon:
                 issues.append(f"Missing required field: {field}")
 
+        person = toon.get('person') if isinstance(toon.get('person'), dict) else {}
         if not isinstance(toon.get('person'), dict):
             issues.append("person must be a dictionary")
         else:
             person_fields = ['name', 'email', 'phone']
             for field in person_fields:
-                if field not in toon['person']:
+                if field not in person:
                     issues.append(f"Missing person field: {field}")
 
             optional_url_fields = ['linkedin', 'github', 'portfolio', 'website', 'twitter']
             for field in optional_url_fields:
-                if field in toon['person'] and not isinstance(toon['person'][field], (str, type(None))):
+                if field in person and not isinstance(person[field], (str, type(None))):
                     issues.append(f"person.{field} must be a string or null")
 
-            if 'otherUrls' in toon['person'] and not isinstance(toon['person']['otherUrls'], (list, type(None))):
+            if 'otherUrls' in person and not isinstance(person.get('otherUrls'), (list, type(None))):
                 issues.append("person.otherUrls must be an array or null")
 
-            if not (toon['person'].get('name') or '').strip():
-                issues.append("person.name must not be empty")
-            if not (toon['person'].get('email') or '').strip():
-                issues.append("person.email must not be empty")
+        if not str(person.get('name') or '').strip():
+            issues.append("person.name must not be empty")
+        if not str(person.get('email') or '').strip():
+            issues.append("person.email must not be empty")
 
-        if not isinstance(toon.get('skills'), list) or len(toon.get('skills') or []) == 0:
-            issues.append("skills must be a non-empty array")
+        # Skills preferred but not mandatory when identity + (experience or education) exist
+        skills = toon.get('skills')
+        has_skills = isinstance(skills, list) and len(skills) > 0
+        if 'skills' not in toon:
+            issues.append("Missing required field: skills")
+        elif not isinstance(skills, list):
+            issues.append("skills must be an array")
+        elif not has_skills:
+            exp = toon.get('experience') if isinstance(toon.get('experience'), list) else []
+            edu = toon.get('education') if isinstance(toon.get('education'), list) else []
+            has_history = len(exp) > 0 or len(edu) > 0
+            name_ok = bool(str(person.get('name') or '').strip())
+            email_ok = bool(str(person.get('email') or '').strip())
+            if not (name_ok and email_ok and has_history):
+                issues.append("skills must be a non-empty array")
 
     elif document_type == 'job_description':
         required_fields = ['title', 'location', 'skills', 'responsibilities']

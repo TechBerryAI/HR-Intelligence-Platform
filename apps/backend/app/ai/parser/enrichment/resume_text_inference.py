@@ -39,6 +39,38 @@ SECTION_HEADERS = frozenset({
     'work history', 'qualifications', 'achievements',
 })
 
+# Career-objective / summary prose wrongly assigned as job titles by LLMs or line scrapers.
+_OBJECTIVE_LIKE_TITLE = re.compile(
+    r'(?i)^(?:'
+    r'to\s+(?:help|work|seek|obtain|secure|contribute|become|build|develop|gain|pursue|'
+    r'leverage|support|drive|create|deliver|learn|grow|join|explore)|'
+    r'(?:seeking|looking\s+for|aspiring|motivated|passionate|dedicated|results[- ]oriented)|'
+    r'(?:i\s+am|i\'m|my\s+(?:goal|objective|aim))'
+    r')'
+)
+_HAS_OBJECTIVE_WORD = re.compile(r'(?i)\bobjectives?\b')
+
+
+def is_plausible_job_title(title: str | None) -> bool:
+    """Reject summary/objective sentence fragments that are not job titles."""
+    t = (title or '').strip()
+    if not t:
+        return False
+    if len(t) > 100:
+        return False
+    words = t.split()
+    if len(words) > 8:
+        return False
+    if _OBJECTIVE_LIKE_TITLE.search(t):
+        return False
+    if _HAS_OBJECTIVE_WORD.search(t):
+        return False
+    # Lowercase multi-word prose (e.g. "to help the company achieve…")
+    if t[0].islower() and len(words) >= 4:
+        return False
+    return True
+
+
 DATE_RANGE_PATTERN = re.compile(
     r'(?i)('
     r'(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{4}'
@@ -331,8 +363,10 @@ def extract_experience_from_text(text: str, max_items: int = 10) -> list[dict[st
     if not text:
         return []
     experiences: list[dict[str, Any]] = []
+    # Require section header at line start so mid-sentence "experience" (e.g. objective) is ignored.
     block_match = re.search(
-        r'(?i)(?:\*\*)?(?:work\s+experience|professional\s+experience|experience|employment|work\s+history)(?:\*\*)?\s*:?\s*'
+        r'(?i)(?:^|\n)\s*(?:\*\*)?(?:work\s+experience|professional\s+experience|experience|'
+        r'employment|work\s+history)(?:\*\*)?\s*:?\s*'
         r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:education|skills|projects|certifications)|\Z)',
         text,
     )
@@ -349,6 +383,9 @@ def extract_experience_from_text(text: str, max_items: int = 10) -> list[dict[st
         parts = re.split(r'\s+at\s+|\s+@\s+|,\s+', line_wo_dates, maxsplit=1)
         title = parts[0].strip() if parts else line_wo_dates
         company = parts[1].strip() if len(parts) > 1 else ''
+        if not is_plausible_job_title(title):
+            # Description / objective bullets are not roles
+            continue
         if title:
             experiences.append({
                 'title': title[:200],

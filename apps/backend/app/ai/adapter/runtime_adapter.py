@@ -262,6 +262,73 @@ def _apply_resume_text_recovery(repaired: dict[str, Any], raw_resume_text: str |
         if new_edu:
             repaired["education"] = new_edu
             actions.append("inferred_education_from_text")
+    elif isinstance(education, list):
+        inferred_edu = inferred.get("education") or []
+        for idx, edu in enumerate(education):
+            if not isinstance(edu, dict):
+                continue
+            degree = (edu.get("degree") or "").strip()
+            institution = (edu.get("institution") or edu.get("school") or "").strip()
+            donor = inferred_edu[idx] if idx < len(inferred_edu) and isinstance(inferred_edu[idx], dict) else None
+            if donor is None:
+                for cand in inferred_edu:
+                    if not isinstance(cand, dict):
+                        continue
+                    if not degree and (cand.get("degree") or "").strip():
+                        donor = cand
+                        break
+                    if not institution and (cand.get("institution") or "").strip():
+                        donor = cand
+                        break
+            if not donor:
+                continue
+            if not degree and (donor.get("degree") or "").strip():
+                edu["degree"] = donor["degree"]
+                actions.append("backfilled_education_degree")
+            if not institution and (donor.get("institution") or "").strip():
+                edu["institution"] = donor["institution"]
+                actions.append("backfilled_education_institution")
+            if not (edu.get("field") or "").strip() and (donor.get("field") or "").strip():
+                edu["field"] = donor["field"]
+            if not str(edu.get("gpa") or edu.get("cgpa") or "").strip():
+                donor_gpa = str(donor.get("gpa") or donor.get("cgpa") or "").strip()
+                if donor_gpa:
+                    edu["gpa"] = donor_gpa
+                    edu["cgpa"] = donor_gpa
+            if not (edu.get("from") or "").strip() and (donor.get("from") or "").strip():
+                edu["from"] = donor["from"]
+            if not (edu.get("to") or edu.get("year") or "").strip():
+                if (donor.get("to") or "").strip():
+                    edu["to"] = donor["to"]
+                if (donor.get("year") or "").strip():
+                    edu["year"] = donor["year"]
+
+    experience = repaired.get("experience")
+    if isinstance(experience, list) and experience:
+        inferred_exp = inferred.get("experience") or []
+        for idx, exp in enumerate(experience):
+            if not isinstance(exp, dict):
+                continue
+            title = (exp.get("title") or exp.get("role") or "").strip()
+            company = (exp.get("company") or "").strip()
+            if title and company:
+                continue
+            donor = inferred_exp[idx] if idx < len(inferred_exp) and isinstance(inferred_exp[idx], dict) else None
+            if not donor:
+                continue
+            if not title and (donor.get("title") or "").strip():
+                from app.ai.parser.enrichment.resume_text_inference import is_plausible_job_title
+                donor_title = (donor.get("title") or "").strip()
+                if is_plausible_job_title(donor_title):
+                    exp["title"] = donor_title
+                    actions.append("backfilled_experience_title")
+            if not company and (donor.get("company") or "").strip():
+                exp["company"] = donor["company"]
+                actions.append("backfilled_experience_company")
+            if not (exp.get("from") or "").strip() and (donor.get("from") or "").strip():
+                exp["from"] = donor["from"]
+            if not (exp.get("to") or "").strip() and (donor.get("to") or "").strip():
+                exp["to"] = donor["to"]
 
     certifications = repaired.get("certifications")
     if not isinstance(certifications, list) or len(certifications) == 0:
@@ -293,12 +360,42 @@ def _repair_resume_structure(data: dict[str, Any], raw_resume_text: str | None =
     if not isinstance(data, dict):
         data = {}
 
+    # Always materialize a minimal skeleton before coalescing / inference / logging.
+    for key, default in (
+        ("type", "resume"),
+        ("person", {}),
+        ("skills", []),
+        ("experience", []),
+        ("education", []),
+        ("projects", []),
+        ("certifications", []),
+        ("languages", []),
+        ("summary", ""),
+    ):
+        if key == "type":
+            data["type"] = "resume"
+            continue
+        if key not in data or data.get(key) is None:
+            data[key] = {} if key == "person" else ([] if key != "summary" else "")
+            actions.append(f"ensured_skeleton_{key}")
+        elif key == "person" and not isinstance(data.get("person"), dict):
+            # Wrong-type person → empty dict; later merge/inference fill fields.
+            data["person"] = {}
+            actions.append("ensured_skeleton_person")
+        # Leave non-list skills/experience/etc. for existing coercion paths.
+
     source = dict(data)
 
     person_raw, person_actions = coalesce_root_field(source, "person")
     if not isinstance(person_raw, dict):
         person_raw = {}
     person, top_actions = merge_top_level_person_fields(source, person_raw)
+    if not isinstance(person, dict):
+        person = {}
+    # Ensure required person keys exist (empty strings allowed; validation decides emptiness)
+    for pk in ("name", "email", "phone", "location"):
+        if pk not in person or person.get(pk) is None:
+            person[pk] = ""
     actions.extend(person_actions)
     actions.extend(top_actions)
 
@@ -673,30 +770,45 @@ def _normalize_certifications(certs: Any) -> list:
     for item in items:
         if isinstance(item, str):
             if item.strip():
-                normalized.append({"name": item.strip()})
+                normalized.append({"name": item.strip(), "issuer": "", "validTill": "", "url": ""})
         elif isinstance(item, dict):
             normalized.append({
                 "name": _str(item.get("name") or item.get("title")),
                 "issuer": _str(item.get("issuer") or item.get("organization")),
+                "validTill": _str(item.get("validTill") or item.get("expiry") or item.get("valid_till")),
+                "url": _str(item.get("url") or item.get("validationUrl") or item.get("validation_url")),
             })
         elif item is not None:
-            normalized.append({"name": _str(item)})
+            normalized.append({"name": _str(item), "issuer": "", "validTill": "", "url": ""})
     return normalized
 
 
 def _normalize_experience(experience: Any) -> list:
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_job_title
+
     items = _ensure_array(experience)
     normalized: list = []
     for item in items:
         if not isinstance(item, dict):
             continue
+        title = _str(item.get("title") or item.get("role") or item.get("position"))
+        company = _str(item.get("company") or item.get("employer"))
+        description = _str(item.get("description"))
+        if title and not is_plausible_job_title(title):
+            # Mis-mapped objective/summary prose → keep as description, clear role
+            if not description:
+                description = title
+            title = ""
+        if not title and not company:
+            continue
         normalized.append({
-            "title": _str(item.get("title") or item.get("role")),
-            "company": _str(item.get("company") or item.get("employer")),
+            "title": title,
+            "company": company,
             "from": _str(item.get("from") or item.get("start") or item.get("start_date")),
             "to": _str(item.get("to") or item.get("end") or item.get("end_date")),
             "years": item.get("years"),
-            "description": _str(item.get("description")),
+            "description": description,
+            "location": _str(item.get("location") or item.get("city")),
         })
     return normalized
 
@@ -707,11 +819,19 @@ def _normalize_education(education: Any) -> list:
     for item in items:
         if not isinstance(item, dict):
             continue
+        year = _str(item.get("year") or item.get("to") or item.get("end") or item.get("end_date"))
+        from_val = _str(item.get("from") or item.get("start") or item.get("start_date"))
+        to_val = _str(item.get("to") or item.get("end") or item.get("end_date") or year)
+        gpa = _str(item.get("gpa") or item.get("cgpa") or item.get("percentage") or item.get("score"))
         normalized.append({
-            "degree": _str(item.get("degree")),
+            "degree": _str(item.get("degree") or item.get("qualification") or item.get("program")),
             "field": _str(item.get("field") or item.get("major")),
-            "institution": _str(item.get("institution") or item.get("school")),
-            "year": _str(item.get("year") or item.get("to") or item.get("end")),
+            "institution": _str(item.get("institution") or item.get("school") or item.get("university")),
+            "year": year,
+            "from": from_val,
+            "to": to_val,
+            "gpa": gpa,
+            "cgpa": gpa,
         })
     return normalized
 

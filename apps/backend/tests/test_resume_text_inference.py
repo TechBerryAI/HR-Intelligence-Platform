@@ -125,6 +125,49 @@ Education
     assert exps[0]["to"] == "Present"
 
 
+def test_extract_experience_skips_objective_prose_as_title():
+    from resume_text_inference import is_plausible_job_title
+
+    assert not is_plausible_job_title("to help the company achieve its objectiv")
+    assert not is_plausible_job_title("Seeking a challenging role in HR")
+    assert is_plausible_job_title("HR Intern")
+    assert is_plausible_job_title("Software Engineer")
+
+    text = """
+Career Objective
+To help the company achieve its objectives through dedicated work.
+
+Experience
+HR Intern at Techberry, Jun 2023 - Aug 2023
+
+Education
+"""
+    exps = extract_experience_from_text(text)
+    assert exps
+    assert exps[0]["title"] == "HR Intern"
+    assert "Techberry" in exps[0]["company"]
+    assert not any("help the company" in (e.get("title") or "").lower() for e in exps)
+
+
+def test_normalize_experience_drops_objective_title_without_company():
+    from ai_runtime_adapter import canonicalize_resume_toon
+
+    toon = {
+        "type": "resume",
+        "person": {"name": "A", "email": "a@b.com", "phone": ""},
+        "skills": ["HR"],
+        "experience": [
+            {"title": "to help the company achieve its objectiv", "company": "", "from": "", "to": ""},
+            {"title": "HR Intern", "company": "Acme", "from": "2023-06", "to": "2023-08"},
+        ],
+        "education": [],
+    }
+    canon, _ = canonicalize_resume_toon(toon)
+    titles = [e["title"] for e in canon["experience"]]
+    assert "HR Intern" in titles
+    assert not any("help the company" in t.lower() for t in titles)
+
+
 def test_compute_total_experience_years():
     years = compute_total_experience_years([
         {"from": "2020-01", "to": "2022-01"},

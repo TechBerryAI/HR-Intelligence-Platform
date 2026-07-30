@@ -16,6 +16,29 @@ function ensureArray(value) {
 }
 
 /**
+ * Reject objective/summary sentence fragments wrongly mapped into experience.role.
+ * @param {string} title
+ * @returns {boolean}
+ */
+function isPlausibleJobTitle(title) {
+  const t = String(title || '').trim();
+  if (!t) return false;
+  if (t.length > 100) return false;
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length > 8) return false;
+  if (
+    /^(to\s+(help|work|seek|obtain|secure|contribute|become|build|develop|gain|pursue|leverage|support|drive|create|deliver|learn|grow|join|explore)|seeking|looking\s+for|aspiring|motivated|passionate|dedicated|results[- ]oriented|i\s+am|i'm|my\s+(goal|objective|aim))/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
+  if (/\bobjectives?\b/i.test(t)) return false;
+  if (/^[a-z]/.test(t) && words.length >= 4) return false;
+  return true;
+}
+
+/**
  * Normalize a date value from parser/API to YYYY-MM for MonthYearPicker.
  * Parser may return: year only ("2025"), "Jan 2025", "2025-01", MM/YYYY, ranges, Present, or object.
  * @param {*} value - Raw date (string, number, or { year, month } object)
@@ -58,8 +81,8 @@ function normalizeToYYYYMM(value) {
 
   // Already YYYY-MM
   if (/^\d{4}-\d{2}$/.test(s)) return s;
-  // Year only (e.g. "2025") -> treat as January
-  if (/^\d{4}$/.test(s)) return `${s}-01`;
+  // Year only (e.g. "2025") -> mid-year for start-like; graduation end uses Dec via call-site
+  if (/^\d{4}$/.test(s)) return `${s}-06`;
   // MM/YYYY or MM-YYYY
   const mmyyyy = s.match(/^(\d{1,2})[/\-](\d{4})$/);
   if (mmyyyy) {
@@ -226,13 +249,28 @@ export function mapResumeTOONToForm(toon) {
       return { degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' };
     }
     const rawStart = edu.start ?? edu.start_date ?? edu.from ?? edu.startMonth;
-    const rawEnd = edu.year ?? edu.end ?? edu.end_date ?? edu.to ?? edu.endMonth;
+    const rawEnd = edu.end ?? edu.end_date ?? edu.to ?? edu.endMonth ?? edu.year;
+    const field = str(edu.field || edu.major);
+    let degree = str(edu.degree || edu.qualification || edu.program);
+    if (degree && field && !degree.toLowerCase().includes(field.toLowerCase())) {
+      degree = `${degree} in ${field}`;
+    } else if (!degree && field) {
+      degree = field;
+    }
+    // Graduation year-only → December; other end dates via normalizer
+    let endMonth = '';
+    const endStr = rawEnd == null ? '' : String(rawEnd).trim();
+    if (/^\d{4}$/.test(endStr) && (edu.year != null && String(edu.year).trim() === endStr)) {
+      endMonth = `${endStr}-12`;
+    } else {
+      endMonth = normalizeToYYYYMM(rawEnd);
+    }
     return {
-      degree: str(edu.degree || edu.qualification || edu.program),
+      degree,
       institution: str(edu.institution || edu.school || edu.university),
       cgpa: str(edu.gpa || edu.cgpa || edu.percentage || edu.score),
       startMonth: normalizeToYYYYMM(rawStart),
-      endMonth: normalizeToYYYYMM(rawEnd),
+      endMonth,
     };
   }).filter(e => e.degree || e.institution || e.cgpa || e.startMonth || e.endMonth);
 
@@ -250,7 +288,10 @@ export function mapResumeTOONToForm(toon) {
       exp.present === 'yes';
     return {
       company: str(exp.company || exp.employer || exp.organization),
-      role: str(exp.title || exp.role || exp.position),
+      role: (() => {
+        const raw = str(exp.title || exp.role || exp.position);
+        return isPlausibleJobTitle(raw) ? raw : '';
+      })(),
       startMonth: normalizeToYYYYMM(rawStart),
       endMonth: isPresent ? '' : normalizeToYYYYMM(rawEnd),
       isCurrent: !!isPresent,
@@ -369,6 +410,7 @@ export function mapResumeTOONToForm(toon) {
   const currentLocation = locationRaw.trim();
   const preferredLocation = str(person.preferred_location) || currentLocation;
 
+  const skillsList = ensureStringArray(toon.skills);
   const mappedData = {
     fullName: str(person.name || person.full_name || person.fullName),
     email: str(person.email || person.email_address),
@@ -378,11 +420,11 @@ export function mapResumeTOONToForm(toon) {
     currentLocation,
     preferredLocation,
     experienceLevel,
+    skills: skillsList.join(', '),
     education: education.length > 0 ? education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }],
     experiences: experiences.length > 0 ? experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }],
     certifications: certifications.length > 0 ? certifications : [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }],
-    // Skills are extracted but not directly mapped to form (could be used for suggestions)
-    _skills: ensureStringArray(toon.skills),
+    _skills: skillsList,
     _summary: toon.summary || '',
   };
 
@@ -437,7 +479,12 @@ function formatJDDescription(toon) {
   const qualifications = ensureStringArray(toon?.qualifications);
   const benefits = ensureStringArray(toon?.benefits);
   const narrative = str(toon?.description);
+  const employmentType = str(toon?.employment_type || toon?.employmentType);
   let description = '';
+
+  if (employmentType) {
+    description += `**Employment Type:** ${employmentType}\n\n`;
+  }
 
   // Prefer structured sections; include narrative overview when present and not already covered.
   if (narrative) {
@@ -446,7 +493,7 @@ function formatJDDescription(toon) {
       /\*\*Required Skills:\*\*/i.test(narrative) ||
       /\*\*Qualifications:\*\*/i.test(narrative);
     if (looksStructured) {
-      description = narrative;
+      description += narrative;
       if (benefits.length > 0 && !/\*\*Benefits:\*\*/i.test(narrative)) {
         description += '\n\n**Benefits:**\n';
         benefits.forEach((b) => {

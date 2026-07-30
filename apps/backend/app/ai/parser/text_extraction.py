@@ -25,8 +25,10 @@ OCR_ENABLED = os.getenv('OCR_ENABLED', 'true').lower() in ('1', 'true', 'yes')
 OCR_LANG = os.getenv('OCR_LANG', 'eng')
 OCR_DPI = max(72, int(os.getenv('OCR_DPI', '250')))
 MIN_TEXT_CHARS = 30
-# Per-page digital text below this with images present triggers OCR for that page.
-PAGE_OCR_TEXT_THRESHOLD = 20
+# Per-page digital text below this triggers OCR.
+PAGE_OCR_TEXT_THRESHOLD = 80
+# If digital text is below this and page has images, prefer OCR.
+PAGE_SPARSE_TEXT_WITH_IMAGES = 200
 
 IMAGE_EXTENSIONS = frozenset({'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp'})
 
@@ -61,14 +63,36 @@ def _ocr_with_rapidocr(image_bytes: bytes) -> str:
     result, _ = engine(arr)
     if not result:
         return ''
-    lines: list[str] = []
-    for item in result:
-        # RapidOCR returns [box, text, score]
-        if isinstance(item, (list, tuple)) and len(item) >= 2:
-            text = item[1]
-            if text and str(text).strip():
-                lines.append(str(text).strip())
-    return '\n'.join(lines).strip()
+    return _join_ocr_detections_reading_order(result)
+
+
+def _box_sort_key(box: Any) -> tuple[float, float]:
+    """Sort key from RapidOCR box: top-to-bottom, then left-to-right."""
+    try:
+        # box is usually [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
+        ys = [float(p[1]) for p in box]
+        xs = [float(p[0]) for p in box]
+        y = min(ys)
+        x = min(xs)
+        # Bucket Y so nearby same-line detections stay left-to-right
+        return (round(y / 12.0) * 12.0, x)
+    except Exception:
+        return (0.0, 0.0)
+
+
+def _join_ocr_detections_reading_order(detections: list) -> str:
+    """Join RapidOCR [box, text, score] items in reading order."""
+    rows: list[tuple[tuple[float, float], str]] = []
+    for item in detections or []:
+        if not isinstance(item, (list, tuple)) or len(item) < 2:
+            continue
+        text = item[1]
+        if not text or not str(text).strip():
+            continue
+        box = item[0] if len(item) >= 1 else None
+        rows.append((_box_sort_key(box), str(text).strip()))
+    rows.sort(key=lambda r: r[0])
+    return '\n'.join(text for _, text in rows).strip()
 
 
 def _ocr_with_tesseract(image_bytes: bytes, *, lang: str | None = None) -> str:
@@ -147,17 +171,22 @@ def _render_page_png(page, dpi: int = OCR_DPI) -> bytes:
 
 
 def _page_needs_ocr(page, digital_text: str) -> bool:
-    """True when digital text is thin and the page appears image-based."""
-    if len((digital_text or '').strip()) >= PAGE_OCR_TEXT_THRESHOLD:
-        return False
+    """True when digital text is thin or the page is image-heavy with sparse text."""
+    text_len = len((digital_text or '').strip())
+    image_count = 0
     try:
-        images = page.get_images(full=True)
-        if images:
-            return True
+        image_count = len(page.get_images(full=True) or [])
     except Exception:
-        pass
-    # No extractable text at all — still try OCR (blank digital layer).
-    return len((digital_text or '').strip()) < MIN_TEXT_CHARS
+        image_count = 0
+
+    if text_len < PAGE_OCR_TEXT_THRESHOLD:
+        return True
+    if image_count > 0 and text_len < PAGE_SPARSE_TEXT_WITH_IMAGES:
+        return True
+    # Large image count with modest text often means scanned page + junk text layer
+    if image_count >= 3 and text_len < 400:
+        return True
+    return False
 
 
 def extract_text_from_pdf_pymupdf(file_data: bytes) -> str:
