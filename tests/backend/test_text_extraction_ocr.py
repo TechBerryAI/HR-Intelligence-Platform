@@ -32,7 +32,7 @@ def test_ocr_image_bytes_missing_engines_message():
     with patch.object(te, "OCR_ENABLED", True), \
          patch.object(te, "_ocr_with_rapidocr", side_effect=ImportError("no rapidocr")), \
          patch.object(te, "_tesseract_available", return_value=False):
-        with pytest.raises(ValueError, match="rapidocr-onnxruntime|requirements.txt"):
+        with pytest.raises(ValueError, match="RapidOCR|Tesseract|OCR failed"):
             te._ocr_image_bytes(b"x")
 
 

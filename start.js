@@ -172,23 +172,40 @@ async function setupBackend() {
   }
   log('Upgrading pip...');
   await runCmd(VENV_PYTHON, ['-m', 'pip', 'install', '--upgrade', 'pip', '-q'], BACKEND_DIR);
-  log('Installing backend dependencies from requirements.txt (includes OCR: pymupdf, rapidocr-onnxruntime, Pillow)...');
+  log('Installing backend dependencies from requirements.txt (includes OCR: pymupdf, Pillow; RapidOCR on Python <3.13)...');
   await runCmd(VENV_PYTHON, ['-m', 'pip', 'install', '-r', 'requirements.txt', '-q'], BACKEND_DIR);
   log('Verifying OCR packages import...');
-  const verify = spawnSync(
+  const verifyCore = spawnSync(
     VENV_PYTHON,
-    [
-      '-c',
-      "import fitz, PIL, rapidocr_onnxruntime; print('OCR packages OK')",
-    ],
+    ['-c', "import fitz, PIL; print('OCR core packages OK (pymupdf, Pillow)')"],
     { cwd: BACKEND_DIR, encoding: 'utf8' }
   );
-  if (verify.status !== 0) {
-    log('OCR package verification failed. Re-run pip install -r requirements.txt', 'err');
-    if (verify.stderr) process.stderr.write(verify.stderr);
+  if (verifyCore.status !== 0) {
+    log('OCR core package verification failed. Re-run pip install -r requirements.txt', 'err');
+    if (verifyCore.stderr) process.stderr.write(verifyCore.stderr);
     process.exit(1);
   }
-  if (verify.stdout) process.stdout.write(verify.stdout.trim() + '\n');
+  if (verifyCore.stdout) process.stdout.write(verifyCore.stdout.trim() + '\n');
+
+  const verifyRapid = spawnSync(
+    VENV_PYTHON,
+    ['-c', "import rapidocr_onnxruntime; print('RapidOCR OK')"],
+    { cwd: BACKEND_DIR, encoding: 'utf8' }
+  );
+  if (verifyRapid.status === 0) {
+    if (verifyRapid.stdout) process.stdout.write(verifyRapid.stdout.trim() + '\n');
+  } else {
+    const pyVer = spawnSync(VENV_PYTHON, ['-c', 'import sys; print("%d.%d" % sys.version_info[:2])'], {
+      cwd: BACKEND_DIR,
+      encoding: 'utf8',
+    });
+    const version = (pyVer.stdout || '').trim() || 'unknown';
+    log(
+      `RapidOCR not available on this Python (${version}). ` +
+        'Scanned-image OCR needs Python 3.12 (recommended) or system Tesseract. Continuing setup...',
+      'warn'
+    );
+  }
   log('Backend setup complete');
 }
 

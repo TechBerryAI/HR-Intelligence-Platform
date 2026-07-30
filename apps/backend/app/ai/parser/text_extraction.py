@@ -119,8 +119,8 @@ def _ocr_image_bytes(image_bytes: bytes, *, lang: str | None = None) -> str:
 
     detail = '; '.join(errors) if errors else 'no OCR engine available'
     raise ValueError(
-        f'OCR failed ({detail}). Ensure backend deps are installed: '
-        f'pip install -r requirements.txt (includes rapidocr-onnxruntime).'
+        f'OCR failed ({detail}). Install RapidOCR with Python 3.10–3.12 '
+        f'(pip install rapidocr-onnxruntime), or install system Tesseract as a fallback.'
     )
 
 
