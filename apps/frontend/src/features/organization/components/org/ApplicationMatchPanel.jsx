@@ -1,6 +1,7 @@
-import React from 'react'
-import { FiAlertTriangle, FiZap } from 'react-icons/fi'
+import React, { useState } from 'react'
+import { FiAlertTriangle, FiZap, FiDownload } from 'react-icons/fi'
 import { MatchHeader, ScoreCard, ChipGroup, CollapsibleSection } from '@/features/analytics/components/MatchExplanation'
+import { generateApplicationMatchPdf } from '@/shared/utils/pdfReportUtils.js'
 
 const SCORE_FACTORS = [
   { name: 'Core Skills', key: 'skills', weight: 60 },
@@ -45,7 +46,10 @@ function StatusDot({ status, shortlisted }) {
   )
 }
 
-export default function ApplicationMatchPanel({ application, hideHeaderClose }) {
+export default function ApplicationMatchPanel({ application, hideHeaderClose, jobTitle }) {
+  const [reportLoading, setReportLoading] = useState(false)
+  const [reportError, setReportError] = useState('')
+
   if (!application) {
     return (
       <div className="rounded-[16px] bg-white/[0.025] border border-white/[0.08] p-6 text-sm text-[#8796A5]">
@@ -92,13 +96,47 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose }) 
 
   const reason = getVerdictReason()
 
+  const handleDownloadReport = () => {
+    setReportError('')
+    setReportLoading(true)
+    try {
+      generateApplicationMatchPdf(application, {
+        jobTitle: jobTitle || application.job_title,
+      })
+    } catch (e) {
+      console.error('Match PDF generation failed:', e)
+      setReportError(e?.message || 'Failed to generate PDF')
+    } finally {
+      setReportLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
+      {reportError && (
+        <div className="org-error-banner">{reportError}</div>
+      )}
+
       {/* Application overview — compact metadata; score de-emphasized vs hero */}
       <section className="rounded-[16px] bg-white/[0.025] border border-white/[0.08] px-5 py-[18px]">
-        <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#738394] mb-4">
-          Application Overview
-        </h3>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#738394]">
+            Application Overview
+          </h3>
+          <button
+            type="button"
+            onClick={handleDownloadReport}
+            disabled={reportLoading}
+            className="org-btn-secondary !py-2 !px-3 !text-sm self-start sm:self-auto"
+          >
+            {reportLoading ? (
+              <span className="spinner-premium w-4 h-4 border-2" />
+            ) : (
+              <FiDownload className="w-4 h-4" aria-hidden="true" />
+            )}
+            {reportLoading ? 'Preparing…' : 'Download Report'}
+          </button>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <p className="text-[12px] text-[#738394] mb-1">Status</p>

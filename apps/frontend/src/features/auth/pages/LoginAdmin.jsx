@@ -6,6 +6,7 @@ import PasswordInput from '@/shared/components/PasswordInput.jsx'
 import AuthPageLayout from '@/layouts/AuthPageLayout.jsx'
 import { Input } from '@/shared/components/ui/Input.jsx'
 import { ROLES, getRole } from '@/core/permissions/rbac.js'
+import { FiShield, FiArrowLeft } from 'react-icons/fi'
 
 export default function LoginAdmin() {
   const { loginHR, auth } = useApp()
@@ -47,17 +48,42 @@ export default function LoginAdmin() {
       title="HR / Admin Login"
       subtitle="Manage job postings, candidates, and analytics."
     >
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 shadow-premium p-6 sm:p-8">
-        <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Sign in</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">HR, Head of HR, or Executive access</p>
+      <div className="mb-5">
+        <Link
+          to="/"
+          className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-[#94A2AF] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38A9FF]/40 rounded-lg"
+        >
+          <FiArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to home
+        </Link>
+        <h2 className="font-display text-[clamp(1.75rem,3vw,2.15rem)] font-bold tracking-tight text-[#F5F7FA]">
+          Welcome back
+        </h2>
+        <p className="mt-1.5 text-[14px] sm:text-[15px] text-[#8796A5]">
+          Sign in to your HR Intelligence account
+        </p>
+      </div>
+
+      <div className="auth-glass-card">
+        <div
+          className="mb-5 flex h-12 w-12 items-center justify-center rounded-[14px] border border-[rgba(67,158,255,0.2)]"
+          style={{
+            background: 'linear-gradient(135deg, rgba(0,166,255,0.18), rgba(92,72,255,0.18))',
+          }}
+        >
+          <FiShield className="h-6 w-6 text-[#55B9FF]" aria-hidden="true" />
+        </div>
+        <h3 className="text-xl font-semibold text-[#F4F7FA]">Sign in</h3>
+        <p className="mt-1 text-sm text-[#8796A5]">HR, Head of HR, or Executive access</p>
+
         <form onSubmit={onAdminSubmit} className="mt-6 space-y-4">
           {adminError && (
-            <div className="rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+            <div className="rounded-xl border border-[rgba(255,90,110,0.55)] bg-[rgba(255,102,133,0.1)] px-4 py-3 text-sm text-[#FF7B8E]">
               {adminError}
             </div>
           )}
           <div className="w-full">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email</label>
+            <label className="mb-1.5 block text-sm font-medium text-[#DCE4EA]">Email</label>
             <Input
               type="email"
               className="input-premium h-12 min-h-[3rem] text-base"
@@ -68,7 +94,7 @@ export default function LoginAdmin() {
             />
           </div>
           <div className="w-full">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Password</label>
+            <label className="mb-1.5 block text-sm font-medium text-[#DCE4EA]">Password</label>
             <PasswordInput
               className="input-premium h-12 min-h-[3rem] text-base"
               placeholder="••••••••"
@@ -77,11 +103,7 @@ export default function LoginAdmin() {
               required
             />
           </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-xl bg-primary dark:bg-accent-blue text-white font-semibold py-3 px-4 hover:opacity-90 transition-opacity shadow-md disabled:opacity-70 disabled:cursor-not-allowed"
-          >
+          <button type="submit" disabled={loading} className="auth-cta mt-2">
             {loading ? (
               <span className="inline-flex items-center justify-center gap-2">
                 <span className="spinner-premium w-4 h-4 border-2" />
@@ -91,8 +113,10 @@ export default function LoginAdmin() {
               'Sign in'
             )}
           </button>
-          <p className="text-center text-sm text-slate-500 dark:text-slate-400 pt-2">
-            <Link to="/login" className="hover:text-primary dark:hover:text-accent-blue-light">← Back to login</Link>
+          <p className="pt-2 text-center text-sm text-[#8796A5]">
+            <Link to="/login" className="text-[#94A2AF] transition-colors hover:text-white">
+              ← Back to login
+            </Link>
           </p>
         </form>
       </div>

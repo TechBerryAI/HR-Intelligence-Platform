@@ -145,7 +145,7 @@ export default function HeadHrJobCandidateDetail() {
         {tab === 'profile' ? (
           <CandidateProfilePanel candidate={candidate} cid={cid} />
         ) : (
-          <ApplicationMatchPanel application={application} hideHeaderClose />
+          <ApplicationMatchPanel application={application} hideHeaderClose jobTitle={jobTitle} />
         )}
       </div>
     </PanelShell>

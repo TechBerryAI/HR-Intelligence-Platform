@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
 import {
   DropdownMenu,
@@ -16,9 +16,23 @@ import { isRecruiter, isHeadHr, isCeo } from '@/core/permissions/rbac.js'
 export default function Navbar() {
   const { auth, logout, user } = useApp()
   const navigate = useNavigate()
+  const location = useLocation()
 
-  const activeClass = ({ isActive }) =>
-    isActive ? 'text-slate-900 font-semibold' : 'text-slate-600 hover:text-slate-900 transition-colors'
+  const isAuthChrome =
+    location.pathname.startsWith('/login') ||
+    location.pathname.startsWith('/signup') ||
+    location.pathname.startsWith('/forgot-password')
+
+  const activeClass = ({ isActive }) => {
+    if (isAuthChrome) {
+      return isActive
+        ? 'auth-nav-link auth-nav-link-active'
+        : 'auth-nav-link'
+    }
+    return isActive
+      ? 'text-slate-900 font-semibold'
+      : 'text-slate-600 hover:text-slate-900 transition-colors'
+  }
 
   const isHrRecruiter = auth.isLoggedIn && isRecruiter(auth)
   const isHeadHrLoggedIn = auth.isLoggedIn && isHeadHr(auth)
@@ -37,28 +51,69 @@ export default function Navbar() {
 
   const navItem = (path, label) => (
     <NavLink to={path} className={activeClass}>
-      <span className="px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors inline-block">{label}</span>
+      <span
+        className={
+          isAuthChrome
+            ? 'px-3 py-2 inline-block text-[14px] font-medium'
+            : 'px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors inline-block'
+        }
+      >
+        {label}
+      </span>
     </NavLink>
   )
 
   const showLogin = !isHrRecruiter && !isHeadHrLoggedIn && !isCeoLoggedIn
 
   return (
-    <header className="sticky top-0 z-30 w-full h-16 bg-white border-b border-slate-200 shadow-sm">
-      <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between gap-6">
+    <header
+      className={
+        isAuthChrome
+          ? 'sticky top-0 z-30 w-full auth-nav px-3 sm:px-6'
+          : 'sticky top-0 z-30 w-full h-16 bg-white border-b border-slate-200 shadow-sm'
+      }
+    >
+      <div
+        className={
+          isAuthChrome
+            ? 'auth-nav-inner'
+            : 'max-w-7xl mx-auto px-6 h-full flex items-center justify-between gap-6'
+        }
+      >
         <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
-          <div className="relative h-10 w-10">
-            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-sky-400/30 to-blue-600/20 blur-md opacity-80 group-hover:opacity-100 transition-opacity" />
-            <div className="relative h-full w-full rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg ring-1 ring-blue-500/20 shadow-sm">
-              H
-            </div>
-          </div>
-          <div className="leading-tight">
-            <span className="block font-bold text-lg text-slate-900 tracking-tight">HR Intelligence</span>
-            <span className="hidden sm:block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
-              Enterprise Platform
-            </span>
-          </div>
+          {isAuthChrome ? (
+            <>
+              <div className="relative h-10 w-10">
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-sky-400/30 to-blue-600/20 blur-md opacity-80 group-hover:opacity-100 transition-opacity" />
+                <div className="relative h-full w-full rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white font-display font-bold text-lg ring-1 ring-white/20">
+                  H
+                </div>
+              </div>
+              <div className="leading-tight">
+                <span className="block font-display font-semibold text-[15px] sm:text-base text-[#F4F7FA] tracking-tight">
+                  HR Intelligence
+                </span>
+                <span className="hidden sm:block text-[10px] text-[#788896] tracking-[0.18em] uppercase font-medium">
+                  Enterprise Platform
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="relative h-10 w-10">
+                <div className="absolute inset-0 rounded-full bg-gradient-to-br from-sky-400/30 to-blue-600/20 blur-md opacity-80 group-hover:opacity-100 transition-opacity" />
+                <div className="relative h-full w-full rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg ring-1 ring-blue-500/20 shadow-sm">
+                  H
+                </div>
+              </div>
+              <div className="leading-tight">
+                <span className="block font-bold text-lg text-slate-900 tracking-tight">HR Intelligence</span>
+                <span className="hidden sm:block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
+                  Enterprise Platform
+                </span>
+              </div>
+            </>
+          )}
         </Link>
 
         <nav className="flex items-center gap-1 sm:gap-4">
@@ -115,7 +170,11 @@ export default function Navbar() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-slate-600">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={isAuthChrome ? 'auth-nav-link hover:bg-white/5 hover:text-white' : 'text-slate-600'}
+              >
                 <FiHelpCircle className="mr-1.5 h-4 w-4" /> <span className="hidden sm:inline">Support</span>
               </Button>
             </DropdownMenuTrigger>

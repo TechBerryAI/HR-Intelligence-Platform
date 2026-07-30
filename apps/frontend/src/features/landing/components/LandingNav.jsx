@@ -1,5 +1,4 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { NAV_LINKS } from '../constants/landingContent.js'
 
@@ -10,7 +9,6 @@ function scrollToHash(href) {
 }
 
 export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
-  const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const scrolled = scrollProgress > 0.02
 
@@ -64,13 +62,6 @@ export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
         </nav>
 
         <div className="flex items-center gap-3 sm:gap-4">
-          <button
-            type="button"
-            onClick={() => navigate('/login')}
-            className="hidden sm:inline-flex px-5 py-2.5 text-[15px] font-medium text-white/75 hover:text-white transition-colors"
-          >
-            Sign in
-          </button>
           {onGetStarted && (
             <button
               type="button"
@@ -116,30 +107,20 @@ export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
               {link.label}
             </button>
           ))}
-          <div className="pt-3 mt-3 border-t border-white/[0.08] flex gap-3">
-            <button
-              type="button"
-              onClick={() => {
-                navigate('/login')
-                setMenuOpen(false)
-              }}
-              className="flex-1 px-4 py-3 text-[15px] text-white/75 font-medium rounded-xl border border-white/12 hover:bg-white/[0.04]"
-            >
-              Sign in
-            </button>
-            {onGetStarted && (
+          {onGetStarted && (
+            <div className="pt-3 mt-3 border-t border-white/[0.08]">
               <button
                 type="button"
                 onClick={() => {
                   onGetStarted()
                   setMenuOpen(false)
                 }}
-                className="flex-1 px-4 py-3 text-[15px] text-white font-semibold rounded-xl bg-gradient-to-r from-sky-500 to-blue-600"
+                className="w-full px-4 py-3 text-[15px] text-white font-semibold rounded-xl bg-gradient-to-r from-sky-500 to-blue-600"
               >
                 Get Started
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </motion.div>
       )}
     </motion.header>
