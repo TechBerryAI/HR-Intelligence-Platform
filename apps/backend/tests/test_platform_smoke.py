@@ -20,8 +20,6 @@ CEO_EMAIL = os.getenv('SMOKE_CEO_EMAIL', 'unmesh.tari@techberryinfotech.com')
 CEO_PASSWORD = os.getenv('SMOKE_CEO_PASSWORD', 'P@ssw0rd')
 RECRUITER_EMAIL = os.getenv('SMOKE_RECRUITER_EMAIL', '')
 RECRUITER_PASSWORD = os.getenv('SMOKE_RECRUITER_PASSWORD', '')
-CANDIDATE_EMAIL = os.getenv('SMOKE_CANDIDATE_EMAIL', '')
-CANDIDATE_PASSWORD = os.getenv('SMOKE_CANDIDATE_PASSWORD', '')
 
 pytestmark = pytest.mark.integration
 
@@ -64,17 +62,13 @@ def _staff_login(client, email: str, password: str):
     return token, data.get('user') or {}
 
 
-def _candidate_login(client, email: str, password: str):
-    if not email or not password:
-        pytest.skip('Candidate credentials not configured')
-    resp = client.post('/api/candidate/login', json={'email': email, 'password': password})
-    if resp.status_code != 200:
-        pytest.skip(f'Candidate login failed for {email}: {resp.status_code} {resp.get_json()}')
-    data = resp.get_json() or {}
-    token = data.get('token')
-    if not token:
-        pytest.skip('No token in candidate login response')
-    return token
+def _jobs_list(resp):
+    data = resp.get_json()
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        return data.get('jobs') or []
+    return []
 
 
 def test_health_ok(app_client):
@@ -82,6 +76,34 @@ def test_health_ok(app_client):
     assert resp.status_code == 200
     body = resp.get_json() or {}
     assert body.get('status') == 'ok'
+
+
+def test_candidate_login_removed(app_client):
+    resp = app_client.post(
+        '/api/candidate/login',
+        json={'email': 'anyone@example.com', 'password': 'x'},
+    )
+    assert resp.status_code in (404, 405)
+
+
+def test_public_parse_requires_file(app_client):
+    resp = app_client.post('/api/parse/resume/public')
+    assert resp.status_code == 400
+    body = resp.get_json() or {}
+    assert body.get('status') == 'error'
+
+
+def test_public_apply_validation(app_client):
+    jobs = _jobs_list(app_client.get('/api/jobs/'))
+    if not jobs:
+        pytest.skip('No public jobs available')
+    job_id = jobs[0].get('id') or jobs[0].get('jdid')
+    resp = app_client.post(f'/api/jobs/{job_id}/apply', data={
+        'fullName': 'Test Applicant',
+        'email': 'not-an-email',
+    })
+    assert resp.status_code == 400
+    assert 'error' in (resp.get_json() or {})
 
 
 def test_head_hr_login_role(app_client):
@@ -124,15 +146,6 @@ def test_legacy_super_admin_prefix_removed(app_client):
     assert resp.status_code == 404
 
 
-def _jobs_list(resp):
-    data = resp.get_json()
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        return data.get('jobs') or []
-    return []
-
-
 def test_head_hr_sees_all_jobs(app_client):
     token, _ = _staff_login(app_client, HEAD_HR_EMAIL, HEAD_HR_PASSWORD)
     public = app_client.get('/api/jobs/')
@@ -156,18 +169,6 @@ def test_recruiter_job_scope(app_client):
             assert posted_by == hrid
 
 
-def test_candidate_profile(app_client):
-    token = _candidate_login(app_client, CANDIDATE_EMAIL, CANDIDATE_PASSWORD)
-    resp = app_client.get('/api/candidate/profile', headers=_auth_header(token))
-    assert resp.status_code == 200
-
-
-def test_candidate_applications_list(app_client):
-    token = _candidate_login(app_client, CANDIDATE_EMAIL, CANDIDATE_PASSWORD)
-    resp = app_client.get('/api/applications/', headers=_auth_header(token))
-    assert resp.status_code == 200
-
-
 def test_refresh_token_roundtrip(app_client):
     token, _ = _staff_login(app_client, HEAD_HR_EMAIL, HEAD_HR_PASSWORD)
     login_resp = app_client.post('/api/login', json={'email': HEAD_HR_EMAIL, 'password': HEAD_HR_PASSWORD})
@@ -180,18 +181,6 @@ def test_refresh_token_roundtrip(app_client):
     assert body.get('token')
     assert body.get('refresh_token')
     assert _jwt_role(body['token']) == 'HEAD_HR'
-
-
-def test_candidate_forgot_password_request(app_client):
-    email = CANDIDATE_EMAIL or 'nonexistent.candidate@example.com'
-    resp = app_client.post('/api/candidate/forgot-password', json={'email': email})
-    if resp.status_code == 500:
-        pytest.skip('Database unavailable for forgot-password test')
-    assert resp.status_code in (200, 404)
-    if resp.status_code == 200:
-        assert 'message' in (resp.get_json() or {})
-    else:
-        assert 'error' in (resp.get_json() or {})
 
 
 def test_job_create_links_parsed_jd_id(app_client):

@@ -86,14 +86,14 @@ def send_email_otp(recipient: str, otp: str, user_type: str = "Candidate") -> bo
             else:
                 print(f"[SEND_EMAIL_OTP] Dev mode - OTP for {recipient}: {otp}")
             return True
-        subject = "Your Job Portal OTP"
+        subject = "Your HR Intelligence OTP"
         greeting = "Dear HR," if user_type.lower() == "hr" else "Dear Candidate,"
         body = (
             f"{greeting}\n\n"
             f"Your One-Time Password (OTP) is: {otp}\n"
             f"This code is valid for 5 minutes.\n\n"
             f"If you did not request this OTP, please ignore this email.\n\n"
-            f"Regards,\nJob Portal Team"
+            f"Regards,\nHR Intelligence Team"
         )
         html = otp_html(otp, user_type)
         print(f"[SEND_EMAIL_OTP] Sending email to {recipient} with OTP: {otp}")

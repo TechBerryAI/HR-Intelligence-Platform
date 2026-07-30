@@ -1,7 +1,6 @@
 import React, { lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import RecruiterGuard from '@/core/auth/RecruiterGuard.jsx'
-import CandidateGuard from '@/core/auth/CandidateGuard.jsx'
 import HeadHrGuard from '@/core/auth/HeadHrGuard.jsx'
 import CeoGuard from '@/core/auth/CeoGuard.jsx'
 import { useApp } from '@/core/context/AppContext.jsx'
@@ -15,8 +14,6 @@ const ForgotPasswordVerify = lazy(() => import('@/features/auth/pages/ForgotPass
 const ForgotPasswordReset = lazy(() => import('@/features/auth/pages/ForgotPasswordReset.jsx'))
 const SignupAdmin = lazy(() => import('@/features/auth/pages/SignupAdmin.jsx'))
 const Dashboard = lazy(() => import('@/features/dashboard/pages/Dashboard.jsx'))
-const ApplicantProfile = lazy(() => import('@/features/candidate/pages/ApplicantProfile.jsx'))
-const ApplicationStatus = lazy(() => import('@/features/candidate/pages/ApplicationStatus.jsx'))
 const AppliedCandidates = lazy(() => import('@/features/dashboard/pages/AppliedCandidates.jsx'))
 const BulkResumeParser = lazy(() => import('@/features/admin/pages/admin/BulkResumeParser.jsx'))
 const FeedbackAdmin = lazy(() => import('@/features/admin/pages/admin/FeedbackAdmin.jsx'))
@@ -51,16 +48,11 @@ export default function AppRoutes() {
       <Route path="/support/contact" element={<ContactUs />} />
       <Route path="/support/hrms-feedback" element={<HRMSTestingFeedback />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/login/applicant" element={<Navigate to="/login" replace />} />
       <Route path="/login/admin" element={<LoginAdmin />} />
-      <Route path="/profile/applicant" element={<CandidateGuard><ApplicantProfile /></CandidateGuard>} />
-      <Route path="/settings/applicant" element={<CandidateGuard><Settings /></CandidateGuard>} />
       <Route path="/forgot-password/:variant" element={<ForgotPasswordRequest />} />
       <Route path="/forgot-password/:variant/verify" element={<ForgotPasswordVerify />} />
       <Route path="/forgot-password/:variant/reset" element={<ForgotPasswordReset />} />
-      <Route path="/applications" element={<CandidateGuard><ApplicationStatus /></CandidateGuard>} />
       <Route path="/signup" element={<Navigate to="/signup/admin" replace />} />
-      <Route path="/signup/applicant" element={<Navigate to="/login" replace />} />
       <Route path="/signup/admin" element={<SignupAdmin />} />
       <Route path="/dashboard" element={<RecruiterGuard><Dashboard /></RecruiterGuard>} />
       <Route path="/candidates" element={<RecruiterGuard><AppliedCandidates /></RecruiterGuard>} />

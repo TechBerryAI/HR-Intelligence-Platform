@@ -53,7 +53,7 @@ pytest tests/test_resume_ollama_smoke.py -v -m integration
 
 # Full app manual test
 node start.js
-# Login as candidate → http://localhost:5173/profile/applicant → upload resume
+# Open Jobs → Apply → upload resume (public form autofills via Ollama) → submit
 ```
 
 ## Related documentation

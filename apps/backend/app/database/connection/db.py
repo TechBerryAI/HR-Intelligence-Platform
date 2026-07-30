@@ -1,5 +1,5 @@
 """
-PostgreSQL database adapter for HR Job Portal.
+PostgreSQL database adapter for HR Intelligence.
 Uses psycopg (v3); parameters use %s placeholders (callers may pass ? and they are converted).
 """
 from __future__ import annotations

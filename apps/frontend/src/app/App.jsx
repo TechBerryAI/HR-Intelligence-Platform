@@ -29,7 +29,7 @@ export default function App() {
             </main>
             {!hideChrome && (
               <footer className="py-8 text-center text-sm text-slate-500 border-t border-slate-200">
-                © {new Date().getFullYear()} Job Portal
+                © {new Date().getFullYear()} HR Intelligence
               </footer>
             )}
           </div>

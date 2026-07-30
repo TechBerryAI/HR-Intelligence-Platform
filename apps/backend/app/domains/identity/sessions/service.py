@@ -1,25 +1,21 @@
 from typing import Optional, List, Dict
 
 from app.database.connection.db import db_run, db_get, db_all
-from app.domains.identity.authorization.rbac import ROLE_CANDIDATE, STAFF_ROLES
+from app.domains.identity.authorization.rbac import STAFF_ROLES
 
 
 def audit_user_type(role: str) -> str:
-    """Map JWT role to login_history.user_type ('HR' | 'candidate')."""
-    if role == ROLE_CANDIDATE or (role or '').lower() == 'candidate':
-        return 'candidate'
+    """Map JWT role to login_history.user_type ('HR')."""
     if role in STAFF_ROLES or (role or '').upper() == 'HR':
         return 'HR'
-    return role
+    return role or 'HR'
 
 
 def deactivate_session(token: str) -> Dict:
-    # Sessions are tracked in login history; no active session table to deactivate
     return {"success": True}
 
 
 def deactivate_all_user_sessions(user_id, user_type: str) -> Dict:
-    # Sessions are tracked in login history; no active session table to deactivate
     return {"success": True}
 
 
@@ -28,11 +24,6 @@ def get_user_sessions(user_id, user_type: str) -> List[Dict]:
     if audit_type == 'HR':
         return db_all(
             "SELECT hrid, email, logged_in_at FROM hr_login WHERE hrid = ? ORDER BY logged_in_at DESC",
-            (user_id,),
-        )
-    if audit_type == 'candidate':
-        return db_all(
-            "SELECT cid, email, logged_in_at FROM candidate_login WHERE cid = ? ORDER BY logged_in_at DESC",
             (user_id,),
         )
     return []

@@ -1,13 +1,13 @@
 """
-Professional HTML email templates for HRMS / Job Portal.
+Professional HTML email templates for HR Intelligence.
 All emails use a consistent branded layout for a premium experience.
 """
 import html as html_module
 from typing import Optional
 
-BRAND_NAME = "HR Management System"
-BRAND_SHORT = "Job Portal"
-SUPPORT_EMAIL = "support@jobportal.com"
+BRAND_NAME = "HR Intelligence"
+BRAND_SHORT = "HR Intelligence"
+SUPPORT_EMAIL = "support@hrintelligence.com"
 
 
 def _escape(s: Optional[str]) -> str:
@@ -145,7 +145,7 @@ def welcome_hr_html(full_name: str) -> str:
     <p style="margin: 0 0 16px 0;">Your HR account has been verified and is ready to use. You can now log in to manage jobs and applicants.</p>
     <p style="margin: 0; color: #64748b; font-size: 14px;">If you did not initiate this signup, please contact support immediately.</p>
     """
-    return _wrap_content("Welcome to Job Portal", content, preheader="Your account is ready")
+    return _wrap_content("Welcome to HR Intelligence", content, preheader="Your account is ready")
 
 
 def password_changed_html(full_name: str) -> str:

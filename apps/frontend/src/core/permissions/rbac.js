@@ -6,7 +6,6 @@ export const ROLES = {
   CEO: 'CEO',
   HEAD_HR: 'HEAD_HR',
   RECRUITER: 'RECRUITER',
-  CANDIDATE: 'CANDIDATE',
 }
 
 const PERMISSIONS = {

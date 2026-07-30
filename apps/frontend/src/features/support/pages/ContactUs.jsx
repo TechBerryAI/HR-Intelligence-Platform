@@ -8,7 +8,7 @@ import { useApp } from '@/core/context/AppContext.jsx'
 import { apiRequest } from '@/core/api/api.js'
 
 export default function ContactUs() {
-  const { applicantProfile, user, auth, applicantAuth } = useApp()
+  const { user, auth } = useApp()
   const toast = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -16,19 +16,14 @@ export default function ContactUs() {
 
   // Determine user info based on who's logged in
   const isStaffLoggedIn = auth.isLoggedIn && (auth.role === 'RECRUITER' || auth.role === 'HEAD_HR' || auth.role === 'CEO')
-  const isApplicantLoggedIn = applicantAuth.isLoggedIn && !isStaffLoggedIn
 
-  const defaultName = isApplicantLoggedIn 
-    ? applicantProfile.fullName || '' 
-    : isStaffLoggedIn 
-      ? user?.fullName || user?.name || '' 
-      : ''
+  const defaultName = isStaffLoggedIn
+    ? user?.fullName || user?.name || ''
+    : ''
   
-  const defaultEmail = isApplicantLoggedIn 
-    ? applicantProfile.email || '' 
-    : isStaffLoggedIn 
-      ? user?.email || '' 
-      : ''
+  const defaultEmail = isStaffLoggedIn
+    ? user?.email || ''
+    : ''
 
   const [form, setForm] = useState({
     name: defaultName,
@@ -94,10 +89,7 @@ export default function ContactUs() {
       }
 
       // Add user info if logged in
-      if (isApplicantLoggedIn) {
-        payload.user_type = 'candidate'
-        payload.user_id = user?.id || applicantProfile?.candidate_id
-      } else if (isStaffLoggedIn) {
+      if (isStaffLoggedIn) {
         payload.user_type = 'hr'
         payload.user_id = user?.hrId
       } else {

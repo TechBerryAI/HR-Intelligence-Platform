@@ -2,10 +2,13 @@
 Resume and Job Description Parsing Routes
 """
 import os
+import time
+import uuid
+from collections import defaultdict, deque
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 
-from app.domains.identity.authorization.rbac import get_user_id, get_role, STAFF_ROLES, ROLE_CANDIDATE
+from app.domains.identity.authorization.rbac import get_user_id, get_role, STAFF_ROLES
 from app.api.middleware.auth import authenticate_token, require_recruiter
 from app.ai.toon.runtime import toon_loads_flex
 from app.domains.recruitment.services.parsing_storage import (
@@ -23,6 +26,11 @@ parsing_bp = Blueprint('parsing', __name__)
 
 ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+# Simple in-memory rate limit for public resume parse: N requests per window per IP
+_PUBLIC_PARSE_LIMIT = int(os.getenv('PUBLIC_PARSE_RATE_LIMIT', '10'))
+_PUBLIC_PARSE_WINDOW_SEC = int(os.getenv('PUBLIC_PARSE_RATE_WINDOW_SEC', '600'))
+_public_parse_hits: dict[str, deque] = defaultdict(deque)
 
 MIME_TYPE_MAP = {
     'pdf': 'application/pdf',
@@ -51,6 +59,151 @@ def get_mime_type(filename):
     """Get MIME type from filename extension"""
     ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
     return MIME_TYPE_MAP.get(ext, 'application/octet-stream')
+
+
+def _client_ip() -> str:
+    forwarded = request.headers.get('X-Forwarded-For', '')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    return request.remote_addr or 'unknown'
+
+
+def _public_parse_rate_limited(ip: str) -> bool:
+    now = time.time()
+    q = _public_parse_hits[ip]
+    while q and now - q[0] > _PUBLIC_PARSE_WINDOW_SEC:
+        q.popleft()
+    if len(q) >= _PUBLIC_PARSE_LIMIT:
+        return True
+    q.append(now)
+    return False
+
+
+def _model_version_label() -> str:
+    if os.getenv('AI_USE_GATEWAY', 'true').lower() in ('1', 'true', 'yes'):
+        try:
+            from app.ai.adapter.runtime_adapter import get_model_version
+            return get_model_version()
+        except Exception:
+            return 'ai-runtime-v1'
+    return f"{os.getenv('LLM_PROVIDER', 'xai')}-v1"
+
+
+def run_resume_parse_pipeline(
+    file_data: bytes,
+    filename: str,
+    *,
+    uploader_id: str,
+    uploader_role: str,
+    candidate_id: str | None = None,
+    enrichment_context=None,
+):
+    """
+    Shared resume parse: store raw → extract → LLM → store parsed.
+    Returns (response_dict, http_status).
+    """
+    mime_type = get_mime_type(filename)
+
+    if len(file_data) > MAX_FILE_SIZE:
+        return {
+            'status': 'error',
+            'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024}MB',
+        }, 400
+
+    file_hash = compute_file_hash(file_data)
+    cached = get_cached_parsing_result(file_hash, uploader_id, 'resume')
+    if cached:
+        if candidate_id:
+            from app.database.connection.db import db_run
+            db_run(
+                'UPDATE parsed_resumes SET candidate_id = ? WHERE id = ?',
+                (candidate_id, cached['parsed_id']),
+            )
+        return {
+            'status': 'ok',
+            'raw_file_id': cached['raw_file_id'],
+            'parsed_id': cached['parsed_id'],
+            'confidence': cached['confidence'],
+            'toon': cached['toon'],
+            'is_duplicate': True,
+            'model_version': cached['model_version'],
+            'public_uploader_id': uploader_id if uploader_role == 'public' else None,
+        }, 200
+
+    raw_file_record = store_raw_file(
+        uploader_id,
+        uploader_role,
+        file_data,
+        filename,
+        mime_type,
+        None,
+    )
+    raw_file_id = raw_file_record['id']
+
+    try:
+        raw_text = extract_text(file_data, filename)
+    except Exception as e:
+        return {'status': 'error', 'error': f'Text extraction failed: {str(e)}'}, 400
+
+    text_length = len(raw_text.strip()) if raw_text else 0
+    if not raw_text or text_length < 30:
+        error_msg = 'Could not extract sufficient text from document'
+        if text_length > 0:
+            error_msg += (
+                f'. Only extracted {text_length} characters. '
+                'The document may be image-based (scanned) or corrupted.'
+            )
+        else:
+            error_msg += (
+                '. The document may be image-based (scanned), corrupted, '
+                'or in an unsupported format.'
+            )
+        return {'status': 'error', 'error': error_msg}, 400
+
+    doc_type = classify_document(raw_text)
+    if doc_type == 'unknown':
+        print("[WARNING] Document type unclear, proceeding as resume")
+
+    try:
+        toon = call_llm(raw_text, 'resume', enrichment_context=enrichment_context)
+    except Exception as e:
+        return {'status': 'error', 'error': f'LLM parsing failed: {str(e)}'}, 500
+
+    from app.domains.recruitment.services.parsing_storage import collect_toon_validation_issues
+    from app.ai.parser.pipelines.resume_toon_pipeline import log_validated_resume_toon
+
+    validation_issues = collect_toon_validation_issues(toon, 'resume')
+    is_valid, error_msg = validate_toon_format(toon, 'resume')
+    log_validated_resume_toon(
+        toon,
+        valid=is_valid,
+        error_msg=error_msg,
+        validation_issues=validation_issues,
+    )
+    if not is_valid:
+        return {'status': 'error', 'error': f'Invalid TOON format: {error_msg}'}, 400
+
+    confidence = calculate_confidence(toon, 'resume')
+    model_version = _model_version_label()
+    parsed_id = store_parsed_resume(
+        raw_file_id,
+        candidate_id,
+        toon,
+        raw_text,
+        confidence,
+        model_version,
+    )
+
+    return {
+        'status': 'ok',
+        'raw_file_id': raw_file_id,
+        'parsed_id': parsed_id,
+        'confidence': confidence,
+        'toon': toon,
+        'is_duplicate': False,
+        'model_version': model_version,
+        'public_uploader_id': uploader_id if uploader_role == 'public' else None,
+    }, 200
 
 
 def calculate_confidence(toon: dict, doc_type: str) -> float:
@@ -142,215 +295,108 @@ def calculate_confidence(toon: dict, doc_type: str) -> float:
         return min(score / max_score if max_score > 0 else 0.5, 1.0)
 
 
-@parsing_bp.route('/parse/resume', methods=['POST'])
-@authenticate_token
-def parse_resume_upload():
+@parsing_bp.route('/parse/resume/public', methods=['POST'])
+def parse_resume_public():
     """
-    Upload and parse resume
-    
-    POST /api/parse/resume
-    Headers: Authorization: Bearer <token>
-    Body: multipart/form-data
-      - file: resume file (PDF/DOCX)
-      - candidate_id: (optional) link to candidate
-    
-    Returns:
-      {
-        "status": "ok",
-        "raw_file_id": "uuid",
-        "parsed_id": "uuid",
-        "confidence": 0.94,
-        "toon": {...},
-        "is_duplicate": false
-      }
+    Public resume parse for apply-form autofill (no auth).
+    Rate-limited by IP. Stores with uploader_role='public'.
     """
     try:
-        # Get user from request (set by authenticate_token decorator)
-        current_user = request.user
-        
-        # Check if file is present
+        ip = _client_ip()
+        if _public_parse_rate_limited(ip):
+            return jsonify({
+                'status': 'error',
+                'error': 'Too many resume parse requests. Please try again later.',
+            }), 429
+
         if 'file' not in request.files:
             return jsonify({'status': 'error', 'error': 'No file provided'}), 400
-        
+
         file = request.files['file']
-        
         if file.filename == '':
             return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
         doc_reject = _reject_legacy_doc(file.filename)
         if doc_reject:
             return doc_reject
-        
+
         if not allowed_file(file.filename):
             return jsonify({
                 'status': 'error',
-                'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}'
+                'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
             }), 400
-        
-        # Read file data
+
         file_data = file.read()
-        
-        # Check file size
-        if len(file_data) > MAX_FILE_SIZE:
+        filename = secure_filename(file.filename)
+        public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
+
+        body, status = run_resume_parse_pipeline(
+            file_data,
+            filename,
+            uploader_id=public_uploader_id,
+            uploader_role='public',
+            candidate_id=None,
+            enrichment_context=None,
+        )
+        return jsonify(body), status
+    except Exception as e:
+        print(f"Public resume parsing error: {str(e)}")
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
+
+@parsing_bp.route('/parse/resume', methods=['POST'])
+@authenticate_token
+def parse_resume_upload():
+    """
+    Upload and parse resume (authenticated staff).
+    POST /api/parse/resume
+    """
+    try:
+        current_user = request.user
+
+        if 'file' not in request.files:
+            return jsonify({'status': 'error', 'error': 'No file provided'}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'status': 'error', 'error': 'No file selected'}), 400
+
+        doc_reject = _reject_legacy_doc(file.filename)
+        if doc_reject:
+            return doc_reject
+
+        if not allowed_file(file.filename):
             return jsonify({
                 'status': 'error',
-                'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024}MB'
+                'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
             }), 400
-        
+
+        file_data = file.read()
         filename = secure_filename(file.filename)
-        mime_type = get_mime_type(filename)
-        
-        # Get uploader info from token
-        # Candidates have 'id', HR has 'hrId'
+
         uploader_id = get_user_id(current_user)
-        jwt_role = get_role(current_user) or ROLE_CANDIDATE
-        uploader_role = 'recruiter' if jwt_role in STAFF_ROLES else 'candidate'
-        
-        # Validate uploader_id
+        jwt_role = get_role(current_user)
         if not uploader_id:
             return jsonify({
                 'status': 'error',
-                'error': 'User ID not found in authentication token'
+                'error': 'User ID not found in authentication token',
             }), 401
-        
-        # Get optional candidate_id from form; for candidates, default to authenticated user
-        candidate_id = request.form.get('candidate_id')
-        if jwt_role == ROLE_CANDIDATE and not candidate_id:
-            candidate_id = uploader_id
-        
-        # Compute file hash for duplicate detection
-        file_hash = compute_file_hash(file_data)
-        
-        # Check if already parsed (cached result)
-        cached = get_cached_parsing_result(file_hash, uploader_id, 'resume')
-        if cached:
-            # Link cached parse to candidate so apply can find it
-            if jwt_role == ROLE_CANDIDATE and uploader_id:
-                from app.database.connection.db import db_run
-                db_run(
-                    'UPDATE parsed_resumes SET candidate_id = ? WHERE id = ?',
-                    (uploader_id, cached['parsed_id'])
-                )
-            return jsonify({
-                'status': 'ok',
-                'raw_file_id': cached['raw_file_id'],
-                'parsed_id': cached['parsed_id'],
-                'confidence': cached['confidence'],
-                'toon': cached['toon'],
-                'is_duplicate': True,
-                'model_version': cached['model_version']
-            }), 200
-        
-        # Store raw file
-        raw_file_record = store_raw_file(
-            uploader_id,
-            uploader_role,
+
+        uploader_role = 'recruiter' if jwt_role in STAFF_ROLES else 'recruiter'
+        candidate_id = request.form.get('candidate_id') or None
+
+        body, status = run_resume_parse_pipeline(
             file_data,
             filename,
-            mime_type,
-            None  # db connection handled internally
+            uploader_id=uploader_id,
+            uploader_role=uploader_role,
+            candidate_id=candidate_id,
+            enrichment_context=None,
         )
-        
-        raw_file_id = raw_file_record['id']
-        
-        # Extract text from file
-        try:
-            raw_text = extract_text(file_data, filename)
-        except Exception as e:
-            return jsonify({
-                'status': 'error',
-                'error': f'Text extraction failed: {str(e)}'
-            }), 400
-        
-        # Check if we got sufficient text (lowered threshold and better error message)
-        text_length = len(raw_text.strip()) if raw_text else 0
-        if not raw_text or text_length < 30:
-            # Provide more helpful error message
-            error_msg = 'Could not extract sufficient text from document'
-            if text_length > 0:
-                error_msg += f'. Only extracted {text_length} characters. The document may be image-based (scanned) or corrupted.'
-            else:
-                error_msg += '. The document may be image-based (scanned), corrupted, or in an unsupported format.'
-            return jsonify({
-                'status': 'error',
-                'error': error_msg
-            }), 400
-        
-        # Classify document (optional verification)
-        doc_type = classify_document(raw_text)
-        if doc_type == 'unknown':
-            print(f"[WARNING] Document type unclear, proceeding as resume")
-        
-        # Call LLM to parse resume (repair → normalize → enrich inside call_llm)
-        try:
-            from app.ai.parser.enrichment.resume_enrichment import get_candidate_enrichment_context
-            enrichment_ctx = (
-                get_candidate_enrichment_context(current_user)
-                if jwt_role == ROLE_CANDIDATE
-                else None
-            )
-            toon = call_llm(raw_text, 'resume', enrichment_context=enrichment_ctx)
-        except Exception as e:
-            return jsonify({
-                'status': 'error',
-                'error': f'LLM parsing failed: {str(e)}'
-            }), 500
-        
-        # Validate TOON format
-        from app.domains.recruitment.services.parsing_storage import collect_toon_validation_issues
-        from app.ai.parser.pipelines.resume_toon_pipeline import log_validated_resume_toon
-
-        validation_issues = collect_toon_validation_issues(toon, 'resume')
-        is_valid, error_msg = validate_toon_format(toon, 'resume')
-        log_validated_resume_toon(
-            toon,
-            valid=is_valid,
-            error_msg=error_msg,
-            validation_issues=validation_issues,
-        )
-        if not is_valid:
-            return jsonify({
-                'status': 'error',
-                'error': f'Invalid TOON format: {error_msg}'
-            }), 400
-        
-        # Calculate confidence (simple heuristic based on field completeness)
-        confidence = calculate_confidence(toon, 'resume')
-        if os.getenv('AI_USE_GATEWAY', 'true').lower() in ('1', 'true', 'yes'):
-            try:
-                from app.ai.adapter.runtime_adapter import get_model_version
-                model_version = get_model_version()
-            except Exception:
-                model_version = 'ai-runtime-v1'
-        else:
-            model_version = f"{os.getenv('LLM_PROVIDER', 'xai')}-v1"
-        
-        # Store parsed result
-        parsed_id = store_parsed_resume(
-            raw_file_id,
-            candidate_id,
-            toon,
-            raw_text,
-            confidence,
-            model_version
-        )
-        
-        return jsonify({
-            'status': 'ok',
-            'raw_file_id': raw_file_id,
-            'parsed_id': parsed_id,
-            'confidence': confidence,
-            'toon': toon,
-            'is_duplicate': False,
-            'model_version': model_version
-        }), 200
-        
+        return jsonify(body), status
     except Exception as e:
         print(f"Resume parsing error: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'error': str(e)
-        }), 500
+        return jsonify({'status': 'error', 'error': str(e)}), 500
 
 
 @parsing_bp.route('/parse/jd', methods=['POST'])

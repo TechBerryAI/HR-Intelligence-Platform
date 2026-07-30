@@ -112,7 +112,29 @@ export async function uploadAndParseResume(file, candidateId = null) {
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || 'Failed to parse resume');
+  }
+
+  return await response.json();
+}
+
+/**
+ * Public resume parse for apply-form autofill (no auth).
+ * @param {File} file
+ * @returns {Promise<Object>}
+ */
+export async function uploadAndParseResumePublic(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_URL}/api/parse/resume/public`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
     throw new Error(error.error || 'Failed to parse resume');
   }
 
@@ -156,12 +178,16 @@ export async function uploadAndParseJD(file, jobId = null) {
  * @returns {Object} - Form field mappings
  */
 export function mapResumeTOONToForm(toon) {
-  if (!toon || toon.type !== 'resume') {
+  // Accept resume TOON even if type is missing (some LLM outputs omit it)
+  if (!toon || (toon.type && toon.type !== 'resume' && toon.type !== 'Resume')) {
+    throw new Error('Invalid resume TOON format');
+  }
+  if (!toon.person && !toon.education && !toon.experience && !toon.skills) {
     throw new Error('Invalid resume TOON format');
   }
 
   const person = toon.person || {};
-  const otherUrls = ensureArray(person.otherUrls);
+  const otherUrls = ensureArray(person.otherUrls || person.urls || person.links);
   // Normalize to string (parser/API may return numbers for phone, etc.)
   const str = (v) => (v == null || v === '') ? '' : String(v).trim();
 
@@ -169,32 +195,32 @@ export function mapResumeTOONToForm(toon) {
     if (edu == null || typeof edu !== 'object') {
       return { degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' };
     }
-    const rawStart = edu.start ?? edu.start_date ?? edu.from;
-    const rawEnd = edu.year ?? edu.end ?? edu.end_date ?? edu.to;
+    const rawStart = edu.start ?? edu.start_date ?? edu.from ?? edu.startMonth;
+    const rawEnd = edu.year ?? edu.end ?? edu.end_date ?? edu.to ?? edu.endMonth;
     return {
-      degree: str(edu.degree),
-      institution: str(edu.institution || edu.field),
-      cgpa: str(edu.gpa || edu.cgpa),
+      degree: str(edu.degree || edu.qualification || edu.program),
+      institution: str(edu.institution || edu.school || edu.university || edu.field),
+      cgpa: str(edu.gpa || edu.cgpa || edu.percentage || edu.score),
       startMonth: normalizeToYYYYMM(rawStart),
       endMonth: normalizeToYYYYMM(rawEnd),
     };
-  });
+  }).filter(e => e.degree || e.institution || e.cgpa || e.startMonth || e.endMonth);
 
-  const experiences = ensureArray(toon.experience).map(exp => {
+  const experiences = ensureArray(toon.experience || toon.experiences || toon.work).map(exp => {
     if (exp == null || typeof exp !== 'object') {
       return { company: '', role: '', startMonth: '', endMonth: '', isCurrent: false };
     }
-    const rawStart = exp.from ?? exp.start ?? exp.start_date;
-    const rawEnd = exp.to ?? exp.end ?? exp.end_date;
-    const isPresent = exp.to === 'Present' || exp.to === 'present' || exp.isCurrent;
+    const rawStart = exp.from ?? exp.start ?? exp.start_date ?? exp.startMonth;
+    const rawEnd = exp.to ?? exp.end ?? exp.end_date ?? exp.endMonth;
+    const isPresent = exp.to === 'Present' || exp.to === 'present' || exp.isCurrent || exp.present === true || exp.present === 'yes';
     return {
-      company: str(exp.company),
-      role: str(exp.title || exp.role),
+      company: str(exp.company || exp.employer || exp.organization),
+      role: str(exp.title || exp.role || exp.position),
       startMonth: normalizeToYYYYMM(rawStart),
       endMonth: isPresent ? '' : normalizeToYYYYMM(rawEnd),
       isCurrent: !!isPresent,
     };
-  });
+  }).filter(e => e.company || e.role || e.startMonth);
 
   const certifications = ensureArray(toon.certifications).map(cert => {
     if (cert == null) {
@@ -221,9 +247,9 @@ export function mapResumeTOONToForm(toon) {
     };
   });
 
-  // Calculate experience level
-  const totalYears = toon.total_experience_years || 0;
-  const experienceLevel = totalYears > 0 ? 'experienced' : 'fresher';
+  // Calculate experience level from years or non-empty experience list
+  const totalYears = Number(toon.total_experience_years || toon.years_of_experience || 0) || 0;
+  const experienceLevel = (totalYears > 0 || experiences.length > 0) ? 'experienced' : 'fresher';
 
   // Extract URLs from person object
   // Map LinkedIn URL - check multiple possible fields
@@ -309,9 +335,9 @@ export function mapResumeTOONToForm(toon) {
   const preferredLocation = str(person.preferred_location) || currentLocation;
 
   const mappedData = {
-    fullName: str(person.name),
-    email: str(person.email),
-    phone: str(person.phone),
+    fullName: str(person.name || person.full_name || person.fullName),
+    email: str(person.email || person.email_address),
+    phone: str(person.phone || person.mobile || person.phone_number || person.contact),
     linkedinUrl: linkedinUrl ? str(linkedinUrl) : '',
     portfolioUrl: portfolioUrl ? str(portfolioUrl) : '',
     currentLocation,

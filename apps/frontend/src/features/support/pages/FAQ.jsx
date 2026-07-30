@@ -9,90 +9,101 @@ const faqs = [
     category: 'General',
     questions: [
       {
-        question: 'What is this Job Portal?',
-        answer: 'This is a comprehensive job portal that connects job seekers with employers. Candidates can create profiles, upload resumes, and apply for jobs, while HR professionals can post job openings and manage applications.'
+        question: 'What is HR Intelligence?',
+        answer:
+          'HR Intelligence is an enterprise platform that connects job seekers with employers. Candidates can browse jobs, upload a resume to autofill an apply form, and submit applications directly — no account required. HR professionals can post job openings and manage applications.',
       },
       {
         question: 'Is this service free to use?',
-        answer: 'Yes! Job seekers can create accounts, upload resumes, and apply for jobs completely free. Employers can post jobs and review applications at no cost.'
+        answer:
+          'Yes! Job seekers can apply for jobs completely free without creating an account. Employers can post jobs and review applications at no cost.',
       },
       {
         question: 'How do I get started?',
-        answer: 'Simply click on "Login" and select whether you\'re a candidate or an HR professional. If you don\'t have an account, you can sign up from the login page. Complete your profile and you\'re ready to go!'
-      }
-    ]
+        answer:
+          'Browse Jobs and click Apply on a role. Upload your resume to autofill the form, review the details, and submit. HR staff can use Login for the admin portal.',
+      },
+    ],
   },
   {
     category: 'For Job Seekers',
     questions: [
       {
-        question: 'How do I create a candidate profile?',
-        answer: 'After signing up as a candidate, go to your profile page and fill in your details including education, experience, skills, and upload your resume. Make sure to complete all required fields to make your profile visible to employers.'
+        question: 'Do I need an account to apply?',
+        answer:
+          'No. Click Apply on a job, fill the form (or upload a resume for AI autofill), and submit. Your application is stored for recruiters to review.',
       },
       {
         question: 'Can I upload my resume?',
-        answer: 'Yes! You can upload your resume in PDF, DOC, or DOCX format. Our system will parse your resume and auto-fill your profile information, which you can then review and edit.'
+        answer:
+          'Yes! Upload a PDF or DOCX resume on the apply form. Our system parses it with AI and autofills your details, which you can review and edit before submitting.',
       },
       {
         question: 'How do I apply for a job?',
-        answer: 'Browse available jobs, click on a job that interests you, and click the "Apply" button. Make sure your profile is complete before applying, as employers will review your profile along with your application.'
+        answer:
+          'Browse available jobs, click Apply, upload your resume or fill the form, then submit. Recruiters will review your application from their dashboard.',
       },
       {
         question: 'Can I track my application status?',
-        answer: 'Yes! Go to "Application Status" from your profile menu to see all your applications and their current status (pending, reviewed, shortlisted, or rejected).'
+        answer:
+          'Application status is managed by recruiters in their dashboard. After you apply, they will contact you using the email you provided on the form.',
       },
       {
         question: 'Can I save jobs to apply later?',
-        answer: 'Absolutely! Click the bookmark icon on any job listing to save it. You can view all your saved jobs later and apply when you\'re ready.'
-      }
-    ]
+        answer:
+          'Yes. Click the bookmark icon on a job listing to save it in this browser session, then apply when you are ready.',
+      },
+    ],
   },
   {
     category: 'For HR Professionals',
     questions: [
       {
         question: 'How do I post a job opening?',
-        answer: 'After logging in as an HR professional, go to your dashboard and click "Post New Job". Fill in the job details including title, description, requirements, and qualifications. You can also upload a job description document for auto-filling.'
+        answer:
+          'After logging in as an HR professional, go to your dashboard and click "Post New Job". Fill in the job details including title, description, requirements, and qualifications. You can also upload a job description document for auto-filling.',
       },
       {
         question: 'How can I review applications?',
-        answer: 'Go to your dashboard to see all your posted jobs and the number of applications for each. Click on a job to view all applicants, their profiles, resumes, and change their application status.'
+        answer:
+          'Go to your dashboard to see all your posted jobs and the number of applications for each. Click on a job to view all applicants, their profiles, resumes, and change their application status.',
       },
       {
         question: 'Can I edit or delete job postings?',
-        answer: 'Yes! From your dashboard, you can edit job details or delete job postings at any time. Note that deleting a job will also remove all associated applications.'
+        answer:
+          'Yes! From your dashboard, you can edit job details or delete job postings at any time. Note that deleting a job will also remove all associated applications.',
       },
       {
         question: 'How do I manage candidates?',
-        answer: 'Use the "Candidates" page to view all applicants across all your job postings. You can filter by job, view detailed profiles, and update application statuses.'
-      }
-    ]
+        answer:
+          'Use the "Candidates" page to view all applicants across all your job postings. You can filter by job, view detailed profiles, and update application statuses.',
+      },
+    ],
   },
   {
     category: 'Technical & Account',
     questions: [
       {
         question: 'I forgot my password. What should I do?',
-        answer: 'Click on "Login" and then "Forgot Password". Enter your email address and follow the instructions sent to your email to reset your password.'
-      },
-      {
-        question: 'Can I change my email address?',
-        answer: 'Currently, email addresses cannot be changed after registration as they are used for authentication. If you need to change your email, please contact our support team.'
+        answer:
+          'Click on "Login" and then "Forgot Password". Enter your email address and follow the instructions sent to your email to reset your password.',
       },
       {
         question: 'Is my data secure?',
-        answer: 'Yes! We take data security seriously. All passwords are encrypted, and we use industry-standard security practices to protect your information. We never share your personal information with third parties without your consent.'
+        answer:
+          'Yes. HR Intelligence uses secure authentication and encrypted connections to protect your information. We never share your personal information with third parties without your consent.',
       },
       {
         question: 'What file formats are supported for resume upload?',
-        answer: 'We support PDF, DOC, and DOCX file formats for resume uploads. Maximum file size is 10MB.'
+        answer: 'We support PDF and DOCX formats for resume uploads. Maximum file size is 10MB. Legacy .DOC is not supported.',
       },
       {
         question: 'The website is not working properly. What should I do?',
-        answer: 'Try refreshing the page or clearing your browser cache. If the problem persists, please contact us through the "Contact Us" form with details about the issue you\'re experiencing.'
-      }
-    ]
-  }
+        answer:
+          'Try refreshing the page or clearing your browser cache. If the problem persists, please contact us through the "Contact Us" form with details about the issue you\'re experiencing.',
+      },
+    ],
+  },
 ]
 
 export default function FAQ() {
@@ -101,16 +112,15 @@ export default function FAQ() {
 
   const toggleItem = (categoryIndex, questionIndex) => {
     const key = `${categoryIndex}-${questionIndex}`
-    setExpandedItems(prev => ({
+    setExpandedItems((prev) => ({
       ...prev,
-      [key]: !prev[key]
+      [key]: !prev[key],
     }))
   }
 
   return (
     <div className="min-h-screen bg-zinc-950 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -123,20 +133,19 @@ export default function FAQ() {
             transition={{ delay: 0.2, type: 'spring', stiffness: 200, damping: 15 }}
             className="inline-block mb-4"
           >
-            <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-r from-purple-600 to-blue-600 flex items-center justify-center shadow-glow">
+            <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-r from-sky-500 to-blue-600 flex items-center justify-center shadow-glow">
               <FiHelpCircle className="w-10 h-10 text-white" />
             </div>
           </motion.div>
-          
+
           <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-zinc-300 bg-clip-text text-transparent mb-3">
             Frequently Asked Questions
           </h1>
           <p className="text-zinc-400 text-lg">
-            Find answers to common questions about our job portal
+            Find answers to common questions about HR Intelligence
           </p>
         </motion.div>
 
-        {/* FAQ Categories */}
         <div className="space-y-8">
           {faqs.map((category, categoryIndex) => (
             <motion.div
@@ -146,21 +155,21 @@ export default function FAQ() {
               transition={{ duration: 0.5, delay: categoryIndex * 0.1 }}
             >
               <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
-                <span className="w-1 h-8 bg-gradient-to-b from-purple-600 to-blue-600 rounded-full"></span>
+                <span className="w-1 h-8 bg-gradient-to-b from-sky-500 to-blue-600 rounded-full" />
                 {category.category}
               </h2>
-              
+
               <div className="space-y-3">
                 {category.questions.map((item, questionIndex) => {
                   const key = `${categoryIndex}-${questionIndex}`
                   const isExpanded = expandedItems[key]
-                  
+
                   return (
                     <motion.div
                       key={questionIndex}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      transition={{ delay: (categoryIndex * 0.1) + (questionIndex * 0.05) }}
+                      transition={{ delay: categoryIndex * 0.1 + questionIndex * 0.05 }}
                       className="glass-card rounded-xl border border-white/10 overflow-hidden"
                     >
                       <button
@@ -175,7 +184,7 @@ export default function FAQ() {
                           <FiChevronDown className="w-5 h-5 text-zinc-400 flex-shrink-0" />
                         </motion.div>
                       </button>
-                      
+
                       <AnimatePresence>
                         {isExpanded && (
                           <motion.div
@@ -199,24 +208,18 @@ export default function FAQ() {
           ))}
         </div>
 
-        {/* Still have questions CTA */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.6 }}
           className="mt-12 glass-card rounded-2xl p-8 border border-white/10 text-center"
         >
-          <FiMessageCircle className="w-12 h-12 text-purple-500 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-white mb-2">
-            Still have questions?
-          </h3>
+          <FiMessageCircle className="w-12 h-12 text-sky-400 mx-auto mb-4" />
+          <h3 className="text-xl font-bold text-white mb-2">Still have questions?</h3>
           <p className="text-zinc-400 mb-6">
-            Can't find the answer you're looking for? Our support team is here to help!
+            Can&apos;t find the answer you&apos;re looking for? Our support team is here to help!
           </p>
-          <PremiumButton
-            onClick={() => navigate('/support/contact')}
-            className="mx-auto"
-          >
+          <PremiumButton onClick={() => navigate('/support/contact')} className="mx-auto">
             <FiMessageCircle className="mr-2" />
             Contact Support
           </PremiumButton>
@@ -225,4 +228,3 @@ export default function FAQ() {
     </div>
   )
 }
-

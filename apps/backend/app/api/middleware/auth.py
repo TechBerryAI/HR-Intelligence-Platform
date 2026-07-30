@@ -6,7 +6,6 @@ from flask import jsonify, request
 
 from app.core.auth import JWT_SECRET, auth_log
 from app.domains.identity.authorization.rbac import (
-    ROLE_CANDIDATE,
     get_role,
     is_head_hr,
     is_staff_recruiter,
@@ -42,17 +41,6 @@ def require_recruiter(f):
         user = getattr(request, 'user', None)
         if not user or not is_staff_recruiter(user):
             return jsonify({"error": "Recruiter access required"}), 403
-        return f(*args, **kwargs)
-    return wrapper
-
-
-def require_candidate(f):
-    @wraps(f)
-    @authenticate_token
-    def wrapper(*args, **kwargs):
-        user = getattr(request, 'user', None)
-        if not user or get_role(user) != ROLE_CANDIDATE:
-            return jsonify({"error": "Candidate access required"}), 403
         return f(*args, **kwargs)
     return wrapper
 

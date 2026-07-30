@@ -120,7 +120,6 @@ def create_app() -> Flask:
     from app.domains.administration.api.head_hr import head_hr_bp  # noqa: E402
     from app.domains.candidate.api.routes import candidate_bp  # noqa: E402
     from app.domains.employee.api.feedback import feedback_bp  # noqa: E402
-    from app.domains.identity.api.candidate_auth import simple_candidate_auth_bp  # noqa: E402
     from app.domains.identity.api.hr_auth import auth_bp  # noqa: E402
     from app.domains.identity.sessions.routes import sessions_bp  # noqa: E402
     from app.domains.recruitment.api.applications import applications_bp  # noqa: E402
@@ -161,7 +160,7 @@ def create_app() -> Flask:
     def root():
         return jsonify({
             "status": "ok",
-            "message": "Job Portal API root. See /health for status.",
+            "message": "HR Intelligence API root. See /health for status.",
             "endpoints": [
                 "/health", "/api", "/api/jobs", "/api/candidate",
                 "/api/applications", "/api/sessions", "/api/admin",
@@ -181,7 +180,7 @@ def create_app() -> Flask:
                 bulk_parser = "unreachable"
         return jsonify({
             "status": "ok",
-            "message": "Job Portal API is running",
+            "message": "HR Intelligence API is running",
             "bulk_parser": bulk_parser,
         })
 
@@ -196,7 +195,6 @@ def create_app() -> Flask:
 
     app.register_blueprint(auth_bp, url_prefix='/api')
     app.register_blueprint(jobs_bp, url_prefix='/api/jobs')
-    app.register_blueprint(simple_candidate_auth_bp, url_prefix='/api/candidate')
     app.register_blueprint(candidate_bp, url_prefix='/api/candidate')
     app.register_blueprint(applications_bp, url_prefix='/api/applications')
     app.register_blueprint(sessions_bp, url_prefix='/api/sessions')

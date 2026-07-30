@@ -1,6 +1,6 @@
 # Backend
 
-Flask REST API for the HR Job Portal application.
+Flask REST API for the HR Intelligence application.
 
 Canonical location: `apps/backend/` (repository root).
 

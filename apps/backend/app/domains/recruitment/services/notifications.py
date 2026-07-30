@@ -37,7 +37,7 @@ def _build_email_profile_viewed(
         f"Hi {name},\n\n"
         f"Your profile has been reviewed for the {job_title or 'position'} role at {company_name or 'the company'}.\n\n"
         "The hiring team will contact you if they wish to move forward with your application.\n\n"
-        "— Job Portal Team"
+        "— HR Intelligence Team"
     )
     html = candidate_notification_html(
         candidate_name, job_title, company_name,
@@ -63,7 +63,7 @@ def _build_email_shortlisted(
         f"Hi {name},\n\n"
         f"You have been shortlisted for the {job_title or 'position'} role at {company_name or 'the company'}.\n\n"
         "The hiring team will reach out with next steps in the coming days.\n\n"
-        "— Job Portal Team"
+        "— HR Intelligence Team"
     )
     html = candidate_notification_html(
         candidate_name, job_title, company_name,
@@ -90,7 +90,7 @@ def _build_email_not_shortlisted(
         f"Thank you for your interest in the {job_title or 'position'} role at {company_name or 'the company'}.\n\n"
         "After careful consideration, we have decided to move forward with other candidates for this position.\n\n"
         "We encourage you to apply for other roles that match your experience.\n\n"
-        "— Job Portal Team"
+        "— HR Intelligence Team"
     )
     html = candidate_notification_html(
         candidate_name, job_title, company_name,

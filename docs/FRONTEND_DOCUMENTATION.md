@@ -1,5 +1,9 @@
 # Frontend Structure & Code Documentation
 
+> **Update (public apply):** Candidate accounts and `CandidateGuard` / applicant login pages are removed.
+> Job applications use a public Apply form on `/jobs` (`ApplyJobModal`) with resume autofill via `POST /api/parse/resume/public`.
+> Staff login remains at `/login` → `/login/admin`. Forgot-password is admin-only.
+
 This document describes the frontend directory structure, the purpose of each file and folder, and how the code works.
 
 ---

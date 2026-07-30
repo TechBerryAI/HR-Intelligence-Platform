@@ -10,11 +10,11 @@ import {
   Button,
   AvatarWithInitials,
 } from './ui/index.js'
-import { FiBriefcase, FiUser, FiFileText, FiLogOut, FiUsers, FiHelpCircle, FiMessageCircle, FiMessageSquare, FiBook, FiShield, FiSettings } from 'react-icons/fi'
+import { FiBriefcase, FiFileText, FiLogOut, FiUsers, FiHelpCircle, FiMessageCircle, FiMessageSquare, FiBook, FiShield, FiSettings } from 'react-icons/fi'
 import { isRecruiter, isHeadHr, isCeo } from '@/core/permissions/rbac.js'
 
 export default function Navbar() {
-  const { auth, applicantAuth, applicantProfile, logout, user } = useApp()
+  const { auth, logout, user } = useApp()
   const navigate = useNavigate()
 
   const activeClass = ({ isActive }) =>
@@ -23,13 +23,6 @@ export default function Navbar() {
   const isHrRecruiter = auth.isLoggedIn && isRecruiter(auth)
   const isHeadHrLoggedIn = auth.isLoggedIn && isHeadHr(auth)
   const isCeoLoggedIn = auth.isLoggedIn && isCeo(auth)
-  const isApplicantLoggedIn = applicantAuth.isLoggedIn && !auth.isLoggedIn
-
-  const applicantInitials = (() => {
-    const name = applicantProfile?.completed && applicantProfile?.fullName ? applicantProfile.fullName : ''
-    if (!name) return ''
-    return name.trim().split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase()
-  })()
 
   const hrInitials = (() => {
     const name = user?.fullName || user?.name || auth?.fullName || ''
@@ -48,16 +41,24 @@ export default function Navbar() {
     </NavLink>
   )
 
-  const showLogin = !isHrRecruiter && !isApplicantLoggedIn && !isHeadHrLoggedIn && !isCeoLoggedIn
+  const showLogin = !isHrRecruiter && !isHeadHrLoggedIn && !isCeoLoggedIn
 
   return (
     <header className="sticky top-0 z-30 w-full h-16 bg-white border-b border-slate-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between gap-6">
-        <Link to="/" className="flex items-center gap-2.5 shrink-0">
-          <div className="h-10 w-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-lg">
-            J
+        <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
+          <div className="relative h-10 w-10">
+            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-sky-400/30 to-blue-600/20 blur-md opacity-80 group-hover:opacity-100 transition-opacity" />
+            <div className="relative h-full w-full rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg ring-1 ring-blue-500/20 shadow-sm">
+              H
+            </div>
           </div>
-          <span className="font-bold text-lg text-slate-900">Job Portal</span>
+          <div className="leading-tight">
+            <span className="block font-bold text-lg text-slate-900 tracking-tight">HR Intelligence</span>
+            <span className="hidden sm:block text-[10px] font-medium uppercase tracking-[0.16em] text-slate-400">
+              Enterprise Platform
+            </span>
+          </div>
         </Link>
 
         <nav className="flex items-center gap-1 sm:gap-4">
@@ -86,35 +87,6 @@ export default function Navbar() {
                   <FiMessageSquare className="mr-2 h-4 w-4" /> Feedback (Admin)
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate('/settings')}>
-                  <FiSettings className="mr-2 h-4 w-4" /> Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
-                  <FiLogOut className="mr-2 h-4 w-4" /> Logout
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-
-          {isApplicantLoggedIn && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  {applicantInitials ? (
-                    <AvatarWithInitials initials={applicantInitials} size="sm" className="bg-blue-100 text-blue-600" />
-                  ) : (
-                    <span className="text-sm font-medium text-slate-600">My Profile</span>
-                  )}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => navigate('/profile/applicant')}>
-                  <FiUser className="mr-2 h-4 w-4" /> Profile
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/applications')}>
-                  <FiFileText className="mr-2 h-4 w-4" /> Application Status
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/settings/applicant')}>
                   <FiSettings className="mr-2 h-4 w-4" /> Settings
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />

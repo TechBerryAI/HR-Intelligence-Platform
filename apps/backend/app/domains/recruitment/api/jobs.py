@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import datetime
 from flask import Blueprint, request, jsonify
@@ -14,6 +15,19 @@ from app.domains.identity.authorization.rbac import (
     ROLE_RECRUITER,
 )
 from app.ai.toon.runtime import toon_loads_flex
+from app.domains.candidate.services.profile_service import (
+    link_parsed_resume,
+    normalize_email,
+    save_candidate_profile,
+    upsert_passwordless_candidate,
+    validate_public_apply_payload,
+)
+from app.domains.recruitment.api.applications import (
+    _extract_ats_result,
+    _jd_toon_from_job_row,
+    _persist_application_atomic,
+)
+from app.domains.recruitment.services.ats_service import match_candidate_to_job
 
 jobs_bp = Blueprint('jobs', __name__)
 
@@ -865,4 +879,142 @@ def delete_job(job_id: str):
         db_run('DELETE FROM jobs WHERE jdid = ?', (job_id,))
         return jsonify({'message': 'Job deleted successfully'})
     except Exception:
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+def _parse_json_field(raw, default=None):
+    if default is None:
+        default = []
+    if raw is None or raw == '':
+        return default
+    if isinstance(raw, (list, dict)):
+        return raw
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return default
+
+
+@jobs_bp.post('/<string:job_id>/apply')
+def public_apply_to_job(job_id: str):
+    """
+    Public apply (no account): multipart form with profile fields + resume.
+    Creates/updates passwordless candidate_signup, saves profile, runs ATS, persists application.
+    """
+    try:
+        is_multipart = request.content_type and 'multipart/form-data' in request.content_type
+        if is_multipart:
+            data = request.form.to_dict()
+            data['education'] = _parse_json_field(data.get('education'), [])
+            data['certifications'] = _parse_json_field(data.get('certifications'), [])
+            data['experiences'] = _parse_json_field(data.get('experiences'), [])
+        else:
+            data = request.get_json(force=True) if request.is_json else {}
+
+        resume_binary = None
+        resume_filename = ''
+        if is_multipart and request.files and 'resume' in request.files:
+            resume_file = request.files['resume']
+            if resume_file and resume_file.filename:
+                resume_file.seek(0)
+                resume_binary = resume_file.read()
+                resume_filename = resume_file.filename
+                if not isinstance(resume_binary, bytes):
+                    resume_binary = bytes(resume_binary) if resume_binary else None
+
+        has_resume = bool(resume_binary and len(resume_binary) > 0)
+        err = validate_public_apply_payload(data, has_resume)
+        if err:
+            return jsonify({'error': err}), 400
+
+        job = db_get(
+            'SELECT * FROM jobs WHERE jdid = ? AND (enabled = ' + TRUE_SQL + ' OR enabled IS NULL)',
+            (job_id,),
+        )
+        if not job:
+            return jsonify({'error': 'Job not found or not available for applications'}), 404
+
+        email = normalize_email(data.get('email'))
+        full_name = (data.get('fullName') or '').strip()
+        candidate_id = upsert_passwordless_candidate(full_name, email)
+
+        existing = db_get(
+            'SELECT id FROM applications WHERE candidate_id = ? AND job_id = ?',
+            (candidate_id, job_id),
+        )
+        if existing:
+            return jsonify({'error': 'Already applied to this job'}), 400
+
+        data = {**data, 'email': email, 'fullName': full_name, 'completed': True}
+        save_candidate_profile(candidate_id, data, resume_binary, completed=True)
+
+        parsed_id = (data.get('parsedId') or data.get('parsed_id') or '').strip() or None
+        public_uploader_id = (data.get('publicUploaderId') or data.get('public_uploader_id') or '').strip() or None
+        parsed_resume_record = link_parsed_resume(parsed_id, candidate_id, public_uploader_id)
+        if not parsed_resume_record:
+            return jsonify({
+                'error': 'No parsed resume found. Please upload your resume and wait for AI parsing to finish.'
+            }), 400
+
+        parsed_jd_record = db_get(
+            """
+            SELECT toon, confidence, id
+            FROM parsed_jds
+            WHERE job_id = ?
+            ORDER BY created_at DESC
+            """,
+            (job_id,),
+        )
+        parsed_jd_id = (parsed_jd_record or {}).get('id')
+        if parsed_jd_record:
+            parsed_jd = toon_loads_flex(parsed_jd_record['toon'])
+            if not parsed_jd:
+                return jsonify({'error': 'Invalid stored job description parsing data'}), 400
+        else:
+            parsed_jd = _jd_toon_from_job_row(job)
+
+        parsed_resume = toon_loads_flex(parsed_resume_record['toon'])
+        if not parsed_resume or not isinstance(parsed_resume, dict) or not isinstance(parsed_jd, dict):
+            return jsonify({'error': 'Resume or job description data is not in a valid format'}), 400
+
+        ats_success, ats_result = match_candidate_to_job(
+            candidate_id, job_id, parsed_resume, parsed_jd
+        )
+        if not ats_success or not ats_result:
+            err_msg = (
+                ats_result.get('error', 'Unknown ATS error')
+                if isinstance(ats_result, dict)
+                else str(ats_result)
+            )
+            return jsonify({'error': f'ATS matching failed: {err_msg}'}), 502
+
+        final_score, shortlisted, rationale, ats_analysis_toon, status = _extract_ats_result(
+            ats_result
+        )
+        app_id, match_id = _persist_application_atomic(
+            candidate_id=candidate_id,
+            job_id=job_id,
+            parsed_resume_id=parsed_resume_record.get('id'),
+            parsed_jd_id=parsed_jd_id,
+            status=status,
+            match_score=final_score,
+            shortlisted=shortlisted,
+            ats_reasoning=rationale,
+            ats_analysis_toon=ats_analysis_toon,
+        )
+
+        return jsonify({
+            'message': 'Application submitted successfully',
+            'status': status.lower() if isinstance(status, str) else status,
+            'matchScore': final_score,
+            'shortlisted': shortlisted,
+            'applicationId': app_id,
+            'candidateId': candidate_id,
+            'resumeFileName': resume_filename or None,
+            'matchId': match_id,
+        }), 200
+    except Exception as e:
+        print(f"[PUBLIC_APPLY] ERROR: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': 'Internal server error'}), 500

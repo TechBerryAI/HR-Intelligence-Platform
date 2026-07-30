@@ -1,13 +1,10 @@
 import React, { useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
 
 export default function ForgotPasswordVerify() {
-  const { variant = 'applicant' } = useParams()
-  const isAdmin = variant === 'admin'
-  const { verifyApplicantPasswordOtp, verifyHrPasswordOtp } = useApp()
-  const verifyOtp = isAdmin ? verifyHrPasswordOtp : verifyApplicantPasswordOtp
-
+  const { variant } = useParams()
+  const { verifyHrPasswordOtp } = useApp()
   const [searchParams] = useSearchParams()
   const email = (searchParams.get('email') || '').trim().toLowerCase()
   const [otp, setOtp] = useState('')
@@ -15,6 +12,10 @@ export default function ForgotPasswordVerify() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+
+  if (variant !== 'admin') {
+    return <Navigate to="/forgot-password/admin" replace />
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -25,24 +26,17 @@ export default function ForgotPasswordVerify() {
       return
     }
     setLoading(true)
-    const res = await verifyOtp({ email, otp: otp.trim() })
+    const res = await verifyHrPasswordOtp({ email, otp: otp.trim() })
     setLoading(false)
     if (res.ok) {
       setStatus('OTP verified. Redirecting to password reset...')
       navigate(
-        `/forgot-password/${variant}/reset?email=${encodeURIComponent(email)}&otp=${encodeURIComponent(otp.trim())}`
+        `/forgot-password/admin/reset?email=${encodeURIComponent(email)}&otp=${encodeURIComponent(otp.trim())}`
       )
     } else {
       setError(res.message || 'OTP verification failed')
     }
   }
-
-  const title = isAdmin ? 'Verify Admin OTP' : 'Verify Applicant OTP'
-  const subtitle = isAdmin
-    ? 'Enter the OTP sent to your admin email.'
-    : 'Enter the OTP sent to your email.'
-
-  const loginPath = isAdmin ? '/login/admin' : '/login'
 
   return (
     <section className="relative min-h-[calc(100vh-180px)] flex items-center justify-center px-4 py-10 overflow-hidden">
@@ -58,13 +52,13 @@ export default function ForgotPasswordVerify() {
       <div className="w-full max-w-xl relative">
         <div className="rounded-2xl bg-gradient-to-br from-zinc-900/90 via-zinc-900/70 to-zinc-900/50 p-[1px] shadow-2xl">
           <div className="rounded-2xl bg-zinc-950/70 backdrop-blur-md p-6 sm:p-8">
-            <h2 className="text-2xl font-semibold text-white">{title}</h2>
-            <p className="mt-1 text-sm text-zinc-400">{subtitle}</p>
+            <h2 className="text-2xl font-semibold text-white">Verify Admin OTP</h2>
+            <p className="mt-1 text-sm text-zinc-400">Enter the OTP sent to your admin email.</p>
 
             {!email && (
               <p className="mt-6 text-sm text-red-400">
                 We could not detect your email. Please{' '}
-                <Link to={`/forgot-password/${variant}`} className="text-white font-medium underline">
+                <Link to="/forgot-password/admin" className="text-white font-medium underline">
                   restart the reset process
                 </Link>
                 .
@@ -109,11 +103,11 @@ export default function ForgotPasswordVerify() {
 
             <p className="mt-4 text-sm text-zinc-400">
               Go back to{' '}
-              <Link to={`/forgot-password/${variant}`} className="text-white font-medium hover:underline">
+              <Link to="/forgot-password/admin" className="text-white font-medium hover:underline">
                 request OTP
               </Link>{' '}
               or{' '}
-              <Link to={loginPath} className="text-white font-medium hover:underline">
+              <Link to="/login/admin" className="text-white font-medium hover:underline">
                 back to login
               </Link>
             </p>
@@ -123,4 +117,3 @@ export default function ForgotPasswordVerify() {
     </section>
   )
 }
-

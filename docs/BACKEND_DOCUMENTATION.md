@@ -1,5 +1,9 @@
 # Backend Structure & Code Documentation
 
+> **Update (public apply):** Candidate login/signup OTP APIs are removed.
+> Applicants apply via `POST /api/jobs/<job_id>/apply` (passwordless `candidate_signup`).
+> Resume autofill uses `POST /api/parse/resume/public`. Migration `08_public_apply_purge_candidate_auth.sql` drops `CandidateAuth` / `candidate_login` and the password column.
+
 This document describes the backend directory structure, the purpose of each file and folder, and how the code works.
 
 ---

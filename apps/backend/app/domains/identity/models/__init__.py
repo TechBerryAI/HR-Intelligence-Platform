@@ -48,7 +48,6 @@ Base = declarative_base()
 
 
 def init_models():
-    from . import candidate_auth  # noqa: F401
     from . import hr_auth  # noqa: F401
 
 

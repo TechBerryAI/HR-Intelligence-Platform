@@ -1,16 +1,13 @@
 import React, { useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
 import PasswordInput from '@/shared/components/PasswordInput.jsx'
 import { PASSWORD_RULES, isPasswordStrong } from '@/shared/utils/passwordValidation.js'
 import { FiCheck, FiX } from 'react-icons/fi'
 
 export default function ForgotPasswordReset() {
-  const { variant = 'applicant' } = useParams()
-  const isAdmin = variant === 'admin'
-  const { resetApplicantPassword, resetHrPassword } = useApp()
-  const resetPassword = isAdmin ? resetHrPassword : resetApplicantPassword
-
+  const { variant } = useParams()
+  const { resetHrPassword } = useApp()
   const [searchParams] = useSearchParams()
   const email = (searchParams.get('email') || '').trim().toLowerCase()
   const otp = (searchParams.get('otp') || '').trim()
@@ -21,6 +18,10 @@ export default function ForgotPasswordReset() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
+
+  if (variant !== 'admin') {
+    return <Navigate to="/forgot-password/admin" replace />
+  }
 
   const newPasswordValid = isPasswordStrong(newPassword)
   const confirmMatches = newPassword && newPassword === confirmPassword
@@ -43,18 +44,15 @@ export default function ForgotPasswordReset() {
       return
     }
     setLoading(true)
-    const res = await resetPassword({ email, otp, newPassword, confirmPassword })
+    const res = await resetHrPassword({ email, otp, newPassword, confirmPassword })
     setLoading(false)
     if (res.ok) {
       setStatus('Password updated successfully. Redirecting to login...')
-      setTimeout(() => navigate(isAdmin ? '/login/admin' : '/login'), 1200)
+      setTimeout(() => navigate('/login/admin'), 1200)
     } else {
       setError(res.message || 'Failed to reset password')
     }
   }
-
-  const title = isAdmin ? 'Set New Admin Password' : 'Set New Applicant Password'
-  const subtitle = 'Choose a strong password you have not used before.'
 
   return (
     <section className="relative min-h-[calc(100vh-180px)] flex items-center justify-center px-4 py-10 overflow-hidden">
@@ -70,13 +68,13 @@ export default function ForgotPasswordReset() {
       <div className="w-full max-w-xl relative">
         <div className="rounded-2xl bg-gradient-to-br from-zinc-900/90 via-zinc-900/70 to-zinc-900/50 p-[1px] shadow-2xl">
           <div className="rounded-2xl bg-zinc-950/70 backdrop-blur-md p-6 sm:p-8">
-            <h2 className="text-2xl font-semibold text-white">{title}</h2>
-            <p className="mt-1 text-sm text-zinc-400">{subtitle}</p>
+            <h2 className="text-2xl font-semibold text-white">Set New Admin Password</h2>
+            <p className="mt-1 text-sm text-zinc-400">Choose a strong password you have not used before.</p>
 
             {(!email || !otp) && (
               <p className="mt-6 text-sm text-red-400">
                 We could not detect your verified OTP. Please{' '}
-                <Link to={`/forgot-password/${variant}`} className="text-white font-medium underline">
+                <Link to="/forgot-password/admin" className="text-white font-medium underline">
                   restart the reset process
                 </Link>
                 .
@@ -135,7 +133,7 @@ export default function ForgotPasswordReset() {
 
             <p className="mt-4 text-sm text-zinc-400">
               Need to change something?{' '}
-              <Link to={`/forgot-password/${variant}/verify?email=${encodeURIComponent(email || '')}`} className="text-white font-medium hover:underline">
+              <Link to={`/forgot-password/admin/verify?email=${encodeURIComponent(email || '')}`} className="text-white font-medium hover:underline">
                 Back to OTP verification
               </Link>
             </p>
@@ -145,4 +143,3 @@ export default function ForgotPasswordReset() {
     </section>
   )
 }
-

@@ -1,5 +1,5 @@
 """
-Centralized RBAC — CEO, HEAD_HR, RECRUITER, CANDIDATE.
+Centralized RBAC — CEO, HEAD_HR, RECRUITER.
 Future modules add permissions here only.
 """
 from functools import wraps
@@ -8,9 +8,8 @@ from flask import request, jsonify
 ROLE_CEO = 'CEO'
 ROLE_HEAD_HR = 'HEAD_HR'
 ROLE_RECRUITER = 'RECRUITER'
-ROLE_CANDIDATE = 'CANDIDATE'
 
-ALL_ROLES = {ROLE_CEO, ROLE_HEAD_HR, ROLE_RECRUITER, ROLE_CANDIDATE}
+ALL_ROLES = {ROLE_CEO, ROLE_HEAD_HR, ROLE_RECRUITER}
 STAFF_ROLES = {ROLE_CEO, ROLE_HEAD_HR, ROLE_RECRUITER}
 
 PERMISSIONS = {

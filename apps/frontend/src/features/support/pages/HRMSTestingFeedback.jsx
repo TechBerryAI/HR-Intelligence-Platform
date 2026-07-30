@@ -41,24 +41,19 @@ const ALLOWED_SCREENSHOT_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image
 const MAX_SCREENSHOT_SIZE = 5 * 1024 * 1024 // 5MB
 
 export default function HRMSTestingFeedback() {
-  const { user, auth, applicantProfile, applicantAuth } = useApp()
+  const { user, auth } = useApp()
   const toast = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
   const isStaffLoggedIn = auth.isLoggedIn && (auth.role === 'RECRUITER' || auth.role === 'HEAD_HR' || auth.role === 'CEO')
-  const isApplicantLoggedIn = applicantAuth.isLoggedIn && !isStaffLoggedIn
 
-  const defaultName = isApplicantLoggedIn
-    ? applicantProfile?.fullName || ''
-    : isStaffLoggedIn
-      ? user?.fullName || user?.name || ''
-      : ''
+  const defaultName = isStaffLoggedIn
+    ? user?.fullName || user?.name || ''
+    : ''
   const defaultEmployeeId = isStaffLoggedIn
     ? user?.hrId || ''
-    : isApplicantLoggedIn
-      ? user?.id || applicantProfile?.candidate_id || ''
-      : ''
+    : ''
 
   const [form, setForm] = useState({
     employee_name: defaultName,

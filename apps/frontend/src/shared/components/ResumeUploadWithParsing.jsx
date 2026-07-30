@@ -1,18 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { uploadAndParseResume, mapResumeTOONToForm, validateFileForParsing } from '@/core/api/parsingApi.js';
+import { uploadAndParseResume, uploadAndParseResumePublic, mapResumeTOONToForm, validateFileForParsing } from '@/core/api/parsingApi.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiExternalLink, FiTrash2 } from 'react-icons/fi';
-import { useApp } from '@/core/context/AppContext.jsx';
 import { tokenService } from '@/core/auth/tokenService.js';
 
 /**
  * Premium Resume Upload Component with AI Parsing
- * When a resume is present: shows file name with Open and Remove.
- * When no resume: shows upload area to drag/drop or parse a new resume.
+ * publicMode: use unauthenticated /api/parse/resume/public (apply form).
  */
-export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, currentFileName, onRemove, onOpenResume }) {
-  const { applicantAuth } = useApp();
+export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, currentFileName, onRemove, onOpenResume, publicMode = false }) {
   const [isUploading, setIsUploading] = useState(false);
   const [parseError, setParseError] = useState('');
   const [parseSuccess, setParseSuccess] = useState('');
@@ -20,9 +17,7 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Clear any stale error messages on mount
   useEffect(() => {
-    // Clear login-related errors on mount
     setParseError('');
   }, []);
 
@@ -63,23 +58,16 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
   };
 
   const processFile = async (file) => {
-    // Clear previous messages
     setParseError('');
     setParseSuccess('');
     setConfidence(null);
 
-    // Check if user is logged in using token service
     const token = tokenService.getToken();
-    if (!token || !applicantAuth.isLoggedIn) {
-      // Allow manual file selection even if not logged in (no AI parsing)
-      if (onFileSelect) {
-        onFileSelect(file);
-      }
-      // Silently allow manual upload without showing error
+    if (!publicMode && !token) {
+      if (onFileSelect) onFileSelect(file);
       return;
     }
 
-    // Validate file
     const validation = validateFileForParsing(file);
     if (!validation.valid) {
       setParseError(validation.error);
@@ -89,34 +77,28 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
       return;
     }
 
-    // Notify parent of file selection (for traditional upload)
     if (onFileSelect) {
       onFileSelect(file);
     }
 
-    // Start AI parsing - show premium overlay
     setIsUploading(true);
     
     try {
-      // Call parsing API
-      const result = await uploadAndParseResume(file);
+      const result = publicMode
+        ? await uploadAndParseResumePublic(file)
+        : await uploadAndParseResume(file);
 
       if (result.status === 'ok' && result.toon) {
-        // Map TOON to form fields
         const formData = mapResumeTOONToForm(result.toon);
-        
-        // Store confidence and parsed ID
         setConfidence(result.confidence);
         
-        // Show success message
         if (result.is_duplicate) {
-          setParseSuccess('✨ Resume recognized! Using previously parsed data.');
+          setParseSuccess('Resume recognized! Using previously parsed data.');
         } else {
           const modelInfo = result.model_version ? ` (${result.model_version})` : '';
-          setParseSuccess(`✨ Resume parsed successfully! Fields auto-filled below.${modelInfo}`);
+          setParseSuccess(`Resume parsed successfully! Fields auto-filled below.${modelInfo}`);
         }
 
-        // Autofill form
         if (onAutofill) {
           onAutofill({
             ...formData,
@@ -124,27 +106,26 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
             resumeFileName: file.name,
             _parsedId: result.parsed_id,
             _rawFileId: result.raw_file_id,
+            _publicUploaderId: result.public_uploader_id || null,
             _confidence: result.confidence,
             _modelVersion: result.model_version,
           });
         }
 
-        // Show low confidence warning
         if (result.confidence < 0.75) {
-          setParseError('⚠️ Parsing confidence is low. Please verify all auto-filled fields.');
+          setParseError('Parsing confidence is low. Please verify all auto-filled fields.');
         }
       } else {
         throw new Error(result.error || 'Parsing failed');
       }
     } catch (error) {
-      // Provide better error messages based on error type
       if (error.message.includes('Invalid or expired token') || error.message.includes('Access token required')) {
-        // Don't show login errors - user can still upload manually
         console.warn('Session expired, allowing manual upload');
+        if (onFileSelect) onFileSelect(file);
       } else if (error.message.includes('Failed to parse resume')) {
-        setParseError('❌ Unable to parse resume. The file may be corrupted or in an unsupported format. Please try another file or fill the form manually.');
+        setParseError('Unable to parse resume. Please try another file or fill the form manually.');
       } else {
-        setParseError(`❌ Parsing error: ${error.message}`);
+        setParseError(`Parsing error: ${error.message}`);
       }
       console.error('Resume parsing error:', error);
     } finally {

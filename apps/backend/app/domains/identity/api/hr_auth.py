@@ -271,7 +271,7 @@ def verify_hr_otp():
             "If you did not initiate this signup, please contact support immediately."
         )
         html = welcome_hr_html(hr_data['full_name'])
-        send_notification_email(hr_data['email'], "Welcome to Job Portal", body, html=html)
+        send_notification_email(hr_data['email'], "Welcome to HR Intelligence", body, html=html)
 
         return jsonify({
             "message": "Account verified and created successfully",
@@ -477,11 +477,11 @@ def hr_reset_password():
 
         body = (
             f"Hi {hr_name or 'there'},\n\n"
-            "This is a confirmation that the password for your Job Portal HR account was just changed.\n"
+            "This is a confirmation that the password for your HR Intelligence account was just changed.\n"
             "If this wasn't you, please reset your password immediately or contact support."
         )
         html = password_changed_html(hr_name or 'there')
-        send_notification_email(email, "Your Job Portal password was changed", body, html=html)
+        send_notification_email(email, "Your HR Intelligence password was changed", body, html=html)
 
         return jsonify({'message': 'Password updated successfully. You can now login.'}), 200
     except Exception as e:
@@ -542,7 +542,7 @@ def hr_login():
             login_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
             body = (
                 f"Hi {signup_data['full_name'] or 'there'},\n\n"
-                f"We noticed a login to your Job Portal HR account on {login_time}\n"
+                f"We noticed a login to your HR Intelligence account on {login_time}\n"
                 f"IP Address: {ip_address or 'Unavailable'}\n"
                 f"Device: {user_agent or 'Unavailable'}\n\n"
                 "If this was you, no action is needed. If you did not sign in, please reset your password immediately."
@@ -555,7 +555,7 @@ def hr_login():
             )
             send_notification_email(
                 signup_data['email'],
-                "New login to your Job Portal HR account",
+                "New login to your HR Intelligence account",
                 body,
                 html=html,
             )
@@ -620,11 +620,11 @@ def hr_change_password():
         try:
             body = (
                 f"Hi {hr_name},\n\n"
-                "This is a confirmation that the password for your Job Portal account was changed.\n"
+                "This is a confirmation that the password for your HR Intelligence account was changed.\n"
                 "If this wasn't you, please reset your password immediately or contact support."
             )
             html = password_changed_html(hr_name)
-            send_notification_email(email, "Your Job Portal password was changed", body, html=html)
+            send_notification_email(email, "Your HR Intelligence password was changed", body, html=html)
         except Exception:
             pass
         return jsonify({'message': 'Password updated successfully'}), 200

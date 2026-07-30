@@ -1,5 +1,5 @@
 -- =============================================================================
--- HR Job Portal - PostgreSQL Schema (replaces SQL Server init_db + migrations)
+-- HR Intelligence - PostgreSQL Schema (replaces SQL Server init_db + migrations)
 -- =============================================================================
 -- Run once against an empty database (e.g. psql -f 01_schema.sql).
 -- Type mappings: NVARCHAR->VARCHAR/TEXT, DATETIME2->TIMESTAMPTZ, BIT->BOOLEAN,
@@ -38,7 +38,6 @@ CREATE TABLE IF NOT EXISTS candidate_signup (
     cid VARCHAR(20) NOT NULL PRIMARY KEY DEFAULT ('CID' || LPAD(nextval('candidate_cid_seq')::text, 3, '0')),
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
-    password VARCHAR(255) NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -84,13 +83,7 @@ CREATE TABLE IF NOT EXISTS hr_login (
 );
 CREATE INDEX IF NOT EXISTS IX_hr_login_hrid ON hr_login(hrid);
 
-CREATE TABLE IF NOT EXISTS candidate_login (
-    cid VARCHAR(20) NOT NULL REFERENCES candidate_signup(cid) ON DELETE CASCADE,
-    email VARCHAR(255) NOT NULL,
-    password VARCHAR(255) NOT NULL,
-    logged_in_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS IX_candidate_login_cid ON candidate_login(cid);
+-- candidate_login removed: applicants apply without accounts
 
 -- -----------------------------------------------------------------------------
 -- 6. jobs
@@ -177,7 +170,7 @@ CREATE INDEX IF NOT EXISTS IX_support_requests_created_at ON support_requests(cr
 CREATE TABLE IF NOT EXISTS raw_files (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     uploader_id VARCHAR(50) NOT NULL,
-    uploader_role VARCHAR(20) NOT NULL CHECK (uploader_role IN ('candidate', 'admin')),
+    uploader_role VARCHAR(20) NOT NULL CHECK (uploader_role IN ('candidate', 'admin', 'recruiter', 'public')),
     original_filename VARCHAR(255) NOT NULL,
     storage_url VARCHAR(1000) NOT NULL,
     mime_type VARCHAR(100) NOT NULL,
@@ -236,23 +229,8 @@ CREATE TABLE IF NOT EXISTS login_history (
 CREATE INDEX IF NOT EXISTS idx_login_history_email ON login_history(email, user_type);
 
 -- -----------------------------------------------------------------------------
--- 12. CandidateAuth, HRAuth (OTP verification tables)
+-- 12. HRAuth (OTP verification for staff signup)
 -- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS "CandidateAuth" (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NULL,
-    phone VARCHAR(20) NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    otp VARCHAR(6) NULL,
-    otp_expiry TIMESTAMPTZ NULL,
-    is_verified BOOLEAN NOT NULL DEFAULT false,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE UNIQUE INDEX IF NOT EXISTS IX_CandidateAuth_Email ON "CandidateAuth"(email) WHERE email IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS IX_CandidateAuth_Phone ON "CandidateAuth"(phone) WHERE phone IS NOT NULL;
-
 CREATE TABLE IF NOT EXISTS "HRAuth" (
     id SERIAL PRIMARY KEY,
     full_name VARCHAR(255) NOT NULL,
