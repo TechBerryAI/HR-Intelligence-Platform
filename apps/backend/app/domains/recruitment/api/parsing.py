@@ -12,6 +12,7 @@ from app.domains.identity.authorization.rbac import get_user_id, get_role, STAFF
 from app.api.middleware.auth import authenticate_token, require_recruiter
 from app.ai.toon.runtime import toon_loads_flex
 from app.domains.recruitment.services.parsing_storage import (
+    collect_toon_validation_issues,
     compute_file_hash,
     store_raw_file,
     validate_toon_format,
@@ -164,12 +165,34 @@ def run_resume_parse_pipeline(
     if doc_type == 'unknown':
         print("[WARNING] Document type unclear, proceeding as resume")
 
+    llm_error = None
+    toon = None
+    used_text_fallback = False
     try:
         toon = call_llm(raw_text, 'resume', enrichment_context=enrichment_context)
-    except Exception as e:
-        return {'status': 'error', 'error': f'LLM parsing failed: {str(e)}'}, 500
+    except (KeyError, TypeError, ValueError, Exception) as e:
+        llm_error = e
+        print(f"[WARN] LLM resume parse failed ({type(e).__name__}: {e}); trying text-only fallback")
+        try:
+            from app.ai.adapter.runtime_adapter import canonicalize_resume_toon, repair_resume_toon
+            from app.ai.parser.enrichment.resume_enrichment import enrich_resume_toon
 
-    from app.domains.recruitment.services.parsing_storage import collect_toon_validation_issues
+            repaired, _ = repair_resume_toon({}, raw_resume_text=raw_text)
+            repaired, _ = canonicalize_resume_toon(repaired)
+            toon, _ = enrich_resume_toon(repaired, enrichment_context)
+            used_text_fallback = True
+        except Exception as fallback_err:
+            return {
+                'status': 'error',
+                'error': (
+                    'Could not parse resume. '
+                    f'LLM error: {llm_error}. Fallback error: {fallback_err}'
+                ),
+            }, 400
+
+    if not isinstance(toon, dict):
+        return {'status': 'error', 'error': 'Resume parse returned invalid structure'}, 400
+
     from app.ai.parser.pipelines.resume_toon_pipeline import log_validated_resume_toon
 
     validation_issues = collect_toon_validation_issues(toon, 'resume')
@@ -180,11 +203,26 @@ def run_resume_parse_pipeline(
         error_msg=error_msg,
         validation_issues=validation_issues,
     )
-    if not is_valid:
-        return {'status': 'error', 'error': f'Invalid TOON format: {error_msg}'}, 400
+
+    person = toon.get('person') if isinstance(toon.get('person'), dict) else {}
+    has_identity = bool(str(person.get('name') or '').strip() and str(person.get('email') or '').strip())
+
+    if not is_valid and not has_identity:
+        return {
+            'status': 'error',
+            'error': f'Invalid TOON format: {error_msg or "; ".join(validation_issues)}',
+        }, 400
+
+    # Soft-accept: identity recovered (possibly via text fallback) even if some fields missing
+    if not is_valid and has_identity:
+        print(f"[WARN] Accepting partial resume TOON after recovery: {error_msg}")
 
     confidence = calculate_confidence(toon, 'resume')
+    if used_text_fallback:
+        confidence = min(float(confidence or 0), 0.55)
     model_version = _model_version_label()
+    if used_text_fallback:
+        model_version = f"{model_version}+text-fallback"
     parsed_id = store_parsed_resume(
         raw_file_id,
         candidate_id,
@@ -203,6 +241,7 @@ def run_resume_parse_pipeline(
         'is_duplicate': False,
         'model_version': model_version,
         'public_uploader_id': uploader_id if uploader_role == 'public' else None,
+        'partial': (not is_valid) or used_text_fallback,
     }, 200
 
 
@@ -232,7 +271,7 @@ def calculate_confidence(toon: dict, doc_type: str) -> float:
             if field in toon and toon[field]:
                 if field == 'person':
                     # Check person sub-fields - more lenient
-                    person = toon['person']
+                    person = toon.get('person') if isinstance(toon.get('person'), dict) else {}
                     # Give partial credit if at least name OR email exists
                     if person.get('name') or person.get('email'):
                         if person.get('name') and person.get('email'):
@@ -264,9 +303,10 @@ def calculate_confidence(toon: dict, doc_type: str) -> float:
             return 1.0
         if max_score > 0:
             base_confidence = score / max_score
-            has_person = 'person' in toon and toon['person'] and (toon['person'].get('name') or toon['person'].get('email'))
-            has_experience = 'experience' in toon and toon['experience'] and isinstance(toon['experience'], list) and len(toon['experience']) > 0
-            has_education = 'education' in toon and toon['education'] and isinstance(toon['education'], list) and len(toon['education']) > 0
+            person = toon.get('person') if isinstance(toon.get('person'), dict) else {}
+            has_person = bool(person.get('name') or person.get('email'))
+            has_experience = isinstance(toon.get('experience'), list) and len(toon.get('experience') or []) > 0
+            has_education = isinstance(toon.get('education'), list) and len(toon.get('education') or []) > 0
             
             if has_person and (has_experience or has_education):
                 base_confidence = max(base_confidence, 0.65)
@@ -526,26 +566,58 @@ def parse_jd_upload():
             }), 400
         
         # Call LLM to parse job description (repair → normalize inside call_llm)
+        used_text_fallback = False
         try:
             toon = call_llm(raw_text, 'jd')
-        except Exception as e:
+        except (KeyError, TypeError, ValueError, Exception) as e:
+            print(f"[WARN] LLM JD parse failed ({type(e).__name__}: {e}); trying text-only fallback")
+            try:
+                from app.ai.parser.pipelines.jd_toon_pipeline import build_jd_toon
+
+                toon = build_jd_toon(raw_text, {})
+                used_text_fallback = True
+            except Exception as fallback_err:
+                return jsonify({
+                    'status': 'error',
+                    'error': (
+                        'Could not parse job description. '
+                        f'LLM error: {e}. Fallback error: {fallback_err}'
+                    ),
+                }), 400
+
+        if not isinstance(toon, dict):
             return jsonify({
                 'status': 'error',
-                'error': f'LLM parsing failed: {str(e)}'
-            }), 500
-        
+                'error': 'Job description parse returned invalid structure',
+            }), 400
+
         # Validate TOON format
         is_valid, error_msg = validate_toon_format(toon, 'job_description')
         from app.ai.parser.pipelines.jd_toon_pipeline import log_validated_jd_toon
         log_validated_jd_toon(toon, valid=is_valid, error_msg=error_msg)
-        if not is_valid:
+
+        has_core = bool(
+            str(toon.get('title') or '').strip()
+            and (
+                (isinstance(toon.get('skills'), list) and len(toon.get('skills') or []) > 0)
+                or (
+                    isinstance(toon.get('responsibilities'), list)
+                    and len(toon.get('responsibilities') or []) > 0
+                )
+            )
+        )
+        if not is_valid and not has_core:
             return jsonify({
                 'status': 'error',
                 'error': f'Invalid TOON format: {error_msg}'
             }), 400
-        
+        if not is_valid and has_core:
+            print(f"[WARN] Accepting partial JD TOON after recovery: {error_msg}")
+
         # Calculate confidence
         confidence = calculate_confidence(toon, 'jd')
+        if used_text_fallback:
+            confidence = min(float(confidence or 0), 0.55)
         if os.getenv('AI_USE_GATEWAY', 'true').lower() in ('1', 'true', 'yes'):
             try:
                 from app.ai.adapter.runtime_adapter import get_model_version
@@ -554,6 +626,8 @@ def parse_jd_upload():
                 model_version = 'ai-runtime-v1'
         else:
             model_version = f"{os.getenv('LLM_PROVIDER', 'xai')}-v1"
+        if used_text_fallback:
+            model_version = f"{model_version}+text-fallback"
         
         # Store parsed result
         parsed_id = store_parsed_jd(

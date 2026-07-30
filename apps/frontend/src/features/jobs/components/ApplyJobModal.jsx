@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiX, FiUser, FiMail, FiPhone, FiMapPin, FiBriefcase } from 'react-icons/fi'
+import { FiX, FiUser, FiMail, FiPhone, FiMapPin, FiBriefcase, FiLink, FiGlobe } from 'react-icons/fi'
 import ResumeUploadWithParsing from '@/shared/components/ResumeUploadWithParsing.jsx'
 import MonthYearPicker from '@/shared/components/MonthYearPicker.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
@@ -23,6 +23,7 @@ const initialForm = () => ({
   portfolioUrl: '',
   currentLocation: '',
   preferredLocation: '',
+  skills: '',
   resumeFile: null,
   resumeFileName: '',
   education: emptyEducation(),
@@ -86,6 +87,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
       currentLocation: mapped.currentLocation || prev.currentLocation,
       preferredLocation: mapped.preferredLocation || mapped.currentLocation || prev.preferredLocation,
       experienceLevel: mapped.experienceLevel || prev.experienceLevel,
+      skills: mapped.skills || (mapped._skills || []).join(', ') || prev.skills,
       education: mapped.education?.length ? mapped.education : prev.education,
       experiences: mapped.experiences?.length ? mapped.experiences : prev.experiences,
       certifications: mapped.certifications?.length ? mapped.certifications : prev.certifications,
@@ -138,6 +140,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
       fd.append('currentLocation', form.currentLocation.trim())
       fd.append('preferredLocation', form.preferredLocation.trim())
       fd.append('experienceLevel', form.experienceLevel)
+      fd.append('skills', form.skills || '')
       fd.append('servingNotice', form.servingNotice || '')
       fd.append('noticePeriod', form.noticePeriod || '')
       fd.append('lastWorkingDay', form.lastWorkingDay || '')
@@ -264,6 +267,18 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                   onChange={(e) => setField('preferredLocation', e.target.value)}
                   error={errors.preferredLocation}
                 />
+                <PremiumInput
+                  label="LinkedIn URL"
+                  icon={FiLink}
+                  value={form.linkedinUrl}
+                  onChange={(e) => setField('linkedinUrl', e.target.value)}
+                />
+                <PremiumInput
+                  label="Portfolio / GitHub"
+                  icon={FiGlobe}
+                  value={form.portfolioUrl}
+                  onChange={(e) => setField('portfolioUrl', e.target.value)}
+                />
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Experience level</label>
                   <select
@@ -278,6 +293,13 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                   {errors.experienceLevel && <p className="mt-1 text-sm text-red-600">{errors.experienceLevel}</p>}
                 </div>
               </div>
+
+              <PremiumInput
+                label="Skills (comma-separated)"
+                value={form.skills}
+                onChange={(e) => setField('skills', e.target.value)}
+                placeholder="Python, React, SQL"
+              />
 
               {form.experienceLevel === 'experienced' && (
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -365,6 +387,30 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                       </label>
                       {(form.experiences || []).length > 1 && (
                         <button type="button" className="text-sm text-red-600 sm:col-span-2 text-left" onClick={() => removeListItem('experiences', i, emptyExperience)}>
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-slate-800">Certifications</h3>
+                  <button type="button" className="text-sm text-accent-blue" onClick={() => addListItem('certifications', emptyCerts)}>
+                    + Add
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {(form.certifications || []).map((cert, i) => (
+                    <div key={i} className="rounded-xl border border-slate-200 p-3 grid sm:grid-cols-2 gap-3">
+                      <PremiumInput label="Name" value={cert.name} onChange={(e) => updateList('certifications', i, 'name', e.target.value)} />
+                      <PremiumInput label="Issuer" value={cert.issuer} onChange={(e) => updateList('certifications', i, 'issuer', e.target.value)} />
+                      <PremiumInput label="Valid till" value={cert.validTill} onChange={(e) => updateList('certifications', i, 'validTill', e.target.value)} />
+                      <PremiumInput label="Validation URL" value={cert.validationUrl} onChange={(e) => updateList('certifications', i, 'validationUrl', e.target.value)} />
+                      {(form.certifications || []).length > 1 && (
+                        <button type="button" className="text-sm text-red-600 sm:col-span-2 text-left" onClick={() => removeListItem('certifications', i, emptyCerts)}>
                           Remove
                         </button>
                       )}
