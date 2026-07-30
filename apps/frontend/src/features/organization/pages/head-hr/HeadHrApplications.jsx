@@ -189,14 +189,14 @@ export default function HeadHrApplications() {
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`${basePath}/applications/${app.id}`) } }}
                     className="org-table-row-clickable"
                   >
-                    <td className="px-4 py-3 text-slate-500 text-xs font-mono">#{app.id}</td>
+                    <td className="px-4 py-3 text-[#8796A5] text-xs font-mono">#{app.id}</td>
                     <td className="px-4 py-3">
-                      <p className="text-slate-900 dark:text-slate-100 font-medium">{app.candidate_name || '—'}</p>
-                      <p className="text-slate-500 text-xs">{app.candidate_email}</p>
+                      <p className="text-[#F5F7FA] font-medium">{app.candidate_name || '—'}</p>
+                      <p className="text-[#8796A5] text-xs">{app.candidate_email}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <p className="text-slate-800 dark:text-slate-200 font-medium max-w-[160px] truncate">{app.job_title || '—'}</p>
-                      <p className="text-slate-500 text-xs">{app.job_company}</p>
+                      <p className="text-[#DCE3EA] font-medium max-w-[160px] truncate">{app.job_title || '—'}</p>
+                      <p className="text-[#8796A5] text-xs">{app.job_company}</p>
                     </td>
                     <td className="org-td-secondary text-xs">{app.hr_name || '—'}</td>
                     <td className="px-4 py-3">

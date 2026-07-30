@@ -66,7 +66,7 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
         </div>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-1">
+      <nav className="px-3 py-4 space-y-1">
         {navItems.map(({ label, path, icon: Icon, end }) => (
           <NavLink
             key={path}
@@ -83,16 +83,17 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
         ))}
       </nav>
 
-      <div className="px-3 pb-5 border-t border-white/[0.08] pt-3">
+      <div className="px-3 pt-1 pb-5 mt-1 border-t border-white/[0.08]">
         <button
           type="button"
           onClick={handleLogout}
-          className="org-nav-item w-full text-[#FF8FA3] hover:text-[#FFB0BC] hover:bg-[rgba(255,102,133,0.08)]"
+          className="org-nav-item w-full mt-2 text-[#FF8FA3] hover:text-[#FFB0BC] hover:bg-[rgba(255,102,133,0.08)]"
         >
           <FiLogOut className="w-4 h-4" />
           Logout
         </button>
       </div>
+      <div className="flex-1" aria-hidden />
     </aside>
   )
 
