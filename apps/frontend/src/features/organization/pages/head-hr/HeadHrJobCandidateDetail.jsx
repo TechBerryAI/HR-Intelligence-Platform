@@ -59,10 +59,12 @@ export default function HeadHrJobCandidateDetail() {
     setSearchParams(next === 'application' ? { tab: 'application' } : {}, { replace: true })
   }
 
+  const candidateName = candidate?.fullName || candidate?.email || 'Candidate'
+
   if (loading) {
     return (
       <PanelShell>
-        <div className="space-y-2 max-w-4xl mx-auto">
+        <div className="space-y-3 max-w-[1280px] mx-auto">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="org-skeleton" />
           ))}
@@ -74,26 +76,46 @@ export default function HeadHrJobCandidateDetail() {
   if (error || !candidate) {
     return (
       <PanelShell>
-        <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">{error || 'Not found'}</div>
-        <button type="button" onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(jdid)}`)} className="org-back-link !mb-0">
-          <FiArrowLeft className="w-4 h-4" /> Back to job
-        </button>
+        <div className="max-w-[1280px] mx-auto">
+          <div className="org-error-banner">{error || 'Not found'}</div>
+          <button
+            type="button"
+            onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(jdid)}`)}
+            className="org-back-link group !mb-0"
+          >
+            <FiArrowLeft className="w-4 h-4 transition-transform duration-[180ms] group-hover:-translate-x-0.5" />
+            Back to job
+          </button>
+        </div>
       </PanelShell>
     )
   }
 
   return (
     <PanelShell>
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-[1280px] mx-auto pb-8">
         <button
           type="button"
           onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(jdid)}`)}
-          className="org-back-link !mb-4"
+          className="group inline-flex items-center gap-2 text-sm text-[#8FA1B3] hover:text-white mb-6 transition-colors duration-[180ms]"
         >
-          <FiArrowLeft className="w-4 h-4" /> Back to {jobTitle}
+          <FiArrowLeft className="w-4 h-4 transition-transform duration-[180ms] group-hover:-translate-x-0.5" />
+          Back to {jobTitle}
         </button>
 
-        <div className="flex gap-1 mb-6 border-b border-zinc-800">
+        <header className="mb-6">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-2">
+            Candidate Evaluation
+          </p>
+          <h1 className="font-display text-[28px] sm:text-[30px] font-bold text-[#F5F7FA] tracking-tight leading-tight">
+            {candidateName}
+          </h1>
+          <p className="mt-1.5 text-sm text-[#8E9BA8]">
+            Application for {jobTitle}
+          </p>
+        </header>
+
+        <div className="flex gap-6 mb-6 border-b border-white/[0.08]">
           {[
             { id: 'profile', label: 'Profile & Resume' },
             { id: 'application', label: 'Application & Match' },
@@ -102,13 +124,20 @@ export default function HeadHrJobCandidateDetail() {
               key={id}
               type="button"
               onClick={() => setTab(id)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              className={`relative px-1 py-3 text-sm font-medium transition-colors duration-[180ms] ${
                 tab === id
-                  ? 'border-purple-500 text-white'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-300'
+                  ? 'text-white'
+                  : 'text-[#77899B] hover:text-[#DCE3EA]'
               }`}
             >
               {label}
+              {tab === id && (
+                <span
+                  className="absolute left-0 right-0 bottom-0 h-0.5 rounded-full"
+                  style={{ background: 'linear-gradient(90deg, #00A6FF, #7657FF)' }}
+                  aria-hidden
+                />
+              )}
             </button>
           ))}
         </div>

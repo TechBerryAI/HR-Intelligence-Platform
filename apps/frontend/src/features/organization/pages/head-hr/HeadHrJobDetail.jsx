@@ -106,7 +106,7 @@ export default function HeadHrJobDetail() {
             <FiBriefcase className="w-6 h-6 text-slate-500 dark:text-slate-400" />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold text-slate-900 dark:text-white">{job.title || 'Job'}</h1>
+            <h1 className="text-xl font-bold text-[#F5F7FA]">{job.title || 'Job'}</h1>
             <p className="text-slate-500 dark:text-slate-400 mt-0.5">{job.company || '—'}</p>
             <p className="text-slate-500 text-sm font-mono mt-1">{job.jdid}</p>
           </div>

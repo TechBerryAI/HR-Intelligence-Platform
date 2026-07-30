@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
 import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
 import {
-  FiGrid, FiUsers, FiUser, FiBriefcase, FiFileText, FiLogOut, FiMenu, FiX, FiShield, FiSettings, FiBarChart2,
+  FiGrid, FiUsers, FiBriefcase, FiLogOut, FiMenu, FiX, FiShield, FiSettings, FiBarChart2,
 } from 'react-icons/fi'
 
 const headHrNav = [
@@ -18,6 +18,14 @@ const ceoNav = [
   { label: 'Jobs', path: '/ceo/jobs', icon: FiBriefcase },
 ]
 
+function initialsFromName(name) {
+  if (!name || typeof name !== 'string') return 'HR'
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return 'HR'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+}
+
 export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
   const { logout, auth } = useApp()
   const { readOnly } = useOrgPanel()
@@ -28,7 +36,9 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
   const displayEmail = auth?.email
   const displayName = auth?.fullName || (isCeoPanel ? 'CEO' : 'Head of HR')
   const panelTitle = isCeoPanel ? 'Executive Panel' : 'Head of HR Panel'
+  const roleLabel = isCeoPanel ? 'Executive' : 'Administrator'
   const PanelIcon = isCeoPanel ? FiBarChart2 : FiShield
+  const initials = initialsFromName(displayName)
 
   const handleLogout = () => {
     logout()
@@ -40,23 +50,23 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
       className={
         mobile
           ? 'flex flex-col h-full'
-          : 'hidden lg:flex flex-col w-60 min-h-screen bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700'
+          : 'org-sidebar hidden lg:flex flex-col w-60 min-h-screen'
       }
     >
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-slate-200 dark:border-slate-700">
-        <div className="w-9 h-9 rounded-xl bg-primary dark:bg-accent-blue text-white grid place-items-center flex-shrink-0">
-          <PanelIcon className="w-4 h-4" />
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-white/[0.08]">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00A6FF] to-[#276DFF] text-white grid place-items-center flex-shrink-0 text-xs font-bold shadow-[0_0_20px_rgba(0,166,255,0.25)]">
+          {initials}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{displayName}</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{displayEmail || ''}</p>
-          {isCeoPanel && (
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">Read-only access</p>
-          )}
+          <p className="text-sm font-semibold text-[#F5F7FA] truncate">{displayName}</p>
+          <p className="text-xs text-[#8E9BA8] truncate">{displayEmail || ''}</p>
+          <p className="text-[10px] uppercase tracking-[0.08em] text-[#00A6FF]/80 mt-1">
+            {isCeoPanel ? 'Read-only access' : roleLabel}
+          </p>
         </div>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
+      <nav className="flex-1 px-3 py-4 space-y-1">
         {navItems.map(({ label, path, icon: Icon, end }) => (
           <NavLink
             key={path}
@@ -64,11 +74,7 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
             end={end}
             onClick={() => setSidebarOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
-                isActive
-                  ? 'bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-200 dark:border-slate-600'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50'
-              }`
+              `org-nav-item ${isActive ? 'org-nav-item-active' : ''}`
             }
           >
             <Icon className="w-4 h-4 flex-shrink-0" />
@@ -77,10 +83,11 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
         ))}
       </nav>
 
-      <div className="px-3 pb-5 border-t border-slate-200 dark:border-slate-700 pt-3">
+      <div className="px-3 pb-5 border-t border-white/[0.08] pt-3">
         <button
+          type="button"
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all duration-150"
+          className="org-nav-item w-full text-[#FF8FA3] hover:text-[#FFB0BC] hover:bg-[rgba(255,102,133,0.08)]"
         >
           <FiLogOut className="w-4 h-4" />
           Logout
@@ -90,16 +97,22 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
   )
 
   return (
-    <div className="flex flex-1 min-h-0 bg-slate-50 dark:bg-slate-900">
+    <div className="org-shell flex flex-1 min-h-0">
       <Sidebar />
 
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
-          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-          <div className="relative z-50 flex flex-col w-64 h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700">
-            <div className="flex items-center justify-between px-4 py-4 border-b border-slate-200 dark:border-slate-700">
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">{panelTitle}</span>
-              <button onClick={() => setSidebarOpen(false)} className="text-slate-500 hover:text-slate-700 dark:hover:text-white p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+          <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
+          <div className="org-sidebar relative z-50 flex flex-col w-64 h-full border-r border-white/[0.08]">
+            <div className="flex items-center justify-between px-4 py-4 border-b border-white/[0.08]">
+              <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
+                <PanelIcon className="w-4 h-4 text-[#00A6FF]" /> {panelTitle}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(false)}
+                className="text-[#8E9BA8] hover:text-white p-2 rounded-xl hover:bg-white/[0.05] transition-all duration-[180ms]"
+              >
                 <FiX className="w-5 h-5" />
               </button>
             </div>
@@ -109,17 +122,23 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
       )}
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80">
-          <button onClick={() => setSidebarOpen(true)} className="text-slate-500 hover:text-slate-700 dark:hover:text-white p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800">
+        <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-white/[0.08] bg-[rgba(13,20,27,0.88)] backdrop-blur-xl">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            className="text-[#8E9BA8] hover:text-white p-2 rounded-xl hover:bg-white/[0.05] transition-all duration-[180ms]"
+          >
             <FiMenu className="w-5 h-5" />
           </button>
-          <span className="text-sm font-semibold text-slate-900 dark:text-white flex items-center gap-2">
-            <PanelIcon className="w-4 h-4" /> {panelTitle}
+          <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
+            <PanelIcon className="w-4 h-4 text-[#00A6FF]" /> {panelTitle}
           </span>
         </div>
 
-        <main className="flex-1 overflow-auto p-5 sm:p-6 lg:p-8">
-          {children}
+        <main className="flex-1 overflow-auto p-6 sm:p-7 lg:p-9">
+          <div className="mx-auto w-full max-w-[1500px]">
+            {children}
+          </div>
         </main>
       </div>
     </div>

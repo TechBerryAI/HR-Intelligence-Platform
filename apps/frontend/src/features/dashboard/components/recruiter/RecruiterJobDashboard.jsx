@@ -140,33 +140,41 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange })
   return (
     <div className={embedded ? 'min-w-0' : undefined}>
       {embedded && (
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Job posting</h2>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">Create and manage your job postings</p>
+        <div className="mb-5">
+          <h2 className="font-display text-[22px] font-semibold text-[#F5F7FA] tracking-tight">Job posting</h2>
+          <p className="mt-1 text-sm text-[#8E9BA8]">Create and manage your job postings</p>
         </div>
       )}
 
       <AnimatedContainer animation="slideUp" delay={embedded ? 0 : 0.2}>
-        <Card className={`space-y-6 ${embedded ? 'p-6' : 'p-8'}`}>
+        <Card className={`space-y-6 ${embedded ? 'org-glass-panel p-6 sm:p-7 border-0 shadow-none hover:shadow-none bg-transparent' : 'p-8'}`}>
           <form onSubmit={onSubmit} className="space-y-6">
             {success && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-5 py-4 rounded-xl flex items-center gap-3"
+                className={`border px-5 py-4 rounded-xl flex items-center gap-3 ${
+                  embedded
+                    ? 'border-[rgba(54,214,160,0.3)] bg-[rgba(54,214,160,0.1)]'
+                    : 'border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10'
+                }`}
               >
-                <FiCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
-                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{success}</span>
+                <FiCheck className={`w-5 h-5 flex-shrink-0 ${embedded ? 'text-[#36D6A0]' : 'text-emerald-600 dark:text-emerald-400'}`} />
+                <span className={`text-sm font-medium ${embedded ? 'text-[#9AE6C8]' : 'text-emerald-700 dark:text-emerald-300'}`}>{success}</span>
               </motion.div>
             )}
             {error && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-5 py-4 rounded-xl flex items-center gap-3"
+                className={`border px-5 py-4 rounded-xl flex items-center gap-3 ${
+                  embedded
+                    ? 'border-[rgba(255,102,133,0.3)] bg-[rgba(255,102,133,0.1)]'
+                    : 'border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10'
+                }`}
               >
-                <FiAlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0" />
-                <span className="text-sm font-medium text-red-700 dark:text-red-300">{error}</span>
+                <FiAlertCircle className={`w-5 h-5 flex-shrink-0 ${embedded ? 'text-[#FF6685]' : 'text-red-600 dark:text-red-400'}`} />
+                <span className={`text-sm font-medium ${embedded ? 'text-[#FF8FA3]' : 'text-red-700 dark:text-red-300'}`}>{error}</span>
               </motion.div>
             )}
 
@@ -209,7 +217,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange })
                 placeholder="₹15-25 LPA"
               />
               <div>
-                <label className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">
+                <label className={`block text-sm font-semibold mb-2 ${embedded ? 'text-[#DCE3EA]' : 'text-slate-700 dark:text-slate-300'}`}>
                   Experience Range (years)
                 </label>
                 <div className="grid grid-cols-2 gap-3">
@@ -249,6 +257,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange })
                 variant="primary"
                 loading={isSubmitting}
                 disabled={isSubmitting}
+                className={embedded ? '!bg-gradient-to-br !from-[#00A6FF] !to-[#276DFF] !shadow-[0_8px_24px_rgba(0,166,255,0.2)] rounded-xl min-h-[46px]' : ''}
               >
                 {isSubmitting ? 'Posting...' : 'Post Job'}
               </PremiumButton>
@@ -258,15 +267,15 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange })
       </AnimatedContainer>
 
       <AnimatedContainer animation="fadeIn" delay={embedded ? 0.1 : 0.4}>
-        <div className={embedded ? 'mt-6' : 'mt-10'}>
-          <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Your Job Posts</h3>
+        <div className={embedded ? 'mt-7' : 'mt-10'}>
+          <h3 className={`text-lg font-semibold mb-4 ${embedded ? 'text-[#F5F7FA]' : 'text-slate-900 dark:text-white'}`}>Your Job Posts</h3>
           <div className="grid gap-4">
             {jobs.length === 0 ? (
-              <Card className="p-8 text-center">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
-                  <FiBriefcase className="w-8 h-8 text-slate-500 dark:text-slate-400" />
+              <Card className={`p-8 text-center ${embedded ? 'org-glass-panel border-0 shadow-none hover:shadow-none' : ''}`}>
+                <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center ${embedded ? 'bg-white/[0.05]' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                  <FiBriefcase className={`w-8 h-8 ${embedded ? 'text-[#8E9BA8]' : 'text-slate-500 dark:text-slate-400'}`} />
                 </div>
-                <p className="text-slate-500 dark:text-slate-400">No jobs yet. Create one above.</p>
+                <p className={embedded ? 'text-[#8E9BA8]' : 'text-slate-500 dark:text-slate-400'}>No jobs yet. Create one above.</p>
               </Card>
             ) : (
               jobs.map((job, index) => {
@@ -277,16 +286,20 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange })
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    className={`rounded-2xl p-6 border bg-white dark:bg-slate-800/80 transition-all duration-300 shadow-card dark:shadow-premium-dark ${
-                      isDisabled ? 'border-slate-200 dark:border-slate-700 opacity-60' : 'border-slate-200 dark:border-slate-700 hover:shadow-card-hover'
+                    className={`rounded-2xl p-6 border transition-all duration-[180ms] ${
+                      embedded
+                        ? `org-glass-card ${isDisabled ? 'opacity-60 hover:transform-none' : ''}`
+                        : `bg-white dark:bg-slate-800/80 shadow-card dark:shadow-premium-dark ${
+                            isDisabled ? 'border-slate-200 dark:border-slate-700 opacity-60' : 'border-slate-200 dark:border-slate-700 hover:shadow-card-hover'
+                          }`
                     }`}
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
-                        <h4 className={`text-lg font-semibold ${isDisabled ? 'text-slate-400' : 'text-slate-900 dark:text-white'}`}>
+                        <h4 className={`text-lg font-semibold ${isDisabled ? 'text-[#71808E]' : embedded ? 'text-[#F5F7FA]' : 'text-slate-900 dark:text-white'}`}>
                           {job.title}
                         </h4>
-                        <p className={`text-sm ${isDisabled ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                        <p className={`text-sm ${isDisabled ? 'text-[#71808E]' : embedded ? 'text-[#8E9BA8]' : 'text-slate-500 dark:text-slate-400'}`}>
                           {job.company}
                         </p>
                       </div>
@@ -297,7 +310,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange })
                           whileTap={{ scale: 0.95 }}
                           className="inline-flex items-center gap-2 cursor-pointer select-none"
                         >
-                          <span className={`text-xs font-medium ${job.enabled === false ? 'text-slate-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                          <span className={`text-xs font-medium ${job.enabled === false ? 'text-[#71808E]' : 'text-[#36D6A0]'}`}>
                             {job.enabled === false ? 'Disabled' : 'Enabled'}
                           </span>
                           <input
@@ -307,7 +320,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange })
                             onChange={(e) => handleToggleEnabled(job.id, e.target.checked)}
                           />
                           <div className={`relative w-11 h-6 rounded-full transition-colors ${
-                            job.enabled === false ? 'bg-slate-300 dark:bg-slate-600' : 'bg-emerald-500'
+                            job.enabled === false ? (embedded ? 'bg-white/20' : 'bg-slate-300 dark:bg-slate-600') : 'bg-emerald-500'
                           }`}>
                             <motion.div
                               animate={{ x: job.enabled === false ? 2 : 22 }}
@@ -322,13 +335,14 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange })
                           size="sm"
                           icon={FiEdit2}
                           onClick={() => handleEditClick(job)}
+                          className={embedded ? '!bg-white/[0.05] !border-white/10 !text-[#E8EDF3] hover:!bg-white/[0.09]' : ''}
                         >
                           Edit
                         </PremiumButton>
                       </div>
                     </div>
 
-                    <div className={`flex flex-wrap items-center gap-4 text-sm mb-4 ${isDisabled ? 'text-slate-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                    <div className={`flex flex-wrap items-center gap-4 text-sm mb-4 ${isDisabled ? 'text-[#71808E]' : embedded ? 'text-[#8E9BA8]' : 'text-slate-500 dark:text-slate-400'}`}>
                       <div className="flex items-center gap-1">
                         <FiMapPin className="w-4 h-4" />
                         <span>{job.location}</span>
@@ -355,7 +369,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange })
                     </div>
 
                     {job.description && (
-                      <p className={`text-sm ${isDisabled ? 'text-slate-400' : 'text-slate-600 dark:text-slate-300'} line-clamp-3`}>
+                      <p className={`text-sm line-clamp-3 ${isDisabled ? 'text-[#71808E]' : embedded ? 'text-[#A0ABB6]' : 'text-slate-600 dark:text-slate-300'}`}>
                         {job.description}
                       </p>
                     )}
@@ -381,16 +395,26 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange })
               initial={{ scale: 0.96, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.96, opacity: 0, y: 10 }}
-              className="relative w-full max-w-2xl rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-premium overflow-hidden"
+              className={`relative w-full max-w-2xl rounded-2xl overflow-hidden border ${
+                embedded
+                  ? 'org-glass-panel border-white/[0.08]'
+                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-premium'
+              }`}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80">
-                <h3 className="text-xl font-semibold text-slate-900 dark:text-white">Edit Job Post</h3>
+              <div className={`flex items-center justify-between px-6 py-4 border-b ${
+                embedded ? 'border-white/[0.08] bg-white/[0.03]' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80'
+              }`}>
+                <h3 className={`text-xl font-semibold ${embedded ? 'text-[#F5F7FA]' : 'text-slate-900 dark:text-white'}`}>Edit Job Post</h3>
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={handleEditCancel}
-                  className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                  className={`p-2 rounded-xl transition-colors ${
+                    embedded
+                      ? 'text-[#8E9BA8] hover:text-white hover:bg-white/[0.05]'
+                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700'
+                  }`}
                 >
                   <FiX className="w-5 h-5" />
                 </motion.button>

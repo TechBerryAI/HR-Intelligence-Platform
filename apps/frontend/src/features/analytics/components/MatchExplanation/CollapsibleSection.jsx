@@ -1,7 +1,48 @@
 import React, { useState } from 'react'
+import { FiChevronDown } from 'react-icons/fi'
 
-export default function CollapsibleSection({ label = 'Detailed Analysis', children }) {
+/**
+ * @param {'default' | 'enterprise'} variant
+ */
+export default function CollapsibleSection({ label = 'Detailed Analysis', children, variant = 'default' }) {
   const [open, setOpen] = useState(false)
+  const enterprise = variant === 'enterprise'
+
+  if (enterprise) {
+    return (
+      <div className="border border-white/[0.08] rounded-[14px] overflow-hidden bg-white/[0.025]">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left hover:bg-white/[0.04] transition-all duration-[180ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#3AA9FF]/35"
+          aria-expanded={open}
+          aria-controls="collapsible-detailed-analysis"
+          id="collapsible-detailed-analysis-toggle"
+        >
+          <span className="flex items-center gap-2 text-sm font-medium text-[#DCE3EA]">
+            <FiChevronDown
+              className={`w-4 h-4 text-[#8796A5] transition-transform duration-[180ms] ${open ? 'rotate-0' : '-rotate-90'}`}
+              aria-hidden
+            />
+            {label}
+          </span>
+          <span className="text-[#738394] text-xs">
+            {open ? 'Collapse' : 'Expand'}
+          </span>
+        </button>
+        {open && (
+          <div
+            id="collapsible-detailed-analysis"
+            role="region"
+            aria-labelledby="collapsible-detailed-analysis-toggle"
+            className="px-4 py-3 border-t border-white/[0.08] text-[#A0ABB6]"
+          >
+            {children}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden bg-white dark:bg-slate-800/50">

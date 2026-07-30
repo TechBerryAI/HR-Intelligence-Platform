@@ -57,7 +57,7 @@ export default function Settings() {
         className="mb-8"
       >
         <h1 className="org-page-title flex items-center gap-3">
-          <FiSettings className="w-7 h-7 text-primary" />
+          <FiSettings className="w-7 h-7 text-[#00A6FF]" />
           Settings
         </h1>
         <p className="org-page-subtitle">Manage your account and security.</p>

@@ -19,11 +19,11 @@ export default function App() {
       <ToastProvider>
         <ErrorBoundary>
           <ConnectionStatus />
-          <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
+          <div className={`min-h-screen flex flex-col ${hideChrome && (isHeadHrRoute || isCeoRoute) ? 'bg-[#0B1118] text-[#F5F7FA]' : isLandingRoute ? 'bg-[#050a14] text-white' : 'bg-slate-50 text-slate-900'}`}>
             {!hideChrome && <Navbar />}
             <ErrorToasts />
             <main className={hideChrome ? 'flex-1 flex flex-col min-h-screen' : 'flex-1'}>
-              <Suspense fallback={<div className="max-w-7xl mx-auto px-6 py-10"><div className="h-10 w-48 rounded-xl bg-slate-200 animate-pulse" /></div>}>
+              <Suspense fallback={<div className={`max-w-7xl mx-auto px-6 py-10 ${hideChrome && (isHeadHrRoute || isCeoRoute) ? '' : ''}`}><div className={`h-10 w-48 rounded-xl animate-pulse ${hideChrome && (isHeadHrRoute || isCeoRoute) ? 'bg-white/10' : 'bg-slate-200'}`} /></div>}>
                 <AppRoutes />
               </Suspense>
             </main>

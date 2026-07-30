@@ -127,17 +127,17 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-card p-6 rounded-2xl border-2 border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-blue-500/10 mb-6"
+        className="org-ai-panel p-6 mb-6"
       >
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 bg-gradient-to-r from-purple-600 to-blue-600 rounded-xl flex items-center justify-center shadow-glow">
-            <FiZap className="w-6 h-6 text-white" />
+          <div className="w-11 h-11 bg-gradient-to-br from-[#7957FF] to-[#00A6FF] rounded-xl flex items-center justify-center shadow-[0_8px_24px_rgba(121,87,255,0.25)]">
+            <FiZap className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white">
+            <h3 className="text-lg font-semibold text-[#F5F7FA]">
               Quick Create from Job Description
             </h3>
-            <p className="text-sm text-zinc-400">
+            <p className="text-sm text-[#9AA7B4]">
               Upload a JD and let AI extract all the details
             </p>
           </div>
@@ -149,11 +149,7 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
-            className={`relative group transition-all duration-300 ${
-              isDragging
-                ? 'scale-105 ring-4 ring-purple-500/50'
-                : 'hover:scale-[1.01]'
-            }`}
+            className="relative group transition-all duration-200"
           >
             <input
               ref={fileInputRef}
@@ -168,36 +164,34 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
             <label
               htmlFor="jd-upload-input"
               className={`
-                block p-6 rounded-xl cursor-pointer
-                border-2 border-dashed transition-all duration-300 bg-white/5
-                ${isDragging 
-                  ? 'border-purple-400 bg-purple-500/20' 
-                  : 'border-zinc-700 hover:border-purple-500/50 hover:bg-white/10'
-                }
+                org-upload-zone block p-6 cursor-pointer
+                ${isDragging ? 'org-upload-zone-active' : ''}
                 ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}
               `}
             >
               <div className="flex flex-col items-center justify-center space-y-3">
-                {/* Animated upload icon */}
                 <motion.div
                   animate={isDragging ? {
-                    scale: [1, 1.2, 1],
+                    scale: [1, 1.08, 1],
                   } : {}}
                   transition={{ duration: 0.5 }}
                   className="relative"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full blur-lg opacity-40 group-hover:opacity-60 transition-opacity" />
-                  <div className="relative w-12 h-12 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full flex items-center justify-center">
-                    <FiUpload className="w-6 h-6 text-white" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-[#7957FF] to-[#00A6FF] rounded-full blur-lg opacity-35 group-hover:opacity-55 transition-opacity" />
+                  <div className="relative w-11 h-11 bg-gradient-to-br from-[#7957FF] to-[#00A6FF] rounded-full flex items-center justify-center">
+                    <FiUpload className="w-5 h-5 text-white" />
                   </div>
                 </motion.div>
 
                 <div className="text-center">
-                  <p className="text-base font-semibold text-white mb-1">
+                  <p className="text-base font-semibold text-[#F5F7FA] mb-1">
                     {isDragging ? 'Drop JD file here' : 'Upload Job Description'}
                   </p>
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-xs text-[#9AA7B4]">
                     PDF, DOC, or DOCX • Max 10MB
+                  </p>
+                  <p className="text-xs text-[#71808E] mt-1.5">
+                    Drag & drop your file here or click to browse
                   </p>
                 </div>
               </div>
@@ -209,14 +203,14 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: -10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="glass-card border-2 border-green-500/30 bg-green-500/10 px-4 py-3 rounded-xl"
+              className="border border-[rgba(54,214,160,0.3)] bg-[rgba(54,214,160,0.1)] px-4 py-3 rounded-xl"
             >
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-                  <FiCheck className="w-4 h-4 text-white" />
+                <div className="flex-shrink-0 w-8 h-8 bg-[#36D6A0] rounded-full flex items-center justify-center">
+                  <FiCheck className="w-4 h-4 text-[#0B1118]" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-green-300">{parseSuccess}</p>
+                  <p className="text-sm font-semibold text-[#9AE6C8]">{parseSuccess}</p>
                   {confidence !== null && (
                     <div className="mt-2 flex items-center gap-2">
                       <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -224,10 +218,10 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
                           initial={{ width: 0 }}
                           animate={{ width: `${confidence * 100}%` }}
                           transition={{ duration: 1, ease: 'easeOut' }}
-                          className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full"
+                          className="h-full bg-gradient-to-r from-[#36D6A0] to-emerald-400 rounded-full"
                         />
                       </div>
-                      <span className="text-xs font-medium text-green-300 min-w-[45px] text-right">
+                      <span className="text-xs font-medium text-[#9AE6C8] min-w-[45px] text-right">
                         {(confidence * 100).toFixed(0)}%
                       </span>
                     </div>
@@ -242,13 +236,13 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: -10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="glass-card border-2 border-yellow-500/30 bg-yellow-500/10 px-4 py-3 rounded-xl"
+              className="border border-[rgba(255,183,77,0.3)] bg-[rgba(255,183,77,0.08)] px-4 py-3 rounded-xl"
             >
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
-                  <FiAlertCircle className="w-4 h-4 text-white" />
+                <div className="flex-shrink-0 w-8 h-8 bg-amber-500 rounded-full flex items-center justify-center">
+                  <FiAlertCircle className="w-4 h-4 text-[#0B1118]" />
                 </div>
-                <p className="text-sm text-yellow-300 flex-1">{parseError}</p>
+                <p className="text-sm text-amber-200 flex-1">{parseError}</p>
               </div>
             </motion.div>
           )}
@@ -256,19 +250,19 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
           {/* Feature highlights */}
           <div className="grid grid-cols-3 gap-3 pt-2">
             {[
-              { icon: FiZap, text: 'Instant Extraction' },
-              { icon: FiCheck, text: 'High Accuracy' },
-              { icon: FiFile, text: 'All Formats' },
+              { icon: FiZap, text: 'Instant Extraction', color: 'text-[#00A6FF]' },
+              { icon: FiCheck, text: 'High Accuracy', color: 'text-[#36D6A0]' },
+              { icon: FiFile, text: 'Multiple Formats', color: 'text-[#A78BFA]' },
             ].map((feature, index) => (
               <motion.div
                 key={index}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="flex flex-col items-center gap-1 p-2 bg-white/5 rounded-lg"
+                className="flex flex-col items-center gap-1.5 p-2"
               >
-                <feature.icon className="w-4 h-4 text-purple-400" />
-                <span className="text-xs text-zinc-400">{feature.text}</span>
+                <feature.icon className={`w-4 h-4 ${feature.color}`} />
+                <span className="text-xs text-[#9AA7B4] text-center">{feature.text}</span>
               </motion.div>
             ))}
           </div>
