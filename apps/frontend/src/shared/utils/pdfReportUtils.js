@@ -561,3 +561,228 @@ export function generateFullSystemPdf(allData) {
   drawPageFooter(doc)
   doc.save('hr-portal-full-report-' + todayStr() + '.pdf')
 }
+
+// ─── 6. Single Application & Match Report ─────────────────────────────────────
+function chipsFromItems(items) {
+  const out = []
+  const arr = Array.isArray(items)
+    ? items
+    : (items && typeof items === 'object' ? Object.values(items) : [])
+  arr.forEach((item) => {
+    const s = String(item).trim()
+    if (!s) return
+    const colon = s.indexOf(': ')
+    if (colon !== -1) {
+      s.slice(colon + 2).split(',').map((x) => x.trim()).filter(Boolean).forEach((x) => out.push(x))
+    } else {
+      out.push(s)
+    }
+  })
+  return out
+}
+
+function ensureSpace(doc, y, needed = 28) {
+  const H = doc.internal.pageSize.getHeight()
+  if (y > H - FOOTER_ZONE_MM - needed) {
+    doc.addPage('a4', 'portrait')
+    return 18
+  }
+  return y
+}
+
+function addWrappedText(doc, text, x, y, maxWidth, lineHeight = 5) {
+  const lines = doc.splitTextToSize(String(text || ''), maxWidth)
+  doc.text(lines, x, y)
+  return y + lines.length * lineHeight
+}
+
+/**
+ * Generate a PDF for one candidate's Application & Match analysis.
+ * @param {object} application — application detail (with ats_analysis when available)
+ * @param {{ jobTitle?: string }} [options]
+ */
+export function generateApplicationMatchPdf(application, options = {}) {
+  if (!application) throw new Error('No application data to export')
+
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W = doc.internal.pageSize.getWidth()
+  const jobTitle = options.jobTitle || application.job_title || '—'
+  const candidateName = application.candidate_name || 'Candidate'
+  const score = application.match_score != null ? Math.round(Number(application.match_score)) : null
+
+  const analysis = application.ats_analysis != null && typeof application.ats_analysis === 'object'
+    ? application.ats_analysis
+    : {}
+  const jsonOut = analysis?.json_output ?? analysis
+  const breakdown = jsonOut?.score_breakdown ?? {}
+  const rawStrengths = Array.isArray(jsonOut?.key_strengths) ? jsonOut.key_strengths : []
+  const rawGaps = Array.isArray(jsonOut?.key_gaps) ? jsonOut.key_gaps : []
+  const verdict = (jsonOut?.verdict || (jsonOut?.decision || '').replace(/_/g, ' ') || '').trim()
+  const evalReport = jsonOut?.evaluation_report ?? {}
+  const skillsAnalysis = evalReport?.skills_analysis ?? {}
+  const mandatoryPct = jsonOut?.mandatory_skills_match_pct ?? skillsAnalysis?.mandatory_skills_match_pct
+  const decisionBullets = Array.isArray(evalReport?.final_decision_logic) ? evalReport.final_decision_logic : []
+  const educationAssessment = evalReport?.education_certification_assessment
+  const finalReasoning = (jsonOut?.final_reasoning || jsonOut?.rationale || application?.ats_reasoning || '').trim()
+  const status = String(application.status || '').toLowerCase()
+  const displayVerdict = status === 'ats_failed' ? 'ATS Failed' : (verdict || '—')
+
+  let verdictReason = 'See detailed analysis below.'
+  if (status === 'ats_failed') {
+    verdictReason = application.ats_reasoning || 'ATS matching failed for this application.'
+  } else if (mandatoryPct != null && Number(mandatoryPct) < 60) {
+    verdictReason = `Mandatory skills match is ${Number(mandatoryPct)}% (below 60% threshold).`
+  } else if (verdict && /not a match/i.test(verdict) && score != null) {
+    verdictReason = `Overall score is ${score}%, below the required threshold for this role.`
+  } else if (finalReasoning) {
+    verdictReason = finalReasoning.split(/\n/)[0]?.trim().slice(0, 280) || verdictReason
+  }
+
+  let y = drawPageHeader(
+    doc,
+    'Application & Match Report',
+    candidateName + '  ·  ' + jobTitle,
+  )
+
+  y = drawSummaryBox(doc, y, [
+    { label: 'Match Score', value: score != null ? score + '%' : '—', color: score != null && score < 60 ? C.red : C.accent },
+    { label: 'Verdict', value: displayVerdict.slice(0, 18), color: /not a match|failed/i.test(displayVerdict) ? C.red : C.green },
+    { label: 'Status', value: application.shortlisted ? 'Shortlisted' : safe(application.status) },
+    { label: 'Applied', value: fmtDate(application.applied_at), color: C.muted },
+  ])
+
+  y = sectionHeading(doc, y, 'Application Overview')
+  autoTable(doc, {
+    ...tableStyles(y),
+    head: [['Field', 'Value']],
+    body: [
+      ['Candidate', safe(candidateName)],
+      ['Email', safe(application.candidate_email)],
+      ['Job', safe(jobTitle)],
+      ['Job ID', safe(application.job_id || application.jobId)],
+      ['Candidate ID', safe(application.candidate_id || application.candidateId)],
+      ['Recruiter', safe(application.hr_name)],
+      ['Match Score', score != null ? score + '%' : '—'],
+      ['Verdict', safe(displayVerdict)],
+      ['Status', application.shortlisted ? 'Shortlisted' : safe(application.status)],
+      ['Applied On', fmtDate(application.applied_at)],
+      ['Mandatory Skills Match', mandatoryPct != null ? Number(mandatoryPct) + '%' : '—'],
+    ],
+    columnStyles: {
+      0: { cellWidth: 55, fontStyle: 'bold', textColor: C.accent },
+      1: { cellWidth: 125 },
+    },
+  })
+  y = doc.lastAutoTable.finalY + 8
+
+  const SCORE_FACTORS = [
+    { name: 'Core Skills', key: 'skills', weight: 60 },
+    { name: 'Experience', key: 'experience', weight: 25 },
+    { name: 'Education', key: 'education', weight: 10 },
+    { name: 'Location', key: 'location', weight: 5 },
+  ]
+  const breakdownRows = SCORE_FACTORS
+    .filter(({ key }) => breakdown[key] != null)
+    .map(({ name, key, weight }) => [
+      name,
+      Math.round(Number(breakdown[key])) + '%',
+      weight + '%',
+    ])
+
+  if (breakdownRows.length) {
+    y = ensureSpace(doc, y, 40)
+    y = sectionHeading(doc, y, 'Score Breakdown')
+    autoTable(doc, {
+      ...tableStyles(y),
+      head: [['Factor', 'Score', 'Weight']],
+      body: breakdownRows,
+      columnStyles: {
+        0: { cellWidth: 80 },
+        1: { cellWidth: 40, halign: 'center', fontStyle: 'bold', textColor: C.accent },
+        2: { cellWidth: 40, halign: 'center' },
+      },
+    })
+    y = doc.lastAutoTable.finalY + 8
+  }
+
+  y = ensureSpace(doc, y, 36)
+  y = sectionHeading(doc, y, 'Why This Verdict')
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  setColor(doc, C.text)
+  y = addWrappedText(doc, verdictReason, 16, y + 2, W - 32, 5)
+  y += 6
+
+  const strengths = chipsFromItems(rawStrengths)
+  const gaps = chipsFromItems(rawGaps)
+
+  if (strengths.length) {
+    y = ensureSpace(doc, y, 36)
+    y = sectionHeading(doc, y, 'Strengths')
+    autoTable(doc, {
+      ...tableStyles(y),
+      head: [['#', 'Strength']],
+      body: strengths.map((s, i) => [i + 1, s]),
+      columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 1: { cellWidth: 168 } },
+    })
+    y = doc.lastAutoTable.finalY + 8
+  }
+
+  if (gaps.length) {
+    y = ensureSpace(doc, y, 36)
+    y = sectionHeading(doc, y, 'Gaps')
+    autoTable(doc, {
+      ...tableStyles(y),
+      head: [['#', 'Gap']],
+      body: gaps.map((s, i) => [i + 1, s]),
+      columnStyles: { 0: { cellWidth: 12, halign: 'center' }, 1: { cellWidth: 168 } },
+    })
+    y = doc.lastAutoTable.finalY + 8
+  }
+
+  if (decisionBullets.length || educationAssessment || finalReasoning) {
+    y = ensureSpace(doc, y, 40)
+    y = sectionHeading(doc, y, 'AI Match Insight')
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    setColor(doc, C.text)
+
+    if (decisionBullets.length) {
+      decisionBullets.forEach((bullet) => {
+        y = ensureSpace(doc, y, 16)
+        y = addWrappedText(doc, '• ' + bullet, 16, y, W - 32, 5)
+        y += 2
+      })
+      y += 2
+    }
+    if (educationAssessment) {
+      y = ensureSpace(doc, y, 20)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8.5)
+      setColor(doc, C.muted)
+      doc.text('Education / Certification', 16, y)
+      y += 5
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      setColor(doc, C.text)
+      y = addWrappedText(doc, educationAssessment, 16, y, W - 32, 5)
+      y += 4
+    }
+    if (finalReasoning) {
+      y = ensureSpace(doc, y, 24)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8.5)
+      setColor(doc, C.muted)
+      doc.text('Detailed Reasoning', 16, y)
+      y += 5
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      setColor(doc, C.text)
+      y = addWrappedText(doc, finalReasoning, 16, y, W - 32, 5)
+    }
+  }
+
+  drawPageFooter(doc)
+  const slug = String(candidateName).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'candidate'
+  doc.save('match-report-' + slug + '-' + todayStr() + '.pdf')
+}

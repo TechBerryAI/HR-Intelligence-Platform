@@ -534,6 +534,256 @@ h1, h2, h3, h4, h5, h6 {
   .dark .hero-visual-image {
     filter: saturate(1.1) contrast(1.05) brightness(0.95);
   }
+
+  /* ——— Auth portal (login / signup) — shared atmosphere, glass panels ——— */
+  .auth-portal {
+    color: var(--ei-text-secondary);
+    background-color: #050a14;
+    background-image:
+      radial-gradient(ellipse 75% 55% at 12% 18%, rgba(0, 166, 255, 0.14), transparent 55%),
+      radial-gradient(ellipse 55% 45% at 88% 82%, rgba(112, 75, 255, 0.12), transparent 50%),
+      radial-gradient(ellipse 40% 35% at 70% 20%, rgba(45, 212, 191, 0.06), transparent 60%),
+      linear-gradient(160deg, #050a14 0%, #070f1a 45%, #0a1220 100%);
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+
+  .auth-portal h1,
+  .auth-portal h2,
+  .auth-portal h3 {
+    color: var(--ei-text-primary);
+    font-family: Sora, 'Plus Jakarta Sans', sans-serif;
+  }
+
+  .auth-portal-grid {
+    display: grid;
+    min-height: calc(100vh - 72px);
+    grid-template-columns: 1fr;
+    gap: 0;
+    position: relative;
+  }
+
+  @media (min-width: 1100px) {
+    .auth-portal-grid {
+      grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+      gap: clamp(1rem, 2vw, 2rem);
+      padding: 0 clamp(1rem, 2vw, 1.5rem);
+    }
+  }
+
+  .auth-portal-hero {
+    position: relative;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    padding: clamp(1.25rem, 3vh, 2.5rem) clamp(1rem, 3vw, 2rem);
+    overflow: hidden;
+    /* no hard partition — shared scene with floating glass */
+    border-right: none;
+  }
+
+  @media (min-width: 1100px) {
+    .auth-portal-hero {
+      display: flex;
+    }
+  }
+
+  .auth-portal-deco {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    opacity: 0.35;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse 70% 60% at 40% 50%, black 15%, transparent 75%);
+  }
+
+  .auth-portal-orb {
+    pointer-events: none;
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(48px);
+  }
+
+  .auth-portal-panel {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: clamp(1.25rem, 3vh, 2.5rem) clamp(1.25rem, 4vw, 3rem);
+  }
+
+  .auth-story-glass {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 560px;
+    padding: clamp(1.5rem, 2.5vw, 2.5rem) clamp(1.5rem, 2.5vw, 2.75rem);
+    border-radius: 28px;
+    background: linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.045) 0%,
+      rgba(255, 255, 255, 0.015) 55%,
+      transparent 100%
+    );
+    backdrop-filter: blur(12px) saturate(1.15);
+    -webkit-backdrop-filter: blur(12px) saturate(1.15);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 8px 40px rgba(0, 0, 0, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .auth-story-glass::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+      160deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      transparent 35%
+    );
+    pointer-events: none;
+  }
+
+  .auth-glass-card {
+    width: 100%;
+    max-width: 460px;
+    padding: clamp(1.5rem, 2.5vw, 2.125rem);
+    border-radius: 24px;
+    background: linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(16, 24, 32, 0.55) 50%,
+      rgba(16, 24, 32, 0.45) 100%
+    );
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 24px 60px rgba(0, 0, 0, 0.28);
+    backdrop-filter: blur(18px) saturate(1.1);
+    -webkit-backdrop-filter: blur(18px) saturate(1.1);
+    transition: border-color 180ms ease;
+  }
+
+  .auth-glass-card:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+  }
+
+  .auth-cta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    height: 52px;
+    border-radius: 9999px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, #0ea5e9, #2563eb);
+    box-shadow: 0 8px 28px rgba(14, 165, 233, 0.28);
+    transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+  }
+
+  .auth-cta:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 32px rgba(14, 165, 233, 0.35);
+    filter: brightness(1.05);
+  }
+
+  .auth-cta:active {
+    transform: translateY(0);
+  }
+
+  .auth-cta:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+    filter: none;
+  }
+
+  .auth-cta:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px #050a14, 0 0 0 4px #38a9ff;
+  }
+
+  .auth-portal .premium-input,
+  .auth-portal .input-premium {
+    background: var(--ei-surface-input);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--ei-text-primary);
+    border-radius: 12px;
+    height: 50px;
+    min-height: 50px;
+  }
+
+  .auth-portal .premium-input::placeholder,
+  .auth-portal .input-premium::placeholder {
+    color: var(--ei-text-placeholder);
+  }
+
+  .auth-portal .premium-input:focus,
+  .auth-portal .input-premium:focus {
+    border-color: #38a9ff;
+    box-shadow: 0 0 0 3px rgba(56, 169, 255, 0.1);
+    outline: none;
+  }
+
+  .auth-portal button[aria-label='Hide password'],
+  .auth-portal button[aria-label='Show password'] {
+    color: #71808e;
+  }
+
+  .auth-portal button[aria-label='Hide password']:hover,
+  .auth-portal button[aria-label='Show password']:hover {
+    color: #f4f7fa;
+  }
+
+  .auth-nav {
+    height: 72px;
+    background: transparent;
+    border-bottom: none;
+    box-shadow: none;
+  }
+
+  .auth-nav-inner {
+    margin-top: 0.75rem;
+    height: calc(72px - 0.75rem);
+    max-width: 1440px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1.25rem;
+    padding-right: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    border-radius: 9999px;
+    background: rgba(10, 18, 32, 0.72);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+      0 12px 40px rgba(0, 0, 0, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  }
+
+  .auth-nav-link {
+    color: #94a2af;
+    transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+  }
+
+  .auth-nav-link:hover {
+    color: #ffffff;
+  }
+
+  .auth-nav-link-active {
+    color: #ffffff !important;
+    background: rgba(0, 166, 255, 0.08);
+    border: 1px solid rgba(0, 166, 255, 0.15);
+    border-radius: 10px;
+  }
 }
 
 /* Premium typography — slightly tighter tracking on headings */

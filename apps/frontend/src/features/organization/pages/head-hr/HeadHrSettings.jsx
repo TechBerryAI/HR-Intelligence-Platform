@@ -5,7 +5,7 @@ import Settings from '@/features/settings/pages/Settings.jsx'
 export default function HeadHrSettings() {
   return (
     <HeadHrLayout>
-      <Settings />
+      <Settings theme="enterprise" />
     </HeadHrLayout>
   )
 }
