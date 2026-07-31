@@ -27,6 +27,7 @@ const HeadHrJobCandidateDetail = lazy(() => import('@/features/organization/page
 const HeadHrJobs = lazy(() => import('@/features/organization/pages/head-hr/HeadHrJobs.jsx'))
 const HeadHrJobDetail = lazy(() => import('@/features/organization/pages/head-hr/HeadHrJobDetail.jsx'))
 const HeadHrSettings = lazy(() => import('@/features/organization/pages/head-hr/HeadHrSettings.jsx'))
+const HeadHrBulkParsing = lazy(() => import('@/features/organization/pages/head-hr/HeadHrBulkParsing.jsx'))
 const Settings = lazy(() => import('@/features/settings/pages/Settings.jsx'))
 const CeoDashboard = lazy(() => import('@/features/organization/pages/ceo/CeoDashboard.jsx'))
 
@@ -76,6 +77,7 @@ export default function AppRoutes() {
       <Route path="/head-hr/jobs/:jdid/candidates/:cid" element={<HeadHrGuard><HeadHrJobCandidateDetail /></HeadHrGuard>} />
       <Route path="/head-hr/jobs" element={<HeadHrGuard><HeadHrJobs /></HeadHrGuard>} />
       <Route path="/head-hr/jobs/:jdid" element={<HeadHrGuard><HeadHrJobDetail /></HeadHrGuard>} />
+      <Route path="/head-hr/bulk-parsing" element={<HeadHrGuard><HeadHrBulkParsing /></HeadHrGuard>} />
       <Route path="/head-hr/settings" element={<HeadHrGuard><HeadHrSettings /></HeadHrGuard>} />
       <Route path="*" element={<NotFound />} />
     </Routes>

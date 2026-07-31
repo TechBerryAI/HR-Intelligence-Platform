@@ -339,10 +339,14 @@ export default function HeadHrJobs() {
                     </td>
                     <td className="org-td-muted">{formatDate(job.posted_on)}</td>
                     {!readOnly && (
-                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <div className="inline-flex items-center justify-end gap-2 flex-wrap">
+                    <td className="px-4 py-3 text-right whitespace-nowrap w-[1%]" onClick={(e) => e.stopPropagation()}>
+                      <div className="inline-flex items-center justify-end gap-2">
                         <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                          <span className={`text-xs font-medium ${job.enabled ? 'text-green-400' : 'text-slate-400'}`}>
+                          <span
+                            className={`inline-block w-[3.75rem] text-right text-xs font-medium ${
+                              job.enabled ? 'text-green-400' : 'text-slate-400'
+                            }`}
+                          >
                             {job.enabled ? 'Enabled' : 'Disabled'}
                           </span>
                           <input
@@ -353,7 +357,7 @@ export default function HeadHrJobs() {
                             onChange={(e) => handleToggleEnabled(job, e.target.checked)}
                           />
                           <span
-                            className={`relative inline-block w-11 h-6 rounded-full transition-colors ${
+                            className={`relative inline-block w-11 h-6 shrink-0 rounded-full transition-colors ${
                               job.enabled ? 'bg-emerald-500' : 'bg-zinc-600'
                             } ${togglingJobId === job.jdid ? 'opacity-60' : ''}`}
                             aria-hidden
