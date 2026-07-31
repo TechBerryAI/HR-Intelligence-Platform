@@ -305,13 +305,17 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 shrink-0">
                         <motion.label
                           whileHover={{ scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                           className="inline-flex items-center gap-2 cursor-pointer select-none"
                         >
-                          <span className={`text-xs font-medium ${job.enabled === false ? 'text-[#71808E]' : 'text-[#36D6A0]'}`}>
+                          <span
+                            className={`inline-block w-[3.75rem] text-right text-xs font-medium ${
+                              job.enabled === false ? 'text-[#71808E]' : 'text-[#36D6A0]'
+                            }`}
+                          >
                             {job.enabled === false ? 'Disabled' : 'Enabled'}
                           </span>
                           <input
@@ -320,7 +324,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                             checked={job.enabled !== false}
                             onChange={(e) => handleToggleEnabled(job.id, e.target.checked)}
                           />
-                          <div className={`relative w-11 h-6 rounded-full transition-colors ${
+                          <div className={`relative w-11 h-6 shrink-0 rounded-full transition-colors ${
                             job.enabled === false ? (embedded ? 'bg-white/20' : 'bg-slate-300 dark:bg-slate-600') : 'bg-emerald-500'
                           }`}>
                             <motion.div

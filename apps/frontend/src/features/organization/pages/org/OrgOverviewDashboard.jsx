@@ -445,6 +445,14 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
 
   return (
     <>
+      {actionMessage && (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 z-[180] -translate-x-1/2 rounded-xl border border-[rgba(54,214,160,0.35)] bg-[rgba(16,24,32,0.95)] px-4 py-2.5 text-sm font-medium text-[#67DFB4] shadow-[0_12px_40px_rgba(0,0,0,0.45)] backdrop-blur-md pointer-events-none"
+        >
+          {actionMessage}
+        </div>
+      )}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="org-page-title">
@@ -553,9 +561,6 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
               </button>
             </div>
 
-            {actionMessage && (
-              <p className="mb-3 text-sm text-[#67DFB4]">{actionMessage}</p>
-            )}
             {loading ? (
               <div className="space-y-2">
                 {Array.from({ length: 3 }).map((_, i) => (
@@ -594,7 +599,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                           </td>
                           <td className="py-3.5 pr-4">
                             <span
-                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                              className={`inline-flex items-center justify-center min-w-[4.25rem] rounded-full px-2.5 py-0.5 text-xs font-medium ${
                                 active
                                   ? 'bg-[rgba(54,214,160,0.12)] text-[#67DFB4]'
                                   : 'bg-white/[0.06] text-[#8E9BA8]'
@@ -608,12 +613,13 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                           </td>
                           <td className="py-3.5 pr-4 text-sm text-[#8E9BA8]">{formatShortDate(job.posted_on)}</td>
                           {!isCeo && (
-                            <td className="py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                              <div className="inline-flex items-center justify-end gap-3">
-                                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                                  <span className={`text-xs font-medium ${active ? 'text-[#67DFB4]' : 'text-[#8E9BA8]'}`}>
-                                    {active ? 'Enabled' : 'Disabled'}
-                                  </span>
+                            <td className="py-3.5 text-right whitespace-nowrap w-[1%]" onClick={(e) => e.stopPropagation()}>
+                              <div className="inline-flex items-center justify-end gap-2.5 min-w-[9.5rem]">
+                                <label
+                                  className="inline-flex items-center cursor-pointer select-none"
+                                  title={active ? 'Enabled — click to disable' : 'Disabled — click to enable'}
+                                >
+                                  <span className="sr-only">{active ? 'Enabled' : 'Disabled'}</span>
                                   <input
                                     type="checkbox"
                                     className="sr-only"
@@ -622,14 +628,14 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                                     onChange={(e) => handleToggleEnabled(job, e.target.checked)}
                                   />
                                   <span
-                                    className={`relative inline-block w-11 h-6 rounded-full transition-colors ${
+                                    className={`relative inline-block w-11 h-6 shrink-0 rounded-full transition-colors ${
                                       active ? 'bg-emerald-500' : 'bg-white/20'
                                     } ${togglingJobId === jdid ? 'opacity-60' : ''}`}
                                     aria-hidden
                                   >
                                     <span
-                                      className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                                        active ? 'translate-x-[22px]' : 'translate-x-0.5'
+                                      className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                                        active ? 'translate-x-5' : 'translate-x-0'
                                       }`}
                                     />
                                   </span>
