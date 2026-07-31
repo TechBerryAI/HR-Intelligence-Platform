@@ -71,4 +71,5 @@ System Tesseract is optional; RapidOCR from requirements is the primary OCR engi
 ## Related documentation
 
 - [Development guide](../docs/DEVELOPMENT.md)
+- [Docs index](../docs/README.md)
 - [Backend README](../apps/backend/README.md)

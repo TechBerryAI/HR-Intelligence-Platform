@@ -18,7 +18,7 @@ HR Job Portal
 └── infrastructure/ Docker + CI templates
 ```
 
-**Start here:** [DOCUMENTATION_MAP.md](DOCUMENTATION_MAP.md)
+**Start here:** [README.md](README.md)
 
 ## Prerequisites
 
@@ -125,7 +125,9 @@ Run all AI tests: `cd ai && pytest`
 
 | Topic | Document |
 |-------|----------|
-| Full HRMS architecture | [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) |
+| Docs index | [README.md](README.md) |
+| Product & system architecture | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| Engineering (APIs, backend, frontend) | [ENGINEERING.md](ENGINEERING.md) |
 | AI platform overview | [ai/README.md](../ai/README.md) |
 | TOON ontology | [ai/toon/README.md](../ai/toon/README.md) |
 | Data pipeline | [ai/docs/DATA_PIPELINE.md](../ai/docs/DATA_PIPELINE.md) |

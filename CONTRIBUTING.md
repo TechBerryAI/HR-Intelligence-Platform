@@ -9,7 +9,7 @@ Thank you for contributing. This repository contains two coordinated systems:
 
 ## Before you start
 
-1. Read [docs/DOCUMENTATION_MAP.md](docs/DOCUMENTATION_MAP.md) — single entry point for all documentation
+1. Read [docs/README.md](docs/README.md) — single entry point for all documentation
 2. Read [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — local setup and workflows
 3. Identify which system you are changing — do not mix concerns across boundaries
 
@@ -56,7 +56,7 @@ Component tests are colocated. See [tests/README.md](tests/README.md).
 
 When adding or changing a major component:
 
-- Update the directory README (see [documentation standard](docs/DOCUMENTATION_MAP.md#documentation-standard))
+- Update the directory README (see [documentation standard](docs/README.md#documentation-standard))
 - Fix cross-references if paths change
 - Do not duplicate content — link to the canonical source
 
@@ -82,6 +82,6 @@ Significant AI platform decisions require an ADR in `ai/docs/adr/`. See [ai/docs
 
 ## Questions
 
-- HRMS architecture: [docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md)
+- HRMS architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/ENGINEERING.md](docs/ENGINEERING.md)
 - AI platform: [ai/README.md](ai/README.md)
 - TOON: [ai/toon/README.md](ai/toon/README.md)

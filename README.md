@@ -42,8 +42,8 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
 - **Frontend:** Single-page app; single AppContext for auth, jobs, applicant state; role-based route guards (Recruiter, Candidate, Head of HR, CEO).
 - **Backend:** Monolithic Flask app; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, head-hr. Connection-pooled PostgreSQL; raw SQL via `db_run`/`db_get`/`db_all`.
 
-Detailed architecture, API catalog, data flows, and security notes: **[docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md)**.  
-Documentation index: **[docs/DOCUMENTATION_MAP.md](docs/DOCUMENTATION_MAP.md)**.
+Detailed architecture, API catalog, data flows, and security notes: **[docs/ENGINEERING.md](docs/ENGINEERING.md)** · **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.  
+Documentation index: **[docs/README.md](docs/README.md)**.
 
 ---
 
@@ -181,8 +181,11 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 ├── tools/                # CLI entry-point index
 ├── ai/                   # AI platform (runtime, providers, capabilities, dataset, toon)
 └── docs/
-    ├── DOCUMENTATION_MAP.md          # Documentation index
-    └── TECHNICAL_DOCUMENTATION.md   # Full HRMS technical reference
+    ├── README.md            # Documentation index
+    ├── DEVELOPMENT.md       # Local setup
+    ├── ARCHITECTURE.md      # Product & system architecture
+    ├── ENGINEERING.md       # APIs, backend, frontend
+    └── HISTORY.md           # Sprint freeze / migration history
 ```
 
 ---
@@ -199,7 +202,7 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 | Admin | `/api/admin` | `POST /bulk-parse/upload`, `GET /bulk-parse/progress/:id`, `GET /job-matches` |
 | Head of HR | `/api/head-hr` | `GET /stats`, `GET /admins`, `GET /candidates`, `GET /jobs`, `GET /applications` |
 
-Full endpoint list, request/response shapes, and auth requirements: **[docs/TECHNICAL_DOCUMENTATION.md#6-api-documentation](docs/TECHNICAL_DOCUMENTATION.md#6-api-documentation)**.
+Full endpoint list, request/response shapes, and auth requirements: **[docs/ENGINEERING.md#6-api-documentation](docs/ENGINEERING.md#6-api-documentation)**.
 
 ---
 
@@ -247,7 +250,7 @@ Electron opens a window that loads the app and uses OS folder dialogs.
 - **Email not sending:** Set `MAIL_SUPPRESS_SEND=true` in `apps/backend/.env` for testing.
 - **Other device cannot reach API:** Leave `VITE_API_URL` empty and open the Vite URL (`http://<host-ip>:5173`), not a hardcoded `localhost` API URL. Ensure firewall allows port 5173.
 
-More troubleshooting: [docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md).
+More troubleshooting: [docs/ENGINEERING.md](docs/ENGINEERING.md).
 
 ---
 
@@ -258,7 +261,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for branch workflow, architecture boundar
 Quick summary:
 
 1. Create a feature branch from `main`.
-2. Follow existing patterns (see [docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md) for architecture and patterns).
+2. Follow existing patterns (see [docs/ENGINEERING.md](docs/ENGINEERING.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for architecture and patterns).
 3. Ensure backend and frontend run cleanly; add tests where applicable.
 4. Open a pull request with a clear description and reference to any issue.
 
