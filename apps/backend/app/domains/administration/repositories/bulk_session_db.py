@@ -16,6 +16,74 @@ def _hash_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def create_empty_session(created_by: str) -> str | None:
+    """Create a Queued bulk_parse_sessions row with zero files. Returns session UUID or None."""
+    if not created_by:
+        return None
+    session_id = str(uuid.uuid4())
+    try:
+        db_run(
+            """
+            INSERT INTO bulk_parse_sessions (
+                id, created_by, status, progress, total_files, started_at
+            ) VALUES (?, ?, 'Queued', 0, 0, NOW())
+            """,
+            (session_id, created_by),
+        )
+        return session_id
+    except Exception as e:
+        print(f"[bulk_session_db] create_empty_session failed: {e}")
+        return None
+
+
+def add_session_files(session_id: str, filenames: list[str], file_data: list[bytes]) -> None:
+    """Append Queued file rows for a session (chunked upload)."""
+    if not session_id or not filenames:
+        return
+    try:
+        for fname, data in zip(filenames, file_data):
+            file_id = str(uuid.uuid4())
+            db_run(
+                """
+                INSERT INTO bulk_parse_files (
+                    id, session_id, original_filename, file_hash, status
+                ) VALUES (?, ?, ?, ?, 'Queued')
+                """,
+                (file_id, session_id, fname, _hash_bytes(data)),
+            )
+    except Exception as e:
+        print(f"[bulk_session_db] add_session_files failed: {e}")
+
+
+def bump_session_total(session_id: str, total_files: int) -> None:
+    try:
+        db_run(
+            """
+            UPDATE bulk_parse_sessions
+            SET total_files = ?, updated_at = NOW()
+            WHERE id = ?
+            """,
+            (total_files, session_id),
+        )
+    except Exception as e:
+        print(f"[bulk_session_db] bump_session_total failed: {e}")
+
+
+def mark_session_running(session_id: str, total_files: int) -> None:
+    try:
+        db_run(
+            """
+            UPDATE bulk_parse_sessions
+            SET status = 'Running', total_files = ?, progress = 0,
+                started_at = COALESCE(started_at, NOW()), updated_at = NOW()
+            WHERE id = ?
+            """,
+            (total_files, session_id),
+        )
+    except Exception as e:
+        print(f"[bulk_session_db] mark_session_running failed: {e}")
+
+
 def create_session(created_by: str, filenames: list[str], file_data: list[bytes]) -> str | None:
     """Create bulk_parse_sessions + bulk_parse_files rows. Returns session UUID or None on failure."""
     if not created_by:
@@ -45,6 +113,7 @@ def create_session(created_by: str, filenames: list[str], file_data: list[bytes]
     except Exception as e:
         print(f"[bulk_session_db] create_session failed: {e}")
         return None
+
 
 
 def get_session_owner(session_id: str) -> str | None:
@@ -164,7 +233,7 @@ def get_session_progress(session_id: str) -> dict[str, Any] | None:
         return None
     failed_rows = db_all(
         """
-        SELECT original_filename FROM bulk_parse_files
+        SELECT original_filename, error_message FROM bulk_parse_files
         WHERE session_id = ? AND status = 'Failed'
         """,
         (session_id,),
@@ -177,12 +246,34 @@ def get_session_progress(session_id: str) -> dict[str, Any] | None:
         (session_id,),
     )
     status_map = {
-        "Queued": "started",
+        "Queued": "pending",
         "Running": "started",
         "Completed": "completed",
         "Failed": "failed",
         "Cancelled": "cancelled",
     }
+    failed_details = []
+    for r in failed_rows:
+        err = (r.get("error_message") or "").strip()
+        code = "exception"
+        low = err.lower()
+        if "unsupported format" in low or "legacy .doc" in low:
+            code = "unsupported_format"
+        elif "insufficient text" in low:
+            code = "insufficient_text"
+        elif "empty fields" in low:
+            code = "empty_fields"
+        elif "validation" in low or "person." in low or "missing" in low:
+            code = "validation"
+        elif "parse" in low or "llm" in low or "failed (parse" in low:
+            code = "llm"
+        failed_details.append(
+            {
+                "filename": r.get("original_filename"),
+                "error": err,
+                "code": code,
+            }
+        )
     return {
         "status": status_map.get(row.get("status"), row.get("status", "").lower()),
         "started_by": row.get("created_by"),
@@ -192,5 +283,6 @@ def get_session_progress(session_id: str) -> dict[str, Any] | None:
         "message": row.get("error_summary") or "",
         "failed_filenames": [r.get("original_filename") for r in failed_rows],
         "success_filenames": [r.get("original_filename") for r in success_rows],
+        "failed_details": failed_details,
         "from_db": True,
     }

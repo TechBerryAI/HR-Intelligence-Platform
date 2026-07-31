@@ -38,12 +38,12 @@ def enrich_resume_toon(
         person = {}
         toon["person"] = person
 
-    if not (person.get("email") or "").strip() and (context.email or "").strip():
-        person["email"] = context.email.strip()
+    if not str(person.get("email") or "").strip() and str(context.email or "").strip():
+        person["email"] = str(context.email).strip()
         actions.append("enriched_email_from_account")
 
-    if not (person.get("name") or "").strip() and (context.name or "").strip():
-        person["name"] = context.name.strip()
+    if not str(person.get("name") or "").strip() and str(context.name or "").strip():
+        person["name"] = str(context.name).strip()
         actions.append("enriched_name_from_account")
 
     return toon, actions

@@ -23,6 +23,38 @@ ipcMain.handle('dialog:selectSaveFile', async (_, suggestedName) => {
   return filePath
 })
 
+/**
+ * Recursively collect resume files under rootDir (all nested subfolders).
+ */
+function collectResumeFiles(rootDir, currentDir = rootDir, files = []) {
+  let entries
+  try {
+    entries = fs.readdirSync(currentDir, { withFileTypes: true })
+  } catch {
+    return files
+  }
+  for (const e of entries) {
+    const fullPath = path.join(currentDir, e.name)
+    if (e.name.startsWith('.')) continue
+    if (e.isDirectory()) {
+      collectResumeFiles(rootDir, fullPath, files)
+      continue
+    }
+    if (!e.isFile()) continue
+    const ext = path.extname(e.name).toLowerCase()
+    if (!ALLOWED_EXT.has(ext)) continue
+    try {
+      const data = fs.readFileSync(fullPath)
+      // Preserve relative path so nested same-named files stay unique on the server
+      const rel = path.relative(rootDir, fullPath).split(path.sep).join('__')
+      files.push({ name: rel || e.name, data: data.toString('base64') })
+    } catch {
+      // skip unreadable files
+    }
+  }
+  return files
+}
+
 ipcMain.handle('dialog:selectInputFolder', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
     properties: ['openDirectory'],
@@ -30,15 +62,6 @@ ipcMain.handle('dialog:selectInputFolder', async () => {
   })
   if (canceled || !filePaths?.length) return null
   const dirPath = filePaths[0]
-  const entries = fs.readdirSync(dirPath, { withFileTypes: true })
-  const files = []
-  for (const e of entries) {
-    if (!e.isFile()) continue
-    const ext = path.extname(e.name).toLowerCase()
-    if (!ALLOWED_EXT.has(ext)) continue
-    const fullPath = path.join(dirPath, e.name)
-    const data = fs.readFileSync(fullPath)
-    files.push({ name: e.name, data: data.toString('base64') })
-  }
+  const files = collectResumeFiles(dirPath)
   return { folderPath: dirPath, files }
 })

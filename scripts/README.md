@@ -37,7 +37,7 @@ python ../../scripts/database/test_db_connection.py
 
 ## Resume parsing smoke test (Ollama)
 
-Primary model: **`qwen2.5:7b-instruct`** (`OLLAMA_MODEL`).
+Primary model: **`qwen2.5:14b-instruct`** (`OLLAMA_MODEL`).
 
 `node start.js` now:
 1. Installs backend deps from `requirements.txt` (includes **RapidOCR** via `rapidocr-onnxruntime`, pymupdf, Pillow)
@@ -51,7 +51,7 @@ Primary model: **`qwen2.5:7b-instruct`** (`OLLAMA_MODEL`).
 node start.js
 
 # Or manual:
-ollama pull qwen2.5:7b-instruct
+ollama pull qwen2.5:14b-instruct
 ollama serve
 
 cd apps/backend && source venv/bin/activate

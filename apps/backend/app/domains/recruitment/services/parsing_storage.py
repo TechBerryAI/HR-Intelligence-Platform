@@ -189,6 +189,48 @@ def validate_toon_format(toon: Dict[str, Any], document_type: str) -> Tuple[bool
     return True, None
 
 
+def _bulk_resume_has_excel_signal(toon: Dict[str, Any]) -> bool:
+    """True when there is enough signal to keep a bulk Excel row."""
+    if not isinstance(toon, dict):
+        return False
+    person = toon.get('person') if isinstance(toon.get('person'), dict) else {}
+    name = str(person.get('name') or '').strip()
+    email = str(person.get('email') or '').strip()
+    phone = str(person.get('phone') or '').strip()
+    skills = toon.get('skills') if isinstance(toon.get('skills'), list) else []
+    exp = toon.get('experience') if isinstance(toon.get('experience'), list) else []
+    return bool(name or email or phone or skills or exp)
+
+
+def validate_toon_format_bulk(
+    toon: Dict[str, Any], document_type: str = 'resume'
+) -> Tuple[bool, Optional[str], str]:
+    """
+    Bulk-relaxed validation for Excel export.
+
+    Accepts a row when name OR email/phone OR skills/experience exist.
+    Does not require non-empty email. Strict issues become ParseNotes.
+
+    Returns:
+        (accept_row, notes_or_error, parse_status) where parse_status is
+        'ok' | 'partial' | 'failed'.
+    """
+    if not isinstance(toon, dict):
+        return False, 'TOON must be a dictionary', 'failed'
+
+    if document_type != 'resume':
+        is_valid, error_msg = validate_toon_format(toon, document_type)
+        return is_valid, error_msg, 'ok' if is_valid else 'failed'
+
+    if not _bulk_resume_has_excel_signal(toon):
+        return False, 'Insufficient fields for Excel (need name, contact, skills, or experience)', 'failed'
+
+    is_valid, error_msg = validate_toon_format(toon, document_type)
+    if is_valid:
+        return True, None, 'ok'
+    return True, error_msg or 'Partial validation', 'partial'
+
+
 def store_raw_file(
     uploader_id: str,
     uploader_role: str,

@@ -1,6 +1,7 @@
 """
 Bulk Resume Parsing Service - calls Bulk-Resume-Parser API when available.
 Falls back to local bulk parsing (text_extraction + LLM) when external service is unreachable.
+Supports create-job → chunked/ZIP upload → start for large batches.
 """
 import json
 import os
@@ -51,6 +52,33 @@ def _is_connection_error(e):
     return 'connection refused' in err or 'max retries exceeded' in err or 'connection error' in err
 
 
+def create_job(started_by=None, append: bool = False):
+    """Create a local bulk job (chunked upload flow). External service is not used for job create."""
+    from app.workers.bulk_parser import create_local_job
+
+    job_id, result = create_local_job(started_by=started_by, append=append)
+    return True, result
+
+
+def upload_chunk(job_id: str, files_list, started_by=None, zip_bytes=None):
+    """
+    Append files or a ZIP to an existing local job.
+    Prefer local staging so chunked uploads work without the external service.
+    """
+    from app.workers.bulk_parser import extract_zip_to_job, stage_files
+
+    if zip_bytes:
+        return extract_zip_to_job(job_id, zip_bytes, started_by=started_by)
+    return stage_files(job_id, files_list, started_by=started_by)
+
+
+def start_job(job_id: str, append: bool | None = None):
+    """Start processing a staged local job."""
+    from app.workers.bulk_parser import start_staged_job
+
+    return start_staged_job(job_id, append=append)
+
+
 def upload_files(files_list, output_filename=None, append=False, started_by=None):
     """
     Try external Bulk-Resume-Parser first; on connection failure use local bulk parsing.
@@ -89,14 +117,19 @@ def upload_files(files_list, output_filename=None, append=False, started_by=None
             # Fall through to local fallback
     # Local bulk parsing (external unreachable or BULK_PARSER_URL not set)
     from app.workers.bulk_parser import start_local_job
-    _, result = start_local_job(files_list, started_by=started_by)
-    return True, result
+
+    try:
+        _, result = start_local_job(files_list, started_by=started_by, append=append)
+        return True, result
+    except ValueError as e:
+        return False, {'error': str(e)}
 
 
 def get_progress(job_id, user=None):
     """Check local job first; else forward to Bulk-Resume-Parser GET /api/progress/{job_id}."""
-    from app.workers.bulk_parser import get_local_progress
     from app.domains.identity.authorization.rbac import can_access_bulk_session
+    from app.workers.bulk_parser import get_local_progress
+
     ok, result = get_local_progress(job_id)
     if ok:
         started_by = result.get('started_by')
@@ -133,8 +166,9 @@ def stream_download(job_id, user=None):
     Return Excel from local job if present; else stream from Bulk-Resume-Parser.
     Returns (success, (content_iterator, filename, content_type)) or (False, error_dict).
     """
-    from app.workers.bulk_parser import get_local_progress, get_local_download
     from app.domains.identity.authorization.rbac import can_access_bulk_session
+    from app.workers.bulk_parser import get_local_download, get_local_progress
+
     ok_meta, meta = get_local_progress(job_id, check_only=True)
     if ok_meta:
         started_by = meta.get('started_by')
@@ -148,35 +182,32 @@ def stream_download(job_id, user=None):
     if ok:
         bio, filename, content_type = payload
         bio.seek(0)
+
         def chunk_iter(b):
             while True:
                 chunk = b.read(8192)
                 if not chunk:
                     break
                 yield chunk
+
         return True, (chunk_iter(bio), filename, content_type)
     if not BULK_PARSER_URL:
         return False, payload
     try:
-        owner = _get_external_owner(job_id)
-        if user and owner and not can_access_bulk_session(user, owner):
-            return False, {'error': 'Access denied'}
-        resp = requests.get(
-            f'{BULK_PARSER_URL}/api/download/{job_id}',
-            stream=True,
-            timeout=120,
-        )
+        resp = requests.get(f'{BULK_PARSER_URL}/api/download/{job_id}', stream=True, timeout=60)
         resp.raise_for_status()
-        filename = resp.headers.get('Content-Disposition', '').split('filename=')[-1].strip('"\'') or 'Parsed_Resumes.xlsx'
-        content_type = resp.headers.get('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        return True, (resp.iter_content(chunk_size=8192), filename, content_type)
+
+        def iter_resp():
+            for chunk in resp.iter_content(8192):
+                if chunk:
+                    yield chunk
+
+        filename = 'Parsed_Resumes.xlsx'
+        cd = resp.headers.get('Content-Disposition') or ''
+        if 'filename=' in cd:
+            filename = cd.split('filename=')[-1].strip().strip('"')
+        return True, (iter_resp(), filename, resp.headers.get('Content-Type') or 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     except requests.exceptions.RequestException as e:
         if _is_connection_error(e):
             return False, {'error': 'Bulk parsing service unavailable.', 'code': ERROR_CODE_UNREACHABLE}
-        err = str(e)
-        if getattr(e, 'response', None) is not None:
-            if e.response.status_code == 404:
-                err = 'Job not found or not completed'
-            elif e.response.status_code == 400:
-                err = 'Job not completed yet'
-        return False, {'error': err}
+        return False, {'error': str(e)}

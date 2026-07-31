@@ -7,6 +7,7 @@ import sys
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
+from flask.wrappers import Request as FlaskRequest
 from flask_cors import CORS
 
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,6 +15,17 @@ load_dotenv(os.path.join(_BACKEND_DIR, '.env'))
 
 from app.bootstrap.extensions import mail  # noqa: E402
 from app.config.env_validator import EnvValidator  # noqa: E402
+
+
+class _AppRequest(FlaskRequest):
+    """Werkzeug 3.1 defaults (1000 parts / 500KB) break bulk multipart uploads.
+
+    Flask 3.0.x only wires MAX_CONTENT_LENGTH from config; form limits must be set
+    on the Request class (Flask 3.1+ adds MAX_FORM_* config keys).
+    """
+
+    max_form_memory_size = int(os.getenv('MAX_FORM_MEMORY_SIZE', str(64 * 1024 * 1024)))
+    max_form_parts = int(os.getenv('MAX_FORM_PARTS', '2000'))
 
 
 def _build_allowed_origins():
@@ -54,6 +66,10 @@ def create_app() -> Flask:
     from app.domains.identity.models import init_models  # noqa: E402
 
     app = Flask(__name__)
+    app.request_class = _AppRequest
+    # Bulk resume uploads: raise body size (Flask wires this via Request.max_content_length).
+    # Form part/memory limits are on _AppRequest (see class docstring).
+    app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', str(512 * 1024 * 1024)))
     app.config['JWT_SECRET'] = os.getenv(
         'JWT_SECRET',
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE',

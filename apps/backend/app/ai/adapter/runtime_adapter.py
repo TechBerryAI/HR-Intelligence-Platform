@@ -198,8 +198,8 @@ def _apply_resume_text_recovery(repaired: dict[str, Any], raw_resume_text: str |
             repaired["skills"] = new_skills
             actions.append("inferred_skills_from_text")
 
-    if not (repaired.get("summary") or "").strip():
-        summary = inferred.get("summary") or ""
+    if not _str(repaired.get("summary")):
+        summary = _str(inferred.get("summary"))
         if summary:
             repaired["summary"] = summary
             actions.append("inferred_summary_from_text")
@@ -210,26 +210,26 @@ def _apply_resume_text_recovery(repaired: dict[str, Any], raw_resume_text: str |
         repaired["person"] = person
 
     inferred_person = inferred.get("person") or {}
-    if not (person.get("email") or "").strip():
-        email = inferred_person.get("email") or ""
+    if not _str(person.get("email")):
+        email = _str(inferred_person.get("email"))
         if email:
             person["email"] = email
             actions.append("inferred_email_from_text")
 
-    if not (person.get("phone") or "").strip():
-        phone = inferred_person.get("phone") or ""
+    if not _str(person.get("phone")):
+        phone = _str(inferred_person.get("phone"))
         if phone:
             person["phone"] = phone
             actions.append("inferred_phone_from_text")
 
-    if not (person.get("name") or "").strip():
-        name = inferred_person.get("name") or ""
+    if not _str(person.get("name")):
+        name = _str(inferred_person.get("name"))
         if name:
             person["name"] = name
             actions.append("inferred_name_from_text")
 
-    if not (person.get("location") or "").strip():
-        loc = inferred_person.get("location") or ""
+    if not _str(person.get("location")):
+        loc = _str(inferred_person.get("location"))
         if loc:
             person["location"] = loc
             actions.append("inferred_location_from_text")
@@ -245,15 +245,15 @@ def _apply_resume_text_recovery(repaired: dict[str, Any], raw_resume_text: str |
         for exp in experience:
             if not isinstance(exp, dict):
                 continue
-            if (exp.get("from") or "").strip() and (exp.get("to") or "").strip():
+            if _str(exp.get("from")) and _str(exp.get("to")):
                 continue
             blob = " ".join(
-                str(exp.get(k) or "") for k in ("title", "company", "description", "from", "to")
+                _str(exp.get(k)) for k in ("title", "company", "description", "from", "to")
             )
             from_d, to_d = extract_date_range_from_line(blob)
-            if from_d and not (exp.get("from") or "").strip():
+            if from_d and not _str(exp.get("from")):
                 exp["from"] = from_d
-            if to_d and not (exp.get("to") or "").strip():
+            if to_d and not _str(exp.get("to")):
                 exp["to"] = to_d
 
     education = repaired.get("education")
@@ -267,41 +267,41 @@ def _apply_resume_text_recovery(repaired: dict[str, Any], raw_resume_text: str |
         for idx, edu in enumerate(education):
             if not isinstance(edu, dict):
                 continue
-            degree = (edu.get("degree") or "").strip()
-            institution = (edu.get("institution") or edu.get("school") or "").strip()
+            degree = _str(edu.get("degree"))
+            institution = _str(edu.get("institution") or edu.get("school"))
             donor = inferred_edu[idx] if idx < len(inferred_edu) and isinstance(inferred_edu[idx], dict) else None
             if donor is None:
                 for cand in inferred_edu:
                     if not isinstance(cand, dict):
                         continue
-                    if not degree and (cand.get("degree") or "").strip():
+                    if not degree and _str(cand.get("degree")):
                         donor = cand
                         break
-                    if not institution and (cand.get("institution") or "").strip():
+                    if not institution and _str(cand.get("institution")):
                         donor = cand
                         break
             if not donor:
                 continue
-            if not degree and (donor.get("degree") or "").strip():
-                edu["degree"] = donor["degree"]
+            if not degree and _str(donor.get("degree")):
+                edu["degree"] = _str(donor["degree"])
                 actions.append("backfilled_education_degree")
-            if not institution and (donor.get("institution") or "").strip():
-                edu["institution"] = donor["institution"]
+            if not institution and _str(donor.get("institution")):
+                edu["institution"] = _str(donor["institution"])
                 actions.append("backfilled_education_institution")
-            if not (edu.get("field") or "").strip() and (donor.get("field") or "").strip():
-                edu["field"] = donor["field"]
-            if not str(edu.get("gpa") or edu.get("cgpa") or "").strip():
-                donor_gpa = str(donor.get("gpa") or donor.get("cgpa") or "").strip()
+            if not _str(edu.get("field")) and _str(donor.get("field")):
+                edu["field"] = _str(donor["field"])
+            if not _str(edu.get("gpa") or edu.get("cgpa")):
+                donor_gpa = _str(donor.get("gpa") or donor.get("cgpa"))
                 if donor_gpa:
                     edu["gpa"] = donor_gpa
                     edu["cgpa"] = donor_gpa
-            if not (edu.get("from") or "").strip() and (donor.get("from") or "").strip():
-                edu["from"] = donor["from"]
-            if not (edu.get("to") or edu.get("year") or "").strip():
-                if (donor.get("to") or "").strip():
-                    edu["to"] = donor["to"]
-                if (donor.get("year") or "").strip():
-                    edu["year"] = donor["year"]
+            if not _str(edu.get("from")) and _str(donor.get("from")):
+                edu["from"] = _str(donor["from"])
+            if not _str(edu.get("to") or edu.get("year")):
+                if _str(donor.get("to")):
+                    edu["to"] = _str(donor["to"])
+                if _str(donor.get("year")):
+                    edu["year"] = _str(donor["year"])
 
     experience = repaired.get("experience")
     if isinstance(experience, list) and experience:
@@ -309,26 +309,26 @@ def _apply_resume_text_recovery(repaired: dict[str, Any], raw_resume_text: str |
         for idx, exp in enumerate(experience):
             if not isinstance(exp, dict):
                 continue
-            title = (exp.get("title") or exp.get("role") or "").strip()
-            company = (exp.get("company") or "").strip()
+            title = _str(exp.get("title") or exp.get("role"))
+            company = _str(exp.get("company"))
             if title and company:
                 continue
             donor = inferred_exp[idx] if idx < len(inferred_exp) and isinstance(inferred_exp[idx], dict) else None
             if not donor:
                 continue
-            if not title and (donor.get("title") or "").strip():
+            if not title and _str(donor.get("title")):
                 from app.ai.parser.enrichment.resume_text_inference import is_plausible_job_title
-                donor_title = (donor.get("title") or "").strip()
+                donor_title = _str(donor.get("title"))
                 if is_plausible_job_title(donor_title):
                     exp["title"] = donor_title
                     actions.append("backfilled_experience_title")
-            if not company and (donor.get("company") or "").strip():
-                exp["company"] = donor["company"]
+            if not company and _str(donor.get("company")):
+                exp["company"] = _str(donor["company"])
                 actions.append("backfilled_experience_company")
-            if not (exp.get("from") or "").strip() and (donor.get("from") or "").strip():
-                exp["from"] = donor["from"]
-            if not (exp.get("to") or "").strip() and (donor.get("to") or "").strip():
-                exp["to"] = donor["to"]
+            if not _str(exp.get("from")) and _str(donor.get("from")):
+                exp["from"] = _str(donor["from"])
+            if not _str(exp.get("to")) and _str(donor.get("to")):
+                exp["to"] = _str(donor["to"])
 
     certifications = repaired.get("certifications")
     if not isinstance(certifications, list) or len(certifications) == 0:
@@ -392,10 +392,13 @@ def _repair_resume_structure(data: dict[str, Any], raw_resume_text: str | None =
     person, top_actions = merge_top_level_person_fields(source, person_raw)
     if not isinstance(person, dict):
         person = {}
-    # Ensure required person keys exist (empty strings allowed; validation decides emptiness)
-    for pk in ("name", "email", "phone", "location"):
+    # Ensure required person keys exist and coerce LLM ints/lists to strings
+    for pk in ("name", "email", "phone", "location", "linkedin", "github", "portfolio", "website", "twitter"):
         if pk not in person or person.get(pk) is None:
-            person[pk] = ""
+            if pk in ("name", "email", "phone", "location"):
+                person[pk] = ""
+        else:
+            person[pk] = _str(person.get(pk))
     actions.extend(person_actions)
     actions.extend(top_actions)
 
@@ -462,16 +465,38 @@ def _repair_resume_structure(data: dict[str, Any], raw_resume_text: str | None =
     )
     actions.extend(skill_actions)
 
+    experience_list = experience_raw if isinstance(experience_raw, list) else []
+    education_list = education_raw if isinstance(education_raw, list) else []
+    projects_list = projects_raw if isinstance(projects_raw, list) else []
+    certs_list = certs_raw if isinstance(certs_raw, list) else []
+
+    _coerce_record_strings(
+        experience_list,
+        ("title", "role", "company", "description", "from", "to", "location"),
+    )
+    _coerce_record_strings(
+        education_list,
+        ("degree", "institution", "school", "field", "year", "from", "to", "gpa", "cgpa"),
+    )
+    _coerce_record_strings(
+        projects_list,
+        ("name", "title", "description", "url", "from", "to"),
+    )
+    _coerce_record_strings(
+        certs_list,
+        ("name", "issuer", "validTill", "url", "year"),
+    )
+
     repaired = {
         "type": "resume",
         "person": person,
         "skills": skills,
-        "experience": experience_raw or [],
-        "education": education_raw or [],
-        "projects": projects_raw or [],
-        "certifications": certs_raw or [],
+        "experience": experience_list,
+        "education": education_list,
+        "projects": projects_list,
+        "certifications": certs_list,
         "languages": languages if isinstance(languages, list) else _ensure_array(languages),
-        "summary": _str(summary_raw) if isinstance(summary_raw, str) else (summary_raw or ""),
+        "summary": _str(summary_raw),
         "total_experience_years": source.get("total_experience_years"),
     }
 
@@ -486,6 +511,20 @@ def _repair_resume_structure(data: dict[str, Any], raw_resume_text: str | None =
 
     _apply_resume_text_fields(repaired["person"], raw_resume_text, actions)
     _apply_resume_text_recovery(repaired, raw_resume_text, actions)
+
+    # Re-coerce after inference/backfill may have reintroduced non-strings
+    for pk in ("name", "email", "phone", "location", "linkedin", "github", "portfolio", "website", "twitter"):
+        if isinstance(repaired.get("person"), dict) and pk in repaired["person"]:
+            repaired["person"][pk] = _str(repaired["person"].get(pk))
+    repaired["summary"] = _str(repaired.get("summary"))
+    _coerce_record_strings(
+        repaired.get("experience"),
+        ("title", "role", "company", "description", "from", "to", "location"),
+    )
+    _coerce_record_strings(
+        repaired.get("education"),
+        ("degree", "institution", "school", "field", "year", "from", "to", "gpa", "cgpa"),
+    )
 
     data.clear()
     data.update(repaired)
@@ -578,7 +617,7 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
             repaired["responsibilities"] = inferred
             actions.append("inferred_responsibilities_from_raw_text")
 
-    infer_source = (repaired.get("description") or raw_jd_text or "").strip()
+    infer_source = _str(repaired.get("description") or raw_jd_text)
     if infer_source:
         from app.ai.parser.enrichment.jd_text_inference import (
             extract_experience_years,
@@ -659,9 +698,37 @@ def get_model_version() -> str:
 
 
 def _str(value: Any) -> str:
+    """Coerce LLM TOON values to a stripped string (ints, lists, None-safe)."""
     if value is None:
         return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, bool):
+        return str(value).strip()
+    if isinstance(value, (int, float)):
+        return str(value).strip()
+    if isinstance(value, list):
+        parts = [_str(item) for item in value]
+        return " ".join(p for p in parts if p)
+    if isinstance(value, dict):
+        for key in ("name", "title", "text", "value", "label", "email", "phone"):
+            if key in value and value[key] is not None:
+                return _str(value[key])
+        return ""
     return str(value).strip()
+
+
+def _coerce_record_strings(records: Any, keys: tuple[str, ...]) -> Any:
+    """In-place coerce selected dict fields to strings via _str."""
+    if not isinstance(records, list):
+        return records
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+        for key in keys:
+            if key in item:
+                item[key] = _str(item.get(key))
+    return records
 
 
 def _split_string_to_items(text: str) -> list[str]:
