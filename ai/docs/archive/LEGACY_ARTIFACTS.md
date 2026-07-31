@@ -27,7 +27,7 @@ When paths were consolidated during repository modernization, some references re
 
 | Path | Justification |
 |------|---------------|
-| `backend/models/candidate_auth.py` | SQLAlchemy model for schema parity; routes use raw SQL (see `docs/BACKEND_DOCUMENTATION.md`) |
+| `backend/models/candidate_auth.py` | SQLAlchemy model for schema parity; routes use raw SQL (see `docs/ENGINEERING.md`) |
 | `ai/toon/v1/types/toon.ts` | TypeScript contracts; not yet imported by frontend |
 
 ## Active production paths (never delete)

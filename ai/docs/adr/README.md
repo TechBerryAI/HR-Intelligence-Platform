@@ -27,7 +27,7 @@ Each ADR follows:
 ## Creating new ADRs
 
 ```
-docs/adr/ADR-{NNN}-{kebab-title}.md
+ai/docs/adr/ADR-{NNN}-{kebab-title}.md
 ```
 
 Increment NNN sequentially. Set status to `Proposed` until reviewed in architecture review.

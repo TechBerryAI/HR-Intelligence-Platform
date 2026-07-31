@@ -1,6 +1,6 @@
-# Documentation Map
+# Documentation
 
-Single entry point for all repository documentation.
+Single entry point for repository documentation.
 
 ## Quick routing
 
@@ -9,11 +9,23 @@ Single entry point for all repository documentation.
 | Set up locally | [DEVELOPMENT.md](DEVELOPMENT.md) |
 | Contribute | [CONTRIBUTING.md](../CONTRIBUTING.md) |
 | Run the HRMS app | [README.md](../README.md) |
-| Understand HRMS architecture & APIs | [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) |
+| Understand architecture & product | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| Work on backend / frontend / APIs | [ENGINEERING.md](ENGINEERING.md) |
+| Review sprint freeze history | [HISTORY.md](HISTORY.md) |
 | Work on the AI platform | [ai/README.md](../ai/README.md) |
 | Understand TOON wire format | [ai/toon/README.md](../ai/toon/README.md) |
-| Review production TOON behavior | [ai/docs/current_system/CURRENT_TOON_SCHEMA.md](../ai/docs/current_system/CURRENT_TOON_SCHEMA.md) |
-| Follow AI milestones & ADRs | [ai/docs/ROADMAP.md](../ai/docs/ROADMAP.md) |
+| Follow AI milestones & ADRs | [ai/docs/ROADMAP.md](../ai/docs/ROADMAP.md) · [ai/docs/adr/](../ai/docs/adr/) |
+
+## Docs in this folder
+
+| Document | Scope |
+|----------|-------|
+| [DEVELOPMENT.md](DEVELOPMENT.md) | Local setup and workflows |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Product vision, domain, system design, security, roadmap |
+| [ENGINEERING.md](ENGINEERING.md) | Stack, APIs, backend structure, frontend structure |
+| [HISTORY.md](HISTORY.md) | Completed sprint freeze / migration reports |
+
+ADRs live under [`ai/docs/adr/`](../ai/docs/adr/) (not duplicated here).
 
 ## Directory indexes
 
@@ -21,9 +33,9 @@ Single entry point for all repository documentation.
 
 | Path | README | Purpose |
 |------|--------|---------|
-| `frontend/` | — | React SPA (see [FRONTEND_DOCUMENTATION.md](FRONTEND_DOCUMENTATION.md)) |
-| `backend/` | [README.md](../backend/README.md) | Flask API |
-| `electron/` | [README.md](../electron/README.md) | Desktop shell |
+| `apps/frontend/` | — | React SPA (see [ENGINEERING.md](ENGINEERING.md#frontend)) |
+| `apps/backend/` | [README.md](../apps/backend/README.md) | Flask API |
+| `apps/desktop/` | — | Electron shell |
 | `ai/` | [README.md](../ai/README.md) | AI platform |
 | `docs/` | This file | HRMS documentation |
 | `scripts/` | [README.md](../scripts/README.md) | Dev utilities |
@@ -38,10 +50,6 @@ Single entry point for all repository documentation.
 | `providers/` | [README.md](../ai/providers/README.md) | LLM providers |
 | `capabilities/` | [README.md](../ai/capabilities/README.md) | Capability library |
 | `dataset/` | [README.md](../ai/dataset/README.md) | Data platform |
-| `dataset/factory/` | [README.md](../ai/dataset/factory/README.md) | Dataset Factory |
-| `dataset/lake/` | [README.md](../ai/dataset/lake/README.md) | Data lake |
-| `dataset/extraction/` | [README.md](../ai/dataset/extraction/README.md) | Document Extraction |
-| `dataset/proposals/` | [README.md](../ai/dataset/proposals/README.md) | Proposal Generator |
 | `toon/` | [README.md](../ai/toon/README.md) | TOON ontology |
 | `contracts/` | [README.md](../ai/contracts/README.md) | Domain contracts |
 | `schemas/` | [README.md](../ai/schemas/README.md) | Document schemas |
@@ -61,41 +69,6 @@ Every major directory README answers:
 6. **Extension points** — how to add functionality
 7. **Related documentation** — links to canonical sources
 
-## Documentation trees
-
-### HRMS Application (`docs/`)
-
-| Document | Scope |
-|----------|-------|
-| [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) | Full-stack architecture, API catalog, security |
-| [BACKEND_DOCUMENTATION.md](BACKEND_DOCUMENTATION.md) | Flask blueprints, database patterns |
-| [FRONTEND_DOCUMENTATION.md](FRONTEND_DOCUMENTATION.md) | React SPA, routing, state |
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Local setup and workflows |
-
-### AI Platform (`ai/docs/`)
-
-| Document | Scope |
-|----------|-------|
-| [PLATFORM_VISION.md](../ai/docs/PLATFORM_VISION.md) | Platform thinking |
-| [DATA_PIPELINE.md](../ai/docs/DATA_PIPELINE.md) | End-to-end data pipeline |
-| [DATA_CONTRACTS.md](../ai/docs/DATA_CONTRACTS.md) | Domain schemas |
-| [AI_ENGINEERING.md](../ai/docs/AI_ENGINEERING.md) | Engineering handbook |
-| [CONVENTIONS.md](../ai/docs/CONVENTIONS.md) | Naming and layout conventions |
-| [adr/](../ai/docs/adr/) | Architecture Decision Records |
-
-### TOON Ontology (`ai/toon/`)
-
-| Document | Scope |
-|----------|-------|
-| [README.md](../ai/toon/README.md) | Package overview and authority chain |
-| [v1/ontology/ontology.yaml](../ai/toon/v1/ontology/ontology.yaml) | Document types |
-| [v1/mappings/](../ai/toon/v1/mappings/) | Projection maps |
-| [v1/types/toon.ts](../ai/toon/v1/types/toon.ts) | TypeScript contracts |
-
-### Production Snapshots (`ai/docs/current_system/`)
-
-Reverse-engineered snapshots of live HRMS behavior. Verify against code before relying on them.
-
 ## Authority chain (no duplication)
 
 ```
@@ -108,10 +81,10 @@ dataset/ → lake/ (artifacts)
 | Concept | Canonical location |
 |---------|-------------------|
 | TOON ontology | `ai/toon/v1/` |
-| TOON wire runtime | `backend/toon.py` |
+| TOON wire runtime | `apps/backend` / `backend/toon.py` |
 | Normalized schemas | `ai/schemas/` |
 | AI prompts/schemas at runtime | `ai/capabilities/` |
-| HRMS LLM prompts | `backend/llm_service.py` |
+| HRMS LLM prompts | backend `llm_service` |
 | Data lake artifacts | `ai/dataset/lake/` |
 
 ## Legacy & archive

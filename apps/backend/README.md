@@ -57,6 +57,6 @@ Or from repo root: `node start.js`
 
 ## Related documentation
 
-- [Backend documentation](../../docs/BACKEND_DOCUMENTATION.md)
-- [Technical documentation](../../docs/TECHNICAL_DOCUMENTATION.md)
+- [Engineering docs (backend + APIs)](../../docs/ENGINEERING.md#backend)
+- [Architecture](../../docs/ARCHITECTURE.md)
 - [Database test script](../../scripts/database/test_db_connection.py)
