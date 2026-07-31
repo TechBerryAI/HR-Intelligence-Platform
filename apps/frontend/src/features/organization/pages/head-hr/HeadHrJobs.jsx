@@ -2,9 +2,12 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
+import { useApp } from '@/core/context/AppContext.jsx'
 import { useAsyncAction } from '@/shared/hooks/useAsyncAction.js'
 import PanelShell, { usePanelBasePath, usePanelReadOnly } from '@/features/organization/pages/org/PanelShell.jsx'
-import { FiTrash2, FiRefreshCw, FiBriefcase, FiSearch, FiDownload } from 'react-icons/fi'
+import PremiumInput from '@/shared/components/PremiumInput.jsx'
+import PremiumButton from '@/shared/components/PremiumButton.jsx'
+import { FiTrash2, FiRefreshCw, FiBriefcase, FiSearch, FiDownload, FiEdit2, FiX } from 'react-icons/fi'
 import { generateJobsPdf } from '@/shared/utils/pdfReportUtils.js'
 
 const Spinner = () => (
@@ -19,10 +22,20 @@ function formatDate(ts) {
   return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
+function parseExperienceRange(experience) {
+  const raw = String(experience || '').trim()
+  if (!raw) return { from: '', to: '' }
+  const range = raw.match(/(\d+(?:\.\d+)?)\s*[-–—to]+\s*(\d+(?:\.\d+)?)/i)
+  if (range) return { from: range[1], to: range[2] }
+  const single = raw.match(/(\d+(?:\.\d+)?)/)
+  return { from: single ? single[1] : '', to: '' }
+}
+
 export default function HeadHrJobs() {
   const navigate = useNavigate()
   const basePath = usePanelBasePath()
   const readOnly = usePanelReadOnly()
+  const { setJobEnabled, updateJob } = useApp()
   const { run: runRefresh, loading: refreshLoading } = useAsyncAction()
   const { run: runReport, loading: reportLoading } = useAsyncAction()
   const [jobs, setJobs] = useState([])
@@ -32,6 +45,16 @@ export default function HeadHrJobs() {
   const [deleting, setDeleting] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [toast, setToast] = useState(null)
+  const [togglingJobId, setTogglingJobId] = useState(null)
+  const [editingJob, setEditingJob] = useState(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editLocation, setEditLocation] = useState('')
+  const [editSalary, setEditSalary] = useState('')
+  const [editExperienceFrom, setEditExperienceFrom] = useState('')
+  const [editExperienceTo, setEditExperienceTo] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState('')
 
   const load = async () => {
     setLoading(true)
@@ -66,6 +89,104 @@ export default function HeadHrJobs() {
     } finally {
       setDeleting(null)
       setConfirmDelete(null)
+    }
+  }
+
+  const handleToggleEnabled = async (job, nextEnabled) => {
+    const jdid = job.jdid
+    if (!jdid || togglingJobId) return
+    setTogglingJobId(jdid)
+    const prevEnabled = !!job.enabled
+    setJobs((prev) => prev.map((j) => (j.jdid === jdid ? { ...j, enabled: nextEnabled } : j)))
+    try {
+      const token = tokenService.getToken()
+      await apiRequest(`/api/jobs/${encodeURIComponent(jdid)}/enabled`, {
+        method: 'PATCH',
+        body: { enabled: nextEnabled },
+        token,
+      })
+      await setJobEnabled(jdid, nextEnabled)
+      showToast(nextEnabled ? 'Job enabled' : 'Job disabled')
+    } catch (err) {
+      setJobs((prev) => prev.map((j) => (j.jdid === jdid ? { ...j, enabled: prevEnabled } : j)))
+      showToast(err?.data?.error || err?.message || 'Failed to update job status', 'error')
+    } finally {
+      setTogglingJobId(null)
+    }
+  }
+
+  const openEditJob = async (job) => {
+    setEditError('')
+    setEditingJob({ jdid: job.jdid, title: job.title })
+    setEditTitle(job.title || '')
+    setEditLocation(job.location || '')
+    setEditSalary(job.salary || '')
+    const parsed = parseExperienceRange(job.experience)
+    setEditExperienceFrom(parsed.from)
+    setEditExperienceTo(parsed.to)
+    setEditDescription('')
+    try {
+      const token = tokenService.getToken()
+      const detail = await apiRequest(`/api/head-hr/jobs/${encodeURIComponent(job.jdid)}`, {
+        method: 'GET',
+        token,
+      })
+      const exp = parseExperienceRange(detail.experience)
+      setEditTitle(detail.title || job.title || '')
+      setEditLocation(detail.location || '')
+      setEditSalary(detail.salary || '')
+      setEditExperienceFrom(exp.from)
+      setEditExperienceTo(exp.to)
+      setEditDescription(detail.description || '')
+    } catch {
+      // Keep list fields
+    }
+  }
+
+  const closeEditJob = () => {
+    if (editSaving) return
+    setEditingJob(null)
+    setEditError('')
+  }
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault()
+    if (!editingJob?.jdid) return
+    if (!editTitle.trim() || !editLocation.trim()) {
+      setEditError('Title and location are required')
+      return
+    }
+    setEditSaving(true)
+    setEditError('')
+    try {
+      const token = tokenService.getToken()
+      await apiRequest(`/api/jobs/${encodeURIComponent(editingJob.jdid)}`, {
+        method: 'PUT',
+        body: {
+          title: editTitle.trim(),
+          location: editLocation.trim(),
+          salary: editSalary.trim(),
+          experienceFrom: editExperienceFrom,
+          experienceTo: editExperienceTo,
+          description: editDescription,
+        },
+        token,
+      })
+      await updateJob(editingJob.jdid, {
+        title: editTitle.trim(),
+        location: editLocation.trim(),
+        salary: editSalary.trim(),
+        experienceFrom: editExperienceFrom,
+        experienceTo: editExperienceTo,
+        description: editDescription,
+      })
+      showToast('Job updated successfully')
+      setEditingJob(null)
+      await load()
+    } catch (err) {
+      setEditError(err?.data?.error || err?.message || 'Failed to update job')
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -219,18 +340,91 @@ export default function HeadHrJobs() {
                     <td className="org-td-muted">{formatDate(job.posted_on)}</td>
                     {!readOnly && (
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setConfirmDelete(job) }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 border border-red-200 dark:border-red-500/30 transition-all"
-                      >
-                        <FiTrash2 className="w-3.5 h-3.5" /> Delete
-                      </button>
+                      <div className="inline-flex items-center justify-end gap-2 flex-wrap">
+                        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                          <span className={`text-xs font-medium ${job.enabled ? 'text-green-400' : 'text-slate-400'}`}>
+                            {job.enabled ? 'Enabled' : 'Disabled'}
+                          </span>
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={!!job.enabled}
+                            disabled={togglingJobId === job.jdid}
+                            onChange={(e) => handleToggleEnabled(job, e.target.checked)}
+                          />
+                          <span
+                            className={`relative inline-block w-11 h-6 rounded-full transition-colors ${
+                              job.enabled ? 'bg-emerald-500' : 'bg-zinc-600'
+                            } ${togglingJobId === job.jdid ? 'opacity-60' : ''}`}
+                            aria-hidden
+                          >
+                            <span
+                              className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                                job.enabled ? 'translate-x-[22px]' : 'translate-x-0.5'
+                              }`}
+                            />
+                          </span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); openEditJob(job) }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#E8EDF3] hover:bg-white/10 border border-white/15 transition-all"
+                        >
+                          <FiEdit2 className="w-3.5 h-3.5" /> Edit
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setConfirmDelete(job) }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 border border-red-200 dark:border-red-500/30 transition-all"
+                        >
+                          <FiTrash2 className="w-3.5 h-3.5" /> Delete
+                        </button>
+                      </div>
                     </td>
                     )}
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {editingJob && !readOnly && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-zinc-900 border border-zinc-700 shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-700">
+              <h3 className="text-lg font-semibold text-white">Edit Job Post</h3>
+              <button type="button" onClick={closeEditJob} className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800">
+                <FiX className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              {editError && (
+                <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">{editError}</p>
+              )}
+              <PremiumInput label="Job Title" required value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+              <PremiumInput label="Location" required value={editLocation} onChange={(e) => setEditLocation(e.target.value)} />
+              <div className="grid sm:grid-cols-2 gap-4">
+                <PremiumInput label="Salary (optional)" value={editSalary} onChange={(e) => setEditSalary(e.target.value)} />
+                <div>
+                  <label className="block text-sm font-semibold text-zinc-300 mb-2">Experience Range (years)</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="number" min="0" className="premium-input" value={editExperienceFrom} onChange={(e) => setEditExperienceFrom(e.target.value)} placeholder="From" />
+                    <input type="number" min="0" className="premium-input" value={editExperienceTo} onChange={(e) => setEditExperienceTo(e.target.value)} placeholder="To" />
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-zinc-300 mb-2">Description</label>
+                <textarea className="premium-input min-h-[110px] resize-y" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
+              </div>
+              <div className="flex justify-end gap-3 pt-1">
+                <PremiumButton type="button" variant="secondary" onClick={closeEditJob} disabled={editSaving}>Cancel</PremiumButton>
+                <PremiumButton type="submit" variant="primary" loading={editSaving} disabled={editSaving}>
+                  {editSaving ? 'Saving…' : 'Save changes'}
+                </PremiumButton>
+              </div>
+            </form>
           </div>
         </div>
       )}

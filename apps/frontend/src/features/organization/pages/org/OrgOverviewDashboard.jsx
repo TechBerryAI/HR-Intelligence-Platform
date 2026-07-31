@@ -1,10 +1,13 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
+import { useApp } from '@/core/context/AppContext.jsx'
 import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
-import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiRefreshCw, FiHome, FiArrowRight } from 'react-icons/fi'
+import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiRefreshCw, FiHome, FiArrowRight, FiEdit2, FiX } from 'react-icons/fi'
 import RecruiterJobDashboard from '@/features/dashboard/components/recruiter/RecruiterJobDashboard.jsx'
+import PremiumInput from '@/shared/components/PremiumInput.jsx'
+import PremiumButton from '@/shared/components/PremiumButton.jsx'
 
 const ACCENT_ICON = {
   purple: 'bg-[rgba(121,87,255,0.15)] text-[#A78BFA]',
@@ -13,6 +16,15 @@ const ACCENT_ICON = {
   rose: 'bg-[rgba(255,102,133,0.12)] text-[#FF6685]',
   teal: 'bg-[rgba(45,212,191,0.12)] text-[#2DD4BF]',
   slate: 'bg-[rgba(156,168,181,0.12)] text-[#9CA8B5]',
+}
+
+function parseExperienceRange(experience) {
+  const raw = String(experience || '').trim()
+  if (!raw) return { from: '', to: '' }
+  const range = raw.match(/(\d+(?:\.\d+)?)\s*[-–—to]+\s*(\d+(?:\.\d+)?)/i)
+  if (range) return { from: range[1], to: range[2] }
+  const single = raw.match(/(\d+(?:\.\d+)?)/)
+  return { from: single ? single[1] : '', to: '' }
 }
 
 function StatCard({ icon: Icon, label, value, accent, onClick, disabled, compact = false }) {
@@ -76,6 +88,7 @@ function BarRow({ label, count, total, colorClass }) {
 
 export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosting = false }) {
   const { basePath, readOnly } = useOrgPanel()
+  const { setJobEnabled, updateJob } = useApp()
   const navigate = useNavigate()
   const isCeo = variant === 'ceo' || readOnly
   const showAnalytics = isCeo
@@ -85,6 +98,17 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
+  const [togglingJobId, setTogglingJobId] = useState(null)
+  const [editingJob, setEditingJob] = useState(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editLocation, setEditLocation] = useState('')
+  const [editSalary, setEditSalary] = useState('')
+  const [editExperienceFrom, setEditExperienceFrom] = useState('')
+  const [editExperienceTo, setEditExperienceTo] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState('')
+  const [actionMessage, setActionMessage] = useState('')
 
   const load = React.useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
@@ -245,6 +269,115 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
   const formatShortDate = (ts) => {
     if (!ts) return '—'
     return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+
+  const flashAction = (msg) => {
+    setActionMessage(msg)
+    setTimeout(() => setActionMessage(''), 2500)
+  }
+
+  const handleToggleEnabled = async (job, nextEnabled) => {
+    const jdid = job.jdid || job.id
+    if (!jdid || togglingJobId) return
+    setTogglingJobId(jdid)
+    const prevEnabled = job.enabled !== false
+    setJobs((prev) =>
+      prev.map((j) => ((j.jdid || j.id) === jdid ? { ...j, enabled: nextEnabled } : j)),
+    )
+    try {
+      const token = tokenService.getToken()
+      await apiRequest(`/api/jobs/${encodeURIComponent(jdid)}/enabled`, {
+        method: 'PATCH',
+        body: { enabled: nextEnabled },
+        token,
+      })
+      await setJobEnabled(jdid, nextEnabled)
+      flashAction(nextEnabled ? 'Job enabled' : 'Job disabled (draft)')
+      await load(true)
+    } catch (err) {
+      setJobs((prev) =>
+        prev.map((j) => ((j.jdid || j.id) === jdid ? { ...j, enabled: prevEnabled } : j)),
+      )
+      setError(err?.data?.error || err?.message || 'Failed to update job status')
+    } finally {
+      setTogglingJobId(null)
+    }
+  }
+
+  const openEditJob = async (job) => {
+    const jdid = job.jdid || job.id
+    setEditError('')
+    setEditingJob({ jdid, title: job.title })
+    setEditTitle(job.title || '')
+    setEditLocation(job.location || '')
+    setEditSalary(job.salary || '')
+    const parsed = parseExperienceRange(job.experience)
+    setEditExperienceFrom(job.experienceFrom || parsed.from)
+    setEditExperienceTo(job.experienceTo || parsed.to)
+    setEditDescription(job.description || '')
+    try {
+      const token = tokenService.getToken()
+      const detail = await apiRequest(`/api/head-hr/jobs/${encodeURIComponent(jdid)}`, {
+        method: 'GET',
+        token,
+      })
+      const exp = parseExperienceRange(detail.experience)
+      setEditTitle(detail.title || job.title || '')
+      setEditLocation(detail.location || '')
+      setEditSalary(detail.salary || '')
+      setEditExperienceFrom(exp.from)
+      setEditExperienceTo(exp.to)
+      setEditDescription(detail.description || '')
+    } catch {
+      // Keep list-row fields if detail fetch fails
+    }
+  }
+
+  const closeEditJob = () => {
+    if (editSaving) return
+    setEditingJob(null)
+    setEditError('')
+  }
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault()
+    if (!editingJob?.jdid) return
+    if (!editTitle.trim() || !editLocation.trim()) {
+      setEditError('Title and location are required')
+      return
+    }
+    setEditSaving(true)
+    setEditError('')
+    try {
+      const token = tokenService.getToken()
+      await apiRequest(`/api/jobs/${encodeURIComponent(editingJob.jdid)}`, {
+        method: 'PUT',
+        body: {
+          title: editTitle.trim(),
+          location: editLocation.trim(),
+          salary: editSalary.trim(),
+          experienceFrom: editExperienceFrom,
+          experienceTo: editExperienceTo,
+          description: editDescription,
+        },
+        token,
+      })
+      await updateJob(editingJob.jdid, {
+        title: editTitle.trim(),
+        location: editLocation.trim(),
+        salary: editSalary.trim(),
+        experienceFrom: editExperienceFrom,
+        experienceTo: editExperienceTo,
+        description: editDescription,
+      })
+      flashAction('Job updated')
+      setEditingJob(null)
+      await load(true)
+    } catch (err) {
+      setEditError(err?.data?.error || err?.message || 'Failed to update job')
+    } finally {
+      setEditSaving(false)
+    }
   }
 
   const overviewMetrics = [
@@ -420,6 +553,9 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
               </button>
             </div>
 
+            {actionMessage && (
+              <p className="mb-3 text-sm text-[#67DFB4]">{actionMessage}</p>
+            )}
             {loading ? (
               <div className="space-y-2">
                 {Array.from({ length: 3 }).map((_, i) => (
@@ -430,13 +566,14 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
               <p className="text-sm text-[#71808E] py-6 text-center">No jobs yet. Create one above.</p>
             ) : (
               <div className="overflow-x-auto -mx-1">
-                <table className="w-full min-w-[560px] text-left">
+                <table className="w-full min-w-[720px] text-left">
                   <thead>
                     <tr className="border-b border-white/[0.08] text-[11px] uppercase tracking-[0.08em] text-[#738394]">
                       <th className="pb-3 pr-4 font-semibold">Job</th>
                       <th className="pb-3 pr-4 font-semibold">Status</th>
                       <th className="pb-3 pr-4 font-semibold">Candidates</th>
-                      <th className="pb-3 font-semibold">Posted</th>
+                      <th className="pb-3 pr-4 font-semibold">Posted</th>
+                      {!isCeo && <th className="pb-3 font-semibold text-right">Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -447,10 +584,14 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                       return (
                         <tr
                           key={jdid}
-                          className="border-b border-white/[0.05] last:border-0 hover:bg-white/[0.03] cursor-pointer transition-colors"
-                          onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(jdid)}`)}
+                          className="border-b border-white/[0.05] last:border-0 hover:bg-white/[0.03] transition-colors"
                         >
-                          <td className="py-3.5 pr-4 text-sm font-medium text-[#F2F5F8]">{job.title || '—'}</td>
+                          <td
+                            className="py-3.5 pr-4 text-sm font-medium text-[#F2F5F8] cursor-pointer"
+                            onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(jdid)}`)}
+                          >
+                            {job.title || '—'}
+                          </td>
                           <td className="py-3.5 pr-4">
                             <span
                               className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
@@ -465,7 +606,45 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                           <td className="py-3.5 pr-4 text-sm tabular-nums text-[#A0ABB6]">
                             {count > 0 ? count : '—'}
                           </td>
-                          <td className="py-3.5 text-sm text-[#8E9BA8]">{formatShortDate(job.posted_on)}</td>
+                          <td className="py-3.5 pr-4 text-sm text-[#8E9BA8]">{formatShortDate(job.posted_on)}</td>
+                          {!isCeo && (
+                            <td className="py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                              <div className="inline-flex items-center justify-end gap-3">
+                                <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+                                  <span className={`text-xs font-medium ${active ? 'text-[#67DFB4]' : 'text-[#8E9BA8]'}`}>
+                                    {active ? 'Enabled' : 'Disabled'}
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    className="sr-only"
+                                    checked={active}
+                                    disabled={togglingJobId === jdid}
+                                    onChange={(e) => handleToggleEnabled(job, e.target.checked)}
+                                  />
+                                  <span
+                                    className={`relative inline-block w-11 h-6 rounded-full transition-colors ${
+                                      active ? 'bg-emerald-500' : 'bg-white/20'
+                                    } ${togglingJobId === jdid ? 'opacity-60' : ''}`}
+                                    aria-hidden
+                                  >
+                                    <span
+                                      className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                                        active ? 'translate-x-[22px]' : 'translate-x-0.5'
+                                      }`}
+                                    />
+                                  </span>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => openEditJob(job)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-[#E8EDF3] hover:bg-white/[0.09] transition-colors"
+                                >
+                                  <FiEdit2 className="w-3.5 h-3.5" />
+                                  Edit
+                                </button>
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       )
                     })}
@@ -474,6 +653,102 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
               </div>
             )}
           </section>
+
+          {editingJob && (
+            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+              <button
+                type="button"
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                aria-label="Close edit dialog"
+                onClick={closeEditJob}
+              />
+              <div
+                className="relative w-full max-w-2xl rounded-2xl overflow-hidden border border-white/[0.08] org-glass-panel"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.08] bg-white/[0.03]">
+                  <h3 className="text-xl font-semibold text-[#F5F7FA]">Edit Job Post</h3>
+                  <button
+                    type="button"
+                    onClick={closeEditJob}
+                    className="p-2 rounded-xl text-[#8E9BA8] hover:text-white hover:bg-white/[0.05] transition-colors"
+                  >
+                    <FiX className="w-5 h-5" />
+                  </button>
+                </div>
+                <form onSubmit={handleEditSubmit} className="px-6 py-6 space-y-5 max-h-[70vh] overflow-y-auto">
+                  {editError && (
+                    <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                      {editError}
+                    </p>
+                  )}
+                  <PremiumInput
+                    label="Job Title"
+                    icon={FiBriefcase}
+                    required
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    placeholder="e.g., Senior React Developer"
+                  />
+                  <PremiumInput
+                    label="Location"
+                    required
+                    value={editLocation}
+                    onChange={(e) => setEditLocation(e.target.value)}
+                    placeholder="Bengaluru, KA"
+                  />
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <PremiumInput
+                      label="Salary (optional)"
+                      value={editSalary}
+                      onChange={(e) => setEditSalary(e.target.value)}
+                      placeholder="₹15-25 LPA"
+                    />
+                    <div>
+                      <label className="block text-sm font-semibold text-[#C5D0DA] mb-2">
+                        Experience Range (years)
+                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <input
+                          type="number"
+                          min="0"
+                          className="premium-input"
+                          value={editExperienceFrom}
+                          onChange={(e) => setEditExperienceFrom(e.target.value)}
+                          placeholder="From"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          className="premium-input"
+                          value={editExperienceTo}
+                          onChange={(e) => setEditExperienceTo(e.target.value)}
+                          placeholder="To"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-[#C5D0DA] mb-2">Description</label>
+                    <textarea
+                      className="premium-input min-h-[120px] resize-y"
+                      value={editDescription}
+                      onChange={(e) => setEditDescription(e.target.value)}
+                      placeholder="Describe responsibilities, requirements, and perks"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-3 pt-2">
+                    <PremiumButton type="button" variant="secondary" onClick={closeEditJob} disabled={editSaving}>
+                      Cancel
+                    </PremiumButton>
+                    <PremiumButton type="submit" variant="primary" loading={editSaving} disabled={editSaving}>
+                      {editSaving ? 'Saving…' : 'Save changes'}
+                    </PremiumButton>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <section className="org-glass-panel p-5 sm:p-6">
