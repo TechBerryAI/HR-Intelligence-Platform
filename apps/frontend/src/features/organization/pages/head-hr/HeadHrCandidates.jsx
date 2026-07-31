@@ -4,7 +4,8 @@ import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
 import { useAsyncAction } from '@/shared/hooks/useAsyncAction.js'
 import PanelShell, { usePanelBasePath, usePanelReadOnly } from '@/features/organization/pages/org/PanelShell.jsx'
-import { FiTrash2, FiRefreshCw, FiUser, FiSearch, FiCheckCircle, FiXCircle, FiDownload } from 'react-icons/fi'
+import { FiTrash2, FiRefreshCw, FiSearch, FiCheckCircle, FiXCircle, FiDownload } from 'react-icons/fi'
+import { User } from 'lucide-react'
 import { generateCandidatesPdf } from '@/shared/utils/pdfReportUtils.js'
 
 const Spinner = () => (
@@ -126,7 +127,7 @@ export default function HeadHrCandidates() {
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="org-page-title flex items-center gap-2">
-            <FiUser className="org-page-icon" /> Candidates
+            <User size={32} className="org-page-icon" /> Candidates
           </h1>
           <p className="org-page-subtitle">{candidates.length} candidate{candidates.length !== 1 ? 's' : ''} registered</p>
         </div>

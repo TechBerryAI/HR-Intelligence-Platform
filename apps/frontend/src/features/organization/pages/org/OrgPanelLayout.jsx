@@ -50,11 +50,11 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
     <aside
       className={
         mobile
-          ? 'flex flex-col h-full'
-          : 'org-sidebar hidden lg:flex flex-col w-60 min-h-screen'
+          ? 'flex flex-col h-full min-h-0'
+          : 'org-sidebar hidden lg:flex flex-col w-60 shrink-0 h-screen sticky top-0 self-start'
       }
     >
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-white/[0.08]">
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-white/[0.08] shrink-0">
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00A6FF] to-[#276DFF] text-white grid place-items-center flex-shrink-0 text-xs font-bold shadow-[0_0_20px_rgba(0,166,255,0.25)]">
           {initials}
         </div>
@@ -67,7 +67,7 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
         </div>
       </div>
 
-      <nav className="px-3 py-4 space-y-1">
+      <nav className="px-3 py-4 space-y-1 flex-1 overflow-y-auto min-h-0">
         {navItems.map(({ label, path, icon: Icon, end }) => (
           <NavLink
             key={path}
@@ -84,7 +84,7 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
         ))}
       </nav>
 
-      <div className="px-3 pt-1 pb-5 mt-1 border-t border-white/[0.08]">
+      <div className="px-3 pt-1 pb-5 shrink-0 border-t border-white/[0.08]">
         <button
           type="button"
           onClick={handleLogout}
@@ -94,12 +94,11 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
           Logout
         </button>
       </div>
-      <div className="flex-1" aria-hidden />
     </aside>
   )
 
   return (
-    <div className="org-shell flex flex-1 min-h-0">
+    <div className="org-shell flex h-[100dvh] max-h-[100dvh] overflow-hidden">
       <Sidebar />
 
       {sidebarOpen && (
@@ -123,8 +122,8 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
         </div>
       )}
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-white/[0.08] bg-[rgba(13,20,27,0.88)] backdrop-blur-xl">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+        <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-white/[0.08] bg-[rgba(13,20,27,0.88)] backdrop-blur-xl shrink-0">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
@@ -137,7 +136,7 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
           </span>
         </div>
 
-        <main className="flex-1 overflow-auto p-6 sm:p-7 lg:p-9">
+        <main className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-7 lg:p-9">
           <div className="mx-auto w-full max-w-[1500px]">
             {children}
           </div>

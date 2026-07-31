@@ -4,7 +4,8 @@ import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
 import { useAsyncAction } from '@/shared/hooks/useAsyncAction.js'
 import PanelShell, { usePanelBasePath } from '@/features/organization/pages/org/PanelShell.jsx'
-import { FiRefreshCw, FiFileText, FiSearch, FiDownload } from 'react-icons/fi'
+import { FiRefreshCw, FiSearch, FiDownload } from 'react-icons/fi'
+import { FileText } from 'lucide-react'
 import { generateApplicationsPdf } from '@/shared/utils/pdfReportUtils.js'
 
 const Spinner = () => (
@@ -85,7 +86,7 @@ export default function HeadHrApplications() {
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="org-page-title flex items-center gap-2">
-            <FiFileText className="org-page-icon" /> All Applications
+            <FileText size={32} className="org-page-icon" /> All Applications
           </h1>
           <p className="org-page-subtitle">
             {applications.length} total &bull; {shortlistedCount} shortlisted &bull; {pendingCount} pending

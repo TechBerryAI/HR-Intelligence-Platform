@@ -3,7 +3,8 @@ import { useApp } from '@/core/context/AppContext.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import { motion } from 'framer-motion'
-import { FiSettings, FiShield, FiLock, FiCheck, FiAlertCircle, FiX } from 'react-icons/fi'
+import { FiShield, FiLock, FiCheck, FiAlertCircle, FiX } from 'react-icons/fi'
+import { Settings as SettingsIcon } from 'lucide-react'
 import { PASSWORD_RULES, isPasswordStrong } from '@/shared/utils/passwordValidation.js'
 
 /**
@@ -63,7 +64,7 @@ export default function Settings({ theme = 'default' }) {
         {enterprise ? (
           <>
             <h1 className="org-page-title flex items-center gap-3">
-              <FiSettings className="w-7 h-7 text-[#00A6FF]" />
+              <SettingsIcon size={32} className="org-page-icon" />
               Settings
             </h1>
             <p className="org-page-subtitle">Manage your account and security.</p>
@@ -71,7 +72,7 @@ export default function Settings({ theme = 'default' }) {
         ) : (
           <>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-              <FiSettings className="w-7 h-7 text-primary" />
+              <SettingsIcon className="w-7 h-7 text-primary" />
               Settings
             </h1>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">

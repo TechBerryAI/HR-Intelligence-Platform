@@ -5,6 +5,7 @@ import { useApp } from '@/core/context/AppContext.jsx'
 import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
 import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiRefreshCw, FiHome, FiArrowRight, FiEdit2, FiX } from 'react-icons/fi'
+import { LayoutDashboard } from 'lucide-react'
 import RecruiterJobDashboard from '@/features/dashboard/components/recruiter/RecruiterJobDashboard.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
@@ -455,7 +456,8 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
       )}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="org-page-title">
+          <h1 className="org-page-title flex items-center gap-2.5">
+            <LayoutDashboard size={32} className="org-page-icon" />
             {isCeo ? 'Executive Dashboard' : 'Admin Dashboard'}
           </h1>
           <p className="org-page-subtitle">
