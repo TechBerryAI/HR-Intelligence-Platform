@@ -7,7 +7,8 @@ import { useAsyncAction } from '@/shared/hooks/useAsyncAction.js'
 import PanelShell, { usePanelBasePath, usePanelReadOnly } from '@/features/organization/pages/org/PanelShell.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
-import { FiTrash2, FiRefreshCw, FiBriefcase, FiSearch, FiDownload, FiEdit2, FiX } from 'react-icons/fi'
+import { FiTrash2, FiRefreshCw, FiSearch, FiDownload, FiEdit2, FiX } from 'react-icons/fi'
+import { Briefcase } from 'lucide-react'
 import { generateJobsPdf } from '@/shared/utils/pdfReportUtils.js'
 
 const Spinner = () => (
@@ -35,7 +36,7 @@ export default function HeadHrJobs() {
   const navigate = useNavigate()
   const basePath = usePanelBasePath()
   const readOnly = usePanelReadOnly()
-  const { setJobEnabled, updateJob } = useApp()
+  const { updateJob } = useApp()
   const { run: runRefresh, loading: refreshLoading } = useAsyncAction()
   const { run: runReport, loading: reportLoading } = useAsyncAction()
   const [jobs, setJobs] = useState([])
@@ -45,7 +46,6 @@ export default function HeadHrJobs() {
   const [deleting, setDeleting] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [toast, setToast] = useState(null)
-  const [togglingJobId, setTogglingJobId] = useState(null)
   const [editingJob, setEditingJob] = useState(null)
   const [editTitle, setEditTitle] = useState('')
   const [editLocation, setEditLocation] = useState('')
@@ -89,29 +89,6 @@ export default function HeadHrJobs() {
     } finally {
       setDeleting(null)
       setConfirmDelete(null)
-    }
-  }
-
-  const handleToggleEnabled = async (job, nextEnabled) => {
-    const jdid = job.jdid
-    if (!jdid || togglingJobId) return
-    setTogglingJobId(jdid)
-    const prevEnabled = !!job.enabled
-    setJobs((prev) => prev.map((j) => (j.jdid === jdid ? { ...j, enabled: nextEnabled } : j)))
-    try {
-      const token = tokenService.getToken()
-      await apiRequest(`/api/jobs/${encodeURIComponent(jdid)}/enabled`, {
-        method: 'PATCH',
-        body: { enabled: nextEnabled },
-        token,
-      })
-      await setJobEnabled(jdid, nextEnabled)
-      showToast(nextEnabled ? 'Job enabled' : 'Job disabled')
-    } catch (err) {
-      setJobs((prev) => prev.map((j) => (j.jdid === jdid ? { ...j, enabled: prevEnabled } : j)))
-      showToast(err?.data?.error || err?.message || 'Failed to update job status', 'error')
-    } finally {
-      setTogglingJobId(null)
     }
   }
 
@@ -244,7 +221,7 @@ export default function HeadHrJobs() {
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="org-page-title flex items-center gap-2">
-            <FiBriefcase className="org-page-icon" /> All Jobs
+            <Briefcase size={32} className="org-page-icon" /> All Jobs
           </h1>
           <p className="org-page-subtitle">{jobs.length} job{jobs.length !== 1 ? 's' : ''} in system</p>
         </div>
@@ -341,34 +318,6 @@ export default function HeadHrJobs() {
                     {!readOnly && (
                     <td className="px-4 py-3 text-right whitespace-nowrap w-[1%]" onClick={(e) => e.stopPropagation()}>
                       <div className="inline-flex items-center justify-end gap-2">
-                        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
-                          <span
-                            className={`inline-block w-[3.75rem] text-right text-xs font-medium ${
-                              job.enabled ? 'text-green-400' : 'text-slate-400'
-                            }`}
-                          >
-                            {job.enabled ? 'Enabled' : 'Disabled'}
-                          </span>
-                          <input
-                            type="checkbox"
-                            className="sr-only"
-                            checked={!!job.enabled}
-                            disabled={togglingJobId === job.jdid}
-                            onChange={(e) => handleToggleEnabled(job, e.target.checked)}
-                          />
-                          <span
-                            className={`relative inline-block w-11 h-6 shrink-0 rounded-full transition-colors ${
-                              job.enabled ? 'bg-emerald-500' : 'bg-zinc-600'
-                            } ${togglingJobId === job.jdid ? 'opacity-60' : ''}`}
-                            aria-hidden
-                          >
-                            <span
-                              className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                                job.enabled ? 'translate-x-[22px]' : 'translate-x-0.5'
-                              }`}
-                            />
-                          </span>
-                        </label>
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); openEditJob(job) }}

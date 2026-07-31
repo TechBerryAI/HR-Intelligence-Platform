@@ -4,7 +4,6 @@
  */
 import React, { useState, useRef, useEffect } from 'react'
 import {
-  FiLayers,
   FiFolder,
   FiHardDrive,
   FiUpload,
@@ -21,6 +20,7 @@ import {
   FiAlertTriangle,
   FiFolderPlus,
 } from 'react-icons/fi'
+import { Layers } from 'lucide-react'
 import { uploadBulkResumes, getBulkProgress, downloadBulkResult } from '@/features/admin/services/bulkParsingService.js'
 
 const POLL_INTERVAL_MS = 500
@@ -290,12 +290,10 @@ export default function BulkResumeParser({ embedded = false }) {
           <div className="flex items-end justify-between gap-4 flex-wrap">
             <div>
               <h1 className="org-page-title flex items-center gap-2.5">
-                <span className="w-10 h-10 rounded-xl grid place-items-center bg-[rgba(0,166,255,0.12)] border border-[rgba(0,166,255,0.22)]">
-                  <FiLayers className="w-5 h-5 text-[var(--ei-accent-blue)]" />
-                </span>
+                <Layers size={32} className="org-page-icon" />
                 Bulk Parsing
               </h1>
-              <p className="org-page-subtitle pl-[3.25rem]">
+              <p className="org-page-subtitle">
                 Select resumes, choose an output path, then parse to Excel
               </p>
             </div>

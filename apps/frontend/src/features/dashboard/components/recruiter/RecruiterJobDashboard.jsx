@@ -19,7 +19,7 @@ const formatDisplayDate = (dateString) => {
 }
 
 export default function RecruiterJobDashboard({ embedded = false, onJobChange, hideJobList = false }) {
-  const { jobs, addJob, setJobEnabled, updateJob, user } = useApp()
+  const { jobs, addJob, updateJob, user } = useApp()
   const [title, setTitle] = useState('')
   const [company, setCompany] = useState(user?.company || '')
   const [location, setLocation] = useState('')
@@ -129,11 +129,6 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     setSuccess('Job updated successfully!')
     setTimeout(() => setSuccess(''), 2500)
     handleEditCancel()
-    notifyChange()
-  }
-
-  const handleToggleEnabled = async (jobId, isEnabled) => {
-    await setJobEnabled(jobId, isEnabled)
     notifyChange()
   }
 
@@ -306,35 +301,6 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                       </div>
 
                       <div className="flex items-center gap-3 shrink-0">
-                        <motion.label
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className="inline-flex items-center gap-2 cursor-pointer select-none"
-                        >
-                          <span
-                            className={`inline-block w-[3.75rem] text-right text-xs font-medium ${
-                              job.enabled === false ? 'text-[#71808E]' : 'text-[#36D6A0]'
-                            }`}
-                          >
-                            {job.enabled === false ? 'Disabled' : 'Enabled'}
-                          </span>
-                          <input
-                            type="checkbox"
-                            className="sr-only peer"
-                            checked={job.enabled !== false}
-                            onChange={(e) => handleToggleEnabled(job.id, e.target.checked)}
-                          />
-                          <div className={`relative w-11 h-6 shrink-0 rounded-full transition-colors ${
-                            job.enabled === false ? (embedded ? 'bg-white/20' : 'bg-slate-300 dark:bg-slate-600') : 'bg-emerald-500'
-                          }`}>
-                            <motion.div
-                              animate={{ x: job.enabled === false ? 2 : 22 }}
-                              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                              className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow"
-                            />
-                          </div>
-                        </motion.label>
-
                         <PremiumButton
                           variant="secondary"
                           size="sm"

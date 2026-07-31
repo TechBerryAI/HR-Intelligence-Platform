@@ -6,7 +6,8 @@ import { isHeadHr } from '@/core/permissions/rbac.js'
 import { useAsyncAction } from '@/shared/hooks/useAsyncAction.js'
 import HeadHrLayout from './HeadHrLayout.jsx'
 import PasswordInput from '@/shared/components/PasswordInput.jsx'
-import { FiTrash2, FiRefreshCw, FiUsers, FiSearch, FiDownload, FiPlus, FiArrowUp, FiArrowDown } from 'react-icons/fi'
+import { FiTrash2, FiRefreshCw, FiSearch, FiDownload, FiPlus, FiArrowUp, FiArrowDown } from 'react-icons/fi'
+import { Users } from 'lucide-react'
 import { generateAdminsPdf } from '@/shared/utils/pdfReportUtils.js'
 
 const Spinner = () => (
@@ -238,7 +239,7 @@ export default function HeadHrAdmins() {
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="org-page-title flex items-center gap-2">
-            <FiUsers className="org-page-icon" /> HR Admins
+            <Users size={32} className="org-page-icon" /> HR Admins
           </h1>
           <p className="org-page-subtitle">{admins.length} admin{admins.length !== 1 ? 's' : ''} registered</p>
         </div>

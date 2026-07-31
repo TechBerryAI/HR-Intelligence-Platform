@@ -251,9 +251,10 @@ h1, h2, h3, h4, h5, h6 {
   }
 
   .org-page-icon {
-    width: 1.25rem;
-    height: 1.25rem;
-    color: var(--ei-text-muted);
+    width: 2rem;
+    height: 2rem;
+    color: var(--ei-accent-blue);
+    flex-shrink: 0;
   }
 
   .org-search-input,
