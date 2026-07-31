@@ -44,13 +44,52 @@ VERDICT_POTENTIAL_MIN = 60.0      # 60–74% → Potential Match (Recruiter Revi
 MAX_SCORE_WITHOUT_EVIDENCE = 50.0
 
 
-def _normalize_skill(s: str) -> str:
-    if not s or not isinstance(s, str):
+def _as_str(value) -> str:
+    """Coerce TOON field values to stripped strings (ints/floats survive toon_loads)."""
+    if value is None:
         return ""
-    return re.sub(r"\s+", " ", s.lower().strip())
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, list):
+        parts = [_as_str(item) for item in value]
+        return " ".join(p for p in parts if p)
+    if isinstance(value, dict):
+        for key in ("name", "title", "role", "text", "value", "label", "email", "phone"):
+            if key in value and value[key] is not None:
+                return _as_str(value[key])
+        return ""
+    return str(value).strip()
 
 
-def _skill_match(required: str, possessed_list: list) -> bool:
+def _split_skill_list(value) -> list:
+    """Normalize a skills field (list or comma-separated string) to a list of strings."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [s for s in (_as_str(p) for p in value.split(",")) if s]
+    if isinstance(value, list):
+        out = []
+        for item in value:
+            s = _as_str(item)
+            if s:
+                out.append(s)
+        return out
+    s = _as_str(value)
+    return [s] if s else []
+
+
+def _normalize_skill(s) -> str:
+    text = _as_str(s)
+    if not text:
+        return ""
+    return re.sub(r"\s+", " ", text.lower())
+
+
+def _skill_match(required, possessed_list: list) -> bool:
     """Exact or close match (possessed contains required or vice versa)."""
     r = _normalize_skill(required)
     if not r:
@@ -69,17 +108,10 @@ def _get_jd_skill_lists(parsed_jd: dict) -> tuple:
     Return (mandatory_skills, preferred_skills).
     JD may have: mandatory_skills, preferred_skills; or legacy single 'skills' (all treated as mandatory).
     """
-    mandatory = list(parsed_jd.get("mandatory_skills") or [])
-    preferred = list(parsed_jd.get("preferred_skills") or [])
-    if isinstance(mandatory, str):
-        mandatory = [s.strip() for s in mandatory.split(",") if s.strip()]
-    if isinstance(preferred, str):
-        preferred = [s.strip() for s in preferred.split(",") if s.strip()]
+    mandatory = _split_skill_list(parsed_jd.get("mandatory_skills"))
+    preferred = _split_skill_list(parsed_jd.get("preferred_skills"))
     if not mandatory and not preferred:
-        legacy = list(parsed_jd.get("skills") or [])
-        if isinstance(legacy, str):
-            legacy = [s.strip() for s in legacy.split(",") if s.strip()]
-        mandatory = legacy
+        mandatory = _split_skill_list(parsed_jd.get("skills"))
         preferred = []
     return mandatory, preferred
 
@@ -146,16 +178,11 @@ def _compute_experience_score(parsed_resume: dict, parsed_jd: dict) -> tuple:
     Returns (raw_score_0_100, summary_text, gaps_text).
     Rule: no category above 50% if direct evidence is missing → no experience list or no domain match caps at 50%.
     """
-    cand_experiences = list(parsed_resume.get("experience") or [])
-    jd_title = (parsed_jd.get("title") or "").lower()
+    raw_experiences = list(parsed_resume.get("experience") or [])
+    cand_experiences = [exp for exp in raw_experiences if isinstance(exp, dict)]
+    jd_title = _as_str(parsed_jd.get("title")).lower()
     jd_min_years = parsed_jd.get("min_experience_years")
     jd_max_years = parsed_jd.get("max_experience_years")
-    for v in (jd_min_years, jd_max_years):
-        if isinstance(v, str):
-            try:
-                _ = float(v)
-            except ValueError:
-                pass  # leave as None
     if isinstance(jd_min_years, str):
         try:
             jd_min_years = float(jd_min_years)
@@ -182,10 +209,12 @@ def _compute_experience_score(parsed_resume: dict, parsed_jd: dict) -> tuple:
 
     if cand_experiences and jd_title:
         for exp in cand_experiences:
-            title = (exp.get("title") or exp.get("role") or "").lower()
+            title = _as_str(exp.get("title") or exp.get("role")).lower()
             if title and (jd_title in title or title in jd_title):
                 relevance = 100.0
-                summary_parts.append(f"Direct role match: {exp.get('title') or exp.get('role')}")
+                summary_parts.append(
+                    f"Direct role match: {_as_str(exp.get('title') or exp.get('role'))}"
+                )
                 break
         if relevance == 0:
             # Some experience but no domain match → cap at 50% (no direct evidence for full score)
@@ -225,17 +254,23 @@ def _compute_education_score(parsed_resume: dict, parsed_jd: dict) -> tuple:
     if isinstance(jd_qualifications, str):
         jd_qualifications = [jd_qualifications]
     jd_requires_degree = any(
-        re.search(r"\b(bachelor|b\.?s\.?|b\.?e\.?|m\.?s\.?|m\.?a\.?|mba|phd|degree|diploma)\b", q, re.I)
+        re.search(
+            r"\b(bachelor|b\.?s\.?|b\.?e\.?|m\.?s\.?|m\.?a\.?|mba|phd|degree|diploma)\b",
+            _as_str(q),
+            re.I,
+        )
         for q in jd_qualifications
     ) if jd_qualifications else False
 
-    cand_education = list(parsed_resume.get("education") or [])
+    cand_education = [
+        e for e in list(parsed_resume.get("education") or []) if isinstance(e, dict)
+    ]
     if not jd_requires_degree:
         return 100.0, "No degree requirement stated for role."
     if not cand_education:
         return 0.0, "Degree required; no education data provided."
     for e in cand_education:
-        deg = (e.get("degree") or e.get("field") or "").lower()
+        deg = _as_str(e.get("degree") or e.get("field")).lower()
         if re.search(r"\b(bachelor|b\.?s\.?|b\.?e\.?|m\.?s\.?|m\.?a\.?|mba|phd|degree|diploma)\b", deg):
             return 100.0, "Education meets or exceeds stated qualifications."
     return 50.0, "Education listed but does not clearly meet degree requirement."
@@ -243,11 +278,13 @@ def _compute_education_score(parsed_resume: dict, parsed_jd: dict) -> tuple:
 
 def _compute_location_score(parsed_resume: dict, parsed_jd: dict) -> float:
     """No category above 50% without direct evidence: if candidate location missing, cap at 50%."""
-    jd_location = (parsed_jd.get("location") or "").strip().lower()
+    jd_location = _as_str(parsed_jd.get("location")).lower()
     cand_location = ""
     person = parsed_resume.get("person") or {}
     if isinstance(person, dict):
-        cand_location = (person.get("location") or person.get("current_location") or "").strip().lower()
+        cand_location = _as_str(
+            person.get("location") or person.get("current_location")
+        ).lower()
     if not jd_location:
         return 100.0
     if not cand_location:
@@ -311,9 +348,7 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
     Returns JSON with: overall_match_score, decision, verdict, evaluation_report, score_breakdown,
     key_strengths, key_gaps, final_reasoning; and mandatory_skills_match_pct for gating.
     """
-    cand_skills = list(parsed_resume.get("skills") or [])
-    if isinstance(cand_skills, str):
-        cand_skills = [s.strip() for s in cand_skills.split(",") if s.strip()]
+    cand_skills = _split_skill_list(parsed_resume.get("skills"))
 
     mandatory_skills, preferred_skills = _get_jd_skill_lists(parsed_jd)
     skills_result = _compute_skills_scores(cand_skills, mandatory_skills, preferred_skills)
@@ -369,9 +404,13 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
 
     # Candidate identity for report
     person = parsed_resume.get("person") or {}
-    candidate_name = (person.get("name") or person.get("full_name") or "Candidate").strip() if isinstance(person, dict) else "Candidate"
-    candidate_email = (person.get("email") or "").strip() if isinstance(person, dict) else ""
-    role_evaluated = (parsed_jd.get("title") or "Role").strip()
+    if isinstance(person, dict):
+        candidate_name = _as_str(person.get("name") or person.get("full_name")) or "Candidate"
+        candidate_email = _as_str(person.get("email"))
+    else:
+        candidate_name = "Candidate"
+        candidate_email = ""
+    role_evaluated = _as_str(parsed_jd.get("title")) or "Role"
 
     skills_analysis = {
         "skills_matched": skills_result["mandatory_matched"] + skills_result["preferred_matched"],

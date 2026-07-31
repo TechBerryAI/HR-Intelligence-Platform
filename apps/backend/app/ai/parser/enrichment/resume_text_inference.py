@@ -9,11 +9,20 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+SKILL_SECTION_STOP = (
+    r'education|academic\s+background|academics|qualifications|'
+    r'experience|work\s+experience|professional\s+experience|employment|work\s+history|'
+    r'projects?|certifications?|certificates?|licenses?|credentials?|'
+    r'languages?|awards?|interests?|references?|'
+    r'professional\s+summary|summary|objective|profile|about\s+me'
+)
+
 SKILL_SECTION_PATTERN = re.compile(
     r'(?i)(?:^|\n)\s*(?:\*\*)?(?:'
-    r'technical\s+skills?|core\s+skills?|key\s+skills?|skills?|tools?|technologies?|'
+    r'technical\s+skills?|core\s+skills?|key\s+skills?|skill\s*sets?|skills?\s*sets?|'
+    r'skills?|tools?|technologies?|'
     r'tech\s+stack|frameworks?|programming\s+languages?|competencies?|expertise'
-    r')(?:\*\*)?\s*:?\s*([\s\S]*?)(?=\n\s*(?:\*\*)?[A-Z][^\n]{2,40}(?:\*\*)?\s*:|\Z)',
+    r')(?:\*\*)?\s*:?\s*([\s\S]*?)(?=\n\s*(?:\*\*)?(?:' + SKILL_SECTION_STOP + r')\b|\Z)',
 )
 
 SUMMARY_SECTION_PATTERN = re.compile(
@@ -22,21 +31,30 @@ SUMMARY_SECTION_PATTERN = re.compile(
 
 EDUCATION_SECTION_PATTERN = re.compile(
     r'(?i)(?:^|\n)\s*(?:\*\*)?(?:education|academic\s+background|academics|qualifications)(?:\*\*)?\s*:?\s*'
-    r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:experience|work\s+experience|employment|skills|projects?|'
-    r'certifications?|languages?|awards?)\b|\Z)',
+    r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:experience|work\s+experience|professional\s+experience|'
+    r'employment|work\s+history|technical\s+skills?|core\s+skills?|key\s+skills?|skill\s*sets?|'
+    r'skills?|tools?|technologies?|tech\s+stack|projects?|certifications?|certificates?|'
+    r'languages?|awards?|personal\s+details|personal\s+information|biodata)\b|\Z)',
 )
 
 CERT_SECTION_PATTERN = re.compile(
     r'(?i)(?:^|\n)\s*(?:\*\*)?(?:certifications?|certificates?|licenses?|credentials?)(?:\*\*)?\s*:?\s*'
-    r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:experience|education|skills|projects?|languages?|awards?)\b|\Z)',
+    r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:experience|work\s+experience|professional\s+experience|'
+    r'employment|work\s+history|education|skills|technical\s+skills?|projects?|'
+    r'languages?|awards?)\b|\Z)',
 )
 
 SECTION_HEADERS = frozenset({
     'summary', 'objective', 'profile', 'experience', 'work experience',
     'professional experience', 'employment', 'education', 'skills', 'technical skills',
-    'projects', 'certifications', 'certificates', 'languages', 'awards', 'interests',
+    'technical skill', 'core skills', 'core skill', 'key skills', 'key skill',
+    'skill set', 'skills set', 'tools', 'technologies', 'tech stack', 'project', 'projects',
+    'certifications', 'certificates', 'languages', 'awards', 'interests',
     'references', 'contact', 'resume', 'curriculum vitae', 'cv', 'about me',
     'work history', 'qualifications', 'achievements',
+    'personal details', 'personal information', 'biodata', 'bio data', 'contact details',
+    'declaration', 'permanent address', 'present address', 'correspondence address',
+    'current address', 'residential address',
 })
 
 # Career-objective / summary prose wrongly assigned as job titles by LLMs or line scrapers.
@@ -50,10 +68,101 @@ _OBJECTIVE_LIKE_TITLE = re.compile(
 )
 _HAS_OBJECTIVE_WORD = re.compile(r'(?i)\bobjectives?\b')
 
+_NAME_LABEL_PREFIX = re.compile(
+    r'(?i)^(percentage|percent|gpa|cgpa|score|marks?|grade|phone|mobile|email|e-?mail|'
+    r'address|location|dob|date\s+of\s+birth|age|gender|father|mother|nationality|'
+    r'passport|linkedin|github|portfolio|website|http|www)\b'
+)
+_BIODATA_LABEL = re.compile(
+    r'(?i)^(?:'
+    r'name|full\s*name|candidate\s*name|'
+    r'date\s+of\s+birth|d\.?\s*o\.?\s*b\.?|dob|'
+    r'gender|sex|marital\s+status|married|unmarried|single|'
+    r'permanent\s+address|present\s+address|current\s+address|correspondence\s+address|'
+    r'residential\s+address|address|'
+    r'father(?:\'?s)?\s*name|mother(?:\'?s)?\s*name|spouse|'
+    r'nationality|religion|languages?\s+known|blood\s+group|'
+    r'passport|aadhaar|aadhar|pan(?:\s*card)?|'
+    r'personal\s+details|personal\s+information|biodata|bio\s*data|contact\s+details|'
+    r'declaration'
+    r')\b'
+)
+_CALENDAR_DATE = re.compile(
+    r'(?i)^(?:'
+    # 20 November 1992 / 20th Nov 1992
+    r'\d{1,2}(?:st|nd|rd|th)?\s+'
+    r'(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|'
+    r'aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)'
+    r'\s*,?\s*\d{4}'
+    r'|'
+    # November 20, 1992
+    r'(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|'
+    r'aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)'
+    r'\s+\d{1,2}(?:st|nd|rd|th)?\s*,?\s*\d{4}'
+    r'|'
+    r'\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4}'
+    r'|'
+    r'\d{4}[/\-.]\d{1,2}[/\-.]\d{1,2}'
+    r')$'
+)
+_ADDRESS_LIKE = re.compile(
+    r'(?i)\b(?:'
+    r'colony|nagar|society|apartment|flat|plot|survey|'
+    r'tal(?:uka)?[\s\-]|dist(?:rict)?[\s\-]|pin(?:code)?|'
+    r'h\.?\s*no\.?|s\.?\s*no\.?|house\s*no|at\s+post|near\s+'
+    r')\b'
+    r'|^\d{6}$'  # Indian PIN alone
+)
+_JOB_BULLET_INSTITUTION = re.compile(
+    r'(?i)^(?:'
+    r'configured|reorganize|rebuilding|issues?\s+for|responsible|worked|managed|'
+    r'database\s+administrator|dba\b|developed|implemented|maintained|performed|'
+    r'monitoring|backup|restore|till\s+da'
+    r')'
+)
+_TECH_SINGLE_TOKEN = frozenset({
+    'html', 'css', 'sql', 'java', 'python', 'javascript', 'typescript', 'react',
+    'angular', 'nodejs', 'docker', 'kubernetes', 'aws', 'azure', 'linux', 'git',
+    'c++', 'c#', '.net', 'mongodb', 'mysql', 'oracle', 'redis', 'kafka',
+})
+_SKILL_CRUMB_TOKENS = frozenset({
+    'set', 'tools', 'technologies', 'technology', 'skills', 'skill', 'expertise',
+    'competencies', 'frameworks', 'languages',
+})
+_INSTITUTION_LIKE = re.compile(
+    r'(?i)\b(?:university|college|school|institute|academy|polytechnic|vidyalaya|'
+    r'iit|nit|iiit|bits|mit)\b'
+)
+_CERT_CUE = re.compile(
+    r'(?i)\b(?:certif|licensed?|licence|aws|azure|google|oracle|course|training|'
+    r'diploma|nanodegree|accreditation|credential)\b'
+)
+_DEGREE_FRAGMENT = re.compile(r'(?i)^(ma|ba|be|bs|ms|me|bsc|msc|mca|bca)$')
+
+
+def is_biodata_or_address_line(line: str | None) -> bool:
+    """True for personal-details labels, calendar DOBs, and address fragments."""
+    t = (line or '').strip().lstrip(':').strip()
+    if not t:
+        return False
+    # Strip leading label punctuation like ": Married"
+    if _BIODATA_LABEL.search(t):
+        return True
+    if t.startswith(':') and _BIODATA_LABEL.search(t.lstrip(':').strip()):
+        return True
+    if _CALENDAR_DATE.match(t):
+        return True
+    if _ADDRESS_LIKE.search(t) and not re.search(
+        r'(?i)\b(?:engineer|developer|manager|analyst|consultant|administrator|dba)\b',
+        t,
+    ):
+        return True
+    return False
+
 
 def is_plausible_job_title(title: str | None) -> bool:
-    """Reject summary/objective sentence fragments that are not job titles."""
-    t = (title or '').strip()
+    """Reject summary/objective/biodata/address fragments that are not job titles."""
+    t = (title or '').strip().lstrip(':').strip()
     if not t:
         return False
     if len(t) > 100:
@@ -65,10 +174,174 @@ def is_plausible_job_title(title: str | None) -> bool:
         return False
     if _HAS_OBJECTIVE_WORD.search(t):
         return False
+    if is_section_header_line(t):
+        return False
+    if is_biodata_or_address_line(t):
+        return False
     # Lowercase multi-word prose (e.g. "to help the company achieve…")
     if t[0].islower() and len(words) >= 4:
         return False
     return True
+
+
+def is_plausible_person_name(name: str | None) -> bool:
+    """Reject metrics, labels, headers, and tech tokens misread as person names."""
+    t = (name or '').strip()
+    if not t or len(t) < 2 or len(t) > 80:
+        return False
+    if '@' in t or 'http' in t.lower() or 'www.' in t.lower():
+        return False
+    if ':' in t or ',' in t or '|' in t:
+        return False
+    if re.search(r'\d', t):
+        return False
+    if _NAME_LABEL_PREFIX.search(t):
+        return False
+    if is_section_header_line(t):
+        return False
+    if re.match(r'^\+?\d[\d\s\-().]{6,}$', t):
+        return False
+    words = t.split()
+    if not (1 <= len(words) <= 5):
+        return False
+    # Skill lists / tech stacks are not names
+    for w in words:
+        cleaned = w.strip(".,'").lower()
+        if cleaned in _TECH_SINGLE_TOKEN:
+            return False
+    if len(words) == 1:
+        token = words[0].strip('.,')
+        if not token[0].isupper():
+            return False
+        if not token.replace("'", '').replace('-', '').isalpha():
+            return False
+        # Reject ALL-CAPS short acronyms (HTML, SQL, AWS)
+        if token.isupper() and len(token) <= 5:
+            return False
+        return True
+    # Prefer multi-word Title-Case alphabetic names
+    alpha_words = 0
+    for w in words:
+        cleaned = w.strip(".,'")
+        if not cleaned:
+            continue
+        if not re.match(r"^[A-Za-z][A-Za-z'\-]*$", cleaned):
+            return False
+        if cleaned.isupper() and len(cleaned) <= 5:
+            return False
+        if cleaned[0].isupper():
+            alpha_words += 1
+    return alpha_words >= 2
+
+
+def is_date_range_only_line(line: str) -> bool:
+    """True when the line is essentially just a date range (e.g. 06/2016 - 06/2017)."""
+    s = (line or '').strip()
+    if not s:
+        return False
+    m = DATE_RANGE_PATTERN.fullmatch(s) or DATE_RANGE_PATTERN.fullmatch(
+        re.sub(r'^[\s•·\-\*]+', '', s).strip()
+    )
+    return bool(m)
+
+
+def is_plausible_skill_item(item: str | None) -> bool:
+    """Reject section headers and bare date ranges from skills lists."""
+    s = (item or '').strip()
+    if not s or len(s) < 2 or len(s) > 80:
+        return False
+    if is_section_header_line(s):
+        return False
+    if is_date_range_only_line(s):
+        return False
+    if DATE_RANGE_PATTERN.fullmatch(s):
+        return False
+    # Pure year or month/year alone
+    if re.fullmatch(r'(?i)\d{1,2}[/\-]\d{4}|\d{4}|present|current|now', s):
+        return False
+    # Reject labeled section lines that leaked into skills
+    if re.match(
+        r'(?i)^(professional\s+summary|summary|objective|profile|about\s+me)\s*:',
+        s,
+    ):
+        return False
+    # Leftover from "SKILL SET" header or category crumbs
+    if s.lower() in _SKILL_CRUMB_TOKENS:
+        return False
+    # Category labels like "Databases - SQL 2016" without a comma-separated list
+    if re.match(r'^[A-Za-z][A-Za-z /&+]{1,30}\s*[-:]\s*.+$', s):
+        # Allow if the part after dash looks like a known tech token list
+        after = re.split(r'\s*[-:]\s*', s, maxsplit=1)[1].strip()
+        tokens = re.split(r'[,|/]', after)
+        if len(tokens) <= 1 and after.lower() not in _TECH_SINGLE_TOKEN:
+            # Single category crumb — reject unless the whole string is a known skill
+            if s.lower() not in _TECH_SINGLE_TOKEN and not any(
+                t in s.lower() for t in ('python', 'java', 'sql server', 'mssql', 'oracle')
+            ):
+                # Keep "SQL Server 2016" style; drop "Databases - SQL 2016" category headers
+                if re.match(r'(?i)^(databases?|tools?|technologies?|frameworks?|languages?)\b', s):
+                    return False
+    return True
+
+
+def filter_skill_items(skills: list[str], max_items: int = 40) -> list[str]:
+    """Dedupe and drop header/date junk from skill lists."""
+    expanded: list[str] = []
+    for s in skills:
+        raw = (s or '').strip()
+        if not raw:
+            continue
+        # Expand leftover comma/pipe groups from section captures
+        if (',' in raw or '|' in raw) and '\n' not in raw:
+            expanded.extend(split_list_items(raw))
+        else:
+            expanded.append(raw)
+    cleaned = [s for s in expanded if is_plausible_skill_item(s)]
+    return dedupe_skills(cleaned, max_items)
+
+
+def is_institution_like(text: str | None) -> bool:
+    return bool(_INSTITUTION_LIKE.search(text or ''))
+
+
+def is_plausible_cert_name(name: str | None) -> bool:
+    """Reject long prose / company blurbs without credential cues."""
+    t = (name or '').strip()
+    if not t or len(t) < 3:
+        return False
+    if is_section_header_line(t) or is_date_range_only_line(t):
+        return False
+    words = t.split()
+    if len(words) > 12:
+        return False
+    if _CERT_CUE.search(t):
+        return True
+    # Short Title-Case credential without cue (e.g. "PMP", "CompTIA A+")
+    if len(words) <= 8 and t[0].isupper():
+        # Reject company-only "Acme Corp: Web Developme" style without cue when > 4 words
+        # and contains a colon (often employer: description)
+        if ':' in t and not _CERT_CUE.search(t):
+            return False
+        return True
+    return False
+
+
+def name_from_email_local_part(email: str | None) -> str:
+    """
+    Best-effort name when local-part has clear separators (dot/underscore/hyphen).
+    Does not invent spaced names from glued locals like anjalibansode0227.
+    """
+    if not email or '@' not in email:
+        return ''
+    local = email.split('@', 1)[0].strip()
+    local = re.sub(r'\d+$', '', local)
+    if not local or not re.search(r'[._\-]', local):
+        return ''
+    parts = [p for p in re.split(r'[._\-]+', local) if p and p.isalpha()]
+    if len(parts) < 2:
+        return ''
+    candidate = ' '.join(p.capitalize() for p in parts[:4])
+    return candidate if is_plausible_person_name(candidate) else ''
 
 
 DATE_RANGE_PATTERN = re.compile(
@@ -225,7 +498,7 @@ def extract_name_from_text(text: str) -> str:
     """Pick a plausible person name from early resume lines, skipping section headers."""
     if not text:
         return ''
-    for line in text.split('\n')[:15]:
+    for line in text.split('\n')[:20]:
         stripped = line.strip()
         if not stripped or stripped.startswith(('#', '*', '-', '•')):
             continue
@@ -235,13 +508,18 @@ def extract_name_from_text(text: str) -> str:
             continue
         if is_section_header_line(stripped):
             continue
-        if re.search(r'\d{5,}', stripped):
+        if re.search(r'\d', stripped):
             continue
-        # Prefer 2–5 word capitalized / title-case names
         words = stripped.split()
-        if 1 <= len(words) <= 6 and 2 <= len(stripped) <= 80:
-            if any(c.isalpha() for c in stripped):
+        # Prefer 2–4 Title-Case alphabetic name tokens
+        if 1 <= len(words) <= 5 and 2 <= len(stripped) <= 80:
+            if is_plausible_person_name(stripped):
                 return stripped[:80]
+    # Separated email locals only (anjali.bansode) — never glued locals
+    email = extract_email_from_text(text)
+    derived = name_from_email_local_part(email)
+    if derived:
+        return derived
     return ''
 
 
@@ -261,23 +539,29 @@ def extract_skills_from_text(text: str, max_items: int = 40) -> list[str]:
             stripped = line.strip()
             if re.match(
                 r'(?i)^(?:technical\s+)?skills?\s*:?\s*$|^(?:core|key)\s+skills?\s*:?\s*$|'
+                r'^skill\s*sets?\s*:?\s*$|^skills?\s*sets?\s*:?\s*$|'
                 r'^tools?\s*:?\s*$|^technologies?\s*:?\s*$|^tech\s+stack\s*:?\s*$|^competencies?\s*:?\s*$',
                 stripped,
             ):
                 in_section = True
+                # Do not treat leftover "SET" from "SKILL SET" as an inline skill
+                if re.match(r'(?i)^skill\s*sets?\s*:?\s*$|^skills?\s*sets?\s*:?\s*$', stripped):
+                    continue
                 inline = re.sub(r'(?i)^[^:]+:\s*', '', stripped).strip()
-                if inline:
+                if inline and not is_section_header_line(inline) and inline.lower() not in _SKILL_CRUMB_TOKENS:
                     skills.extend(split_list_items(inline))
                 continue
             if in_section:
                 if re.match(
-                    r'(?i)^(?:experience|education|projects?|certifications?|employment|work\s+history)\b',
+                    r'(?i)^(?:experience|work\s+experience|professional\s+experience|'
+                    r'education|projects?|certifications?|employment|work\s+history|'
+                    r'personal\s+details|personal\s+information)\b',
                     stripped,
-                ):
+                ) or is_section_header_line(stripped):
                     break
                 item = re.sub(r'^[\s•·\-\*]+', '', stripped).strip()
                 item = re.sub(r'^\d+[\.\)]\s*', '', item).strip()
-                if item and len(item) > 1 and len(item) < 80:
+                if item and is_plausible_skill_item(item):
                     skills.append(item)
                 if len(skills) >= max_items:
                     break
@@ -290,7 +574,7 @@ def extract_skills_from_text(text: str, max_items: int = 40) -> list[str]:
                     skills.extend(split_list_items(after[1]))
                     break
 
-    return dedupe_skills(skills, max_items)
+    return filter_skill_items(skills, max_items)
 
 
 def extract_email_from_text(text: str) -> str:
@@ -367,7 +651,9 @@ def extract_experience_from_text(text: str, max_items: int = 10) -> list[dict[st
     block_match = re.search(
         r'(?i)(?:^|\n)\s*(?:\*\*)?(?:work\s+experience|professional\s+experience|experience|'
         r'employment|work\s+history)(?:\*\*)?\s*:?\s*'
-        r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:education|skills|projects|certifications)|\Z)',
+        r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:education|academic\s+background|skills|skill\s*sets?|'
+        r'technical\s+skills?|projects?|certifications?|'
+        r'personal\s+details|personal\s+information|biodata|declaration)\b|\Z)',
         text,
     )
     if not block_match:
@@ -378,13 +664,17 @@ def extract_experience_from_text(text: str, max_items: int = 10) -> list[dict[st
         stripped = re.sub(r'^\d+[\.\)]\s*', '', stripped).strip()
         if not stripped or len(stripped) < 5 or is_section_header_line(stripped):
             continue
+        if is_biodata_or_address_line(stripped):
+            continue
         from_d, to_d = extract_date_range_from_line(stripped)
         line_wo_dates = DATE_RANGE_PATTERN.sub('', stripped).strip(' |-–—,')
         parts = re.split(r'\s+at\s+|\s+@\s+|,\s+', line_wo_dates, maxsplit=1)
         title = parts[0].strip() if parts else line_wo_dates
         company = parts[1].strip() if len(parts) > 1 else ''
+        if company and is_biodata_or_address_line(company):
+            company = ''
         if not is_plausible_job_title(title):
-            # Description / objective bullets are not roles
+            # Description / objective / biodata bullets are not roles
             continue
         if title:
             experiences.append({
@@ -409,15 +699,24 @@ def extract_education_from_text(text: str, max_items: int = 8) -> list[dict[str,
         return []
     raw = match.group(1) or ''
     education: list[dict[str, Any]] = []
+    # Full words BEFORE abbreviated M.A./B.A. so "Master" is not cut to "Ma"
     degree_pat = re.compile(
-        r'(?i)\b((?:B\.?\s?Tech|B\.?\s?E\.?|B\.?\s?S\.?|B\.?\s?A\.?|B\.?\s?Com|'
-        r'M\.?\s?Tech|M\.?\s?S\.?|M\.?\s?A\.?|M\.?\s?B\.?\s?A\.?|M\.?\s?Com|'
-        r'Ph\.?\s?D\.?|Bachelor(?:\'?s)?|Master(?:\'?s)?|Diploma|Associate)'
-        r'(?:\s+(?:of|in)\s+[A-Za-z &\-/]+)?)',
+        r'(?i)\b('
+        r'Master(?:\'?s)?(?:\s+(?:of|in)\s+[A-Za-z &\-/]+)?|'
+        r'Bachelor(?:\'?s)?(?:\s+(?:of|in)\s+[A-Za-z &\-/]+)?|'
+        r'Associate(?:\'?s)?(?:\s+(?:of|in|degree)\s+[A-Za-z &\-/]+)?|'
+        r'B\.?\s?Tech|B\.?\s?E\.?(?![a-z])|B\.?\s?S\.?(?![a-z])|B\.?\s?Com|'
+        r'M\.?\s?Tech|M\.?\s?S\.?(?![a-z])|M\.?\s?Com|'
+        r'M\.?\s?B\.?\s?A\.?(?![a-z])|Ph\.?\s?D\.?(?![a-z])|'
+        r'Diploma(?:\s+in\s+[A-Za-z &\-/]+)?|'
+        r'M\.?\s?A\.?(?![a-z])|B\.?\s?A\.?(?![a-z])'
+        r')\b',
     )
     for line in raw.split('\n'):
         stripped = re.sub(r'^[\s•·\-\*]+', '', line.strip())
         if not stripped or len(stripped) < 4 or is_section_header_line(stripped):
+            continue
+        if is_date_range_only_line(stripped) or is_biodata_or_address_line(stripped):
             continue
         from_d, to_d = extract_date_range_from_line(stripped)
         year = ''
@@ -429,17 +728,45 @@ def extract_education_from_text(text: str, max_items: int = 8) -> list[dict[str,
                 year = ym.group(0)
         degree_m = degree_pat.search(stripped)
         degree = degree_m.group(1).strip() if degree_m else ''
-        rest = degree_pat.sub('', stripped) if degree_m else stripped
+        # Drop abbreviation-prefix fragments (Ma, Ba, Be) without punctuation
+        if degree and _DEGREE_FRAGMENT.match(degree.replace('.', '').replace(' ', '')):
+            if '.' not in (degree_m.group(0) if degree_m else ''):
+                # Allow only if original token had dots (M.A.) — bare "Ma" from Master is bad
+                if len(degree) <= 2:
+                    degree = ''
+        rest = degree_pat.sub('', stripped) if degree_m and degree else stripped
+        if degree_m and not degree:
+            rest = stripped
         rest = DATE_RANGE_PATTERN.sub('', rest)
         rest = re.sub(r'\b(19|20)\d{2}\b', '', rest)
         rest = re.sub(r'(?i)\b(?:gpa|cgpa|percentage)\s*[:=]?\s*[\d.]+%?', '', rest)
         institution = re.sub(r'^[\s,\-|–—]+|[\s,\-|–—]+$', '', rest).strip()
         gpa_m = re.search(r'(?i)(?:gpa|cgpa|percentage)\s*[:=]?\s*([\d.]+%?)', stripped)
         gpa = gpa_m.group(1) if gpa_m else ''
-        if degree or institution:
+
+        if institution and (
+            _JOB_BULLET_INSTITUTION.search(institution) or is_biodata_or_address_line(institution)
+        ):
+            institution = ''
+
+        # Keep only real degrees or institution-like schools
+        degree_ok = bool(degree) and len(degree) >= 3 and not _DEGREE_FRAGMENT.match(
+            degree.replace('.', '').replace(' ', '')
+        )
+        # Re-allow proper abbreviated degrees with dots/all-caps
+        if degree and re.match(r'(?i)^(M\.?\s?A\.?|B\.?\s?A\.?|B\.?\s?E\.?|M\.?\s?S\.?|B\.?\s?S\.?|'
+                               r'M\.?\s?B\.?\s?A\.?|Ph\.?\s?D\.?)$', degree.strip()):
+            degree_ok = True
+        if not degree_ok and not is_institution_like(institution):
+            continue
+        if degree_ok or is_institution_like(institution):
             education.append({
-                'degree': degree[:200],
-                'institution': institution[:200],
+                'degree': degree[:200] if degree_ok else '',
+                'institution': (
+                    institution[:200]
+                    if is_institution_like(institution) or (degree_ok and institution)
+                    else ''
+                ),
                 'field': '',
                 'year': year,
                 'from': from_d,
@@ -464,9 +791,14 @@ def extract_certifications_from_text(text: str, max_items: int = 15) -> list[Any
         stripped = re.sub(r'^\d+[\.\)]\s*', '', stripped).strip()
         if not stripped or len(stripped) < 3 or is_section_header_line(stripped):
             continue
+        if is_date_range_only_line(stripped):
+            continue
         parts = re.split(r'\s+[-–—|]\s+|\s+from\s+|\s+by\s+', stripped, maxsplit=1, flags=re.I)
         name = parts[0].strip()
         issuer = parts[1].strip() if len(parts) > 1 else ''
+        # "Company: description" often lacks a credential cue — use full line for cue check
+        if not is_plausible_cert_name(stripped) and not is_plausible_cert_name(name):
+            continue
         if name:
             if issuer:
                 certs.append({'name': name[:200], 'issuer': issuer[:200]})

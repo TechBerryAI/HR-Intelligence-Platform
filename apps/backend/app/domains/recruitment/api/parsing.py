@@ -90,6 +90,12 @@ def _model_version_label() -> str:
     return f"{os.getenv('LLM_PROVIDER', 'xai')}-v1"
 
 
+# Prefer rules-based parse when confidence gate passes (same idea as bulk parser)
+_RESUME_SKIP_LLM_WHEN_DETERMINISTIC = os.getenv(
+    'RESUME_SKIP_LLM_WHEN_DETERMINISTIC', 'true'
+).lower() in ('1', 'true', 'yes')
+
+
 def run_resume_parse_pipeline(
     file_data: bytes,
     filename: str,
@@ -100,7 +106,7 @@ def run_resume_parse_pipeline(
     enrichment_context=None,
 ):
     """
-    Shared resume parse: store raw → extract → LLM → store parsed.
+    Shared resume parse: store raw → extract → deterministic/LLM → store parsed.
     Returns (response_dict, http_status).
     """
     mime_type = get_mime_type(filename)
@@ -129,6 +135,7 @@ def run_resume_parse_pipeline(
             'is_duplicate': True,
             'model_version': cached['model_version'],
             'public_uploader_id': uploader_id if uploader_role == 'public' else None,
+            'partial': 'text-fallback' in str(cached.get('model_version') or ''),
         }, 200
 
     raw_file_record = store_raw_file(
@@ -168,27 +175,78 @@ def run_resume_parse_pipeline(
     llm_error = None
     toon = None
     used_text_fallback = False
-    try:
-        toon = call_llm(raw_text, 'resume', enrichment_context=enrichment_context)
-    except (KeyError, TypeError, ValueError, Exception) as e:
-        llm_error = e
-        print(f"[WARN] LLM resume parse failed ({type(e).__name__}: {e}); trying text-only fallback")
-        try:
-            from app.ai.adapter.runtime_adapter import canonicalize_resume_toon, repair_resume_toon
-            from app.ai.parser.enrichment.resume_enrichment import enrich_resume_toon
+    used_deterministic = False
 
-            repaired, _ = repair_resume_toon({}, raw_resume_text=raw_text)
-            repaired, _ = canonicalize_resume_toon(repaired)
-            toon, _ = enrich_resume_toon(repaired, enrichment_context)
-            used_text_fallback = True
-        except Exception as fallback_err:
-            return {
-                'status': 'error',
-                'error': (
-                    'Could not parse resume. '
-                    f'LLM error: {llm_error}. Fallback error: {fallback_err}'
-                ),
-            }, 400
+    from app.ai.parser.deterministic_resume import parse_resume_deterministic
+    from app.ai.parser.pipelines.resume_toon_pipeline import build_resume_toon
+
+    try:
+        det_toon, _det_conf, _missing, passes = parse_resume_deterministic(raw_text)
+        det_person = det_toon.get('person') if isinstance(det_toon.get('person'), dict) else {}
+        from app.ai.parser.deterministic_resume import experience_quality_ok
+        from app.ai.parser.enrichment.resume_text_inference import is_plausible_person_name
+
+        det_name_ok = is_plausible_person_name(det_person.get('name'))
+        det_has_identity = bool(
+            det_name_ok and str(det_person.get('email') or '').strip()
+        )
+        exp_ok = experience_quality_ok(det_toon) if isinstance(det_toon, dict) else False
+        # Public apply: require clean experience quality before skipping LLM
+        public_ok = True
+        if uploader_role == 'public':
+            public_ok = exp_ok
+        if (
+            _RESUME_SKIP_LLM_WHEN_DETERMINISTIC
+            and passes
+            and det_has_identity
+            and public_ok
+            and isinstance(det_toon, dict)
+        ):
+            toon = det_toon
+            used_deterministic = True
+            print(
+                f"[INFO] Resume parse using deterministic path "
+                f"(conf={_det_conf:.2f}, missing={_missing[:4]})"
+            )
+        elif _RESUME_SKIP_LLM_WHEN_DETERMINISTIC and passes and not det_name_ok:
+            print(
+                "[INFO] Deterministic gate score passed but person name is implausible; "
+                "falling through to LLM"
+            )
+        elif (
+            _RESUME_SKIP_LLM_WHEN_DETERMINISTIC
+            and passes
+            and det_has_identity
+            and uploader_role == 'public'
+            and not exp_ok
+        ):
+            print(
+                "[INFO] Deterministic passed but experience quality is poor for public apply; "
+                "falling through to LLM"
+            )
+    except Exception as det_err:
+        print(f"[WARN] Deterministic resume parse failed: {det_err}")
+
+    if toon is None:
+        try:
+            toon = call_llm(raw_text, 'resume', enrichment_context=enrichment_context)
+        except (KeyError, TypeError, ValueError, Exception) as e:
+            llm_error = e
+            print(
+                f"[WARN] LLM resume parse failed ({type(e).__name__}: {e}); "
+                "trying text-only fallback"
+            )
+            try:
+                toon = build_resume_toon(raw_text, {}, enrichment_context)
+                used_text_fallback = True
+            except Exception as fallback_err:
+                return {
+                    'status': 'error',
+                    'error': (
+                        'Could not parse resume. '
+                        f'LLM error: {llm_error}. Fallback error: {fallback_err}'
+                    ),
+                }, 400
 
     if not isinstance(toon, dict):
         return {'status': 'error', 'error': 'Resume parse returned invalid structure'}, 400
@@ -218,10 +276,13 @@ def run_resume_parse_pipeline(
         print(f"[WARN] Accepting partial resume TOON after recovery: {error_msg}")
 
     confidence = calculate_confidence(toon, 'resume')
+    # Mild discount for rules-only recovery — do not hard-cap at 0.55 (UI warns below 0.75)
     if used_text_fallback:
-        confidence = min(float(confidence or 0), 0.55)
+        confidence = min(1.0, float(confidence or 0) * 0.95)
     model_version = _model_version_label()
-    if used_text_fallback:
+    if used_deterministic:
+        model_version = f"{model_version}+deterministic"
+    elif used_text_fallback:
         model_version = f"{model_version}+text-fallback"
     parsed_id = store_parsed_resume(
         raw_file_id,
@@ -300,8 +361,8 @@ def calculate_confidence(toon: dict, doc_type: str) -> float:
         
         # When all required fields are fully present, parsing is complete -> 100%
         if required_score >= required_max:
-            return 1.0
-        if max_score > 0:
+            base_confidence = 1.0
+        elif max_score > 0:
             base_confidence = score / max_score
             person = toon.get('person') if isinstance(toon.get('person'), dict) else {}
             has_person = bool(person.get('name') or person.get('email'))
@@ -311,9 +372,27 @@ def calculate_confidence(toon: dict, doc_type: str) -> float:
             if has_person and (has_experience or has_education):
                 base_confidence = max(base_confidence, 0.65)
             
-            return min(base_confidence, 1.0)
+            base_confidence = min(base_confidence, 1.0)
         else:
-            return 0.5  # Default if no fields checked
+            base_confidence = 0.5  # Default if no fields checked
+
+        # Do not report high confidence when the "name" is clearly not a person name
+        # or experience/education lists are biodata-polluted junk
+        try:
+            from app.ai.parser.deterministic_resume import experience_quality_ok
+            from app.ai.parser.enrichment.resume_text_inference import is_plausible_person_name
+            person = toon.get('person') if isinstance(toon.get('person'), dict) else {}
+            raw_name = person.get('name')
+            if raw_name and not is_plausible_person_name(raw_name):
+                return min(float(base_confidence), 0.45)
+            if not raw_name:
+                # Missing name should not look highly confident either
+                return min(float(base_confidence), 0.55)
+            if not experience_quality_ok(toon):
+                return min(float(base_confidence), 0.5)
+        except Exception:
+            pass
+        return float(base_confidence)
     
     else:  # jd
         required_fields = ['title', 'skills', 'responsibilities']
@@ -617,7 +696,7 @@ def parse_jd_upload():
         # Calculate confidence
         confidence = calculate_confidence(toon, 'jd')
         if used_text_fallback:
-            confidence = min(float(confidence or 0), 0.55)
+            confidence = min(1.0, float(confidence or 0) * 0.95)
         if os.getenv('AI_USE_GATEWAY', 'true').lower() in ('1', 'true', 'yes'):
             try:
                 from app.ai.adapter.runtime_adapter import get_model_version

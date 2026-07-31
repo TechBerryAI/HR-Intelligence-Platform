@@ -24,11 +24,18 @@ PDF_MAX_PAGES = max(0, int(os.getenv('PDF_MAX_PAGES', '0')))
 OCR_ENABLED = os.getenv('OCR_ENABLED', 'true').lower() in ('1', 'true', 'yes')
 OCR_LANG = os.getenv('OCR_LANG', 'eng')
 OCR_DPI = max(72, int(os.getenv('OCR_DPI', '250')))
+# Try a lower DPI first for speed; escalate when OCR text is thin.
+OCR_DPI_FAST = max(72, int(os.getenv('OCR_DPI_FAST', '180')))
 MIN_TEXT_CHARS = 30
 # Per-page digital text below this triggers OCR.
 PAGE_OCR_TEXT_THRESHOLD = 80
 # If digital text is below this and page has images, prefer OCR.
 PAGE_SPARSE_TEXT_WITH_IMAGES = 200
+RESUME_LAYOUT_ENABLED = os.getenv('RESUME_LAYOUT_ENABLED', 'true').lower() in (
+    '1',
+    'true',
+    'yes',
+)
 
 IMAGE_EXTENSIONS = frozenset({'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp'})
 
@@ -55,7 +62,10 @@ def _ocr_with_rapidocr(image_bytes: bytes) -> str:
     import numpy as np
     from PIL import Image
 
-    image = Image.open(io.BytesIO(image_bytes))
+    from app.ai.parser.layout.preprocess import preprocess_image_bytes
+
+    processed = preprocess_image_bytes(image_bytes)
+    image = Image.open(io.BytesIO(processed))
     if image.mode not in ('RGB', 'L'):
         image = image.convert('RGB')
     arr = np.array(image)
@@ -100,23 +110,18 @@ def _ocr_with_tesseract(image_bytes: bytes, *, lang: str | None = None) -> str:
     import pytesseract
     from PIL import Image
 
-    image = Image.open(io.BytesIO(image_bytes))
+    from app.ai.parser.layout.preprocess import preprocess_image_bytes
+
+    processed = preprocess_image_bytes(image_bytes)
+    image = Image.open(io.BytesIO(processed))
     if image.mode not in ('RGB', 'L'):
         image = image.convert('RGB')
     text = pytesseract.image_to_string(image, lang=lang or OCR_LANG)
     return (text or '').strip()
 
 
-def _ocr_image_bytes(image_bytes: bytes, *, lang: str | None = None) -> str:
-    """
-    Run OCR on raw image bytes.
-
-    Primary: RapidOCR (installed via requirements.txt).
-    Secondary: system Tesseract if available.
-    """
-    if not OCR_ENABLED:
-        raise ValueError('OCR is disabled (OCR_ENABLED=false)')
-
+def _ocr_image_bytes_plain(image_bytes: bytes, *, lang: str | None = None) -> str:
+    """Run RapidOCR then Tesseract without layout structuring."""
     errors: list[str] = []
 
     try:
@@ -146,6 +151,33 @@ def _ocr_image_bytes(image_bytes: bytes, *, lang: str | None = None) -> str:
         f'OCR failed ({detail}). Install RapidOCR with Python 3.10–3.12 '
         f'(pip install rapidocr-onnxruntime), or install system Tesseract as a fallback.'
     )
+
+
+def _ocr_image_bytes(image_bytes: bytes, *, lang: str | None = None) -> str:
+    """
+    Run OCR on raw image bytes.
+
+    Primary: RapidOCR (+ OpenCV preprocess, optional layout).
+    Secondary: system Tesseract if available.
+    """
+    if not OCR_ENABLED:
+        raise ValueError('OCR is disabled (OCR_ENABLED=false)')
+
+    if RESUME_LAYOUT_ENABLED:
+        try:
+            from app.ai.parser.layout.detector import ocr_image_with_layout
+
+            text, source = ocr_image_with_layout(
+                image_bytes,
+                ocr_fn=lambda b: _ocr_image_bytes_plain(b, lang=lang),
+            )
+            if text and text.strip():
+                logger.debug('Layout OCR source=%s chars=%s', source, len(text))
+                return text.strip()
+        except Exception as exc:
+            logger.warning('Layout OCR failed, falling back to plain OCR: %s', exc)
+
+    return _ocr_image_bytes_plain(image_bytes, lang=lang)
 
 
 def extract_text_from_image(file_data: bytes, filename: str = 'image.png') -> str:
@@ -198,7 +230,10 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
     except ImportError as exc:
         raise ValueError('PyMuPDF (pymupdf) is not installed') from exc
 
-    render_dpi = max(72, int(dpi or OCR_DPI))
+    # Explicit dpi from caller wins; otherwise adaptive fast → full
+    forced_dpi = max(72, int(dpi)) if dpi is not None else None
+    fast_dpi = forced_dpi or max(72, min(OCR_DPI_FAST, OCR_DPI))
+    full_dpi = forced_dpi or OCR_DPI
 
     doc = fitz.open(stream=file_data, filetype='pdf')
     try:
@@ -208,6 +243,7 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
 
         text_parts: list[str] = []
         used_ocr = False
+        max_dpi_used = fast_dpi
 
         for page_num in range(page_count):
             page = doc[page_num]
@@ -216,8 +252,17 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
             if _page_needs_ocr(page, digital):
                 if OCR_ENABLED:
                     try:
-                        png = _render_page_png(page, dpi=render_dpi)
+                        png = _render_page_png(page, dpi=fast_dpi)
                         ocr_text = _ocr_image_bytes(png)
+                        # Escalate DPI when fast pass is too thin
+                        if (
+                            forced_dpi is None
+                            and full_dpi > fast_dpi
+                            and len((ocr_text or '').strip()) < PAGE_OCR_TEXT_THRESHOLD
+                        ):
+                            png = _render_page_png(page, dpi=full_dpi)
+                            ocr_text = _ocr_image_bytes(png)
+                            max_dpi_used = max(max_dpi_used, full_dpi)
                         if ocr_text:
                             text_parts.append(ocr_text)
                             used_ocr = True
@@ -236,6 +281,14 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
                 text_parts.append(digital)
 
         extracted = '\n\n'.join(text_parts).strip()
+        if RESUME_LAYOUT_ENABLED and extracted:
+            try:
+                from app.ai.parser.layout.detector import enhance_resume_text
+
+                extracted = enhance_resume_text(extracted)
+            except Exception as exc:
+                logger.debug('enhance_resume_text skipped: %s', exc)
+
         if len(extracted) < MIN_TEXT_CHARS:
             raise ValueError(
                 'Insufficient text extracted - PDF may be image-based or corrupted'
@@ -245,7 +298,7 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
                 'Extracted %s characters from PDF (%s pages, OCR used, dpi=%s)',
                 len(extracted),
                 page_count,
-                render_dpi,
+                max_dpi_used,
             )
         return extracted
     finally:
@@ -364,25 +417,36 @@ def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> 
     ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
 
     if ext in IMAGE_EXTENSIONS:
-        return extract_text_from_image(file_data, filename)
-
-    if ext == 'pdf':
+        text = extract_text_from_image(file_data, filename)
+    elif ext == 'pdf':
         try:
-            return extract_text_from_pdf(file_data, dpi=dpi)
+            text = extract_text_from_pdf(file_data, dpi=dpi)
         except ValueError as e:
             error_msg = str(e)
             if 'Insufficient text' in error_msg or 'Failed to extract' in error_msg or 'OCR' in error_msg:
                 logger.info('Local PDF extraction failed, trying parsing API fallback...')
                 try:
-                    return extract_text_from_pdf_via_api(file_data, filename)
+                    text = extract_text_from_pdf_via_api(file_data, filename)
                 except Exception as api_error:
                     raise ValueError(
                         f'Local extraction failed: {error_msg}. '
                         f'API fallback also failed: {api_error}'
                     ) from api_error
-            raise
-    if ext == 'doc':
+            else:
+                raise
+    elif ext == 'doc':
         raise ValueError('Legacy .doc format is not supported. Please use DOCX or PDF.')
-    if ext == 'docx':
-        return extract_text_from_docx(file_data)
-    raise ValueError(f'Unsupported file type: {ext}')
+    elif ext == 'docx':
+        text = extract_text_from_docx(file_data)
+    else:
+        raise ValueError(f'Unsupported file type: {ext}')
+
+    if RESUME_LAYOUT_ENABLED and text and ext != 'pdf':
+        # PDF path already enhances inside pymupdf extractor
+        try:
+            from app.ai.parser.layout.detector import enhance_resume_text
+
+            text = enhance_resume_text(text)
+        except Exception as exc:
+            logger.debug('enhance_resume_text skipped: %s', exc)
+    return text

@@ -1,31 +1,33 @@
-# Production runtime — Ollama primary, Grok fallback.
+# Production runtime — Ollama only (no cloud fallback).
+# Grok/XAI stays available as an optional provider definition but is disabled
+# so rate-limit / quota errors cannot interrupt local parsing.
 runtime:
   settings:
-    default_timeout_seconds: 120
+    default_timeout_seconds: 300
     max_input_chars: 0
 
   routing:
     primary: ollama
-    fallback_chain:
-      - grok
+    fallback_chain: []
 
   providers:
     ollama:
       type: ollama
       enabled: true
       base_url: ${OLLAMA_HOST:http://localhost:11434}
-      default_timeout_seconds: 120
+      # Long timeout for 14B on large resumes / queued bulk jobs
+      default_timeout_seconds: 300
     grok:
       type: grok
-      enabled: true
+      enabled: false
       api_key: ${XAI_API_KEY}
       model: ${XAI_MODEL}
       base_url: ${XAI_BASE_URL}
       default_timeout_seconds: 45
 
   retry:
-    max_attempts: 3
-    backoff_seconds: 2
+    max_attempts: 4
+    backoff_seconds: 3
     retry_on_status: [429, 500, 502, 503, 504]
 
   validation:

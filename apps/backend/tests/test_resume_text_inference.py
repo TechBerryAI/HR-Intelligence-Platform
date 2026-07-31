@@ -86,10 +86,73 @@ Experienced engineer
 Jane Doe
 jane@example.com
 """
-    # Prefer a name-like line; SUMMARY must not win
+    # Prefer a name-like line; SUMMARY / objective prose must not win
     name = extract_name_from_text(text)
     assert name.lower() != "summary"
-    assert "Jane" in name or "Experienced" in name
+    assert "Jane" in name
+    assert "Experienced" not in name
+
+
+def test_extract_name_rejects_percentage_label():
+    text = """
+Percentage: 75.27
+anjalibansode0227@gmail.com
+9527767516
+"""
+    name = extract_name_from_text(text)
+    assert name != "Percentage: 75.27"
+    assert "75.27" not in name
+    # Glued email local must not invent a spaced name
+    assert name == ""
+
+
+def test_anjali_style_section_bleed_does_not_pollute_fields():
+    text = """
+Percentage: 75.27
+anjalibansode0227@gmail.com
+9527767516
+
+Education
+B.Tech Computer Science, Some College, 2017
+
+Technical Skills
+HTML, Core Java, SQL
+
+PROJECT
+06/2016 - 06/2017
+Built a small website.
+
+Certifications
+Revolution IT Solutions: Web Development
+Web Development certification focusing on front-end
+
+Work Experience
+Web Developer at Acme, Jan 2018 - Present
+"""
+    name = extract_name_from_text(text)
+    assert name != "Percentage: 75.27"
+
+    skills = extract_skills_from_text(text)
+    skills_l = [s.lower() for s in skills]
+    assert "education" not in skills_l
+    assert "project" not in skills_l
+    assert not any("06/2016" in s for s in skills)
+    assert "HTML" in skills or "html" in skills_l
+    assert any("java" in s.lower() for s in skills)
+    assert "SQL" in skills or "sql" in skills_l
+
+    edu = extract_education_from_text(text)
+    institutions = [(e.get("institution") or "").lower() for e in edu]
+    degrees = [(e.get("degree") or "").lower() for e in edu]
+    assert not any(i in ("html", "core java") for i in institutions)
+    assert any("b.tech" in d or "college" in i for d, i in zip(degrees, institutions))
+
+    certs = extract_certifications_from_text(text)
+    cert_names = []
+    for c in certs:
+        cert_names.append((c.get("name") if isinstance(c, dict) else str(c)).lower())
+    # Company: description without cert cue should be dropped
+    assert not any("revolution it solutions" in n for n in cert_names)
 
 
 def test_extract_education_and_certs_from_sections():
@@ -175,3 +238,31 @@ def test_compute_total_experience_years():
     ])
     assert years is not None
     assert years >= 4.0
+
+
+def test_master_of_science_not_split_to_ma():
+    text = """
+Education
+Master of Science, Pune University, 2015
+
+Technical Skills
+SQL
+"""
+    edu = extract_education_from_text(text)
+    assert edu
+    assert any("Master" in (e.get("degree") or "") for e in edu)
+    assert not any((e.get("degree") or "").strip().lower() == "ma" for e in edu)
+    assert not any("ster of science" in (e.get("institution") or "").lower() for e in edu)
+
+
+def test_biodata_lines_are_not_job_titles():
+    from resume_text_inference import is_plausible_job_title
+
+    assert not is_plausible_job_title("PERSONAL DETAILS")
+    assert not is_plausible_job_title("Date of Birth")
+    assert not is_plausible_job_title("20 November 1992")
+    assert not is_plausible_job_title("Gender")
+    assert not is_plausible_job_title("Marital Status")
+    assert not is_plausible_job_title(": Married")
+    assert is_plausible_job_title("MSSQL DBA")
+    assert is_plausible_job_title("Software Engineer")

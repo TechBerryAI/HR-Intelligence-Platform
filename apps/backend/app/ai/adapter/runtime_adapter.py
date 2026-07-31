@@ -101,33 +101,63 @@ def _apply_resume_text_fields(person: dict[str, Any], raw_resume_text: str | Non
 
     from app.ai.parser.enrichment.resume_text_inference import extract_location_from_text
 
+    def _is_false_address_url(u: str) -> bool:
+        """Reject Indian address abbreviations misread as domains (H.no, S.no, etc.)."""
+        s = (u or '').strip().lower()
+        s = re.sub(r'^https?://', '', s)
+        host = s.split('/')[0].split('?')[0].rstrip('.')
+        if re.match(
+            r'^(?:h|s|plot|flat|survey|house|door|room)\.?n(?:o|umber)?\.?$',
+            host.replace(' ', ''),
+        ):
+            return True
+        if re.search(r'\bh\.?\s*no\.?\b|\bs\.?\s*no\.?\b|plot\.?\s*no|flat\.?\s*no', s):
+            return True
+        # Single-letter hostname + junk TLD (h.no)
+        parts = host.split('.')
+        if len(parts) == 2 and len(parts[0]) <= 1 and len(parts[1]) <= 3:
+            return True
+        return False
+
+    def _normalize_url(u: str) -> str | None:
+        url = (u or '').strip('.,;:')
+        if not url or _is_false_address_url(url):
+            return None
+        return url if url.startswith('http') else f'https://{url}'
+
     url_pattern = (
         r'(https?://[^\s<>"\'\)]+|www\.[^\s<>"\'\)]+|linkedin\.com/[^\s<>"\'\)]+|'
         r'github\.com/[^\s<>"\'\)]+|twitter\.com/[^\s<>"\'\)]+|x\.com/[^\s<>"\'\)]+|'
         r'[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-zA-Z]{2,}[^\s<>"\'\)]*)'
     )
-    found_urls = re.findall(url_pattern, raw_resume_text, re.IGNORECASE)
+    found_urls = [
+        u for u in re.findall(url_pattern, raw_resume_text, re.IGNORECASE)
+        if not _is_false_address_url(u)
+    ]
 
     if not person.get('linkedin'):
         linkedin_urls = [u for u in found_urls if 'linkedin' in u.lower() or 'linked.in' in u.lower()]
         if linkedin_urls:
-            url = linkedin_urls[0].strip('.,;:')
-            person['linkedin'] = url if url.startswith('http') else f'https://{url}'
-            actions.append('extracted_linkedin_from_text')
+            url = _normalize_url(linkedin_urls[0])
+            if url:
+                person['linkedin'] = url
+                actions.append('extracted_linkedin_from_text')
 
     if not person.get('github'):
         github_urls = [u for u in found_urls if 'github' in u.lower()]
         if github_urls:
-            url = github_urls[0].strip('.,;:')
-            person['github'] = url if url.startswith('http') else f'https://{url}'
-            actions.append('extracted_github_from_text')
+            url = _normalize_url(github_urls[0])
+            if url:
+                person['github'] = url
+                actions.append('extracted_github_from_text')
 
     if not person.get('twitter'):
         twitter_urls = [u for u in found_urls if 'twitter' in u.lower() or 'x.com' in u.lower()]
         if twitter_urls:
-            url = twitter_urls[0].strip('.,;:')
-            person['twitter'] = url if url.startswith('http') else f'https://{url}'
-            actions.append('extracted_twitter_from_text')
+            url = _normalize_url(twitter_urls[0])
+            if url:
+                person['twitter'] = url
+                actions.append('extracted_twitter_from_text')
 
     if not person.get('portfolio') and not person.get('website'):
         excluded = [
@@ -137,11 +167,13 @@ def _apply_resume_text_fields(person: dict[str, Any], raw_resume_text: str | Non
         portfolio_urls = [
             u for u in found_urls
             if not any(x in u.lower() for x in excluded) and '.' in u and len(u) > 5
+            and not _is_false_address_url(u)
         ]
         if portfolio_urls:
-            url = portfolio_urls[0].strip('.,;:')
-            person['portfolio'] = url if url.startswith('http') else f'https://{url}'
-            actions.append('extracted_portfolio_from_text')
+            url = _normalize_url(portfolio_urls[0])
+            if url:
+                person['portfolio'] = url
+                actions.append('extracted_portfolio_from_text')
 
     if not isinstance(person.get('otherUrls'), list):
         person['otherUrls'] = []
@@ -153,9 +185,10 @@ def _apply_resume_text_fields(person: dict[str, Any], raw_resume_text: str | Non
             categorized.add(str(val).lower())
 
     for url in found_urls:
-        url_clean = url.strip('.,;:')
-        if url_clean.lower() not in categorized and url_clean not in person['otherUrls']:
-            url_final = url_clean if url_clean.startswith('http') else f'https://{url_clean}'
+        url_final = _normalize_url(url)
+        if not url_final:
+            continue
+        if url_final.lower() not in categorized and url_final not in person['otherUrls']:
             person['otherUrls'].append(url_final)
 
     if not person.get('location') or not str(person.get('location', '')).strip():
@@ -225,8 +258,12 @@ def _apply_resume_text_recovery(repaired: dict[str, Any], raw_resume_text: str |
     if not _str(person.get("name")):
         name = _str(inferred_person.get("name"))
         if name:
-            person["name"] = name
-            actions.append("inferred_name_from_text")
+            from app.ai.parser.enrichment.resume_text_inference import is_plausible_person_name
+            if is_plausible_person_name(name):
+                person["name"] = name
+                actions.append("inferred_name_from_text")
+            else:
+                actions.append("skipped_implausible_inferred_name")
 
     if not _str(person.get("location")):
         loc = _str(inferred_person.get("location"))
@@ -906,8 +943,12 @@ def _normalize_education(education: Any) -> list:
 def _normalize_person(person: Any) -> dict[str, Any]:
     if not isinstance(person, dict):
         person = {}
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_person_name
+
+    raw_name = _str(person.get("name"))
+    name = raw_name if is_plausible_person_name(raw_name) else ""
     return {
-        "name": _str(person.get("name")),
+        "name": name,
         "email": _str(person.get("email")),
         "phone": _str(person.get("phone")),
         "location": _str(person.get("location")),

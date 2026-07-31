@@ -49,6 +49,14 @@ class ProviderManager:
                 continue
             chain.append(provider)
 
+        # Ollama-only / empty fallback: never abandon the job because of a transient
+        # health flag — always retry the configured primary if it is set up.
+        if not chain:
+            primary_id = self._config.routing.primary
+            primary = self.get(primary_id)
+            if primary.is_configured():
+                chain.append(primary)
+
         if not chain:
             raise ProviderNotAvailableError("No healthy configured providers available")
         return chain

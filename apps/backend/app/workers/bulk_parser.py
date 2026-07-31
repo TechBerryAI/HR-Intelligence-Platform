@@ -46,8 +46,50 @@ EXCEL_HEADERS = [
 BULK_OCR_RETRY_DPI = 300
 BULK_MIN_TEXT_CHARS = 30
 
-# Conservative default for local Ollama 14B; raise via env for cloud keys.
-BULK_PARSE_MAX_WORKERS = max(1, min(24, int(os.getenv('BULK_PARSE_MAX_WORKERS', '4'))))
+# OCR/extract can run in parallel; LLM calls are gated by OLLAMA_MAX_CONCURRENT.
+# Higher default now that most clean resumes skip Ollama via deterministic path.
+BULK_PARSE_MAX_WORKERS = max(1, min(24, int(os.getenv('BULK_PARSE_MAX_WORKERS', '6'))))
+# Serialize local 14B inference so large batches queue instead of timing out.
+OLLAMA_MAX_CONCURRENT = max(1, min(8, int(os.getenv('OLLAMA_MAX_CONCURRENT', '1'))))
+BULK_LLM_ATTEMPTS = max(2, min(8, int(os.getenv('BULK_LLM_ATTEMPTS', '4'))))
+BULK_EXCEL_CHECKPOINT_EVERY = max(5, int(os.getenv('BULK_EXCEL_CHECKPOINT_EVERY', '25')))
+BULK_SKIP_LLM_WHEN_DETERMINISTIC = os.getenv(
+    'BULK_SKIP_LLM_WHEN_DETERMINISTIC', 'true'
+).lower() in ('1', 'true', 'yes')
+_llm_semaphore = threading.Semaphore(OLLAMA_MAX_CONCURRENT)
+
+
+def _is_retryable_llm_error(err: str) -> bool:
+    low = (err or '').lower()
+    return any(
+        token in low
+        for token in (
+            'timeout',
+            'timed out',
+            'connection',
+            'temporarily',
+            'unavailable',
+            'overloaded',
+            'busy',
+            '429',
+            '500',
+            '502',
+            '503',
+            '504',
+            'provider not available',
+            'no healthy',
+            'read timed out',
+            'connect',
+        )
+    )
+
+
+def _call_llm_throttled(raw_text: str, doc_type: str = 'resume'):
+    """Queue LLM calls so Ollama is not overwhelmed on large batches."""
+    from app.integrations.openai.llm_service import call_llm
+
+    with _llm_semaphore:
+        return call_llm(raw_text, doc_type)
 
 
 def _export_path(job_id: str) -> Path:
@@ -282,13 +324,13 @@ def _build_excel_bytes(rows: list[dict]) -> bytes:
 
 def _process_one_file(args: tuple[str, Path]) -> tuple[str, dict | None, bool, str, str]:
     """
-    Process a single staged file: extract text + LLM + bulk-relaxed validate.
+    Process a single staged file: extract → deterministic rules → LLM if needed.
     Returns (filename, row or None, failed: bool, message, code).
     Codes: insufficient_text | unsupported_format | llm | validation | empty_fields | exception | ok | partial
     """
+    from app.ai.parser.deterministic_resume import parse_resume_deterministic
     from app.ai.parser.text_extraction import extract_text
     from app.domains.recruitment.services.parsing_storage import validate_toon_format_bulk
-    from app.integrations.openai.llm_service import call_llm
 
     filename, path = args
     try:
@@ -329,20 +371,71 @@ def _process_one_file(args: tuple[str, Path]) -> tuple[str, dict | None, bool, s
                 'insufficient_text',
             )
 
+        # --- Fast path: rules / hybrid CV (skip Ollama when confidence is high) ---
+        if BULK_SKIP_LLM_WHEN_DETERMINISTIC:
+            try:
+                det_toon, conf, missing, passes = parse_resume_deterministic(raw_text)
+                if passes and isinstance(det_toon, dict):
+                    accept, notes, parse_status = validate_toon_format_bulk(det_toon, 'resume')
+                    if accept:
+                        row = _flatten_toon(det_toon, filename)
+                        try:
+                            from app.ai.parser.layout import RESUME_LAYOUT_ENABLED as _layout_on
+                        except Exception:
+                            _layout_on = False
+                        source = 'hybrid' if _layout_on else 'deterministic'
+                        note_bits = [
+                            f'source={source}',
+                            f'conf={conf:.2f}',
+                        ]
+                        if missing:
+                            note_bits.append('weak=' + ','.join(missing[:6]))
+                        if notes:
+                            note_bits.append(notes)
+                        row['ParseStatus'] = (
+                            'ok' if parse_status == 'ok' else parse_status
+                        )
+                        # Prefer explicit rules_only marker when fully ok from rules
+                        if parse_status == 'ok':
+                            row['ParseStatus'] = 'ok'
+                        row['ParseNotes'] = '; '.join(note_bits)[:2000]
+                        if (
+                            row.get('Name')
+                            or row.get('Email')
+                            or row.get('Phone')
+                            or row.get('Skills')
+                            or row.get('Experience')
+                        ):
+                            return (
+                                filename,
+                                row,
+                                False,
+                                f'Processing: {filename} ({source})',
+                                parse_status if parse_status in ('ok', 'partial') else 'ok',
+                            )
+            except Exception as det_err:
+                print(f'[local_bulk_parser] deterministic path failed for {filename}: {det_err}')
+
+        # --- Slow path: Ollama / LLM ---
         toon = None
         last_err = None
-        for _attempt in range(2):
+        for attempt in range(BULK_LLM_ATTEMPTS):
             try:
-                toon = call_llm(raw_text, 'resume')
+                toon = _call_llm_throttled(raw_text, 'resume')
                 if not isinstance(toon, dict):
                     last_err = 'LLM returned non-object'
                     toon = None
+                    if attempt < BULK_LLM_ATTEMPTS - 1:
+                        time.sleep(min(30, 2 ** attempt))
                     continue
                 accept, notes, parse_status = validate_toon_format_bulk(toon, 'resume')
                 if accept:
                     row = _flatten_toon(toon, filename)
+                    note_bits = [f'source=llm', f'status={parse_status}']
+                    if notes:
+                        note_bits.append(notes)
                     row['ParseStatus'] = parse_status
-                    row['ParseNotes'] = (notes or '')[:2000]
+                    row['ParseNotes'] = '; '.join(note_bits)[:2000]
                     if not (
                         row.get('Name')
                         or row.get('Email')
@@ -365,6 +458,10 @@ def _process_one_file(args: tuple[str, Path]) -> tuple[str, dict | None, bool, s
             except Exception as e:
                 last_err = str(e)[:200]
                 toon = None
+                if _is_retryable_llm_error(last_err) and attempt < BULK_LLM_ATTEMPTS - 1:
+                    # Back off so Ollama can catch up on long queues
+                    time.sleep(min(45, 2 ** attempt + 1))
+                    continue
 
         if last_err and 'empty fields' in (last_err or ''):
             return (
@@ -449,12 +546,16 @@ def _worker(job_id: str, started_at: float, append: bool = False) -> None:
                 with _local_jobs_lock:
                     if job_id in _local_jobs:
                         _local_jobs[job_id].setdefault('success_filenames', []).append(filename)
-            update_session_progress(job_id, success_count + failed_count, success_count, failed_count)
+            done = success_count + failed_count
+            update_session_progress(job_id, done, success_count, failed_count)
             with _local_jobs_lock:
                 if job_id in _local_jobs:
-                    _local_jobs[job_id]['processed_files'] = success_count + failed_count
+                    _local_jobs[job_id]['processed_files'] = done
                     _local_jobs[job_id]['failed_files'] = failed_count
                     _local_jobs[job_id]['message'] = message
+            # Checkpoint Excel during long runs so progress survives restarts
+            if results and done > 0 and done % BULK_EXCEL_CHECKPOINT_EVERY == 0:
+                _persist_excel(job_id, list(results), append=append)
 
     with _local_jobs_lock:
         if job_id in _local_jobs:

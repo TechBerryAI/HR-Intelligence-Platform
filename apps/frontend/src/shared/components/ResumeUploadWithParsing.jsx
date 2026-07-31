@@ -112,8 +112,17 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
           });
         }
 
-        if (result.confidence < 0.75) {
-          setParseError('Parsing confidence is low. Please verify all auto-filled fields.');
+        if (result.partial || result.confidence < 0.75) {
+          const mv = String(result.model_version || '');
+          if (mv.includes('text-fallback')) {
+            setParseError(
+              'AI model unavailable; used rules-based parse — please verify all auto-filled fields.'
+            );
+          } else if (result.partial) {
+            setParseError('Parsing was partial. Please verify all auto-filled fields.');
+          } else {
+            setParseError('Parsing confidence is low. Please verify all auto-filled fields.');
+          }
         }
       } else {
         throw new Error(result.error || 'Parsing failed');

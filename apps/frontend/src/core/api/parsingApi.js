@@ -16,12 +16,12 @@ function ensureArray(value) {
 }
 
 /**
- * Reject objective/summary sentence fragments wrongly mapped into experience.role.
+ * Reject objective/summary/biodata fragments wrongly mapped into experience.role.
  * @param {string} title
  * @returns {boolean}
  */
 function isPlausibleJobTitle(title) {
-  const t = String(title || '').trim();
+  const t = String(title || '').trim().replace(/^:\s*/, '');
   if (!t) return false;
   if (t.length > 100) return false;
   const words = t.split(/\s+/).filter(Boolean);
@@ -35,6 +35,24 @@ function isPlausibleJobTitle(title) {
   }
   if (/\bobjectives?\b/i.test(t)) return false;
   if (/^[a-z]/.test(t) && words.length >= 4) return false;
+  // Personal details / biodata / address — never job titles
+  if (
+    /^(name|full\s*name|date\s+of\s+birth|d\.?\s*o\.?\s*b\.?|dob|gender|sex|marital\s+status|married|unmarried|single|permanent\s+address|present\s+address|current\s+address|correspondence\s+address|residential\s+address|address|father|mother|nationality|religion|languages?\s+known|blood\s+group|passport|aadhaar|aadhar|pan|personal\s+details|personal\s+information|biodata|bio\s*data|contact\s+details|declaration)\b/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
+  if (
+    /^(?:\d{1,2}(?:st|nd|rd|th)?\s+)?(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}/i.test(
+      t,
+    )
+  ) {
+    return false;
+  }
+  if (/\b(colony|nagar|tal[\s\-]|dist[\s\-]|pin(?:code)?|h\.?\s*no\.?)\b/i.test(t)) {
+    return false;
+  }
   return true;
 }
 
@@ -347,12 +365,21 @@ export function mapResumeTOONToForm(toon) {
     if (invalidDomains.some(domain => urlLower.includes(domain + '.'))) {
       return false;
     }
+    // Indian address abbreviations misread as domains (H.no, S.no)
+    if (/\bh\.?\s*no\.?\b|\bs\.?\s*no\.?\b|plot\.?\s*no|flat\.?\s*no/i.test(urlLower)) {
+      return false;
+    }
     // Check if it's a proper domain (has TLD)
     const domainMatch = url.match(/https?:\/\/(?:www\.)?([^\/]+)/);
     if (domainMatch) {
       const domain = domainMatch[1];
+      const parts = domain.split('.');
+      // Reject single-letter hosts like h.no
+      if (parts.length === 2 && parts[0].length <= 1 && parts[1].length <= 3) {
+        return false;
+      }
       // Should have a valid TLD (at least 2 characters)
-      return domain.split('.').length >= 2 && domain.split('.').pop().length >= 2;
+      return parts.length >= 2 && parts[parts.length - 1].length >= 2;
     }
     return true; // If we can't parse it, assume it's valid
   };
