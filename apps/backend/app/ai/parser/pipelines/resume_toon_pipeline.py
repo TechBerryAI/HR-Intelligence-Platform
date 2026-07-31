@@ -61,7 +61,7 @@ def _field_counts(toon: dict[str, Any]) -> dict[str, Any]:
     person = toon.get("person")
     if isinstance(person, dict):
         counts["person_fields"] = sum(
-            1 for k in ("name", "email", "phone") if (person.get(k) or "").strip()
+            1 for k in ("name", "email", "phone") if str(person.get(k) or "").strip()
         )
     return counts
 

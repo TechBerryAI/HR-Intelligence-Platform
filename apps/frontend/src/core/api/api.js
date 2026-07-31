@@ -74,7 +74,77 @@ function isRefreshableAuthError(status, message) {
 }
 
 function isRoleMismatchError(message) {
-  return (message || '').toLowerCase().includes('access required');
+  const msg = (message || '').toLowerCase();
+  return (
+    msg.includes('access required') ||
+    msg.includes('access denied') ||
+    msg.includes('read-only access')
+  );
+}
+
+/** Decode JWT payload without verifying signature (client-side expiry check only). */
+function decodeJwtPayload(token) {
+  if (!token || typeof token !== 'string') return null;
+  try {
+    const parts = token.split('.');
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const json = typeof atob === 'function' ? atob(padded) : Buffer.from(padded, 'base64').toString('utf8');
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+const PROACTIVE_REFRESH_WINDOW_SEC = 120; // refresh when access JWT expires within 2 minutes
+let refreshInFlight = null;
+
+async function tryRefreshOnce() {
+  const refreshToken = tokenService.getRefreshToken();
+  if (!refreshToken) return false;
+  const refreshUrl = joinUrl(BASE_URL, '/api/refresh');
+  try {
+    const res = await fetch(refreshUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return false;
+    const json = await res.json().catch(() => ({}));
+    if (!json.token || !json.refresh_token) return false;
+    tokenService.setToken(json.token);
+    tokenService.setRefreshToken(json.refresh_token);
+    if (typeof onTokensRefreshed === 'function') {
+      try { onTokensRefreshed(json.token, json.refresh_token); } catch {}
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Single-flight refresh — concurrent callers share one in-flight promise. */
+export async function tryRefresh() {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = tryRefreshOnce().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+/** If access token expires soon, refresh before the request. */
+async function ensureFreshAccessToken() {
+  const access = tokenService.getToken();
+  if (!access) return;
+  const payload = decodeJwtPayload(access);
+  const exp = payload?.exp;
+  if (typeof exp !== 'number') return;
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (exp - nowSec <= PROACTIVE_REFRESH_WINDOW_SEC) {
+    await tryRefresh();
+  }
 }
 
 export async function apiRequest(
@@ -153,32 +223,15 @@ export async function apiRequest(
   throw lastError;
 }
 
-async function tryRefresh() {
-  const refreshToken = tokenService.getRefreshToken();
-  if (!refreshToken) return false;
-  const refreshUrl = joinUrl(BASE_URL, '/api/refresh');
-  try {
-    const res = await fetch(refreshUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ refresh_token: refreshToken }),
-    });
-    if (!res.ok) return false;
-    const json = await res.json().catch(() => ({}));
-    if (!json.token || !json.refresh_token) return false;
-    tokenService.setToken(json.token);
-    tokenService.setRefreshToken(json.refresh_token);
-    if (typeof onTokensRefreshed === 'function') {
-      try { onTokensRefreshed(json.token, json.refresh_token); } catch {}
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function performRequest(url, method, body, token, headers, timeoutMs, alreadyTriedRefresh = false, skipAuthHandler = false) {
+  if (!alreadyTriedRefresh) {
+    try {
+      await ensureFreshAccessToken();
+    } catch {
+      // ignore proactive refresh errors; request may still succeed or reactive path will run
+    }
+  }
+
   const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
 
   const finalHeaders = new Headers(headers);

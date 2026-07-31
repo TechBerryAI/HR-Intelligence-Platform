@@ -24,7 +24,7 @@ const BACKEND_PORT = 3000;
 const FRONTEND_PORT = 5173;
 const BROWSER_URL = `http://localhost:${FRONTEND_PORT}`;
 const DEFAULT_OLLAMA_HOST = 'http://127.0.0.1:11434';
-const DEFAULT_OLLAMA_MODEL = 'qwen2.5:7b-instruct';
+const DEFAULT_OLLAMA_MODEL = 'qwen2.5:14b-instruct';
 
 let backendProcess = null;
 let frontendProcess = null;

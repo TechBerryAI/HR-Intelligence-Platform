@@ -278,4 +278,10 @@ backend/uploads/
 # Runtime session data only (do not ignore app.domains.identity.sessions)
 /sessions/
 data/sessions/
+# Bulk parse staging + Excel exports (local runtime)
+# Worker writes under apps/data/ (Path parents[3] from bulk_parser.py), not apps/backend/data/
+apps/data/bulk_uploads/
+apps/data/bulk_exports/
+apps/backend/data/bulk_uploads/
+apps/backend/data/bulk_exports/
 *.session

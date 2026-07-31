@@ -189,7 +189,7 @@ def _page_needs_ocr(page, digital_text: str) -> bool:
     return False
 
 
-def extract_text_from_pdf_pymupdf(file_data: bytes) -> str:
+def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -> str:
     """
     Extract text from PDF via PyMuPDF, with per-page OCR when needed.
     """
@@ -197,6 +197,8 @@ def extract_text_from_pdf_pymupdf(file_data: bytes) -> str:
         import fitz  # PyMuPDF
     except ImportError as exc:
         raise ValueError('PyMuPDF (pymupdf) is not installed') from exc
+
+    render_dpi = max(72, int(dpi or OCR_DPI))
 
     doc = fitz.open(stream=file_data, filetype='pdf')
     try:
@@ -214,7 +216,7 @@ def extract_text_from_pdf_pymupdf(file_data: bytes) -> str:
             if _page_needs_ocr(page, digital):
                 if OCR_ENABLED:
                     try:
-                        png = _render_page_png(page)
+                        png = _render_page_png(page, dpi=render_dpi)
                         ocr_text = _ocr_image_bytes(png)
                         if ocr_text:
                             text_parts.append(ocr_text)
@@ -224,10 +226,11 @@ def extract_text_from_pdf_pymupdf(file_data: bytes) -> str:
                         logger.warning(
                             'OCR failed for PDF page %s: %s', page_num + 1, ocr_err
                         )
-                        if digital:
+                        # Do not treat thin digital junk as success when OCR was needed
+                        if digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
                             text_parts.append(digital)
                         continue
-                elif digital:
+                elif digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
                     text_parts.append(digital)
             elif digital:
                 text_parts.append(digital)
@@ -239,9 +242,10 @@ def extract_text_from_pdf_pymupdf(file_data: bytes) -> str:
             )
         if used_ocr:
             logger.info(
-                'Extracted %s characters from PDF (%s pages, OCR used)',
+                'Extracted %s characters from PDF (%s pages, OCR used, dpi=%s)',
                 len(extracted),
                 page_count,
+                render_dpi,
             )
         return extracted
     finally:
@@ -310,10 +314,10 @@ def extract_text_from_pdf_via_api(file_data: bytes, filename: str) -> str:
         raise ValueError(f'Failed to extract text via API: {e}') from e
 
 
-def extract_text_from_pdf(file_data: bytes) -> str:
+def extract_text_from_pdf(file_data: bytes, *, dpi: int | None = None) -> str:
     """Extract text from PDF: PyMuPDF (+OCR) → PyPDF2 → raise."""
     try:
-        return extract_text_from_pdf_pymupdf(file_data)
+        return extract_text_from_pdf_pymupdf(file_data, dpi=dpi)
     except ValueError as e:
         # If PyMuPDF missing, try PyPDF2; otherwise re-raise for OCR/API fallback chain.
         if 'pymupdf' in str(e).lower() or 'PyMuPDF' in str(e):
@@ -351,10 +355,11 @@ def extract_text_from_docx(file_data: bytes) -> str:
         raise ValueError(f'Failed to extract text from DOCX: {e}') from e
 
 
-def extract_text(file_data: bytes, filename: str) -> str:
+def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> str:
     """
     Extract text from file based on extension.
     Tries local extraction (with OCR) first, falls back to parsing API for PDFs.
+    Optional dpi overrides PDF OCR render resolution (e.g. bulk retry at 300).
     """
     ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
 
@@ -363,7 +368,7 @@ def extract_text(file_data: bytes, filename: str) -> str:
 
     if ext == 'pdf':
         try:
-            return extract_text_from_pdf(file_data)
+            return extract_text_from_pdf(file_data, dpi=dpi)
         except ValueError as e:
             error_msg = str(e)
             if 'Insufficient text' in error_msg or 'Failed to extract' in error_msg or 'OCR' in error_msg:

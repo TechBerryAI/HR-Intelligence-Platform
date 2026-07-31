@@ -3,6 +3,7 @@
  * Styled to match enterprise org panel (glass + blue accent).
  */
 import React, { useState, useRef, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import {
   FiFolder,
   FiHardDrive,
@@ -21,10 +22,23 @@ import {
   FiFolderPlus,
 } from 'react-icons/fi'
 import { Layers } from 'lucide-react'
-import { uploadBulkResumes, getBulkProgress, downloadBulkResult } from '@/features/admin/services/bulkParsingService.js'
+import {
+  uploadBulkResumes,
+  getBulkProgress,
+  downloadBulkResult,
+  saveBulkJobSession,
+  loadBulkJobSession,
+  clearBulkJobSession,
+  refreshForBulkPoll,
+  BULK_POLL_INTERVAL_MS,
+} from '@/features/admin/services/bulkParsingService.js'
 
-const POLL_INTERVAL_MS = 500
-const ALLOWED_EXT = ['pdf', 'doc', 'docx']
+const RESUME_EXT = ['pdf', 'doc', 'docx']
+
+function isAuthPollError(err) {
+  const status = err?.status
+  return status === 401 || status === 403
+}
 
 export default function BulkResumeParser({ embedded = false }) {
   const [inputFolderPath, setInputFolderPath] = useState('')
@@ -39,10 +53,15 @@ export default function BulkResumeParser({ embedded = false }) {
   const [progress, setProgress] = useState(null)
   const [error, setError] = useState(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState('')
   const [downloading, setDownloading] = useState(false)
   const [instructionsOpen, setInstructionsOpen] = useState(false)
+  const [sessionExpired, setSessionExpired] = useState(false)
+  const [listFilter, setListFilter] = useState('all') // all | processed | failed | queued
 
   const folderInputRef = useRef(null)
+  const zipInputRef = useRef(null)
+  const restoredRef = useRef(false)
 
   const b64ToFile = (name, b64) => {
     const bin = atob(b64)
@@ -51,16 +70,24 @@ export default function BulkResumeParser({ embedded = false }) {
     return new File([arr], name)
   }
 
-  const addFiles = (list) => {
+  const addFiles = (list, { allowZip = false } = {}) => {
     const valid = Array.from(list).filter((f) => {
       const ext = (f.name.split('.').pop() || '').toLowerCase()
-      return ALLOWED_EXT.includes(ext)
+      if (allowZip) return ext === 'zip'
+      return RESUME_EXT.includes(ext)
     })
-    if (valid.length) {
-      setFiles((prev) => [...prev, ...valid])
+    // Keep subfolder path in the filename so nested duplicates stay distinct when uploaded
+    const named = valid.map((f) => {
+      const rel = (f.webkitRelativePath || '').replace(/\\/g, '/')
+      if (!rel || !rel.includes('/')) return f
+      const flat = rel.split('/').filter(Boolean).join('__')
+      return flat && flat !== f.name ? new File([f], flat, { type: f.type || 'application/octet-stream' }) : f
+    })
+    if (named.length) {
+      setFiles((prev) => [...prev, ...named])
       const first = valid[0]
       const folderName = first.webkitRelativePath ? first.webkitRelativePath.split('/')[0] : ''
-      setInputFolderPath(folderName || 'Selected folder')
+      setInputFolderPath(folderName || (allowZip ? first.name : 'Selected folder'))
       setInputFolderFound(true)
     }
     setError(null)
@@ -163,47 +190,134 @@ export default function BulkResumeParser({ embedded = false }) {
 
   const startUpload = async () => {
     if (!files.length) {
-      setError('Select at least one file (PDF, DOC, DOCX).')
+      setError('Select at least one file (PDF, DOC, DOCX) or a ZIP archive.')
       return
     }
     setError(null)
+    setSessionExpired(false)
     setUploading(true)
+    setUploadStatus('Preparing upload…')
+    setJobId(null)
+    setProgress(null)
+    clearBulkJobSession()
     try {
-      const res = await uploadBulkResumes(files, append)
+      const res = await uploadBulkResumes(files, append, {
+        onProgress: (msg) => setUploadStatus(msg),
+      })
       setJobId(res.job_id)
+      saveBulkJobSession(res.job_id)
+      setUploadStatus('')
       setProgress({
         status: res.status || 'started',
-        total_files: res.total_files || files.length,
+        total_files: res.total_files || files.filter((f) => !/\.zip$/i.test(f.name)).length,
         processed_files: 0,
         failed_files: 0,
         message: res.message || 'Processing started',
+        failed_details: [],
       })
     } catch (e) {
       const status = e?.status
       const code = e?.data?.code
       const msg = e?.data?.error || e?.message
-      if (status === 502 || status === 503 || code === 'BULK_PARSER_UNREACHABLE' || code === 'BULK_PARSER_NOT_CONFIGURED') {
+      setJobId(null)
+      setProgress(null)
+      clearBulkJobSession()
+      if (status === 413) {
+        setError(
+          'Upload was rejected as too large (413). Files are uploaded in batches automatically — try again, or upload a ZIP of resumes instead.'
+        )
+      } else if (status === 502 || status === 503 || code === 'BULK_PARSER_UNREACHABLE' || code === 'BULK_PARSER_NOT_CONFIGURED') {
         setError(msg || 'Bulk parsing service unavailable. Ensure the parsing service is running (see README).')
+      } else if (/timeout|abort|network/i.test(String(msg || ''))) {
+        setError(msg || 'Upload timed out or lost connection. Try a ZIP upload or fewer files per batch.')
       } else {
         setError(msg || 'Upload failed')
       }
     } finally {
       setUploading(false)
+      setUploadStatus('')
     }
   }
 
+  // Restore job after re-login / remount
+  useEffect(() => {
+    if (restoredRef.current) return
+    restoredRef.current = true
+    const saved = loadBulkJobSession()
+    if (!saved?.jobId) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const data = await getBulkProgress(saved.jobId)
+        if (cancelled) return
+        const st = data?.status
+        if (st === 'started' || st === 'pending' || st === 'completed' || st === 'failed') {
+          setJobId(saved.jobId)
+          setProgress(data)
+          setSessionExpired(false)
+        } else {
+          clearBulkJobSession()
+        }
+      } catch (err) {
+        if (cancelled) return
+        if (isAuthPollError(err)) {
+          setJobId(saved.jobId)
+          setSessionExpired(true)
+        } else {
+          // Job may still exist after cold start — keep id and let poll retry
+          setJobId(saved.jobId)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Chained 2s polling — await previous poll; never logout from poll failures
   useEffect(() => {
     if (!jobId) return
-    const id = setInterval(async () => {
+    let cancelled = false
+    let timer = null
+
+    const schedule = (ms) => {
+      if (cancelled) return
+      timer = setTimeout(runPoll, ms)
+    }
+
+    const runPoll = async () => {
       try {
         const data = await getBulkProgress(jobId)
+        if (cancelled) return
         setProgress(data)
-        if (data.status === 'completed' || data.status === 'failed') clearInterval(id)
-      } catch {
-        // ignore poll errors
+        setSessionExpired(false)
+        if (data.status === 'completed' || data.status === 'failed') {
+          return
+        }
+        schedule(BULK_POLL_INTERVAL_MS)
+      } catch (err) {
+        if (cancelled) return
+        if (isAuthPollError(err)) {
+          const refreshed = await refreshForBulkPoll()
+          if (cancelled) return
+          if (refreshed) {
+            schedule(BULK_POLL_INTERVAL_MS)
+            return
+          }
+          setSessionExpired(true)
+          // Keep jobId / sessionStorage; retry slowly until user re-logs in
+          schedule(BULK_POLL_INTERVAL_MS * 5)
+          return
+        }
+        schedule(BULK_POLL_INTERVAL_MS)
       }
-    }, POLL_INTERVAL_MS)
-    return () => clearInterval(id)
+    }
+
+    runPoll()
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
   }, [jobId])
 
   const handleDownload = async () => {
@@ -220,48 +334,82 @@ export default function BulkResumeParser({ embedded = false }) {
   }
 
   const reset = () => {
+    clearBulkJobSession()
     setJobId(null)
     setProgress(null)
     setFiles([])
     setError(null)
+    setUploadStatus('')
+    setSessionExpired(false)
+    setListFilter('all')
     setInputFolderPath('')
     setInputFolderFound(false)
   }
 
-  const total = progress?.total_files ?? files.length
+  const resumeFiles = files.filter((f) => /\.(pdf|docx?)$/i.test(f.name))
+  const zipSelected = files.some((f) => /\.zip$/i.test(f.name))
+  // Only treat files as "in queue" when a real job is running — avoids fake stuck UI after failed upload
+  const total = progress?.total_files ?? (jobId ? resumeFiles.length : 0)
   const processed = progress?.processed_files ?? 0
   const failed = progress?.failed_files ?? 0
-  const failedFilenames = progress?.failed_filenames ?? progress?.failedFilenames ?? []
+  const failedDetails = progress?.failed_details ?? progress?.failedDetails ?? []
+  const failedFilenames =
+    failedDetails.length > 0
+      ? failedDetails.map((d) => d.filename || d.name).filter(Boolean)
+      : progress?.failed_filenames ?? progress?.failedFilenames ?? []
   const successFilenames = progress?.success_filenames ?? progress?.successFilenames ?? []
-  const hasDetailedLists = successFilenames.length > 0 || failedFilenames.length > 0
-  const failedCount = failedFilenames.length || failed
-  const processingCount = Math.max(0, total - processed)
+  const hasDetailedLists = successFilenames.length > 0 || failedFilenames.length > 0 || failedDetails.length > 0
+  const failedCount = failedDetails.length || failedFilenames.length || failed
+  const processingCount = jobId ? Math.max(0, total - processed) : 0
   const progressPct = total ? Math.round((processed / total) * 100) : 0
   const currentFile =
     progress?.message?.replace(/^Processing:\s*/i, '').trim() ||
-    (files[processed]?.name ?? (files.length ? files[0]?.name : ''))
-  const inProgressFilenames = hasDetailedLists
-    ? files.map((f) => f.name).filter((name) => !successFilenames.includes(name) && !failedFilenames.includes(name))
-    : files.slice(processed).map((f) => f.name)
-  const processedDisplayNames = hasDetailedLists ? successFilenames : files.slice(0, processed).map((f) => f.name)
+    (jobId ? resumeFiles[processed]?.name ?? '' : '')
+  const inProgressFilenames = !jobId
+    ? []
+    : progress?.status === 'completed' || progress?.status === 'failed'
+      ? []
+      : hasDetailedLists
+        ? resumeFiles.map((f) => f.name).filter((name) => !successFilenames.includes(name) && !failedFilenames.includes(name))
+        : resumeFiles.slice(processed).map((f) => f.name)
+  const processedDisplayNames = hasDetailedLists
+    ? successFilenames
+    : jobId
+      ? resumeFiles.slice(0, processed).map((f) => f.name)
+      : []
+
+  const failedEntries =
+    failedDetails.length > 0
+      ? failedDetails.map((d) => ({
+          name: d.filename || d.name || 'Unknown',
+          error: d.error || d.message || '',
+          code: d.code || '',
+        }))
+      : failedFilenames.map((name) => ({ name, error: '', code: '' }))
+
+  const showProcessedList = listFilter === 'all' || listFilter === 'processed'
+  const showQueuedList = listFilter === 'all' || listFilter === 'queued'
+  const showFailedList = listFilter === 'all' || listFilter === 'failed'
 
   const statusLabel =
     progress?.status === 'completed'
       ? 'Completed'
       : progress?.status === 'failed'
         ? 'Failed'
-        : jobId
-          ? 'Processing'
-          : files.length
-            ? 'Ready'
-            : 'Idle'
+        : uploading
+          ? 'Uploading'
+          : jobId
+            ? 'Processing'
+            : files.length
+              ? 'Ready'
+              : 'Idle'
 
   const statusDot =
     progress?.status === 'completed'
       ? 'bg-[var(--ei-accent-green)]'
       : progress?.status === 'failed'
         ? 'bg-[var(--ei-accent-red)]'
-        : jobId
+        : uploading || jobId
           ? 'bg-[var(--ei-accent-blue)] animate-pulse'
           : files.length
             ? 'bg-[var(--ei-accent-teal)]'
@@ -278,7 +426,7 @@ export default function BulkResumeParser({ embedded = false }) {
   ]
 
   const hasFiles = files.length > 0
-  const showStatusLists = hasFiles || jobId
+  const showStatusLists = (hasFiles && jobId) || jobId || uploading
 
   return (
     <div
@@ -327,6 +475,24 @@ export default function BulkResumeParser({ embedded = false }) {
             })}
           </div>
 
+          {sessionExpired && (
+            <div className="org-error-banner flex items-start gap-2 border-[rgba(255,180,80,0.35)] bg-[rgba(255,180,80,0.1)]">
+              <FiAlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-400" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-[var(--ei-text-primary)]">Session expired</p>
+                <p className="text-xs text-[var(--ei-text-muted)] mt-0.5">
+                  Your login expired while parsing. The job is still running — sign in again to keep watching progress. Job ID is kept until you start a new job.
+                </p>
+                <Link
+                  to="/login/admin"
+                  className="inline-flex items-center gap-1.5 mt-2 text-xs font-semibold text-[var(--ei-accent-blue)] hover:underline"
+                >
+                  Go to login
+                </Link>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="org-error-banner flex items-start gap-2">
               <FiAlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -369,8 +535,8 @@ export default function BulkResumeParser({ embedded = false }) {
               {/* Step 1 — drop zone */}
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2.5">
-                  <label className="text-sm font-medium text-[var(--ei-text-label)]">1. Input folder</label>
-                  <span className="text-[11px] text-[var(--ei-text-muted)]">PDF · DOC · DOCX</span>
+                  <label className="text-sm font-medium text-[var(--ei-text-label)]">1. Input folder or ZIP</label>
+                  <span className="text-[11px] text-[var(--ei-text-muted)]">PDF · DOC · DOCX · ZIP</span>
                 </div>
 
                 <button
@@ -389,7 +555,17 @@ export default function BulkResumeParser({ embedded = false }) {
                     webkitdirectory=""
                     directory=""
                     onChange={(e) => {
-                      addFiles(e.target.files || [])
+                      addFiles(e.target.files || [], { allowZip: false })
+                      e.target.value = ''
+                    }}
+                    className="hidden"
+                  />
+                  <input
+                    ref={zipInputRef}
+                    type="file"
+                    accept=".zip,application/zip"
+                    onChange={(e) => {
+                      addFiles(e.target.files || [], { allowZip: true })
                       e.target.value = ''
                     }}
                     className="hidden"
@@ -407,13 +583,15 @@ export default function BulkResumeParser({ embedded = false }) {
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-[var(--ei-text-primary)]">
                         {hasFiles
-                          ? `${files.length} resume${files.length !== 1 ? 's' : ''} ready`
+                          ? zipSelected
+                            ? `${files.filter((f) => /\.zip$/i.test(f.name)).length} ZIP ready`
+                            : `${resumeFiles.length} resume${resumeFiles.length !== 1 ? 's' : ''} ready`
                           : 'Click to browse a folder'}
                       </p>
                       <p className="text-xs text-[var(--ei-text-muted)] mt-1 truncate">
                         {hasFiles
-                          ? inputFolderPath || 'Selected folder'
-                          : 'Or paste a folder path below — resumes load when you browse'}
+                          ? inputFolderPath || 'Selected files'
+                          : 'Or upload a ZIP of resumes — large folders upload in batches'}
                       </p>
                     </div>
                     <span className="org-btn-ghost pointer-events-none shrink-0">
@@ -423,7 +601,7 @@ export default function BulkResumeParser({ embedded = false }) {
                   </div>
                 </button>
 
-                <div className="mt-2.5 flex gap-2">
+                <div className="mt-2.5 flex gap-2 flex-wrap">
                   <div className="relative flex-1 min-w-0">
                     <FiFolder className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ei-text-muted)] pointer-events-none" />
                     <input
@@ -437,6 +615,14 @@ export default function BulkResumeParser({ embedded = false }) {
                       className={`${pathInputClass} pl-9`}
                     />
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => zipInputRef.current?.click()}
+                    className="org-btn-ghost shrink-0"
+                  >
+                    <FiUpload className="w-4 h-4" />
+                    Upload ZIP
+                  </button>
                 </div>
               </div>
 
@@ -515,7 +701,7 @@ export default function BulkResumeParser({ embedded = false }) {
                     className="org-btn-primary min-w-[180px] disabled:opacity-45 disabled:cursor-not-allowed disabled:transform-none"
                   >
                     {uploading ? <FiLoader className="w-4 h-4 animate-spin" /> : <FiUpload className="w-4 h-4" />}
-                    {uploading ? 'Uploading…' : 'Upload and parse'}
+                    {uploading ? (uploadStatus || 'Uploading…') : 'Upload and parse'}
                   </button>
                 </div>
               )}
@@ -527,9 +713,10 @@ export default function BulkResumeParser({ embedded = false }) {
                     <div>
                       <p className="text-sm font-semibold text-[var(--ei-text-primary)]">Parsing in progress</p>
                       <p className="text-xs text-[var(--ei-text-muted)] mt-0.5">
-                        {processed}/{total} done
-                        {failed > 0 ? ` · ${failed} failed` : ''}
+                        Processed {processed} / {total}
+                        {failed > 0 ? ` · Failed ${failed}` : ''}
                         {processingCount > 0 ? ` · ${processingCount} queued` : ''}
+                        {currentFile && processingCount > 0 ? ` · ${currentFile}` : ''}
                       </p>
                     </div>
                     <span className="text-2xl font-bold tabular-nums text-[var(--ei-accent-blue)]">{progressPct}%</span>
@@ -584,11 +771,35 @@ export default function BulkResumeParser({ embedded = false }) {
           {/* File lists — only when relevant */}
           {showStatusLists ? (
             <section className="org-glass-card p-4 sm:p-5 hover:transform-none">
-              <div className="flex items-center gap-2 mb-3.5">
-                <FiFileText className="w-4 h-4 text-[var(--ei-text-muted)]" />
-                <h2 className="text-sm font-semibold text-[var(--ei-text-primary)]">File activity</h2>
+              <div className="flex items-center justify-between gap-3 mb-3.5 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <FiFileText className="w-4 h-4 text-[var(--ei-text-muted)]" />
+                  <h2 className="text-sm font-semibold text-[var(--ei-text-primary)]">File activity</h2>
+                </div>
+                <div className="inline-flex p-0.5 rounded-lg bg-white/[0.04] border border-[var(--ei-border-primary)] flex-wrap">
+                  {[
+                    { id: 'all', label: 'All' },
+                    { id: 'processed', label: 'Processed' },
+                    { id: 'failed', label: 'Failed' },
+                    { id: 'queued', label: 'Queued' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setListFilter(opt.id)}
+                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                        listFilter === opt.id
+                          ? 'bg-[rgba(0,166,255,0.18)] text-[var(--ei-accent-blue)] border border-[rgba(0,166,255,0.3)]'
+                          : 'text-[var(--ei-text-muted)] hover:text-[var(--ei-text-secondary)] border border-transparent'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {showProcessedList && (
                 <div className="rounded-xl border border-[var(--ei-border-primary)] overflow-hidden bg-white/[0.02]">
                   <div className="px-3.5 py-2 border-b border-[var(--ei-border-primary)] flex items-center justify-between">
                     <span className="text-xs font-medium text-[var(--ei-text-secondary)]">Processed</span>
@@ -607,58 +818,78 @@ export default function BulkResumeParser({ embedded = false }) {
                             className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-[var(--ei-text-secondary)] hover:bg-white/[0.03]"
                           >
                             <FiCheck className="w-3.5 h-3.5 flex-shrink-0 text-[var(--ei-accent-green)]" />
-                            <span className="truncate">{name}</span>
+                            <span className="truncate" title={name}>{name}</span>
                           </li>
                         ))}
                       </ul>
                     )}
                   </div>
                 </div>
+                )}
 
-                <div className="rounded-xl border border-[var(--ei-border-primary)] overflow-hidden bg-white/[0.02]">
+                {(showQueuedList || showFailedList) && (
+                <div className="rounded-xl border border-[var(--ei-border-primary)] overflow-hidden bg-white/[0.02] md:col-span-1">
                   <div className="px-3.5 py-2 border-b border-[var(--ei-border-primary)] flex items-center justify-between gap-2">
-                    <span className="text-xs font-medium text-[var(--ei-text-secondary)]">Queue &amp; failed</span>
+                    <span className="text-xs font-medium text-[var(--ei-text-secondary)]">
+                      {listFilter === 'failed' ? 'Failed' : listFilter === 'queued' ? 'Queued' : 'Queue & failed'}
+                    </span>
                     <div className="flex items-center gap-1">
-                      <span className="text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded bg-[rgba(0,166,255,0.12)] text-[var(--ei-accent-blue)]">
-                        {inProgressFilenames.length}
-                      </span>
-                      <span className="text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded bg-[rgba(255,102,133,0.12)] text-[var(--ei-accent-red)]">
-                        {failedCount}
-                      </span>
+                      {showQueuedList && (
+                        <span className="text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded bg-[rgba(0,166,255,0.12)] text-[var(--ei-accent-blue)]">
+                          {inProgressFilenames.length}
+                        </span>
+                      )}
+                      {showFailedList && (
+                        <span className="text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded bg-[rgba(255,102,133,0.12)] text-[var(--ei-accent-red)]">
+                          {failedCount}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="min-h-[140px] max-h-[240px] overflow-auto p-2">
                     <ul className="space-y-0.5">
-                      {inProgressFilenames.map((name, i) => (
-                        <li
-                          key={`p-${i}`}
-                          className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-[var(--ei-text-secondary)] hover:bg-white/[0.03]"
-                        >
-                          <span className="w-1.5 h-1.5 rounded-full bg-[var(--ei-accent-blue)] flex-shrink-0" />
-                          <span className="truncate">{name}</span>
-                        </li>
-                      ))}
-                      {failedFilenames.map((name, i) => (
-                        <li
-                          key={`f-${i}`}
-                          className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-[var(--ei-accent-red)] hover:bg-white/[0.03]"
-                        >
-                          <FiX className="w-3.5 h-3.5 flex-shrink-0" />
-                          <span className="truncate">{name}</span>
-                        </li>
-                      ))}
-                      {failedCount > 0 && failedFilenames.length === 0 && (
+                      {showQueuedList &&
+                        inProgressFilenames.map((name, i) => (
+                          <li
+                            key={`p-${i}`}
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-[var(--ei-text-secondary)] hover:bg-white/[0.03]"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--ei-accent-blue)] flex-shrink-0" />
+                            <span className="truncate" title={name}>{name}</span>
+                          </li>
+                        ))}
+                      {showFailedList &&
+                        failedEntries.map((entry, i) => (
+                          <li
+                            key={`f-${i}`}
+                            className="flex items-start gap-2 px-2 py-1.5 rounded-lg text-xs text-[var(--ei-accent-red)] hover:bg-white/[0.03]"
+                            title={entry.error || entry.name}
+                          >
+                            <FiX className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                            <span className="min-w-0 flex-1">
+                              <span className="truncate block">{entry.name}</span>
+                              {entry.error ? (
+                                <span className="block text-[10px] text-[var(--ei-text-muted)] truncate mt-0.5">
+                                  {entry.error.length > 120 ? `${entry.error.slice(0, 120)}…` : entry.error}
+                                </span>
+                              ) : null}
+                            </span>
+                          </li>
+                        ))}
+                      {showFailedList && failedCount > 0 && failedEntries.length === 0 && (
                         <li className="flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs text-[var(--ei-accent-red)]">
                           <FiX className="w-3.5 h-3.5 flex-shrink-0" />
                           <span>{failedCount} file(s) failed</span>
                         </li>
                       )}
-                      {inProgressFilenames.length === 0 && failedCount === 0 && (
-                        <p className="text-xs text-[var(--ei-text-muted)] text-center py-8">Queue is clear</p>
-                      )}
+                      {(!showQueuedList || inProgressFilenames.length === 0) &&
+                        (!showFailedList || failedCount === 0) && (
+                          <p className="text-xs text-[var(--ei-text-muted)] text-center py-8">Queue is clear</p>
+                        )}
                     </ul>
                   </div>
                 </div>
+                )}
               </div>
             </section>
           ) : (
