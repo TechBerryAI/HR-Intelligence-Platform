@@ -9,26 +9,6 @@ import { motion } from 'framer-motion'
 import { FiAlertCircle, FiRefreshCw, FiCheck, FiBriefcase } from 'react-icons/fi'
 import { isStaffRecruiter } from '@/core/permissions/rbac.js'
 
-const APPLIED_SESSION_KEY = 'publicAppliedJobIds'
-
-function readAppliedIds() {
-  try {
-    const raw = sessionStorage.getItem(APPLIED_SESSION_KEY)
-    const arr = raw ? JSON.parse(raw) : []
-    return new Set(Array.isArray(arr) ? arr : [])
-  } catch {
-    return new Set()
-  }
-}
-
-function writeAppliedIds(set) {
-  try {
-    sessionStorage.setItem(APPLIED_SESSION_KEY, JSON.stringify([...set]))
-  } catch {
-    // ignore
-  }
-}
-
 export default function Jobs() {
   const { jobs, jobsError, jobsLoading, fetchJobs, auth } = useApp()
   const location = useLocation()
@@ -40,7 +20,6 @@ export default function Jobs() {
   }
   const [applyError, setApplyError] = useState('')
   const [applySuccess, setApplySuccess] = useState('')
-  const [appliedIds, setAppliedIds] = useState(() => readAppliedIds())
   const [applyJob, setApplyJob] = useState(null)
 
   const filtered = useMemo(() => {
@@ -71,15 +50,6 @@ export default function Jobs() {
     }, 5000)
     return () => clearTimeout(id)
   }, [jobsError, fetchJobs])
-
-  const markApplied = (jobId) => {
-    setAppliedIds((prev) => {
-      const next = new Set(prev)
-      next.add(String(jobId))
-      writeAppliedIds(next)
-      return next
-    })
-  }
 
   return (
     <div className="min-h-screen bg-[#f7f8fa]">
@@ -194,7 +164,6 @@ export default function Jobs() {
                 <JobCard
                   key={job.id}
                   job={job}
-                  isApplied={appliedIds.has(String(job.id))}
                   isAdmin={isStaffRecruiter(auth)}
                   onApply={() => {
                     setApplyError('')
@@ -214,7 +183,6 @@ export default function Jobs() {
         job={applyJob}
         onClose={() => setApplyJob(null)}
         onSuccess={(data) => {
-          if (applyJob?.id) markApplied(applyJob.id)
           setApplySuccess(
             data?.message ||
               (data?.matchScore != null

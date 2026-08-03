@@ -979,7 +979,7 @@ def public_apply_to_job(job_id: str):
             (candidate_id, job_id),
         )
         if existing:
-            return jsonify({'error': 'Already applied to this job'}), 400
+            return jsonify({'error': 'Applicant already applied'}), 400
 
         data = {**data, 'email': email, 'fullName': full_name, 'completed': True}
         save_candidate_profile(candidate_id, data, resume_binary, completed=True)

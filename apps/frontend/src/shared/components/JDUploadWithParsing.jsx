@@ -116,13 +116,15 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
         throw new Error(result.error || 'Parsing failed');
       }
     } catch (error) {
-      // Provide better error messages based on error type
       if (error.message.includes('Invalid or expired token') || error.message.includes('Access token required')) {
-        setParseError('🔒 Your session has expired. Please log in again to use AI-powered job description parsing.');
-      } else if (error.message.includes('Failed to parse job description')) {
-        setParseError('❌ Unable to parse job description. The file may be corrupted or in an unsupported format. Please try another file or fill the form manually.');
+        setParseError('Your session has expired. Please log in again to use AI-powered job description parsing.');
       } else {
-        setParseError(`❌ Parsing error: ${error.message}`);
+        const detail = (error.message || '').trim();
+        setParseError(
+          detail && !/^failed to parse job description\.?$/i.test(detail)
+            ? detail
+            : 'Unable to parse this job description. Please try another file or fill the form manually.'
+        );
       }
       console.error('JD parsing error:', error);
     } finally {
