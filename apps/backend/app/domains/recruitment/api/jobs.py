@@ -1,6 +1,7 @@
 import json
 import re
 from datetime import datetime
+from typing import Optional
 from flask import Blueprint, request, jsonify
 from app.database.connection.db import db_all, db_get, db_run, BACKEND, TRUE_SQL, FALSE_SQL
 from app.api.middleware.auth import authenticate_token, require_recruiter, optional_authenticate_token
@@ -44,6 +45,50 @@ def _get_job_for_user(job_id, user, require_write=False):
         if not can_access_job(user, posted_by):
             return None
     return job
+
+
+def _normalize_keywords(value) -> Optional[str]:
+    """Normalize keywords to a comma-separated string (or None if empty)."""
+    if value is None:
+        return None
+    if isinstance(value, list):
+        parts = [str(v).strip() for v in value if v is not None and str(v).strip()]
+    else:
+        raw = str(value).strip()
+        if not raw:
+            return None
+        if '|' in raw:
+            parts = [p.strip() for p in raw.split('|') if p.strip()]
+        else:
+            parts = [p.strip() for p in raw.split(',') if p.strip()]
+    if not parts:
+        return None
+    # Dedupe case-insensitively, preserve first-seen casing
+    seen = set()
+    out = []
+    for p in parts:
+        key = p.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(p)
+    return ', '.join(out)
+
+
+def _serialize_job(job: dict, company_fallback: str = None) -> dict:
+    return {
+        'id': job['jdid'],
+        'title': job['title'],
+        'company': job.get('company') or company_fallback or job.get('company_name'),
+        'location': job['location'],
+        'salary': job['salary'],
+        'experience': job.get('experience'),
+        'description': job['description'],
+        'keywords': job.get('keywords') or '',
+        'enabled': bool(job['enabled']),
+        'postedOn': job['posted_on'],
+        'parsedJdId': job.get('parsed_jd_id'),
+    }
 
 
 def _send_notification(hr_action, candidate_name, candidate_email, job_title, company_name, application_id, timestamp):
@@ -200,17 +245,7 @@ def get_jobs_public():
                 '''
             )
         formatted = [
-            {
-                'id': j['jdid'],
-                'title': j['title'],
-                'company': j.get('company') or j.get('company_name'),
-                'location': j['location'],
-                'salary': j['salary'],
-                'experience': j.get('experience'),
-                'description': j['description'],
-                'enabled': bool(j['enabled']),
-                'postedOn': j['posted_on'],
-            }
+            _serialize_job(j)
             for j in jobs
         ]
         return jsonify(formatted)
@@ -245,17 +280,7 @@ def get_jobs_all():
                 ''', (get_user_id(user),)
             )
         formatted = [
-            {
-                'id': j['jdid'],
-                'title': j['title'],
-                'company': j.get('company') or j.get('company_name'),
-                'location': j['location'],
-                'salary': j['salary'],
-                'experience': j.get('experience'),
-                'description': j['description'],
-                'enabled': bool(j['enabled']),
-                'postedOn': j['posted_on'],
-            }
+            _serialize_job(j)
             for j in jobs
         ]
         return jsonify(formatted)
@@ -286,17 +311,7 @@ def get_job(job_id: str):
             # Candidate/public: only enabled jobs
             if not job.get('enabled'):
                 return jsonify({'error': 'Job not found'}), 404
-        return jsonify({
-            'id': job['jdid'],
-            'title': job['title'],
-            'company': job.get('company') or job.get('company_name'),
-            'location': job['location'],
-            'salary': job['salary'],
-            'experience': job.get('experience'),
-            'description': job['description'],
-            'enabled': bool(job['enabled']),
-            'postedOn': job['posted_on'],
-        })
+        return jsonify(_serialize_job(job))
     except Exception:
         return jsonify({'error': 'Internal server error'}), 500
 
@@ -664,6 +679,7 @@ def create_job():
                     experience = f"Up to {experience_to} years"
         
         description = (data.get('description') or '').strip()
+        keywords = _normalize_keywords(data.get('keywords'))
         parsed_jd_id = (data.get('parsedJdId') or data.get('parsed_jd_id') or '').strip() or None
 
         def _as_skill_list(val):
@@ -711,10 +727,10 @@ def create_job():
         _enabled_val = True if BACKEND == 'postgresql' else 1
         result = db_run(
             '''
-            INSERT INTO jobs (jdid, title, company, location, salary, experience, description, posted_by, enabled, parsed_jd_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (jdid, title, company, location, salary, experience, description, keywords, posted_by, enabled, parsed_jd_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
-            (jdid, title, company, location, salary, experience, description, hr_id, _enabled_val, parsed_jd_id)
+            (jdid, title, company, location, salary, experience, description, keywords, hr_id, _enabled_val, parsed_jd_id)
         )
         print(f"INSERT result: {result}")
         
@@ -757,18 +773,7 @@ def create_job():
         print("Job created successfully!")
         print("=" * 50)
         
-        return jsonify({
-            'id': job['jdid'],
-            'title': job['title'],
-            'company': job['company'],
-            'location': job['location'],
-            'salary': job['salary'],
-            'experience': job.get('experience'),
-            'description': job['description'],
-            'enabled': bool(job['enabled']),
-            'postedOn': job['posted_on'],
-            'parsedJdId': job.get('parsed_jd_id'),
-        }), 201
+        return jsonify(_serialize_job(job)), 201
     except Exception as e:
         import traceback
         error_msg = str(e)
@@ -824,6 +829,11 @@ def update_job(job_id: str):
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
 
+        if 'keywords' in data:
+            keywords = _normalize_keywords(data.get('keywords'))
+        else:
+            keywords = job.get('keywords')
+
         # Determine if jdid needs to be regenerated
         # Regenerate if title, experience, or salary changed
         old_title = (job.get('title') or '').strip()
@@ -866,23 +876,14 @@ def update_job(job_id: str):
               location = COALESCE(?, location),
               salary = ?,
               experience = ?,
-              description = COALESCE(?, description)
+              description = COALESCE(?, description),
+              keywords = ?
             WHERE jdid = ?
             ''',
-            (new_jdid, title, location, salary, experience, description, job_id)
+            (new_jdid, title, location, salary, experience, description, keywords, job_id)
         )
         updated = db_get('SELECT * FROM jobs WHERE jdid = ?', (new_jdid,))
-        return jsonify({
-            'id': updated['jdid'],
-            'title': updated['title'],
-            'company': updated['company'],
-            'location': updated['location'],
-            'salary': updated['salary'],
-            'experience': updated.get('experience'),
-            'description': updated['description'],
-            'enabled': bool(updated['enabled']),
-            'postedOn': updated['posted_on'],
-        })
+        return jsonify(_serialize_job(updated))
     except Exception:
         return jsonify({'error': 'Internal server error'}), 500
 

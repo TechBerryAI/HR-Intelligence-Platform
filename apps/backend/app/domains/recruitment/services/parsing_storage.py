@@ -380,3 +380,33 @@ def get_cached_parsing_result_by_hash(
 
     return None
 
+
+def update_parsed_jd_toon(
+    parsed_id: str,
+    toon: Dict[str, Any],
+    confidence: float,
+    model_version: Optional[str] = None,
+) -> None:
+    """Refresh a stored JD parse after repair/enrichment improvements."""
+    from app.database.connection.db import db_run
+
+    toon_text = toon_dumps(toon)
+    if model_version:
+        db_run(
+            """
+            UPDATE parsed_jds
+            SET toon = ?, confidence = ?, model_version = ?
+            WHERE id = ?
+            """,
+            (toon_text, confidence, model_version, parsed_id),
+        )
+    else:
+        db_run(
+            """
+            UPDATE parsed_jds
+            SET toon = ?, confidence = ?
+            WHERE id = ?
+            """,
+            (toon_text, confidence, parsed_id),
+        )
+

@@ -43,24 +43,31 @@ def _bullets(text: str) -> list[str]:
 
 
 def parse_title(section_text: str, full_text: str) -> str:
-    # Labeled first line: "Job Title: Backend Developer"
+    from app.ai.parser.enrichment.jd_text_inference import is_plausible_job_title
+
+    # Labeled first line — never bare "role:" (matches "About the role:")
     m = re.search(
-        r'(?im)^(?:job\s+title|title|position|role)\s*[:\-]\s*(.+)$',
+        r'(?im)^(?:job\s+title|title|position)\s*[:\-]\s*(.+)$',
         full_text[:800],
     )
     if m:
-        return m.group(1).strip()[:120]
-    for line in (section_text or full_text).splitlines()[:8]:
+        cand = m.group(1).strip()[:120]
+        if is_plausible_job_title(cand):
+            return cand
+    for line in (section_text or full_text).splitlines()[:10]:
         s = line.strip()
         if not s:
             continue
         low = s.lower()
-        if low.startswith(('job description', 'about', 'company', 'location', 'salary', 'employment')):
+        if low.startswith((
+            'job description', 'about', 'company', 'location', 'salary', 'employment',
+            'experience', 'responsibilit', 'requirement', 'skill', 'qualification',
+            'benefit', 'what you',
+        )):
             continue
-        # Strip leading label if present
         s2 = re.sub(r'(?i)^(?:job\s+title|title|position)\s*[:\-]\s*', '', s).strip()
-        if s2 and len(s2) <= 120:
-            return s2
+        if is_plausible_job_title(s2):
+            return s2[:120]
     return extract_title_from_text(full_text)
 
 

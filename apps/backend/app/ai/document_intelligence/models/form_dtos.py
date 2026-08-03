@@ -89,6 +89,7 @@ class JobCreateFormDTO(BaseModel):
     experienceFrom: str = ''
     experienceTo: str = ''
     description: str = ''
+    keywords: str = ''
     salary: str = ''
     company: str = ''
     mandatorySkills: list[str] = Field(default_factory=list)
