@@ -101,11 +101,11 @@ export default function MonthYearPicker({
     <div ref={containerRef} className={`relative ${className}`}>
       <button
         type="button"
-        className="w-full text-left bg-transparent border-0 border-b border-zinc-700 py-2.5 text-gray-100 focus:border-white flex items-center justify-between"
+        className="premium-input w-full text-left flex items-center justify-between gap-2 cursor-pointer"
         onClick={() => setOpen((o) => !o)}
       >
-        <span className={display ? '' : 'text-zinc-500'}>{display || placeholder}</span>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-zinc-400">
+        <span className={display ? 'text-slate-900' : 'text-slate-500'}>{display || placeholder}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5 text-slate-500 shrink-0">
           <path d="M6.75 3A.75.75 0 0 1 7.5 2.25h.75V3.75a.75.75 0 0 1-1.5 0V2.25H6.75zM15 2.25h.75V3.75a.75.75 0 0 1-1.5 0V2.25H15z" />
           <path fillRule="evenodd" d="M4.5 6.75A2.25 2.25 0 0 1 6.75 4.5h10.5A2.25 2.25 0 0 1 19.5 6.75v10.5A2.25 2.25 0 0 1 17.25 19.5H6.75A2.25 2.25 0 0 1 4.5 17.25V6.75zm2.25.75a.75.75 0 0 0-.75.75v8.25c0 .414.336.75.75.75h10.5a.75.75 0 0 0 .75-.75V8.25a.75.75 0 0 0-.75-.75H6.75z" clipRule="evenodd" />
         </svg>
@@ -116,20 +116,20 @@ export default function MonthYearPicker({
         createPortal(
           <div
             ref={dropdownRef}
-            className="fixed w-72 rounded-lg border border-zinc-800 bg-zinc-950/95 backdrop-blur p-3 shadow-xl z-[9999]"
+            className="fixed w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-xl z-[9999]"
             style={{ top: position.top, left: position.left }}
           >
             <div className="flex items-center justify-between gap-2 mb-3">
               <button
                 type="button"
-                className="px-2 py-1 text-sm rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 text-sm rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => setYear((y) => Math.max(minYear, y - 1))}
                 disabled={year <= minYear}
               >
                 ◀
               </button>
               <select
-                className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-gray-100"
+                className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-sm text-slate-900"
                 value={year}
                 onChange={(e) => {
                   const newYear = parseInt(e.target.value, 10)
@@ -144,7 +144,7 @@ export default function MonthYearPicker({
               </select>
               <button
                 type="button"
-                className="px-2 py-1 text-sm rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-2 py-1 text-sm rounded-lg border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 onClick={() => setYear((y) => Math.min(maxYear, y + 1))}
                 disabled={year >= maxYear}
               >
@@ -157,15 +157,15 @@ export default function MonthYearPicker({
                   key={m}
                   type="button"
                   onClick={() => commit(year, m)}
-                  className={`px-3 py-2 rounded border text-sm ${m === month && year === parseInt((normalizedValue||'').slice(0,4)||'0',10) ? 'border-white/60 bg-zinc-800 text-white' : 'border-zinc-800 bg-zinc-900/60 text-zinc-300 hover:bg-zinc-800'}`}
+                  className={`px-3 py-2 rounded-lg border text-sm ${m === month && year === parseInt((normalizedValue||'').slice(0,4)||'0',10) ? 'border-blue-500 bg-blue-50 text-slate-900 font-medium' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
                 >
                   {new Date(2000, m - 1).toLocaleString('en-US', { month: 'short' })}
                 </button>
               ))}
             </div>
             <div className="mt-3 flex justify-end gap-2">
-              <button type="button" className="text-xs text-zinc-400 hover:text-zinc-200" onClick={() => { onChange?.(''); setOpen(false) }}>Clear</button>
-              <button type="button" className="text-xs text-white bg-zinc-800 hover:bg-zinc-700 rounded px-2 py-1" onClick={() => setOpen(false)}>Done</button>
+              <button type="button" className="text-xs text-slate-500 hover:text-slate-800" onClick={() => { onChange?.(''); setOpen(false) }}>Clear</button>
+              <button type="button" className="text-xs text-white bg-slate-800 hover:bg-slate-700 rounded-lg px-2.5 py-1" onClick={() => setOpen(false)}>Done</button>
             </div>
           </div>,
           document.body

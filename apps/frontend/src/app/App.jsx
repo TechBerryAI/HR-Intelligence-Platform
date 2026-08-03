@@ -12,17 +12,14 @@ export default function App() {
   const isHeadHrRoute = location.pathname.startsWith('/head-hr')
   const isCeoRoute = location.pathname.startsWith('/ceo')
   const isLandingRoute = location.pathname === '/'
-  const isInterviewRoute = location.pathname.startsWith('/interview/')
   const isAuthRoute =
     location.pathname.startsWith('/login') ||
     location.pathname.startsWith('/signup') ||
     location.pathname.startsWith('/forgot-password')
-  const hideChrome = isHeadHrRoute || isCeoRoute || isLandingRoute || isInterviewRoute
+  const hideChrome = isHeadHrRoute || isCeoRoute || isLandingRoute
   const hideFooter = hideChrome || isAuthRoute
   const shellClass = hideChrome && (isHeadHrRoute || isCeoRoute)
     ? 'bg-[#0B1118] text-[#F5F7FA] h-[100dvh] max-h-[100dvh] overflow-hidden'
-    : isInterviewRoute
-      ? 'bg-[#0B1118] text-[#F5F7FA]'
     : isLandingRoute
       ? 'bg-[#050a14] text-white'
       : isAuthRoute

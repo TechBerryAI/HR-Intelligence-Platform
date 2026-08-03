@@ -28,8 +28,6 @@ const HeadHrJobs = lazy(() => import('@/features/organization/pages/head-hr/Head
 const HeadHrJobDetail = lazy(() => import('@/features/organization/pages/head-hr/HeadHrJobDetail.jsx'))
 const HeadHrSettings = lazy(() => import('@/features/organization/pages/head-hr/HeadHrSettings.jsx'))
 const HeadHrBulkParsing = lazy(() => import('@/features/organization/pages/head-hr/HeadHrBulkParsing.jsx'))
-const HeadHrInterviews = lazy(() => import('@/features/interview/pages/HeadHrInterviews.jsx'))
-const AiInterviewSession = lazy(() => import('@/features/interview/pages/AiInterviewSession.jsx'))
 const Settings = lazy(() => import('@/features/settings/pages/Settings.jsx'))
 const CeoDashboard = lazy(() => import('@/features/organization/pages/ceo/CeoDashboard.jsx'))
 
@@ -70,7 +68,6 @@ export default function AppRoutes() {
       <Route path="/settings" element={<StaffSettingsRoute><Settings /></StaffSettingsRoute>} />
       <Route path="/admin/bulk-resume-parser" element={<RecruiterGuard><BulkResumeParser /></RecruiterGuard>} />
       <Route path="/admin/feedback" element={<RecruiterGuard><FeedbackAdmin /></RecruiterGuard>} />
-      <Route path="/interview/:token" element={<AiInterviewSession />} />
       <Route path="/head-hr" element={<HeadHrGuard><HeadHrDashboard /></HeadHrGuard>} />
       <Route path="/head-hr/admins" element={<HeadHrGuard><HeadHrAdmins /></HeadHrGuard>} />
       <Route path="/head-hr/candidates" element={<Navigate to="/head-hr/jobs" replace />} />
@@ -80,7 +77,6 @@ export default function AppRoutes() {
       <Route path="/head-hr/jobs/:jdid/candidates/:cid" element={<HeadHrGuard><HeadHrJobCandidateDetail /></HeadHrGuard>} />
       <Route path="/head-hr/jobs" element={<HeadHrGuard><HeadHrJobs /></HeadHrGuard>} />
       <Route path="/head-hr/jobs/:jdid" element={<HeadHrGuard><HeadHrJobDetail /></HeadHrGuard>} />
-      <Route path="/head-hr/interviews" element={<HeadHrGuard><HeadHrInterviews /></HeadHrGuard>} />
       <Route path="/head-hr/bulk-parsing" element={<HeadHrGuard><HeadHrBulkParsing /></HeadHrGuard>} />
       <Route path="/head-hr/settings" element={<HeadHrGuard><HeadHrSettings /></HeadHrGuard>} />
       <Route path="*" element={<NotFound />} />

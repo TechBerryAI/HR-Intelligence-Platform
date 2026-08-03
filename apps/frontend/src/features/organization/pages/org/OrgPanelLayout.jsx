@@ -3,14 +3,13 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
 import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
 import {
-  FiGrid, FiUsers, FiBriefcase, FiLogOut, FiMenu, FiX, FiShield, FiSettings, FiBarChart2, FiLayers, FiCalendar,
+  FiGrid, FiUsers, FiBriefcase, FiLogOut, FiMenu, FiX, FiShield, FiSettings, FiBarChart2, FiLayers,
 } from 'react-icons/fi'
 
 const headHrNav = [
   { label: 'Overview', path: '/head-hr', icon: FiGrid, end: true },
   { label: 'Admins', path: '/head-hr/admins', icon: FiUsers },
   { label: 'Jobs', path: '/head-hr/jobs', icon: FiBriefcase },
-  { label: 'Interviews', path: '/head-hr/interviews', icon: FiCalendar },
   { label: 'Bulk Parsing', path: '/head-hr/bulk-parsing', icon: FiLayers },
   { label: 'Settings', path: '/head-hr/settings', icon: FiSettings },
 ]

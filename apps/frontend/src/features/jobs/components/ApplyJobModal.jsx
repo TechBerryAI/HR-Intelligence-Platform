@@ -404,8 +404,8 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                       {exp.isCurrent ? (
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">End</label>
-                          <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600">
-                            Present (current month)
+                          <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+                            Present
                           </div>
                         </div>
                       ) : (
