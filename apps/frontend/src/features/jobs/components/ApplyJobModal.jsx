@@ -8,7 +8,7 @@ import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import { BASE_URL } from '@/core/api/api.js'
 
 const emptyEducation = () => [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }]
-const emptyExperience = () => [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false, description: '' }]
+const emptyExperience = () => [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }]
 const emptyCerts = () => [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }]
 
 const initialForm = () => ({
@@ -21,11 +21,9 @@ const initialForm = () => ({
   phone: '',
   linkedinUrl: '',
   portfolioUrl: '',
-  githubUrl: '',
   currentLocation: '',
   preferredLocation: '',
   skills: '',
-  summary: '',
   resumeFile: null,
   resumeFileName: '',
   education: emptyEducation(),
@@ -86,12 +84,10 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
       phone: mapped.phone || prev.phone,
       linkedinUrl: mapped.linkedinUrl || prev.linkedinUrl,
       portfolioUrl: mapped.portfolioUrl || prev.portfolioUrl,
-      githubUrl: mapped.githubUrl || prev.githubUrl,
       currentLocation: mapped.currentLocation || prev.currentLocation,
       preferredLocation: mapped.preferredLocation || mapped.currentLocation || prev.preferredLocation,
       experienceLevel: mapped.experienceLevel || prev.experienceLevel,
       skills: mapped.skills || (mapped._skills || []).join(', ') || prev.skills,
-      summary: mapped.summary || mapped._summary || prev.summary,
       education: mapped.education?.length ? mapped.education : prev.education,
       experiences: mapped.experiences?.length ? mapped.experiences : prev.experiences,
       certifications: mapped.certifications?.length ? mapped.certifications : prev.certifications,
@@ -110,7 +106,19 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
   const updateList = (key, index, field, value) => {
     setForm((prev) => {
       const list = [...(prev[key] || [])]
-      list[index] = { ...list[index], [field]: value }
+      const next = { ...list[index], [field]: value }
+      // Currently working: keep Start, set End to current month, hide End picker
+      if (key === 'experiences' && field === 'isCurrent') {
+        if (value) {
+          const now = new Date()
+          const yyyy = now.getFullYear()
+          const mm = String(now.getMonth() + 1).padStart(2, '0')
+          next.endMonth = `${yyyy}-${mm}`
+        } else {
+          next.endMonth = ''
+        }
+      }
+      list[index] = next
       return { ...prev, [key]: list }
     })
   }
@@ -194,28 +202,28 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
             initial={{ y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 40, opacity: 0 }}
-            className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white shadow-xl"
+            className="relative w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl bg-white shadow-xl"
           >
-            <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4">
-              <div>
+            <div className="shrink-0 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 z-20">
+              <div className="min-w-0">
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Apply for</p>
                 <h2 id="apply-job-title" className="text-xl font-semibold text-slate-900 flex items-center gap-2">
-                  <FiBriefcase className="text-slate-500" />
-                  {job.title}
+                  <FiBriefcase className="text-slate-500 shrink-0" />
+                  <span className="truncate">{job.title}</span>
                 </h2>
                 <p className="text-sm text-slate-500 mt-0.5">{job.company} · {job.location}</p>
               </div>
               <button
                 type="button"
                 onClick={() => !submitting && onClose?.()}
-                className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+                className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="Close apply form"
               >
                 <FiX className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="px-5 py-5 space-y-6">
+            <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-5 space-y-6">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Resume (AI autofill)</label>
                 <ResumeUploadWithParsing
@@ -298,13 +306,6 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                 </div>
               </div>
 
-              <PremiumInput
-                label="Skills (comma-separated)"
-                value={form.skills}
-                onChange={(e) => setField('skills', e.target.value)}
-                placeholder="Python, React, SQL"
-              />
-
               {form.experienceLevel === 'experienced' && (
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
@@ -320,14 +321,29 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                     </select>
                     {errors.servingNotice && <p className="mt-1 text-sm text-red-600">{errors.servingNotice}</p>}
                   </div>
-                  <PremiumInput
-                    label="Notice period"
-                    value={form.noticePeriod}
-                    onChange={(e) => setField('noticePeriod', e.target.value)}
-                    error={errors.noticePeriod}
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Serving period</label>
+                    <select
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                      value={form.noticePeriod}
+                      onChange={(e) => setField('noticePeriod', e.target.value)}
+                    >
+                      <option value="">Select</option>
+                      <option value="<30 days">&lt;30 days</option>
+                      <option value="<60 days">&lt;60 days</option>
+                      <option value="<90 days">&lt;90 days</option>
+                    </select>
+                    {errors.noticePeriod && <p className="mt-1 text-sm text-red-600">{errors.noticePeriod}</p>}
+                  </div>
                 </div>
               )}
+
+              <PremiumInput
+                label="Skills (comma-separated)"
+                value={form.skills}
+                onChange={(e) => setField('skills', e.target.value)}
+                placeholder="Python, React, SQL"
+              />
 
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -373,14 +389,6 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                     <div key={i} className="rounded-xl border border-slate-200 p-3 grid sm:grid-cols-2 gap-3">
                       <PremiumInput label="Company" value={exp.company} onChange={(e) => updateList('experiences', i, 'company', e.target.value)} />
                       <PremiumInput label="Role" value={exp.role} onChange={(e) => updateList('experiences', i, 'role', e.target.value)} />
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Start</label>
-                        <MonthYearPicker value={exp.startMonth} onChange={(v) => updateList('experiences', i, 'startMonth', v)} />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">End</label>
-                        <MonthYearPicker value={exp.isCurrent ? '' : exp.endMonth} onChange={(v) => updateList('experiences', i, 'endMonth', v)} />
-                      </div>
                       <label className="flex items-center gap-2 text-sm text-slate-600 sm:col-span-2">
                         <input
                           type="checkbox"
@@ -389,13 +397,23 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                         />
                         Currently working here
                       </label>
-                      <div className="sm:col-span-2">
-                        <PremiumInput
-                          label="Description"
-                          value={exp.description || ''}
-                          onChange={(e) => updateList('experiences', i, 'description', e.target.value)}
-                        />
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">Start</label>
+                        <MonthYearPicker value={exp.startMonth} onChange={(v) => updateList('experiences', i, 'startMonth', v)} />
                       </div>
+                      {exp.isCurrent ? (
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">End</label>
+                          <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+                            Present
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-1">End</label>
+                          <MonthYearPicker value={exp.endMonth} onChange={(v) => updateList('experiences', i, 'endMonth', v)} />
+                        </div>
+                      )}
                       {(form.experiences || []).length > 1 && (
                         <button type="button" className="text-sm text-red-600 sm:col-span-2 text-left" onClick={() => removeListItem('experiences', i, emptyExperience)}>
                           Remove

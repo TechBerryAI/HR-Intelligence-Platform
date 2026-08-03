@@ -50,7 +50,7 @@ const PremiumInput = forwardRef(({
       
       <div className="relative">
         {Icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 z-10 pointer-events-none org-field-icon">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 pointer-events-none org-field-icon">
             <Icon className="w-5 h-5" />
           </div>
         )}
@@ -70,7 +70,7 @@ const PremiumInput = forwardRef(({
           <button
             type="button"
             onClick={() => setPasswordVisible((v) => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 z-10 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 focus:outline-none transition-colors p-1 rounded"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 focus:outline-none transition-colors p-1 rounded"
             tabIndex={-1}
             aria-label={passwordVisible ? 'Hide password' : 'Show password'}
           >
@@ -79,7 +79,7 @@ const PremiumInput = forwardRef(({
         )}
 
         {isAutofilled && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 z-10 pointer-events-none">
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
             <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
               <svg 
                 className="w-3 h-3 text-white" 

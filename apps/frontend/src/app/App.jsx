@@ -34,7 +34,11 @@ export default function App() {
           <div className={`min-h-screen flex flex-col ${shellClass}`}>
             {!hideChrome && <Navbar />}
             <ErrorToasts />
-            <main className={hideChrome ? 'flex-1 flex flex-col min-h-0 overflow-hidden' : 'flex-1'}>
+            <main className={
+              isHeadHrRoute || isCeoRoute
+                ? 'flex-1 flex flex-col min-h-0 overflow-hidden'
+                : 'flex-1'
+            }>
               <Suspense fallback={<div className={`max-w-7xl mx-auto px-6 py-10 ${hideChrome && (isHeadHrRoute || isCeoRoute) || isAuthRoute ? '' : ''}`}><div className={`h-10 w-48 rounded-xl animate-pulse ${hideChrome && (isHeadHrRoute || isCeoRoute) || isAuthRoute ? 'bg-white/10' : 'bg-slate-200'}`} /></div>}>
                 <AppRoutes />
               </Suspense>
