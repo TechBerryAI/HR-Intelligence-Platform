@@ -18,9 +18,28 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md) · [DEVELOPMENT.md](DEVELOPMENT.md) 
 
 **Version:** 1.0  
 **Audience:** Internal engineering, architecture reviews, production readiness  
-**Last Updated:** June 2026
+**Last Updated:** August 2026
 
 > **Related:** AI platform docs live in [`ai/README.md`](../ai/README.md). Full documentation index: [README.md](README.md).
+
+### Intelligence Engine (Resume & JD)
+
+Parsing is orchestrated by the **Human Capital Intelligence Engine** (`apps/backend/app/ai/parser/engine/`):
+
+```
+Document → Layout/Text → Sections → Deterministic parsers → Knowledge →
+Semantic AI (gaps only) → TOON → Validate → Persist → Form mapping
+```
+
+- **Resume:** deterministic-first (`RESUME_SKIP_LLM_WHEN_DETERMINISTIC`); LLM only for semantic gaps.
+- **JD:** deterministic-first (`JD_SKIP_LLM_WHEN_DETERMINISTIC`); same engine entry.
+- **TOON** remains the canonical structured representation.
+- **Progress:** `GET /api/parse/jobs/:id/progress` and SSE streams `/api/parse/resume/public/stream`, `/api/parse/jd/stream`.
+Adaptive runtime: `apply_hardware_env()` sets `OLLAMA_MODEL` from the hardware tier
+when the operator has not set it (`gpu_high`→14b, `gpu_mid`→7b, `cpu`→3b). Also sets
+concurrency, OCR DPI, and `RESUME_LAYOUT_ENABLED` / `HCIP_ENABLE_DOCLAYOUT`.
+
+Bulk resume parsing uses `parse_resume_text_via_engine` (same sections/parsers/knowledge path).
 
 ---
 

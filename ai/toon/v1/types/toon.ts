@@ -11,6 +11,8 @@ export interface TOONPerson {
   name: string;
   email: string;
   phone: string;
+  location?: string;
+  preferred_location?: string;
   linkedin?: string;
   github?: string;
   portfolio?: string;
@@ -52,15 +54,22 @@ export interface JDTOON extends TOONBase {
   type: 'job_description';
   title: string;
   location: string;
-  employment_type: string;
-  min_experience_years: number;
-  max_experience_years?: number;
+  employment_type?: string;
+  min_experience_years?: number | null;
+  max_experience_years?: number | null;
   skills: string[];
+  /** ATS-critical required skills */
+  mandatory_skills?: string[];
+  /** Nice-to-have skills */
+  preferred_skills?: string[];
   responsibilities: string[];
-  keywords: string[];
+  keywords?: string[];
   qualifications?: string[];
+  benefits?: string[];
+  description?: string;
   salary_range?: string;
   company?: string;
+  confidence?: number;
 }
 
 export type TOON = ResumeTOON | JDTOON;

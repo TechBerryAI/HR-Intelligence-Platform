@@ -1,7 +1,16 @@
 {
   "knowledge_base": "job_titles",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "schema_ref": "./schema.yaml",
-  "updated_at": "2026-06-25",
-  "aliases": []
+  "updated_at": "2026-08-03",
+  "aliases": [
+    {"alias": "sde", "canonical": "Software Development Engineer", "id": "title.sde"},
+    {"alias": "swe", "canonical": "Software Engineer", "id": "title.swe"},
+    {"alias": "fullstack", "canonical": "Full Stack Developer", "id": "title.fullstack"},
+    {"alias": "full-stack", "canonical": "Full Stack Developer", "id": "title.fullstack"},
+    {"alias": "full stack", "canonical": "Full Stack Developer", "id": "title.fullstack"},
+    {"alias": "devops", "canonical": "DevOps Engineer", "id": "title.devops"},
+    {"alias": "frontend", "canonical": "Frontend Developer", "id": "title.frontend"},
+    {"alias": "backend", "canonical": "Backend Developer", "id": "title.backend"}
+  ]
 }

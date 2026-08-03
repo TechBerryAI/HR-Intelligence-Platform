@@ -665,6 +665,20 @@ def create_job():
         
         description = (data.get('description') or '').strip()
         parsed_jd_id = (data.get('parsedJdId') or data.get('parsed_jd_id') or '').strip() or None
+
+        def _as_skill_list(val):
+            if isinstance(val, list):
+                return [str(s).strip() for s in val if str(s or '').strip()]
+            if isinstance(val, str) and val.strip():
+                return [s.strip() for s in val.split(',') if s.strip()]
+            return []
+
+        mandatory_skills = _as_skill_list(
+            data.get('mandatorySkills') or data.get('mandatory_skills')
+        )
+        preferred_skills = _as_skill_list(
+            data.get('preferredSkills') or data.get('preferred_skills')
+        )
         
         # Company is always taken from the HR account
         hr_id = get_user_id(request.user)
@@ -715,6 +729,28 @@ def create_job():
         if parsed_jd_id:
             try:
                 db_run('UPDATE parsed_jds SET job_id = ? WHERE id = ?', (jdid, parsed_jd_id))
+                # Persist recruiter-edited skill tiers into linked TOON (ATS source of truth)
+                if mandatory_skills or preferred_skills:
+                    from app.ai.toon.runtime import toon_dumps, toon_loads_flex
+
+                    row = db_get('SELECT toon FROM parsed_jds WHERE id = ?', (parsed_jd_id,))
+                    if row and row.get('toon'):
+                        toon = toon_loads_flex(row['toon'])
+                        if isinstance(toon, dict):
+                            if mandatory_skills:
+                                toon['mandatory_skills'] = mandatory_skills
+                            if preferred_skills:
+                                toon['preferred_skills'] = preferred_skills
+                            if mandatory_skills or preferred_skills:
+                                combined = list(dict.fromkeys(
+                                    (mandatory_skills or []) + (preferred_skills or [])
+                                    + (toon.get('skills') if isinstance(toon.get('skills'), list) else [])
+                                ))
+                                toon['skills'] = combined
+                            db_run(
+                                'UPDATE parsed_jds SET toon = ? WHERE id = ?',
+                                (toon_dumps(toon), parsed_jd_id),
+                            )
             except Exception as link_err:
                 print(f"[jobs] parsed_jd link warning: {link_err}")
         

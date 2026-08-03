@@ -8,13 +8,15 @@ from pathlib import Path
 
 import pytest
 
-BACKEND_ROOT = Path(__file__).resolve().parents[2] / "apps" / "backend"
+BACKEND_ROOT = Path(__file__).resolve().parents[2] / 'apps' / 'backend'
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 # Force internal matcher for deterministic unit tests
 os.environ['ATS_API_URL'] = ''
 os.environ['ATS_API_KEY'] = ''
 
-from services.ats_service import _internal_match, MANDATORY_SKILLS_MIN_PCT
+from app.domains.recruitment.services.ats_service import _internal_match, MANDATORY_SKILLS_MIN_PCT
 
 BASE_RESUME = {
     "type": "resume",
@@ -82,3 +84,30 @@ def test_empty_mandatory_skills_no_auto_gate():
     jd = {**BASE_JD, "mandatory_skills": [], "preferred_skills": [], "skills": []}
     result = _internal_match(BASE_RESUME, jd)
     assert result["mandatory_skills_match_pct"] == 100.0
+
+
+def test_numeric_experience_title_role_does_not_crash():
+    """TOON round-trip can reload numeric-looking titles/roles as ints."""
+    resume = {
+        **BASE_RESUME,
+        "experience": [
+            {"title": 2021, "role": 3, "company": "Acme", "from": "2019", "to": "2021"},
+            {"title": "MSSQL DBA", "company": "Tech Co", "from": "2021", "to": "2024"},
+        ],
+        "education": [
+            {"degree": 2018, "field": "Computer Science", "institution": "State U"},
+        ],
+    }
+    jd = {
+        **BASE_JD,
+        "title": "MSSQL DBA",
+        "location": 400001,  # numeric postal-style location from TOON
+    }
+    result = _internal_match(resume, jd)
+    assert "overall_match_score" in result
+    assert isinstance(result["overall_match_score"], (int, float))
+    assert result["verdict"] in (
+        "Strong Match",
+        "Potential Match (Recruiter Review)",
+        "Not a Match",
+    )

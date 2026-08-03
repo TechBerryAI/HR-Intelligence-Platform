@@ -66,11 +66,13 @@ def optional_authenticate_token(f):
             try:
                 user = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
                 if user.get('type') == 'refresh':
-                    return jsonify({"error": "Invalid or expired token"}), 401
-                request.user = user
+                    # Treat refresh tokens as unauthenticated for optional routes
+                    request.user = None
+                else:
+                    request.user = user
             except jwt.ExpiredSignatureError:
-                return jsonify({"error": "Invalid or expired token"}), 401
+                request.user = None
             except Exception:
-                return jsonify({"error": "Invalid or expired token"}), 401
+                request.user = None
         return f(*args, **kwargs)
     return wrapper

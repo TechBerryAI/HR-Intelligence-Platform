@@ -5,22 +5,29 @@ import { FiFile, FiCheck, FiZap, FiCpu, FiDatabase } from 'react-icons/fi';
 
 /**
  * Premium Upload Overlay - Perfectly Centered & Visible
+ * Pass `stageLabel` / `stageIndex` for real Intelligence Engine progress.
  */
-export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
+export default function PremiumUploadOverlay({
+  isVisible,
+  type = 'resume',
+  stageLabel = null,
+  stageIndex = null,
+  progressPct = null,
+}) {
   const [currentStep, setCurrentStep] = useState(0);
   
   const steps = type === 'resume' 
     ? [
-        { icon: FiFile, text: 'Reading Resume', color: '#60a5fa' },
-        { icon: FiCpu, text: 'Analyzing with AI', color: '#a78bfa' },
-        { icon: FiDatabase, text: 'Extracting Skills', color: '#f472b6' },
-        { icon: FiZap, text: 'Auto-filling Application', color: '#4ade80' },
+        { icon: FiFile, text: 'Reading Document', color: '#60a5fa', stages: ['cache', 'persist_raw', 'layout', 'text'] },
+        { icon: FiCpu, text: 'Detecting Sections', color: '#a78bfa', stages: ['sections', 'deterministic'] },
+        { icon: FiDatabase, text: 'Knowledge & Semantics', color: '#f472b6', stages: ['knowledge', 'semantic'] },
+        { icon: FiZap, text: 'Validating & Autofill', color: '#4ade80', stages: ['validate', 'persist', 'toon'] },
       ]
     : [
-        { icon: FiFile, text: 'Reading Job Description', color: '#60a5fa' },
-        { icon: FiCpu, text: 'Parsing Requirements', color: '#a78bfa' },
-        { icon: FiDatabase, text: 'Extracting Details', color: '#f472b6' },
-        { icon: FiZap, text: 'Preparing Form', color: '#4ade80' },
+        { icon: FiFile, text: 'Reading Job Description', color: '#60a5fa', stages: ['cache', 'persist_raw', 'layout', 'text'] },
+        { icon: FiCpu, text: 'Parsing Requirements', color: '#a78bfa', stages: ['sections', 'deterministic'] },
+        { icon: FiDatabase, text: 'Knowledge & Semantics', color: '#f472b6', stages: ['knowledge', 'semantic'] },
+        { icon: FiZap, text: 'Preparing Form', color: '#4ade80', stages: ['validate', 'persist', 'toon'] },
       ];
 
   // Prevent body scroll
@@ -40,13 +47,37 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
       setCurrentStep(0);
       return;
     }
-    
+
+    // Prefer real stage mapping from Intelligence Engine
+    if (stageLabel) {
+      const idx = steps.findIndex((s) => (s.stages || []).includes(stageLabel));
+      if (idx >= 0) {
+        setCurrentStep(idx);
+        return;
+      }
+    }
+    if (typeof stageIndex === 'number' && stageIndex >= 0) {
+      setCurrentStep(stageIndex % steps.length);
+      return;
+    }
+
+    // Fallback cosmetic timer only when no real stage events
     const interval = setInterval(() => {
       setCurrentStep((prev) => (prev + 1) % steps.length);
     }, 2000);
     
     return () => clearInterval(interval);
-  }, [isVisible, steps.length]);
+  }, [isVisible, steps.length, stageLabel, stageIndex]);
+
+  const displayText = stageLabel
+    ? (stageLabel.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) +
+      (steps[currentStep] ? ` · ${steps[currentStep].text}` : ''))
+    : steps[currentStep].text;
+
+  const barPct =
+    progressPct != null
+      ? Math.max(5, Math.min(100, progressPct))
+      : ((currentStep + 1) / steps.length) * 100;
 
   // Use portal to ensure overlay is always at root level
   const overlayContent = (
@@ -203,7 +234,7 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
                 lineHeight: '1.2'
               }}
             >
-              {steps[currentStep].text}
+              {displayText}
             </motion.h1>
           </AnimatePresence>
           <p style={{ 
@@ -213,7 +244,7 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
             fontWeight: '500',
             lineHeight: '1.4'
           }}>
-            Takes 10-30 seconds
+            {stageLabel ? 'Live pipeline progress' : 'Takes 10-30 seconds'}
           </p>
         </div>
 
@@ -338,17 +369,16 @@ export default function PremiumUploadOverlay({ isVisible, type = 'resume' }) {
               top: 0,
               left: 0,
               height: '100%',
+              width: `${barPct}%`,
               background: 'linear-gradient(90deg, #8b5cf6 0%, #3b82f6 50%, #06b6d4 100%)',
               backgroundSize: '200% 100%',
               borderRadius: '2.5px',
               boxShadow: '0 0 12px rgba(139, 92, 246, 0.5)'
             }}
             animate={{
-              width: ['0%', '100%'],
               backgroundPosition: ['0% 50%', '200% 50%'],
             }}
             transition={{
-              width: { duration: 30, ease: "linear" },
               backgroundPosition: { duration: 2, repeat: Infinity, ease: "linear" },
             }}
           />
