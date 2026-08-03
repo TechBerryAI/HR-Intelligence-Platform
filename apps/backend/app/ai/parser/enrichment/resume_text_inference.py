@@ -130,7 +130,8 @@ _TECH_SINGLE_TOKEN = frozenset({
 })
 _SKILL_CRUMB_TOKENS = frozenset({
     'set', 'tools', 'technologies', 'technology', 'skills', 'skill', 'expertise',
-    'competencies', 'frameworks', 'languages',
+    'competencies', 'frameworks', 'languages', 'platforms', 'tools and platforms',
+    'skills tools and platforms', 'and platforms', 'and tools',
 })
 _INSTITUTION_LIKE = re.compile(
     r'(?i)\b(?:university|college|school|institute|academy|polytechnic|vidyalaya|'
@@ -190,6 +191,8 @@ def is_plausible_job_title(title: str | None) -> bool:
 def is_plausible_person_name(name: str | None) -> bool:
     """Reject metrics, labels, headers, and tech tokens misread as person names."""
     t = (name or '').strip()
+    # PDF/Word often appends zero-width spaces to header names
+    t = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff\u00ad]', '', t).replace('\xa0', ' ').strip()
     if not t or len(t) < 2 or len(t) > 80:
         return False
     if '@' in t or 'http' in t.lower() or 'www.' in t.lower():
@@ -525,9 +528,29 @@ def extract_name_from_text(text: str) -> str:
     """Pick a plausible person name from early resume lines, skipping section headers."""
     if not text:
         return ''
-    for line in text.split('\n')[:20]:
-        stripped = line.strip()
-        if not stripped or stripped.startswith(('#', '*', '-', '•')):
+    # Join consecutive ALL-CAPS single-token name lines (PyPDF2 word-per-line layouts)
+    early_lines: list[str] = []
+    for line in text.split('\n')[:25]:
+        stripped = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff\u00ad]', '', line).replace('\xa0', ' ').strip()
+        if stripped:
+            early_lines.append(stripped)
+
+    # Collapse runs of single ALL-CAPS alpha tokens at the top into one name candidate
+    caps_run: list[str] = []
+    for stripped in early_lines[:8]:
+        if re.fullmatch(r"[A-Z][A-Z\-']{1,24}", stripped) and stripped not in {
+            'SEO', 'API', 'AWS', 'HTML', 'CSS', 'SQL', 'USA', 'UAE', 'CV',
+        }:
+            caps_run.append(stripped.title() if stripped.isupper() else stripped)
+            if len(caps_run) >= 2:
+                joined = ' '.join(caps_run)
+                if is_plausible_person_name(joined):
+                    return joined[:80]
+            continue
+        break
+
+    for stripped in early_lines[:20]:
+        if stripped.startswith(('#', '*', '-', '•')):
             continue
         if '@' in stripped or 'http' in stripped.lower() or 'www.' in stripped.lower():
             continue
@@ -551,6 +574,9 @@ def extract_name_from_text(text: str) -> str:
         # Prefer 2–4 Title-Case alphabetic name tokens
         if 1 <= len(words) <= 5 and 2 <= len(stripped) <= 80:
             if is_plausible_person_name(stripped):
+                # Title-case ALL-CAPS full names for form display
+                if stripped.isupper() and len(words) >= 2:
+                    return stripped.title()[:80]
                 return stripped[:80]
     # Separated email locals only (anjali.bansode) — never glued locals
     email = extract_email_from_text(text)

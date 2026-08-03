@@ -39,6 +39,24 @@ RESUME_LAYOUT_ENABLED = os.getenv('RESUME_LAYOUT_ENABLED', 'true').lower() in (
 
 IMAGE_EXTENSIONS = frozenset({'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp'})
 
+# Invisible / formatting chars common in Word→PDF exports (ZWSP, soft hyphen, BOM, etc.)
+_INVISIBLE_CHARS_RE = __import__('re').compile(
+    r'[\u200b\u200c\u200d\u2060\ufeff\u00ad\u180e]'
+)
+
+
+def normalize_extracted_text(text: str) -> str:
+    """
+    Strip PDF/Word invisible characters that break name/header matching.
+    Zero-width spaces after names (e.g. 'DHRUTI JADEJA\\u200b') are common.
+    """
+    if not text:
+        return ''
+    t = _INVISIBLE_CHARS_RE.sub('', text)
+    t = t.replace('\xa0', ' ').replace('\u202f', ' ')
+    return t
+
+
 _rapidocr_engine: Any = None
 
 
@@ -449,4 +467,4 @@ def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> 
             text = enhance_resume_text(text)
         except Exception as exc:
             logger.debug('enhance_resume_text skipped: %s', exc)
-    return text
+    return normalize_extracted_text(text or '')

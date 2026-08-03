@@ -407,8 +407,16 @@ def _run_resume(
     _emit(parse_job_id, 'validate', 'started', on_stage=on_stage)
     validation_issues = collect_toon_validation_issues(toon, 'resume')
     is_valid, error_msg = validate_toon_format(toon, 'resume')
-    has_identity = bool(profile.personal.full_name and profile.contact.email)
-    if not is_valid and not has_identity:
+    # Never hard-fail when any usable contact/body signal exists — return partial form
+    has_usable = bool(
+        (profile.personal.full_name or '').strip()
+        or (profile.contact.email or '').strip()
+        or (profile.contact.phone or '').strip()
+        or profile.skills
+        or profile.experience
+        or profile.education
+    )
+    if not is_valid and not has_usable:
         _emit(parse_job_id, 'validate', 'failed', error_msg or '', on_stage=on_stage)
         return {
             'status': 'error',
@@ -419,7 +427,7 @@ def _run_resume(
 
     confidence = calculate_confidence(toon, 'resume')
     model_version = _model_version_label()
-    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v3')
+    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v5')
     if not used_llm:
         model_version = f'{model_version}+{cache_tag}+deterministic'
     else:
@@ -448,6 +456,7 @@ def _run_resume(
         'model_version': model_version,
         'public_uploader_id': uploader_id if uploader_role == 'public' else None,
         'partial': (not is_valid),
+        'missing_fields': validation_issues if not is_valid else [],
         'parse_job_id': parse_job_id,
     }, 200
 
@@ -547,7 +556,7 @@ def _run_jd(
 
     confidence = calculate_confidence(toon, 'job_description')
     model_version = _model_version_label()
-    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v3')
+    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v5')
     model_version = f'{model_version}+{cache_tag}+{"hybrid" if used_llm else "deterministic"}'
 
     _emit(parse_job_id, 'persist', 'started', on_stage=on_stage)
