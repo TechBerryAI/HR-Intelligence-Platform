@@ -48,11 +48,6 @@ const faqs = [
         answer:
           'Application status is managed by recruiters in their dashboard. After you apply, they will contact you using the email you provided on the form.',
       },
-      {
-        question: 'Can I save jobs to apply later?',
-        answer:
-          'Yes. Click the bookmark icon on a job listing to save it in this browser session, then apply when you are ready.',
-      },
     ],
   },
   {

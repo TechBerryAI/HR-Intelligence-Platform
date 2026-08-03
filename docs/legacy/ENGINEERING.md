@@ -2,7 +2,9 @@
 
 Full-stack technical reference for the HR Job Portal — architecture, APIs, backend, and frontend.
 
-Related: [ARCHITECTURE.md](ARCHITECTURE.md) · [DEVELOPMENT.md](DEVELOPMENT.md) · [README.md](README.md)
+> **Authority:** Prefer the consolidated HCIP set ([../README.md](../README.md) → `01`–`10`, especially [../07-API.md](../07-API.md) and [../08-Database.md](../08-Database.md)) and the live code when this file disagrees. This document is a **deep narrative archive**.
+
+Related: [../README.md](../README.md) · [../DEVELOPMENT.md](../DEVELOPMENT.md) · [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ---
 
@@ -20,7 +22,7 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md) · [DEVELOPMENT.md](DEVELOPMENT.md) 
 **Audience:** Internal engineering, architecture reviews, production readiness  
 **Last Updated:** June 2026
 
-> **Related:** AI platform docs live in [`ai/README.md`](../ai/README.md). Full documentation index: [README.md](README.md).
+> **Related:** AI platform docs live in [`ai/README.md`](../../ai/README.md). Full documentation index: [README.md](../README.md).
 
 ---
 
@@ -269,7 +271,7 @@ Login flows: HR and candidate each use email + password; HR and candidate signup
 #### 4.7 Key Components (Purpose, Props, Logic)
 
 - **Navbar:** Top navigation; shows links by role (candidate vs HR); logout. Uses `useApp()` for auth state.
-- **JobCard:** Displays one job; actions: apply, save; uses applicantApplications/applicantSavedJobs and applyToJobAsApplicant, toggleSaveJob from context.
+- **JobCard:** Displays one job; primary action: apply. Bookmark/save control removed from public Jobs UI (do not document as current).
 - **ResumeUploadWithParsing:** File input for resume; calls parsing API; maps TOON to profile fields; used in ApplicantProfile.
 - **ConnectionStatus:** Shows backend health (backendHealthy from context); may show offline/retry UI.
 - **ErrorBoundary:** Catches React errors; renders fallback UI.
@@ -1256,7 +1258,7 @@ Guards are small wrapper components that either render `children` or redirect.
 - **Props:** `job`, `onApply`, `isApplied`, `applicationStatus`, `isSaved`, `onToggleSave`, `isAdmin`, `isApplying`, `matchScore`.
 - **Skills:** Uses `extractRequiredSkillsFromDescription(job.description)`; fallback to `job.skills` or regex on description. Deduplicates by lowercased string.
 - **Modal:** `showDescriptionModal` state. Click on card (but not on buttons) opens modal; Escape or overlay click closes. Modal shows full job details and `JobDescriptionView` for description.
-- **Apply/Save:** Apply button disabled when `isDisabled` (job.enabled === false) or `isApplied`. Save button toggles via `onToggleSave`; filled bookmark when `isSaved`. Both button areas use `onClick={(e) => e.stopPropagation()` so they don’t trigger the card click.
+- **Apply:** Apply button disabled when `isDisabled` (job.enabled === false) or `isApplied`. Action areas use `onClick={(e) => e.stopPropagation()` so they don’t trigger the card click. Save/bookmark button is not present on the current Jobs UI.
 - **Status badge:** Uses `STATUS_BADGES[applicationStatus]` (applied, reviewed, shortlisted, rejected) for label and icon.
 
 #### 7.6 `components/ResumeUploadWithParsing.jsx`

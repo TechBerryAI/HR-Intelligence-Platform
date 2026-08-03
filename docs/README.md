@@ -1,102 +1,161 @@
-# Documentation
+# Human Capital Intelligence Platform — Documentation
 
-Single entry point for repository documentation.
+**HCIP** is an AI-native platform for understanding, acquiring, developing, and retaining talent.  
+This repository’s **current product surface** is Recruitment Intelligence (jobs, apply, parsing, ATS, recruiter & Head HR portals). The documentation set below records that foundation and defines how the platform extends toward full workforce intelligence.
 
-## Quick routing
+---
 
-| I need to… | Start here |
-|------------|------------|
-| Set up locally | [DEVELOPMENT.md](DEVELOPMENT.md) |
-| Contribute | [CONTRIBUTING.md](../CONTRIBUTING.md) |
-| Run the HRMS app | [README.md](../README.md) |
-| Understand architecture & product | [ARCHITECTURE.md](ARCHITECTURE.md) |
-| Work on backend / frontend / APIs | [ENGINEERING.md](ENGINEERING.md) |
-| Review sprint freeze history | [HISTORY.md](HISTORY.md) |
-| Work on the AI platform | [ai/README.md](../ai/README.md) |
-| Understand TOON wire format | [ai/toon/README.md](../ai/toon/README.md) |
-| Follow AI milestones & ADRs | [ai/docs/ROADMAP.md](../ai/docs/ROADMAP.md) · [ai/docs/adr/](../ai/docs/adr/) |
+## What HCIP is
 
-## Docs in this folder
+| Today | Tomorrow |
+|-------|----------|
+| HR Job Portal / HRMS core with AI parse & match | Human Capital Intelligence across employee lifecycle |
+| Candidates, Recruiters, Head HR, CEO | + Hiring managers, interviewers, employees, AI agents |
+| TOON parse artifacts + weighted ATS | Ontology, knowledge repo, interview AI, Copilot, analytics |
 
-| Document | Scope |
-|----------|-------|
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Local setup and workflows |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Product vision, domain, system design, security, roadmap |
-| [ENGINEERING.md](ENGINEERING.md) | Stack, APIs, backend structure, frontend structure |
-| [HISTORY.md](HISTORY.md) | Completed sprint freeze / migration reports |
+**Constitutional source of truth:** [01-Product-Constitution.md](01-Product-Constitution.md)
 
-ADRs live under [`ai/docs/adr/`](../ai/docs/adr/) (not duplicated here).
+---
 
-## Directory indexes
+## Where to start
 
-### Repository root
+| If you are… | Read this first |
+|-------------|-----------------|
+| New to the product | [01-Product-Constitution.md](01-Product-Constitution.md) |
+| Engineer joining the repo | [DEVELOPMENT.md](DEVELOPMENT.md) → [03-System-Architecture.md](03-System-Architecture.md) → [04-Workflow.md](04-Workflow.md) |
+| Working on apply / parse / match | [04-Workflow.md](04-Workflow.md) · [06-AI.md](06-AI.md) |
+| Designing future AI | [01-Product-Constitution.md](01-Product-Constitution.md) · [06-AI.md](06-AI.md) · [05-Ontology.md](05-Ontology.md) |
+| Security / compliance | [09-Security.md](09-Security.md) |
+| Planning releases | [10-Roadmap.md](10-Roadmap.md) |
 
-| Path | README | Purpose |
-|------|--------|---------|
-| `apps/frontend/` | — | React SPA (see [ENGINEERING.md](ENGINEERING.md#frontend)) |
-| `apps/backend/` | [README.md](../apps/backend/README.md) | Flask API |
-| `apps/desktop/` | — | Electron shell |
-| `ai/` | [README.md](../ai/README.md) | AI platform |
-| `docs/` | This file | HRMS documentation |
-| `scripts/` | [README.md](../scripts/README.md) | Dev utilities |
-| `tests/` | [README.md](../tests/README.md) | Test index |
-| `tools/` | [README.md](../tools/README.md) | CLI index |
+Local runbook: root [README.md](../README.md) · [DEVELOPMENT.md](DEVELOPMENT.md)
 
-### AI platform (`ai/`)
+---
 
-| Path | README | Purpose |
-|------|--------|---------|
-| `runtime/` | [README.md](../ai/runtime/README.md) | Task execution engine |
-| `providers/` | [README.md](../ai/providers/README.md) | LLM providers |
-| `capabilities/` | [README.md](../ai/capabilities/README.md) | Capability library |
-| `dataset/` | [README.md](../ai/dataset/README.md) | Data platform |
-| `toon/` | [README.md](../ai/toon/README.md) | TOON ontology |
-| `contracts/` | [README.md](../ai/contracts/README.md) | Domain contracts |
-| `schemas/` | [README.md](../ai/schemas/README.md) | Document schemas |
-| `knowledge/` | [README.md](../ai/knowledge/README.md) | Knowledge bases |
-| `registry/` | [README.md](../ai/registry/README.md) | Artifact registry |
-| `configs/` | [README.md](../ai/configs/README.md) | Config templates |
+## Documentation structure (required set)
 
-## Documentation standard
-
-Every major directory README answers:
-
-1. **What is this?** — one-sentence purpose
-2. **Why does it exist?** — problem it solves
-3. **What belongs here?** — allowed contents
-4. **What should never be placed here?** — boundary violations
-5. **Dependencies / consumers** — who uses it
-6. **Extension points** — how to add functionality
-7. **Related documentation** — links to canonical sources
-
-## Authority chain (no duplication)
-
-```
-contracts/ → schemas/ → knowledge/ → toon/v1/ → backend/toon.py (runtime)
-capabilities/ → runtime/ (AI execution)
-providers/ → runtime/ (LLM backends)
-dataset/ → lake/ (artifacts)
+```text
+docs/
+  README.md                     ← you are here
+  01-Product-Constitution.md
+  02-Domain-Model.md
+  03-System-Architecture.md
+  04-Workflow.md
+  05-Ontology.md
+  06-AI.md
+  07-API.md
+  08-Database.md
+  09-Security.md
+  10-Roadmap.md
+  DEVELOPMENT.md                ← local setup
+  legacy/                       ← archived narrative (optional reading)
 ```
 
-| Concept | Canonical location |
-|---------|-------------------|
-| TOON ontology | `ai/toon/v1/` |
-| TOON wire runtime | `apps/backend` / `backend/toon.py` |
-| Normalized schemas | `ai/schemas/` |
-| AI prompts/schemas at runtime | `ai/capabilities/` |
-| HRMS LLM prompts | backend `llm_service` |
-| Data lake artifacts | `ai/dataset/lake/` |
+---
 
-## Legacy & archive
+## Architecture (snapshot)
 
-Retired paths and migration notes: [ai/docs/archive/LEGACY_ARTIFACTS.md](../ai/docs/archive/LEGACY_ARTIFACTS.md)
+```mermaid
+flowchart LR
+  SPA[React SPA] --> API[Flask API]
+  API --> PG[(PostgreSQL)]
+  API --> AI[Parse + ATS]
+  AI --> LLM[LLM providers]
+```
 
-## Canonical naming
+Detail: [03-System-Architecture.md](03-System-Architecture.md)
 
-| Concept | Canonical form |
+---
+
+## Workflows (snapshot)
+
+```mermaid
+flowchart TB
+  Job[Job enabled] --> Apply[Candidate apply]
+  Apply --> Parse[Resume TOON]
+  Parse --> Match[ATS score]
+  Match --> Review[Recruiter / Head HR]
+```
+
+Detail: [04-Workflow.md](04-Workflow.md)
+
+---
+
+## Document conventions
+
+1. **One file per topic area** — use the Contents list at the top of each file.  
+2. **Current vs Future** — always labeled when aspirational.  
+3. **Mermaid** — flowcharts, sequence, and ER diagrams.  
+4. **Runtime wins** — APIs/tables marked Current must match `create_app.py` / `schema_pg/`.  
+5. **Amend the constitution deliberately** — see [01-Product-Constitution.md](01-Product-Constitution.md).
+
+---
+
+## Documentation index
+
+| # | Document | Covers |
+|---|----------|--------|
+| 01 | [Product Constitution](01-Product-Constitution.md) | Vision, mission, principles, AI philosophy, design, NFRs |
+| 02 | [Domain Model](02-Domain-Model.md) | Actors, organization, recruitment, employee, intelligence, ER |
+| 03 | [System Architecture](03-System-Architecture.md) | Overall, backend, frontend, database, AI, deployment |
+| 04 | [Workflows](04-Workflow.md) | Platform, candidate, recruiter, employee, admin, resume, JD, matching |
+| 05 | [Ontology](05-Ontology.md) | Human capital ontology, knowledge repository, taxonomy |
+| 06 | [AI](06-AI.md) | Resume/JD parsers, matching, interview AI, copilot, evaluation |
+| 07 | [API](07-API.md) | Overview, public API, staff API |
+| 08 | [Database](08-Database.md) | Current schema, relationships, scaling |
+| 09 | [Security](09-Security.md) | Authentication, authorization, compliance |
+| 10 | [Roadmap](10-Roadmap.md) | Phases 1–10 |
+| — | [DEVELOPMENT.md](DEVELOPMENT.md) | Local setup |
+
+### Source-of-truth order
+
+1. **Product / process:** [01-Product-Constitution.md](01-Product-Constitution.md)  
+2. **Current system behavior:** `02`–`09` (especially [04-Workflow.md](04-Workflow.md), [07-API.md](07-API.md), [08-Database.md](08-Database.md))  
+3. **Runtime:** `apps/backend/app/bootstrap/create_app.py`, domain routes, `apps/backend/schema_pg/`  
+4. **Legacy archive (optional):** [legacy/](legacy/README.md)
+
+### Legacy archive
+
+| Document | Path |
+|----------|------|
+| Old architecture mega-doc | [legacy/ARCHITECTURE.md](legacy/ARCHITECTURE.md) |
+| Old engineering narrative | [legacy/ENGINEERING.md](legacy/ENGINEERING.md) |
+| Sprint / migration history | [legacy/HISTORY.md](legacy/HISTORY.md) |
+
+---
+
+## Keeping docs up to date (automatic + required)
+
+HCIP docs stay current through **two layers**:
+
+### 1. Cursor agent rule (always on)
+
+`.cursor/rules/documentation-sync.mdc` tells the AI: when you change product/code, update the matching `docs/01`–`10` file in the same change.  
+`.cursor/rules/code-docs-coupling.mdc` reinforces this when editing `apps/backend` or `apps/frontend`.
+
+### 2. Code → inventory sync script
+
+Regenerates the **route table** and **schema file list** from the live backend:
+
+```bash
+python scripts/sync_docs_from_code.py
+```
+
+| Updates | Marker region |
 |---------|----------------|
-| Proposal Generator (product) | Title case in docs |
-| Python package | `dataset.proposals` |
-| Data lake path | `dataset/lake/` |
-| TOON | Always uppercase |
-| Document Extraction | Title case; path `dataset/extraction/` |
+| [07-API.md](07-API.md) | `GENERATED-API-ROUTES` |
+| [08-Database.md](08-Database.md) | `GENERATED-SCHEMA-FILES` |
+
+Run this after adding/removing Flask routes or `schema_pg/*.sql` files. Narrative sections (workflows, constitution) are still updated by the agent/human using the Cursor rule — they cannot be fully invented from code alone.
+
+---
+
+## Document control
+
+| Item | Value |
+|------|-------|
+| Platform name | Human Capital Intelligence Platform (HCIP) |
+| Required docs | `README` + `01`–`10` + `DEVELOPMENT` |
+| Legacy | `docs/legacy/` only |
+| Doc sync script | `scripts/sync_docs_from_code.py` |
+| Cursor rules | `.cursor/rules/documentation-sync.mdc` |

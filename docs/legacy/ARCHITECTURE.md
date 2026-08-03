@@ -1,10 +1,12 @@
 # Architecture
 
-Canonical product and system architecture for the Human Capital Intelligence Platform.
+Legacy product and system architecture deep dive for the Human Capital Intelligence Platform.
+
+> **Authority:** This file is **not** the product source of truth. Use [../01-Product-Constitution.md](../01-Product-Constitution.md) and the `02`–`10` docs in [../README.md](../README.md). Keep this file for historical depth; do not extend it for new product decisions.
 
 **Audience:** product, engineering, AI, security
 
-Related: [ENGINEERING.md](ENGINEERING.md) · [DEVELOPMENT.md](DEVELOPMENT.md) · [ai/docs/adr/](../ai/docs/adr/)
+Related: [../README.md](../README.md) · [ENGINEERING.md](ENGINEERING.md) · [../DEVELOPMENT.md](../DEVELOPMENT.md) · [ai/docs/adr/](../../ai/docs/adr/)
 
 ---
 

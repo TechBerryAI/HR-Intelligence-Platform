@@ -30,7 +30,7 @@ function writeAppliedIds(set) {
 }
 
 export default function Jobs() {
-  const { jobs, jobsError, jobsLoading, fetchJobs, applicantSavedJobs, toggleSaveJob, auth } = useApp()
+  const { jobs, jobsError, jobsLoading, fetchJobs, auth } = useApp()
   const location = useLocation()
   const navigate = useNavigate()
   const params = new URLSearchParams(location.search)
@@ -195,7 +195,6 @@ export default function Jobs() {
                   key={job.id}
                   job={job}
                   isApplied={appliedIds.has(String(job.id))}
-                  isSaved={!!applicantSavedJobs?.[job.id] || !!applicantSavedJobs?.[String(job.id)]}
                   isAdmin={isStaffRecruiter(auth)}
                   onApply={() => {
                     setApplyError('')
@@ -203,7 +202,6 @@ export default function Jobs() {
                     if (isStaffRecruiter(auth)) return
                     setApplyJob(job)
                   }}
-                  onToggleSave={() => toggleSaveJob?.(job.id)}
                 />
               ))}
             </div>

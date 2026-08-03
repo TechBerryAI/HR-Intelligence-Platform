@@ -4,7 +4,6 @@ import {
   FiMapPin,
   FiClock,
   FiCheck,
-  FiBookmark,
   FiX,
   FiEye,
   FiAward,
@@ -48,8 +47,6 @@ export default function JobCard({
   onApply,
   isApplied = false,
   applicationStatus = 'applied',
-  isSaved = false,
-  onToggleSave,
   isAdmin = false,
   isApplying = false,
   matchScore,
@@ -139,12 +136,6 @@ export default function JobCard({
                   {statusConfig.label}
                 </span>
               )}
-              {!isApplied && isSaved && (
-                <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                  <FiBookmark className="h-3 w-3 fill-current" />
-                  Saved
-                </span>
-              )}
             </div>
 
             <p className="mt-1 text-sm font-medium text-slate-600">{job.company}</p>
@@ -213,20 +204,6 @@ export default function JobCard({
               >
                 {isApplying ? 'Applying…' : isApplied ? statusConfig.label : 'Apply'}
                 {!isApplied && !isApplying && <FiArrowRight className="h-4 w-4" />}
-              </button>
-            )}
-            {!isAdmin && onToggleSave && !isApplied && (
-              <button
-                type="button"
-                onClick={onToggleSave}
-                title={isSaved ? 'Unsave job' : 'Save job'}
-                className={`inline-flex h-10 w-10 items-center justify-center rounded-lg border transition ${
-                  isSaved
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-800'
-                }`}
-              >
-                <FiBookmark className={`h-4 w-4 ${isSaved ? 'fill-current' : ''}`} />
               </button>
             )}
           </div>
