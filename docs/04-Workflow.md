@@ -90,7 +90,7 @@ flowchart TB
 
 ### Purpose
 
-Enable a candidate to discover a role and submit a complete, AI-assisted application without creating a staff account.
+Enable a candidate to discover a role and submit a complete, AI-assisted application without creating a staff account. Landing **Get Started** opens `/jobs` (not login).
 
 ---
 
@@ -112,11 +112,11 @@ Enable a candidate to discover a role and submit a complete, AI-assisted applica
 
 ### Business rules
 
-1. Resume AI parse must finish (`parsedId`).
+1. Resume AI parse must finish (`parsedId`). Parse failures show the **server error detail** (e.g. text extraction / validation), not a generic “parse resume error”.
 2. Required fields validated client & server.
 3. Education autofill includes 10th/12th **if present in resume**.
 4. Experienced candidates: notice period; last working date when serving notice = yes.
-5. One apply per job per candidate email identity.
+5. One apply per job per candidate email identity. Duplicate submit returns **Applicant already applied**. Apply stays available so a different applicant (different email) can apply to the same job.
 
 ---
 

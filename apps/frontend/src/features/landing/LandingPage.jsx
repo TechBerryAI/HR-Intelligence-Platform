@@ -21,6 +21,7 @@ export default function LandingPage() {
     visualRef,
     overlayRef,
     uiRef,
+    to: '/jobs',
   })
 
   const handleGetStarted = () => {

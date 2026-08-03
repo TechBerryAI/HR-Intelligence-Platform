@@ -6,7 +6,7 @@ export function useEnterAppTransition({
   visualRef,
   overlayRef,
   uiRef,
-  to = '/login',
+  to = '/jobs',
   state = { fromLanding: true },
 }) {
   const navigate = useNavigate()

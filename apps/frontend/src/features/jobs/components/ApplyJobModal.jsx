@@ -35,7 +35,7 @@ const initialForm = () => ({
   _publicUploaderId: null,
 })
 
-function validate(form) {
+function validate(form, parseError = '') {
   const errors = {}
   if (!form.fullName?.trim()) errors.fullName = 'Required'
   if (!form.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errors.email = 'Valid email required'
@@ -50,8 +50,11 @@ function validate(form) {
       errors.lastWorkingDay = 'Required'
     }
   }
-  if (!form.resumeFile && !form.resumeFileName) errors.resume = 'Resume required'
-  if (!form._parsedId) errors.resume = errors.resume || 'Please wait for resume AI parsing to finish'
+  if (!form.resumeFile && !form.resumeFileName) {
+    errors.resume = parseError || 'Resume required'
+  } else if (!form._parsedId) {
+    errors.resume = parseError || 'Please wait for resume AI parsing to finish'
+  }
   const eduOk = (form.education || []).some((e) => e.degree?.trim() && e.institution?.trim())
   if (!eduOk) errors.education = 'At least one education entry with degree and institution is required'
   return errors
@@ -62,12 +65,14 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [parseError, setParseError] = useState('')
 
   useEffect(() => {
     if (open) {
       setForm(initialForm())
       setErrors({})
       setSubmitError('')
+      setParseError('')
       setSubmitting(false)
     }
   }, [open, job?.id])
@@ -145,7 +150,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSubmitError('')
-    const errs = validate(form)
+    const errs = validate(form, parseError)
     setErrors(errs)
     if (Object.keys(errs).length) return
 
@@ -179,7 +184,11 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        throw new Error(data.error || 'Failed to submit application')
+        const raw = String(data.error || '')
+        if (/already applied/i.test(raw)) {
+          throw new Error('Applicant already applied')
+        }
+        throw new Error(raw || 'Failed to submit application')
       }
       onSuccess?.(data)
       onClose?.()
@@ -239,7 +248,10 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                 <ResumeUploadWithParsing
                   publicMode
                   currentFileName={form.resumeFileName}
-                  onFileSelect={(file) => setForm((p) => ({ ...p, resumeFile: file, resumeFileName: file.name }))}
+                  onFileSelect={(file) => {
+                    setParseError('')
+                    setForm((p) => ({ ...p, resumeFile: file, resumeFileName: file.name, _parsedId: null }))
+                  }}
                   onRemove={() => setForm((p) => ({
                     ...p,
                     resumeFile: null,
@@ -247,9 +259,10 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                     _parsedId: null,
                     _publicUploaderId: null,
                   }))}
+                  onParseError={(message) => setParseError(message || '')}
                   onAutofill={handleAutofill}
                 />
-                {errors.resume && <p className="mt-1 text-sm text-red-600">{errors.resume}</p>}
+                {errors.resume && !parseError && <p className="mt-1 text-sm text-red-600">{errors.resume}</p>}
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
