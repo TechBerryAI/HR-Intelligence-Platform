@@ -34,10 +34,25 @@ HR Job Portal
 cp apps/backend/.env.example apps/backend/.env
 # Edit apps/backend/.env — set DATABASE_URL or POSTGRES_*
 
+# Local stack (backend + frontend; DB must already be reachable)
 node start.js
+
+# Full VM stack: wait/start DB (Hyper-V or Docker) + backend + frontend + Ollama
+node start-vm.js
+# or: npm run start:vm
 ```
 
 Opens http://localhost:5173 (frontend) and http://localhost:3000 (backend).
+
+Optional `start-vm.js` knobs (env or `apps/backend/.env`):
+
+| Key | Purpose |
+|-----|---------|
+| `HCIP_VM_NAME` | Hyper-V VM name to `Start-VM` when DB is down |
+| `HCIP_VM_PROVIDER` | `auto` (default), `hyperv`, or `docker` |
+| `HCIP_START_DOCKER_DB` | Force `docker compose` Postgres |
+| `HCIP_SKIP_OLLAMA` | Skip Ollama serve/pull |
+| `HCIP_OPEN_BROWSER` | Set `false` to skip opening the browser |
 
 ## Quick start (AI platform)
 

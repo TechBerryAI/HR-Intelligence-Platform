@@ -79,10 +79,36 @@ function checkEnv() {
   try {
     const pyVer = nodeExecSync('python --version', { encoding: 'utf8' }).trim();
     log(`Python: ${pyVer}`);
+    const m = /Python\s+(\d+)\.(\d+)/i.exec(pyVer);
+    if (m) {
+      const major = Number(m[1]);
+      const minor = Number(m[2]);
+      if (major < 3 || (major === 3 && minor < 10)) {
+        log(
+          `Python ${major}.${minor} is below the supported range (3.10–3.12). ` +
+            'Type hints like str | None will crash the backend. Install Python 3.10+ ' +
+            'and recreate apps/backend/venv, or continue only if all modules use ' +
+            '`from __future__ import annotations`.',
+          'warn'
+        );
+      }
+    }
   } catch (e) {
     try {
       const py3Ver = nodeExecSync('python3 --version', { encoding: 'utf8' }).trim();
       log(`Python: ${py3Ver}`);
+      const m = /Python\s+(\d+)\.(\d+)/i.exec(py3Ver);
+      if (m) {
+        const major = Number(m[1]);
+        const minor = Number(m[2]);
+        if (major < 3 || (major === 3 && minor < 10)) {
+          log(
+            `Python ${major}.${minor} is below the supported range (3.10–3.12). ` +
+              'Prefer Python 3.10+ for the backend venv on the VM.',
+            'warn'
+          );
+        }
+      }
     } catch (e2) {
       log('Python 3.8+ required for backend.', 'err');
       process.exit(1);
@@ -157,6 +183,71 @@ function setupEnv() {
     log(`Normalized Ollama env: host=${host}, model=${model}`);
   } else {
     log(`Ollama config: host=${host}, model=${model}`);
+  }
+
+  setupFrontendEnv(envMap);
+}
+
+/**
+ * Keep apps/frontend/.env VM/LAN-compatible with backend FRONTEND_URL.
+ * Empty VITE_API_URL → same-origin /api via Vite proxy (works on LAN IPs).
+ */
+function setupFrontendEnv(backendEnvMap = null) {
+  const FRONTEND_ENV = path.join(FRONTEND_DIR, '.env');
+  const FRONTEND_ENV_EXAMPLE = path.join(FRONTEND_DIR, '.env.example');
+  const be = backendEnvMap || readEnvFile(BACKEND_ENV);
+
+  if (!fs.existsSync(FRONTEND_ENV)) {
+    if (fs.existsSync(FRONTEND_ENV_EXAMPLE)) {
+      fs.copyFileSync(FRONTEND_ENV_EXAMPLE, FRONTEND_ENV);
+      log('Created apps/frontend/.env from .env.example');
+    } else {
+      fs.writeFileSync(
+        FRONTEND_ENV,
+        [
+          '# Auto-created by start.js / start-vm.js',
+          'VITE_API_URL=',
+          'VITE_API_TIMEOUT_MS=30000',
+          '',
+        ].join('\n'),
+        'utf8'
+      );
+      log('Created apps/frontend/.env');
+    }
+  }
+
+  const fe = readEnvFile(FRONTEND_ENV);
+  const updates = {};
+
+  // localhost absolute API breaks LAN (UI on 192.168.x.x → API hits client's localhost)
+  const apiUrl = (fe.VITE_API_URL || '').trim();
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(apiUrl)) {
+    updates.VITE_API_URL = '';
+    log(
+      'Cleared VITE_API_URL localhost — using same-origin /api (VM/LAN safe via Vite proxy)',
+      'warn'
+    );
+  } else if (!('VITE_API_URL' in fe)) {
+    updates.VITE_API_URL = '';
+  }
+
+  if (!(fe.VITE_API_TIMEOUT_MS || '').trim()) {
+    updates.VITE_API_TIMEOUT_MS = '30000';
+  }
+
+  const publicOrigin = (be.FRONTEND_URL || '').trim();
+  if (publicOrigin && (fe.VITE_PUBLIC_ORIGIN || '').trim() !== publicOrigin) {
+    updates.VITE_PUBLIC_ORIGIN = publicOrigin;
+    log(`Synced VITE_PUBLIC_ORIGIN ← backend FRONTEND_URL (${publicOrigin})`);
+  }
+
+  if (Object.keys(updates).length) {
+    upsertEnvKeys(FRONTEND_ENV, updates);
+  } else {
+    log(
+      `Frontend .env OK (VITE_API_URL=${apiUrl ? apiUrl : '(same-origin)'}, ` +
+        `VITE_PUBLIC_ORIGIN=${(fe.VITE_PUBLIC_ORIGIN || publicOrigin || '').trim() || 'unset'})`
+    );
   }
 }
 
@@ -510,7 +601,35 @@ async function main() {
   console.log('Press Ctrl+C to stop.\n');
 }
 
-main().catch((err) => {
-  log(err.message || err, 'err');
-  process.exit(1);
-});
+module.exports = {
+  main,
+  ROOT,
+  BACKEND_DIR,
+  FRONTEND_DIR,
+  BACKEND_ENV,
+  readEnvFile,
+  upsertEnvKeys,
+  log,
+  logStep,
+  checkEnv,
+  setupEnv,
+  setupFrontendEnv,
+  setupBackend,
+  setupOllama,
+  setupFrontend,
+  startBackend,
+  startFrontend,
+  waitForReady,
+  openBrowser,
+  onExit,
+  BACKEND_PORT,
+  FRONTEND_PORT,
+  BROWSER_URL,
+};
+
+if (require.main === module) {
+  main().catch((err) => {
+    log(err.message || err, 'err');
+    process.exit(1);
+  });
+}

@@ -3,6 +3,8 @@ Resume and Job Description Parsing Routes.
 
 Thin HTTP layer over the Human Capital Intelligence Engine.
 """
+from __future__ import annotations
+
 import os
 import time
 import uuid
