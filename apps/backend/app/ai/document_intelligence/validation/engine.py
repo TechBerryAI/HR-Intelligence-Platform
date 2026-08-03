@@ -98,6 +98,7 @@ def validate_url(
 
 def validate_person_name(value: str) -> Tuple[bool, str]:
     s = (value or '').strip()
+    s = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff\u00ad]', '', s).replace('\xa0', ' ').strip()
     if not s:
         return False, 'name_empty'
     low = s.lower()
@@ -188,6 +189,20 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
     # Drop assignment / Coursera / project narratives mistaken for jobs
     if _PROJECT_LIKE_EXP.search(f'{role} {company} {desc}'):
         return ExperienceEntry(company='', role='', start='', end='', is_current=False)
+    # Drop duty-sentence fragments mistaken for role/company
+    if re.match(
+        r'(?i)^(managed|executed|coordinated|collaborated|utilized|maintained|'
+        r'facilitated|developed|designed|created|built|led|drove|implemented|'
+        r'optimized|improved|increased|worked|assisted|supported|handled|'
+        r'performed|conducted|analyzed|monitored|delivered|owned|spearheaded|'
+        r'[•·\*●])',
+        role,
+    ) or re.match(
+        r'(?i)^(resulting|ensuring|improving|including|across|reports?|captions|'
+        r'brand voice|traffic|and efficiency)\b',
+        company,
+    ):
+        return ExperienceEntry(company='', role='', start='', end='', is_current=False)
     company_ok, _ = validate_company(company) if company else (False, '')
     role_ok, _ = validate_role(role) if role else (False, '')
 
@@ -268,7 +283,12 @@ def sanitize_skills(skills: list[SkillEntry], *, companies: set[str] | None = No
 
 def sanitize_candidate_profile(profile: CandidateProfile) -> CandidateProfile:
     """Apply anti-contamination rules; blank invalid fields rather than guess."""
-    name_ok, _ = validate_person_name(profile.personal.full_name)
+    raw_name = re.sub(
+        r'[\u200b\u200c\u200d\u2060\ufeff\u00ad]',
+        '',
+        (profile.personal.full_name or ''),
+    ).replace('\xa0', ' ').strip()
+    name_ok, _ = validate_person_name(raw_name)
     email_ok, _ = validate_email(profile.contact.email) if profile.contact.email else (False, '')
     phone_ok, _ = validate_phone(profile.contact.phone) if profile.contact.phone else (False, '')
 
@@ -291,7 +311,7 @@ def sanitize_candidate_profile(profile: CandidateProfile) -> CandidateProfile:
         schema_version=profile.schema_version,
         personal=profile.personal.model_copy(
             update={
-                'full_name': profile.personal.full_name if name_ok else '',
+                'full_name': raw_name if name_ok else '',
                 'summary': profile.personal.summary.strip(),
             }
         ),

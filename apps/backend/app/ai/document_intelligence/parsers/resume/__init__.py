@@ -47,6 +47,32 @@ _PIPE_EXP = re.compile(
     r'^(.+?)\s*[|–—]\s*(.+?)\s*[|–—]\s*(.+)$'
 )
 _AT_EXP = re.compile(r'^(.+?)\s+(?:at|@)\s+(.+)$', re.I)
+# Role - Company - (Mon YYYY - Mon YYYY|Now)   OR   Role - Company - Mon YYYY - Mon YYYY
+_DASH_ROLE_COMPANY_DATES = re.compile(
+    r'^(.+?)\s*[-–—]\s*(.+?)\s*[-–—]\s*\(?\s*'
+    r'((?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+    r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+    r'|(?:19|20)\d{2})'
+    r'\s*(?:[-–—]|to)\s*'
+    r'(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+    r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+    r'|(?:19|20)\d{2}|Present|Current|Now))\s*\)?\s*$',
+    re.I,
+)
+_EXP_META_LINE = re.compile(
+    r'(?i)^(?:responsibilities|duties|key\s+achievements|achievements|'
+    r'client\s*name\s*/?\s*projects?|projects?\s*:|clients?\s*:)\b'
+)
+_DUTY_VERB_START = re.compile(
+    r'(?i)^(managed|executed|coordinated|collaborated|utilized|maintained|'
+    r'facilitated|developed|designed|created|built|led|drove|implemented|'
+    r'optimized|improved|increased|worked|assisted|supported|handled|'
+    r'performed|conducted|analyzed|monitored|delivered|owned|spearheaded)\b'
+)
+_PROJECT_LIKE_EXP = re.compile(
+    r'(?i)\b(?:assignment|coursera|project|internship\s+project|fictional\s+brand|'
+    r'client\s*name\s*/?\s*projects?)\b'
+)
 _DEGREE_PAT = re.compile(
     r'(?i)\b('
     r'Masters?(?:\s+of)?(?:\s+Arts|\s+Science|\s+Commerce|\s+Business|\s+Technology)?'
@@ -78,9 +104,6 @@ _DATE_RANGE_STRIP = re.compile(
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:19|20)\d{2}|Present|Current|Now'
     r')\b'
-)
-_PROJECT_LIKE_EXP = re.compile(
-    r'(?i)\b(?:assignment|coursera|project|internship\s+project|fictional\s+brand)\b'
 )
 
 
@@ -374,7 +397,13 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
 def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
     raw = section_text.strip()
     raw = re.sub(
-        r'(?i)^(?:technical\s+)?skills?(?:\s+and\s+abilities)?\s*:?\s*',
+        r'(?i)^(?:technical\s+)?skills?(?:\s*,?\s*(?:tools?|platforms?|abilities|technologies?))*(?:\s+and\s+(?:tools?|platforms?|abilities|technologies?))*\s*:?\s*',
+        '',
+        raw,
+    ).strip()
+    # Drop leftover header crumbs from "SKILLS, TOOLS AND PLATFORMS"
+    raw = re.sub(
+        r'(?i)^(?:tools?|platforms?|abilities|technologies?)(?:\s+and\s+(?:tools?|platforms?|abilities))?\s*:?\s*',
         '',
         raw,
     ).strip()
@@ -419,29 +448,123 @@ def _is_project_like_experience(role: str, company: str = '', description: str =
     return bool(blob and _PROJECT_LIKE_EXP.search(blob))
 
 
+def _is_bullet_or_duty_line(line: str) -> bool:
+    """True for responsibility bullets / duty sentences — never job headers."""
+    raw = (line or '').strip()
+    if not raw:
+        return False
+    if raw[:1] in '•·*-●▪▸►' or raw.startswith(('●', '•')):
+        return True
+    stripped = re.sub(r'^[\s•·\-\*●▪▸►]+', '', raw).strip()
+    if _EXP_META_LINE.match(stripped):
+        return True
+    if _DUTY_VERB_START.match(stripped):
+        return True
+    # Long prose with comma clauses is a duty sentence, not a title
+    if len(stripped) > 90 and ',' in stripped:
+        return True
+    return False
+
+
+def _looks_like_job_header_line(line: str) -> bool:
+    """Heuristic: line is a role/company/dates header, not a duty."""
+    stripped = re.sub(r'^[\s•·\-\*●]+', '', (line or '').strip())
+    if not stripped or _is_bullet_or_duty_line(stripped) or _EXP_META_LINE.match(stripped):
+        return False
+    if _DASH_ROLE_COMPANY_DATES.match(stripped) or _PIPE_EXP.match(stripped):
+        return True
+    start, _end = extract_date_range(stripped)
+    if start and (
+        ' - ' in stripped or ' – ' in stripped or '|' in stripped or ' at ' in stripped.lower()
+    ):
+        return True
+    return False
+
+
+def _join_wrapped_experience_lines(lines: list[str]) -> list[str]:
+    """Join PDF-wrapped duty lines onto the previous bullet/header."""
+    if not lines:
+        return []
+    out: list[str] = [lines[0]]
+    for nxt in lines[1:]:
+        prev = out[-1]
+        n = nxt.strip()
+        p = prev.strip()
+        if not n:
+            continue
+        if _looks_like_job_header_line(n) or n[:1] in '•·*●▪▸►' or n.startswith('●'):
+            out.append(n)
+            continue
+        if _EXP_META_LINE.match(re.sub(r'^[\s•·\-\*●]+', '', n)):
+            out.append(n)
+            continue
+        # Continuation of previous bullet / soft-wrapped sentence
+        if (
+            p[:1] in '•·*●▪▸►'
+            or _DUTY_VERB_START.match(re.sub(r'^[\s•·\-\*●]+', '', p))
+            or (n and n[0].islower())
+            or (len(n) < 60 and not extract_date_range(n)[0])
+        ) and not _looks_like_job_header_line(n):
+            out[-1] = f'{p.rstrip()} {n.lstrip()}'.strip()
+        else:
+            out.append(n)
+    return out
+
+
 def _parse_experience_line(line: str) -> ExperienceEntry | None:
-    stripped = re.sub(r'^[\s•·\-\*]+', '', (line or '').strip())
-    if not stripped or is_section_header_line(stripped) or len(stripped) < 3:
+    raw_line = (line or '').strip()
+    if not raw_line or is_section_header_line(raw_line) or len(raw_line) < 3:
         return None
+    # Never promote bullets / duty sentences / meta labels to experience rows
+    if _is_bullet_or_duty_line(raw_line) or _EXP_META_LINE.match(
+        re.sub(r'^[\s•·\-\*●]+', '', raw_line)
+    ):
+        return None
+
+    stripped = re.sub(r'^[\s•·\-\*●]+', '', raw_line).strip()
     if _is_project_like_experience(stripped):
         return None
+    if re.match(r'(?i)^client\s*name', stripped):
+        return None
+
     start, end = extract_date_range(stripped)
     is_current = bool(end and re.match(r'(?i)^(present|current|now)$', end))
     if is_current:
         end = ''
+
+    # Preferred: Role - Company - (dates)
+    dash = _DASH_ROLE_COMPANY_DATES.match(stripped)
+    if dash:
+        role = dash.group(1).strip(' -–—|')
+        company = dash.group(2).strip(' -–—|')
+        d_start, d_end = extract_date_range(dash.group(3))
+        if d_start:
+            start, end = d_start, d_end
+            is_current = bool(end and re.match(r'(?i)^(present|current|now)$', end))
+            if is_current:
+                end = ''
+        if role and not _DUTY_VERB_START.match(role) and not _EXP_META_LINE.match(role):
+            return ExperienceEntry(
+                company=company[:200],
+                role=role[:200],
+                start=start,
+                end=end,
+                is_current=is_current,
+            )
 
     # Gold / common: Role | Company | Dates
     pipe = _PIPE_EXP.match(stripped)
     if pipe:
         role = pipe.group(1).strip()
         company = pipe.group(2).strip()
-        # group3 may be dates already extracted
         if not start:
             start, end2 = extract_date_range(pipe.group(3))
             if end2:
                 is_current = bool(re.match(r'(?i)^(present|current|now)$', end2))
                 end = '' if is_current else end2
-        if role and (is_plausible_job_title(role) or len(role.split()) <= 8):
+        if role and not _DUTY_VERB_START.match(role) and (
+            is_plausible_job_title(role) or len(role.split()) <= 8
+        ):
             return ExperienceEntry(
                 company=company,
                 role=role,
@@ -454,22 +577,31 @@ def _parse_experience_line(line: str) -> ExperienceEntry | None:
     line_wo = stripped
     if start:
         line_wo = re.sub(
-            r'(?i)\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
-            r'\s*[-–—to]+\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}|Present|Current|Now)\b',
+            r'(?i)\(?\s*(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+            r'\s*[-–—to]+\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}|Present|Current|Now)\s*\)?',
             '',
             stripped,
-        ).strip(' |-–—,')
+        ).strip(' |-–—,()')
     at_m = _AT_EXP.match(line_wo)
     if at_m:
         role, company = at_m.group(1).strip(), at_m.group(2).strip()
-        if is_plausible_job_title(role):
+        if is_plausible_job_title(role) and not _DUTY_VERB_START.match(role):
             return ExperienceEntry(
                 company=company, role=role, start=start, end=end, is_current=is_current,
             )
 
-    # Comma: Role, Company
+    # Comma: Role, Company — only when left is a short title AND right looks like an org
+    # (never split duty sentences on commas)
     parts = re.split(r',\s+', line_wo, maxsplit=1)
-    if len(parts) == 2 and is_plausible_job_title(parts[0]):
+    if (
+        len(parts) == 2
+        and is_plausible_job_title(parts[0])
+        and not _DUTY_VERB_START.match(parts[0])
+        and len(parts[0].split()) <= 6
+        and len(parts[1].split()) <= 8
+        and not _DUTY_VERB_START.match(parts[1])
+        and not re.search(r'(?i)\b(?:resulting|ensuring|improving|including|across|and)\b', parts[1])
+    ):
         return ExperienceEntry(
             company=parts[1].strip(),
             role=parts[0].strip(),
@@ -478,7 +610,12 @@ def _parse_experience_line(line: str) -> ExperienceEntry | None:
             is_current=is_current,
         )
 
-    if is_plausible_job_title(line_wo) and start:
+    if (
+        is_plausible_job_title(line_wo)
+        and start
+        and not _DUTY_VERB_START.match(line_wo)
+        and len(line_wo.split()) <= 8
+    ):
         return ExperienceEntry(role=line_wo.strip(), start=start, end=end, is_current=is_current)
     return None
 
@@ -487,40 +624,68 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
     """
     Parse experience ONLY from the Experience section span.
     Empty section → [] (fresher / projects-only resumes). Never scrape Projects via full-text fallback.
+    Supports 'Role - Company - (dates)' headers. Consecutive headers before a shared
+    Responsibilities block each become their own row and share that description.
     """
     _ = full_text  # retained for API compat; intentionally unused
     raw = (section_text or '').strip()
     if not raw:
         return []
 
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    lines = _join_wrapped_experience_lines(lines)
+
     entries: list[ExperienceEntry] = []
+    pending_jobs: list[ExperienceEntry] = []
     pending_desc: list[str] = []
-    current: ExperienceEntry | None = None
-    for line in raw.splitlines():
+
+    def _flush_pending() -> None:
+        nonlocal pending_jobs, pending_desc
+        desc = ' '.join(pending_desc).strip()
+        pending_desc = []
+        if not pending_jobs:
+            return
+        for job in pending_jobs:
+            if _is_project_like_experience(job.role, job.company, desc):
+                continue
+            if desc:
+                job = job.model_copy(update={'description': desc})
+            entries.append(job)
+        pending_jobs = []
+
+    for line in lines:
         entry = _parse_experience_line(line)
         if entry and (entry.role or entry.company):
             if _is_project_like_experience(entry.role, entry.company):
                 continue
-            if current:
-                if pending_desc:
-                    current = current.model_copy(
-                        update={'description': ' '.join(pending_desc).strip()}
-                    )
-                    pending_desc = []
-                if not _is_project_like_experience(current.role, current.company, current.description):
-                    entries.append(current)
-            current = entry
+            # New header after duties → close previous block(s)
+            if pending_jobs and pending_desc:
+                _flush_pending()
+            pending_jobs.append(entry)
             continue
-        # Description bullet under current role
-        stripped = re.sub(r'^[\s•·\-\*]+', '', line.strip())
-        if current and stripped and not is_section_header_line(stripped):
+        stripped = re.sub(r'^[\s•·\-\*●]+', '', line.strip())
+        if not stripped or is_section_header_line(stripped) or _EXP_META_LINE.match(stripped):
+            continue
+        if pending_jobs:
             pending_desc.append(stripped)
-    if current:
-        if pending_desc:
-            current = current.model_copy(update={'description': ' '.join(pending_desc).strip()})
-        if not _is_project_like_experience(current.role, current.company, current.description):
-            entries.append(current)
-    return entries
+
+    _flush_pending()
+
+    cleaned: list[ExperienceEntry] = []
+    for e in entries:
+        role = (e.role or '').strip()
+        company = (e.company or '').strip()
+        if _DUTY_VERB_START.match(role) or _DUTY_VERB_START.match(company):
+            continue
+        if role[:1] in '•·*●' or company[:1] in '•·*●':
+            continue
+        if not (role or company):
+            continue
+        if e.start or (role and company and not _is_bullet_or_duty_line(role)):
+            cleaned.append(e)
+        elif role and is_plausible_job_title(role) and not _is_bullet_or_duty_line(role):
+            cleaned.append(e)
+    return cleaned
 
 
 def parse_summary(section_text: str, full_text: str = '') -> str:

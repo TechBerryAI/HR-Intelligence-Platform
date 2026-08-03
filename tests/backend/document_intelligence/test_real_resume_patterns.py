@@ -231,3 +231,136 @@ def test_sse_payload_uuid_json_serializable():
     loaded = json.loads(dumped)
     assert isinstance(loaded['raw_file_id'], str)
     assert isinstance(loaded['parsed_id'], str)
+
+
+DHRUTI_ZWSP = """
+DHRUTI JADEJA\u200b
+Digital Marketing Executive\u200b
+Thane, Mumbai | Mobile: 7016707933 | Email: zaladhruti02@gmail.com | LinkedIn:
+https://www.linkedin.com/in/dhruti-zala-6a6055284/
+
+Summary
+Digital Marketing and SEO professional with 3 years of overall experience.
+
+SKILLS, TOOLS AND PLATFORMS
+Technical SEO, On-page SEO, Google Analytics, Canva, HubSpot
+
+EXPERIENCE
+Digital Marketing Executive | Hawkium | Sep 2024 - Present
+SEO and content campaigns
+
+EDUCATION
+Bachelor of Commerce, Mumbai University, 2021
+"""
+
+
+def test_zero_width_space_name_still_extracts():
+    from app.ai.parser.enrichment.resume_text_inference import (
+        extract_name_from_text,
+        is_plausible_person_name,
+    )
+    from app.ai.parser.text_extraction import normalize_extracted_text
+
+    raw = 'DHRUTI JADEJA\u200b'
+    assert not is_plausible_person_name(raw) or '\u200b' in raw
+    cleaned = normalize_extracted_text(raw)
+    assert '\u200b' not in cleaned
+    assert is_plausible_person_name(cleaned)
+    assert extract_name_from_text(cleaned + '\nEmail: x@y.com\n') == 'Dhruti Jadeja' or \
+        extract_name_from_text(cleaned) in ('Dhruti Jadeja', 'DHRUTI JADEJA')
+
+
+def test_dhruti_like_resume_never_hard_fails_empty_name():
+    profile, form, toon = parse_resume_text_to_canonical(DHRUTI_ZWSP)
+    assert form.fullName
+    assert 'Dhruti' in form.fullName or 'DHRUTI' in form.fullName.upper()
+    assert 'Jadeja' in form.fullName or 'JADEJA' in form.fullName.upper()
+    assert form.email == 'zaladhruti02@gmail.com'
+    person = toon.get('person') or {}
+    assert str(person.get('name') or '').strip()
+    assert 'person.name must not be empty' not in str(person)
+
+
+def test_word_per_line_all_caps_name():
+    from app.ai.parser.enrichment.resume_text_inference import extract_name_from_text
+
+    text = 'DHRUTI\n\nJADEJA\n\nDigital\n\nMarketing\n\nExecutive\nEmail: a@b.com\n'
+    name = extract_name_from_text(text)
+    assert name.lower() == 'dhruti jadeja'
+
+
+DHRUTI_EXPERIENCE = """
+DHRUTI JADEJA
+Thane, Mumbai | Mobile: 7016707933 | Email: zaladhruti02@gmail.com
+
+SKILLS
+SEO, Google Analytics, Canva, HubSpot
+
+PROFESSIONAL EXPERIENCE
+Digital Marketing Executive -  Hawkium  -  (Sep 2024 -  Now)
+Digital Marketing Executive -  Tridhya Tech Public Limited  -  (Dec 2023 -  Sep 2024)
+
+Client Name/Projects -  Silwatech UAE ,  Vibing Tech , TridhyaTech
+Responsibilities
+● Managed and optimized social media platforms for multiple brands, driving a 20%
+increase in engagement across Instagram and LinkedIn
+● Executed on-page SEO strategies, resulting in a 15% increase in organic search
+traffic
+● Coordinated content calendars, ensuring consistent messaging and alignment with
+brand voice
+Resource Manager - Tridhya Tech - (Dec 2022 - Dec 2023)
+● Managed resource allocation and task coordination between digital marketing and
+technical teams
+● Maintained schedules, reports, and documentation to ensure effective team
+performance and task completion
+● Facilitated smooth communication between teams, improving internal collaboration
+and efficiency
+"""
+
+
+def test_dhruti_experience_not_fragmented_into_bullet_jobs():
+    profile, form, _ = parse_resume_text_to_canonical(DHRUTI_EXPERIENCE)
+    assert len(form.experiences) == 3, [(e.role, e.company) for e in form.experiences]
+
+    roles = [e.role for e in form.experiences]
+    companies = [e.company for e in form.experiences]
+    assert roles[0] == 'Digital Marketing Executive'
+    assert companies[0] == 'Hawkium'
+    assert form.experiences[0].startMonth.startswith('2024-09')
+    assert form.experiences[0].isCurrent is True
+
+    assert roles[1] == 'Digital Marketing Executive'
+    assert 'Tridhya Tech Public Limited' in companies[1]
+    assert form.experiences[1].startMonth.startswith('2023-12')
+    assert form.experiences[1].endMonth.startswith('2024-09')
+
+    assert roles[2] == 'Resource Manager'
+    assert companies[2] == 'Tridhya Tech'
+    assert form.experiences[2].startMonth.startswith('2022-12')
+    assert form.experiences[2].endMonth.startswith('2023-12')
+
+    # Bullets must not become company/role
+    blob = ' '.join(f'{e.role} {e.company}' for e in form.experiences).lower()
+    assert 'executed' not in blob
+    assert 'resulting' not in blob
+    assert 'client name' not in blob
+    assert 'vibing' not in blob
+    assert 'silwatech' not in blob
+
+    # Descriptions stay under jobs, not split into fields
+    assert 'social media' in (form.experiences[0].description or '').lower()
+    assert 'resource allocation' in (form.experiences[2].description or '').lower()
+
+
+def test_dash_role_company_dates_line_parses():
+    from app.ai.document_intelligence.parsers.resume import _parse_experience_line
+
+    e = _parse_experience_line(
+        'Digital Marketing Executive - Hawkium - (Sep 2024 - Now)'
+    )
+    assert e is not None
+    assert e.role == 'Digital Marketing Executive'
+    assert e.company == 'Hawkium'
+    assert e.start == '2024-09'
+    assert e.is_current is True
+    assert e.end == ''
