@@ -9,12 +9,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-BACKEND_ROOT = Path(__file__).resolve().parents[2] / "apps" / "backend"
-REPO_ROOT = BACKEND_ROOT.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = REPO_ROOT / "apps" / "backend"
 AI_ROOT = REPO_ROOT / "ai"
 
 if str(AI_ROOT) not in sys.path:
     sys.path.insert(0, str(AI_ROOT))
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 SAMPLE_RESUME = """
 Jane Doe

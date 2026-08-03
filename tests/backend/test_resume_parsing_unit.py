@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-BACKEND_ROOT = Path(__file__).resolve().parents[2] / "apps" / "backend"
+BACKEND_ROOT = Path(__file__).resolve().parents[2] / 'apps' / 'backend'
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -469,3 +469,42 @@ Skills: Python, JavaScript, HTML
     assert ok, err
     assert toon["person"]["email"] == "alex@fresh.com"
     assert len(toon["skills"]) > 0
+
+
+def test_collect_validation_issues_missing_person_does_not_raise():
+    toon = {
+        "type": "resume",
+        "skills": ["Python"],
+        "experience": [],
+        "education": [],
+    }
+    issues = collect_toon_validation_issues(toon, "resume")
+    assert isinstance(issues, list)
+    assert any("person" in i.lower() for i in issues)
+    assert "person.name must not be empty" in issues
+    assert "person.email must not be empty" in issues
+
+
+def test_build_resume_toon_empty_llm_recovers_identity_from_text():
+    raw_text = """
+Jordan Lee
+jordan.lee@example.com
++1 555-0101
+Skills: Python, SQL, Docker
+"""
+    toon = build_resume_toon(raw_text, {})
+    assert isinstance(toon.get("person"), dict)
+    assert toon["person"].get("name")
+    assert "jordan.lee@example.com" in (toon["person"].get("email") or "").lower()
+    assert isinstance(toon.get("skills"), list)
+
+
+def test_build_resume_toon_empty_llm_does_not_raise_keyerror():
+    raw_text = "No contact info here, just some prose about projects."
+    toon = build_resume_toon(raw_text, {})
+    assert isinstance(toon, dict)
+    assert "person" in toon
+    assert isinstance(toon["person"], dict)
+    # Validation may fail, but pipeline must not crash on missing keys
+    issues = collect_toon_validation_issues(toon, "resume")
+    assert isinstance(issues, list)

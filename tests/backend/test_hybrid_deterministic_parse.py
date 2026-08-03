@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-BACKEND_ROOT = Path(__file__).resolve().parent.parent
+BACKEND_ROOT = Path(__file__).resolve().parents[2] / 'apps' / 'backend'
 APP_ROOT = BACKEND_ROOT / 'app'
 for p in (str(BACKEND_ROOT), str(APP_ROOT)):
     if p not in sys.path:
