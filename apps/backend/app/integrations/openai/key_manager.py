@@ -2,6 +2,8 @@
 LLM API Key Manager: multi-key rotation, per-service round-robin, cooldown on failure.
 Production-ready: no keys in logs; thread-safe; extensible.
 """
+from __future__ import annotations
+
 import os
 import time
 import threading

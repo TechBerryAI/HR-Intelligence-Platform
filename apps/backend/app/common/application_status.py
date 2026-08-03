@@ -3,6 +3,8 @@ Canonical application status values for PostgreSQL (applications_status_check).
 All writes to applications.status must use these constants.
 """
 
+from __future__ import annotations
+
 STATUS_APPLIED = 'Applied'
 STATUS_SCREENING = 'Screening'
 STATUS_MATCHED = 'Matched'

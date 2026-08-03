@@ -3,6 +3,8 @@ Bulk Resume Parsing Service - calls Bulk-Resume-Parser API when available.
 Falls back to local bulk parsing (text_extraction + LLM) when external service is unreachable.
 Supports create-job → chunked/ZIP upload → start for large batches.
 """
+from __future__ import annotations
+
 import json
 import os
 from pathlib import Path

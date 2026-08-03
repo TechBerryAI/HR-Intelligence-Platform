@@ -1,4 +1,5 @@
-# Backend requires Python 3.10–3.12 for full OCR (RapidOCR).
+# Backend requires Python 3.10–3.12 recommended (3.9 works if modules use
+# `from __future__ import annotations` — required for `str | None` type hints).
 # Python 3.13+ can run the API; RapidOCR is skipped (no wheels yet) — scanned-image OCR
 # then needs system Tesseract, or use Python 3.12 for pip RapidOCR.
 Flask==3.0.3
