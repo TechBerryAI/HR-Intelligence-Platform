@@ -387,21 +387,67 @@ Required Skills: Python, Django
     assert "1. Own" not in repaired["description"]
 
 
-def test_description_falls_back_to_required_skills_when_missing():
+def test_no_overview_still_fills_form_from_available_jd_details():
+    """When JD has no About/description, fill form from whatever sections exist."""
+    jd_text = """
+Backend Engineer
+Company: Acme
+Location: Remote
+Experience: 2-4 years
+Salary: 10-15 LPA
+
+Key Responsibilities:
+• Build REST APIs
+• Write automated tests
+
+Required Skills: Python, Django, PostgreSQL
+Preferred Skills: Docker, AWS
+"""
     repaired, actions = repair_jd_toon(
         {
             "type": "job_description",
-            "title": "Python Developer",
-            "location": "Remote",
-            "skills": ["Python", "Django", "PostgreSQL"],
-            "mandatory_skills": ["Python", "Django", "PostgreSQL"],
+            "title": "",
+            "location": "",
+            "skills": [],
             "responsibilities": [],
             "description": "",
         },
-        raw_jd_text="Python Developer\nLocation: Remote\nRequired Skills: Python, Django, PostgreSQL\n",
+        raw_jd_text=jd_text,
     )
-    assert "**Required Skills:**" in repaired["description"]
-    assert "Python" in repaired["description"]
-    assert "Key Responsibilities" not in repaired["description"]
-    assert "filled_description_from_required_skills" in actions
+    assert repaired["title"] == "Backend Engineer"
+    assert repaired["location"] == "Remote"
+    assert repaired["company"] == "Acme"
+    assert repaired["min_experience_years"] == 2.0
+    assert repaired["max_experience_years"] == 4.0
+    assert repaired["salary_range"]
+    assert "Python" in repaired["mandatory_skills"]
+    assert "Docker" in repaired["preferred_skills"] or "Docker" in repaired["skills"]
+    assert repaired["description"]
+    assert "Build REST APIs" in repaired["description"]
+    assert "Required Skills" not in repaired["description"]
+
+    # Skills-only JD (no responsibilities, no overview)
+    jd2 = """
+Data Analyst
+Location: Bengaluru
+Experience: 1-3 years
+Required Skills: SQL, Excel, Python
+"""
+    r2, _ = repair_jd_toon(
+        {
+            "type": "job_description",
+            "title": "",
+            "location": "",
+            "skills": [],
+            "responsibilities": [],
+            "description": "",
+        },
+        raw_jd_text=jd2,
+    )
+    assert r2["title"] == "Data Analyst"
+    assert r2["location"] == "Bengaluru"
+    assert r2["min_experience_years"] == 1.0
+    assert "SQL" in r2["mandatory_skills"]
+    assert "**Required Skills:**" in r2["description"]
+    assert "SQL" in r2["description"]
 

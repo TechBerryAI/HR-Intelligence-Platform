@@ -168,17 +168,28 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
 
 
 def extract_tech_keywords_from_text(text: str, max_items: int = 20) -> list[str]:
-    """Pull short tech/domain keywords that actually appear in the JD text."""
+    """Pull short tech/domain keywords that actually appear in the JD text.
+
+    Skips generic/title acronyms (AI, IT, QA, …) — those are not useful keywords.
+    """
     if not text:
         return []
     found: list[str] = []
     seen: set[str] = set()
+    skip_acronyms = {
+        'JD', 'CEO', 'HR', 'USA', 'PDF', 'DOC', 'AI', 'IT', 'QA', 'PM', 'UI', 'UX',
+        'CV', 'LLC', 'INC', 'LTD', 'PTE', 'PVT', 'OKR', 'KPI', 'SLA', 'NDA',
+        'LPA', 'CTC', 'INR', 'USD', 'EUR', 'GBP', 'WFH',
+    }
 
-    # Acronyms / product tokens: RAG, GenAI, NLP, AWS, API, LLM, etc.
+    # Acronyms / product tokens: RAG, GenAI, NLP, AWS, LLM, etc.
     for m in re.finditer(r'\b([A-Z][A-Z0-9+]{1,9})\b', text):
         tok = m.group(1)
         key = tok.lower()
-        if key in seen or key in {'JD', 'CEO', 'HR', 'USA', 'PDF', 'DOC'}:
+        if key in seen or tok in skip_acronyms:
+            continue
+        # Require length >= 3 for bare acronyms (RAG, AWS) — drop 2-letter noise
+        if len(tok) < 3:
             continue
         if is_plausible_keyword(tok):
             seen.add(key)
@@ -191,31 +202,99 @@ def extract_tech_keywords_from_text(text: str, max_items: int = 20) -> list[str]
         'machine learning', 'deep learning', 'natural language processing',
         'computer vision', 'large language model', 'large language models',
         'retrieval augmented generation', 'prompt engineering', 'vector database',
-        'rest api', 'rest apis', 'microservices', 'data pipeline', 'data pipelines',
+        'microservices', 'data pipeline', 'data pipelines',
         'langchain', 'llamaindex', 'pytorch', 'tensorflow', 'kubernetes',
         'docker', 'postgresql', 'mongodb', 'fastapi', 'flask', 'django',
-        'react', 'node.js', 'typescript', 'python', 'java', 'golang', 'go',
+        'react', 'node.js', 'typescript', 'python', 'java', 'golang',
         'aws', 'azure', 'gcp', 'genai', 'rag', 'llm', 'nlp', 'mlops',
     ]
     lower = text.lower()
     for phrase in phrases:
         if phrase in lower and phrase not in seen and is_plausible_keyword(phrase):
-            # Prefer original casing from a simple title-case for multi-word
             display = phrase.upper() if len(phrase) <= 5 and ' ' not in phrase else phrase.title() if ' ' in phrase else phrase.capitalize()
-            # Keep known acronyms upper
-            if phrase in {'rag', 'llm', 'nlp', 'aws', 'gcp', 'api', 'genai', 'mlops'}:
+            if phrase in {'rag', 'llm', 'nlp', 'aws', 'gcp', 'genai', 'mlops'}:
                 display = phrase.upper() if phrase != 'genai' else 'GenAI'
-            elif phrase in {'langchain', 'llamaindex', 'pytorch', 'tensorflow', 'fastapi', 'django', 'flask', 'postgresql', 'mongodb', 'kubernetes', 'docker', 'python', 'java', 'react'}:
-                display = {'langchain': 'LangChain', 'llamaindex': 'LlamaIndex', 'pytorch': 'PyTorch',
-                           'tensorflow': 'TensorFlow', 'fastapi': 'FastAPI', 'django': 'Django',
-                           'flask': 'Flask', 'postgresql': 'PostgreSQL', 'mongodb': 'MongoDB',
-                           'kubernetes': 'Kubernetes', 'docker': 'Docker', 'python': 'Python',
-                           'java': 'Java', 'react': 'React'}.get(phrase, display)
+            elif phrase in {
+                'langchain', 'llamaindex', 'pytorch', 'tensorflow', 'fastapi', 'django',
+                'flask', 'postgresql', 'mongodb', 'kubernetes', 'docker', 'python', 'java', 'react',
+            }:
+                display = {
+                    'langchain': 'LangChain', 'llamaindex': 'LlamaIndex', 'pytorch': 'PyTorch',
+                    'tensorflow': 'TensorFlow', 'fastapi': 'FastAPI', 'django': 'Django',
+                    'flask': 'Flask', 'postgresql': 'PostgreSQL', 'mongodb': 'MongoDB',
+                    'kubernetes': 'Kubernetes', 'docker': 'Docker', 'python': 'Python',
+                    'java': 'Java', 'react': 'React',
+                }.get(phrase, display)
             seen.add(phrase)
             found.append(display)
             if len(found) >= max_items:
                 break
     return found
+
+
+def strip_foreign_form_sections_from_description(text: str, title: str = '') -> str:
+    """Remove skills/salary/employment/etc. — those belong in other form fields.
+
+    Preserves overview prose and responsibility bullets already in the text.
+    """
+    if not text or not str(text).strip():
+        return ''
+    title_norm = re.sub(r'\s+', ' ', (title or '').strip()).lower() if is_plausible_job_title(title or '') else ''
+    kept: list[str] = []
+    for raw in str(text).replace('\r\n', '\n').split('\n'):
+        line = raw.strip()
+        if not line:
+            if kept and kept[-1] != '':
+                kept.append('')
+            continue
+        # Drop metadata / duplicate title lines only
+        if re.match(
+            r'(?i)^(?:job\s*title|title|role|position|company|employer|location|salary|ctc|'
+            r'compensation|experience|employment\s*type|job\s*type|department|jd|job\s*description)\s*:{1,2}\s*',
+            line,
+        ):
+            continue
+        if re.match(r'(?i)^(?:jd|job\s*description|role|position)\s*$', line):
+            continue
+        line_norm = re.sub(r'\s+', ' ', line).lower().strip('.:- ')
+        if title_norm and line_norm == title_norm:
+            continue
+        kept.append(line)
+
+    cleaned = re.sub(r'\n{3,}', '\n\n', '\n'.join(kept)).strip()
+    foreign = (
+        r'Employment\s*Type|Job\s*Type|Required\s*Skills?|Preferred\s*Skills?|'
+        r'Nice[- ]?to[- ]?have(?:\s*Skills?)?|Mandatory\s*Skills?|Core\s*Skills?|'
+        r'Technical\s*Skills?|(?<![A-Za-z])Skills|Qualifications|Requirements|Must\s*Haves?|'
+        r'Minimum\s*Qualifications|Benefits|What\s*We\s*Offer|Compensation|Salary|CTC'
+    )
+    cut = re.search(rf'(?im)(?:^|\n)\s*(?:\*\*)?(?:{foreign})(?:\*\*)?\s*:', cleaned)
+    if cut:
+        cleaned = cleaned[: cut.start()].strip()
+    lines: list[str] = []
+    for line in cleaned.split('\n'):
+        if re.match(rf'(?i)^\s*(?:\*\*)?(?:{foreign})(?:\*\*)?\s*:?\s*$', line):
+            continue
+        lines.append(line)
+    return re.sub(r'\n{3,}', '\n\n', '\n'.join(lines)).strip()
+
+
+def detect_responsibility_heading(text: str) -> str:
+    """Use the JD's own responsibilities heading when present."""
+    if not text:
+        return 'Responsibilities'
+    m = re.search(
+        rf'(?im)^(?:\*\*)?\s*({RESPONSIBILITY_HEADING_RE})\s*(?:\*\*)?\s*:?\s*$',
+        text,
+    )
+    if m:
+        raw = re.sub(r'\s+', ' ', m.group(1)).strip(' :*')
+        return raw.title() if raw.islower() or raw.isupper() else raw
+    m2 = re.search(rf'(?i)({RESPONSIBILITY_HEADING_RE})\s*:', text)
+    if m2:
+        raw = re.sub(r'\s+', ' ', m2.group(1)).strip(' :*')
+        return raw.title() if raw.islower() or raw.isupper() else raw
+    return 'Responsibilities'
 
 
 def compose_jd_description(
@@ -224,18 +303,15 @@ def compose_jd_description(
     *,
     title: str = '',
     include_responsibilities: bool | None = None,
+    source_text: str = '',
+    responsibilities_heading: str | None = None,
 ) -> str:
-    """Build Description for the form.
+    """Build Description = overview [+ responsibilities from the JD only].
 
-    - Overview is always plain prose (source JD bullets stripped).
-    - Key Responsibilities is included only when include_responsibilities is True
-      (or when responsibilities are provided and include_responsibilities is None
-      for backward-compatible callers that already decided).
-    - Responsibility sentences are re-bulleted with our own • markers.
+    Skills/salary/employment stay out. Heading follows the JD when available.
     """
-    overview_clean = clean_jd_description(overview or '', title=title)
-    overview_clean = strip_source_bullets_to_prose(overview_clean)
-    # Drop any embedded responsibilities block so we control formatting
+    title_for_clean = title if is_plausible_job_title(title) else ''
+    overview_clean = strip_foreign_form_sections_from_description(overview or '', title=title_for_clean)
     overview_clean = re.sub(
         rf'\n*\s*(?:\*\*)?(?:{RESPONSIBILITY_HEADING_RE}):?\*?\*?\s*[\s\S]*$',
         '',
@@ -248,24 +324,23 @@ def compose_jd_description(
         for r in (responsibilities or [])
         if r and _strip_list_marker(str(r))
     ]
-
     if include_responsibilities is False:
         resp_items = []
 
-    # Deduplicate responsibilities already present in overview
     if overview_clean and resp_items:
         ov_lower = overview_clean.lower()
-        resp_items = [
-            r for r in resp_items
-            if r.lower()[:48] not in ov_lower
-        ]
+        resp_items = [r for r in resp_items if r.lower()[:48] not in ov_lower]
 
     parts: list[str] = []
     if overview_clean:
         parts.append(overview_clean)
     if resp_items:
+        heading = (
+            responsibilities_heading
+            or detect_responsibility_heading(source_text or overview or '')
+        )
         bullets = "\n".join(f"• {r}" for r in resp_items)
-        parts.append(f"**Key Responsibilities:**\n{bullets}")
+        parts.append(f"**{heading}:**\n{bullets}")
     return "\n\n".join(parts).strip()
 
 
@@ -401,26 +476,61 @@ def extract_location_from_text(text: str) -> str:
     return ''
 
 
+def is_plausible_job_title(title: str) -> bool:
+    """Reject overview sentences and section labels wrongly used as titles."""
+    t = re.sub(r'\s+', ' ', (title or '').strip())
+    if not t or len(t) < 2 or len(t) > 80:
+        return False
+    words = t.split()
+    if len(words) > 8:
+        return False
+    if re.search(r'[.!?]', t):
+        return False
+    lower = t.lower()
+    if lower.startswith((
+        'we ', 'our ', 'looking', 'seeking', 'join ', 'the ', 'a ', 'an ',
+        'about ', 'this ', 'you ', 'your ',
+    )):
+        return False
+    if re.match(
+        r'(?i)^(about|responsibilit|duties|requirements?|qualifications?|skills?|'
+        r'benefits?|what you|employment|location|company|salary|compensation)\b',
+        t,
+    ):
+        return False
+    return True
+
+
 def extract_title_from_text(text: str) -> str:
     if not text:
         return ''
+    # Prefer explicit labels — never bare "role:" (matches "About the role:")
     labeled = re.search(
-        r'(?i)(?:job\s*title|position|role|title)\s*[:\-]\s*([^\n]+)',
+        r'(?im)^(?:job\s*title|position|title)\s*[:\-]\s*([^\n]+)$',
         text,
     )
     if labeled and labeled.group(1):
         title = labeled.group(1).strip().strip('.,;:')
-        if 2 <= len(title) <= 120:
-            return title
-    for line in text.split('\n')[:8]:
+        if is_plausible_job_title(title):
+            return title[:120]
+    for line in text.split('\n')[:10]:
         stripped = re.sub(r'^[\s#*•\-]+', '', line.strip())
         if not stripped or len(stripped) < 3:
             continue
-        if re.match(r'(?i)^(company|location|salary|about|job\s+description)\b', stripped):
+        if re.match(
+            r'(?i)^(company|employer|location|salary|ctc|compensation|experience|'
+            r'employment|about|job\s+description|responsibilit|requirements?|skills?|'
+            r'qualifications?|benefits?|what you|preferred|mandatory)\b',
+            stripped,
+        ):
             continue
-        if '@' in stripped or 'http' in stripped.lower():
-            continue
-        if 3 <= len(stripped) <= 100:
+        # Strip leading label if present
+        stripped = re.sub(
+            r'(?i)^(?:job\s*title|position|title)\s*[:\-]\s*',
+            '',
+            stripped,
+        ).strip()
+        if is_plausible_job_title(stripped):
             return stripped[:120]
     return ''
 
@@ -477,7 +587,10 @@ def extract_company_from_text(text: str) -> str:
 
 
 def extract_overview_from_text(text: str, max_chars: int = 2500) -> str:
-    """Extract the job overview / about section for the Description form field."""
+    """Extract the job overview / about section for the Description form field.
+
+    Returns empty when the JD has no real narrative (only title/location/skills metadata).
+    """
     if not text or not str(text).strip():
         return ''
     desc = str(text).strip()
@@ -490,7 +603,9 @@ def extract_overview_from_text(text: str, max_chars: int = 2500) -> str:
         desc,
     )
     if about and len(about.group(1).strip()) >= 20:
-        return clean_jd_description(about.group(1).strip()[:max_chars])
+        cleaned_about = clean_jd_description(about.group(1).strip()[:max_chars])
+        if cleaned_about and len(cleaned_about) >= 20:
+            return cleaned_about
 
     cut = re.search(
         rf'\n\s*(?:\*\*)?(?:{RESPONSIBILITY_HEADING_RE}|requirements|qualifications|'
@@ -517,12 +632,75 @@ def extract_overview_from_text(text: str, max_chars: int = 2500) -> str:
             stripped,
         ):
             break
+        if re.match(r'(?i)^(remote|hybrid|onsite|work\s+from\s+home|wfh)[\s,.-]*$', stripped):
+            continue
         lines.append(_strip_list_marker(stripped) or stripped)
     overview = '\n'.join(ln for ln in lines if ln).strip()
     overview = re.sub(r'\n{3,}', '\n\n', overview)
     cleaned = clean_jd_description(overview)
-    if len(cleaned) >= 20:
-        return cleaned[:max_chars]
+    # Reject title/location-only leftovers — need real narrative
+    if not cleaned or len(cleaned) < 40:
+        return ''
+    if is_plausible_job_title(cleaned):
+        return ''
+    if '.' not in cleaned and len(cleaned.split()) < 12:
+        return ''
+    return cleaned[:max_chars]
+
+
+def build_description_from_available(
+    *,
+    overview: str = '',
+    responsibilities: list[str] | None = None,
+    mandatory_skills: list[str] | None = None,
+    preferred_skills: list[str] | None = None,
+    qualifications: list[str] | None = None,
+    title: str = '',
+    source_text: str = '',
+    include_responsibilities: bool = False,
+    responsibilities_heading: str | None = None,
+) -> str:
+    """Fill Description from whatever the JD actually has — never invent content.
+
+    Priority:
+      1) overview (+ responsibilities if present in JD)
+      2) responsibilities only
+      3) qualifications bullets
+      4) required / preferred skills
+    """
+    resp = [
+        _strip_list_marker(str(r))
+        for r in (responsibilities or [])
+        if r and _strip_list_marker(str(r))
+    ]
+    composed = compose_jd_description(
+        overview or '',
+        resp if include_responsibilities else [],
+        title=title if is_plausible_job_title(title) else '',
+        include_responsibilities=include_responsibilities,
+        source_text=source_text,
+        responsibilities_heading=responsibilities_heading,
+    )
+    if composed and len(composed.strip()) >= 10:
+        return composed.strip()
+
+    if include_responsibilities and resp:
+        heading = responsibilities_heading or detect_responsibility_heading(source_text)
+        return f"**{heading}:**\n" + "\n".join(f"• {r}" for r in resp)
+
+    quals = [
+        _strip_list_marker(str(q))
+        for q in (qualifications or [])
+        if q and _strip_list_marker(str(q))
+    ]
+    if quals:
+        return "**Qualifications:**\n" + "\n".join(f"• {q}" for q in quals[:12])
+
+    required = [str(s).strip() for s in (mandatory_skills or []) if s and str(s).strip()]
+    if not required:
+        required = [str(s).strip() for s in (preferred_skills or []) if s and str(s).strip()]
+    if required:
+        return f"**Required Skills:**\n{', '.join(required)}"
     return ''
 
 

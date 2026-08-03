@@ -97,22 +97,9 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     setError('')
     try {
       const companyToUse = user?.company || company
-      // Keep description skill sections in sync with structured skill fields
-      let descriptionToSend = description
+      // Skills stay in their own fields — do not inject them into Description
       const mand = mandatorySkills.split(',').map((s) => s.trim()).filter(Boolean)
       const pref = preferredSkills.split(',').map((s) => s.trim()).filter(Boolean)
-      if (mand.length || pref.length) {
-        let body = descriptionToSend
-        // Strip old skill sections then append current
-        body = body.replace(/\*\*(?:Required|Mandatory|Preferred)\s*Skills?:\*\*[\s\S]*?(?=\n\*\*|\n*$)/gi, '').trim()
-        if (mand.length) {
-          body += `\n\n**Required Skills:**\n${mand.join(', ')}`
-        }
-        if (pref.length) {
-          body += `\n\n**Preferred Skills:**\n${pref.join(', ')}`
-        }
-        descriptionToSend = body.trim()
-      }
       const payload = {
         title,
         company: companyToUse,
@@ -120,7 +107,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
         salary,
         experienceFrom,
         experienceTo,
-        description: descriptionToSend,
+        description: (description || '').trim(),
         keywords,
         mandatorySkills: mand,
         preferredSkills: pref,

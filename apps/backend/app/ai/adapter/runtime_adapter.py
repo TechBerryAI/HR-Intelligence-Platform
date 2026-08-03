@@ -692,13 +692,19 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
             extract_experience_years,
             extract_qualifications_from_text,
             infer_jd_fields_from_text,
+            is_plausible_job_title,
         )
 
         inferred_fields = infer_jd_fields_from_text(infer_source)
 
         if not repaired.get("title") and inferred_fields.get("title"):
-            repaired["title"] = inferred_fields["title"]
-            actions.append("inferred_title_from_text")
+            if is_plausible_job_title(inferred_fields["title"]):
+                repaired["title"] = inferred_fields["title"]
+                actions.append("inferred_title_from_text")
+        elif repaired.get("title") and not is_plausible_job_title(_str(repaired.get("title"))):
+            if inferred_fields.get("title") and is_plausible_job_title(inferred_fields["title"]):
+                repaired["title"] = inferred_fields["title"]
+                actions.append("replaced_implausible_title")
         if not repaired.get("company") and inferred_fields.get("company"):
             repaired["company"] = inferred_fields["company"]
             actions.append("inferred_company_from_text")
@@ -746,11 +752,22 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
     from app.ai.parser.enrichment.jd_text_inference import (
         clean_jd_description,
         compose_jd_description,
+        detect_responsibility_heading,
         extract_overview_from_text,
         extract_responsibilities_from_text,
         extract_tech_keywords_from_text,
+        extract_title_from_text,
         has_responsibilities_section,
+        is_plausible_job_title,
     )
+
+    # Fix title if it wrongly captured overview / "About the role" body
+    current_title = _str(repaired.get("title"))
+    if raw_jd_text and not is_plausible_job_title(current_title):
+        fixed_title = extract_title_from_text(raw_jd_text)
+        if is_plausible_job_title(fixed_title):
+            repaired["title"] = fixed_title
+            actions.append("fixed_implausible_title")
 
     source_text = (raw_jd_text or repaired.get("description") or "").strip()
     jd_has_kr = has_responsibilities_section(source_text)
@@ -778,62 +795,65 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
             )
             actions.append("responsibilities_excluded_from_description")
 
-    # Compose Description = overview [+ Key Responsibilities only if JD has that section]
+    # Compose Description = overview [+ responsibilities only if JD has that section]
+    title_for_clean = repaired.get("title") or ""
+    if not is_plausible_job_title(title_for_clean):
+        title_for_clean = ""
     overview = clean_jd_description(
         repaired.get("description") or "",
-        title=repaired.get("title") or "",
+        title=title_for_clean,
     )
     if not overview and raw_jd_text:
         overview = extract_overview_from_text(raw_jd_text)
         if overview:
             actions.append("filled_description_from_overview")
+    # If overview still empty/too short, prefer raw about extraction again
+    if (not overview or len(overview) < 20) and raw_jd_text:
+        overview2 = extract_overview_from_text(raw_jd_text)
+        if overview2 and len(overview2) > len(overview or ""):
+            overview = overview2
+            actions.append("filled_description_from_overview")
 
     resp_for_desc = (repaired.get("responsibilities") or []) if jd_has_kr else []
-    composed = compose_jd_description(
-        overview,
-        resp_for_desc,
-        title=repaired.get("title") or "",
+    heading = detect_responsibility_heading(source_text) if jd_has_kr else None
+    from app.ai.parser.enrichment.jd_text_inference import build_description_from_available
+
+    composed = build_description_from_available(
+        overview=overview or '',
+        responsibilities=resp_for_desc,
+        mandatory_skills=list(repaired.get("mandatory_skills") or []),
+        preferred_skills=list(repaired.get("preferred_skills") or []),
+        qualifications=list(repaired.get("qualifications") or []),
+        title=title_for_clean,
+        source_text=source_text,
         include_responsibilities=jd_has_kr,
+        responsibilities_heading=heading,
     )
     if composed:
         if composed != (repaired.get("description") or ""):
-            actions.append(
-                "composed_description_with_responsibilities"
-                if jd_has_kr and resp_for_desc
-                else "composed_description_overview_only"
-            )
+            if jd_has_kr and resp_for_desc and overview:
+                actions.append("composed_description_with_responsibilities")
+            elif jd_has_kr and resp_for_desc:
+                actions.append("filled_description_from_responsibilities")
+            elif overview:
+                actions.append("composed_description_overview_only")
+            elif "**Required Skills:**" in composed:
+                actions.append("filled_description_from_required_skills")
+            elif "**Qualifications:**" in composed:
+                actions.append("filled_description_from_qualifications")
+            else:
+                actions.append("filled_description_from_available_fields")
         repaired["description"] = composed
-    elif resp_for_desc:
-        repaired["description"] = compose_jd_description(
-            "",
-            resp_for_desc,
-            title=repaired.get("title") or "",
-            include_responsibilities=True,
-        )
-        actions.append("filled_description_from_responsibilities")
-    else:
-        # No overview / KR — Description = Required Skills only
-        required = [
-            _str(s)
-            for s in (
-                list(repaired.get("mandatory_skills") or [])
-                or list(repaired.get("skills") or [])
-            )
-            if _str(s)
-        ]
-        if required:
-            repaired["description"] = f"**Required Skills:**\n{', '.join(required)}"
-            actions.append("filled_description_from_required_skills")
 
-    # Flag for frontend autofill: only show KR block when JD had that section
+    # Flag for frontend autofill: only show responsibilities when JD had that section
     repaired["has_key_responsibilities"] = bool(jd_has_kr and resp_for_desc)
 
-    # Keywords: skills first, then short tech terms found in the JD (never sentences)
+    # Keywords: JD skills first; optional tech terms only if they appear in the JD text
     tech_from_text = extract_tech_keywords_from_text(
-        raw_jd_text or repaired.get("description") or ""
+        raw_jd_text or ""
     )
     repaired["keywords"] = _derive_jd_keywords(
-        list(repaired.get("keywords") or []) + tech_from_text,
+        tech_from_text,  # never trust raw LLM keyword sentences
         repaired,
         raw_jd_text or repaired.get("description") or "",
     )
@@ -851,7 +871,7 @@ def _derive_jd_keywords(
     *,
     max_keywords: int = 20,
 ) -> list[str]:
-    """Build keywords strictly from JD content — never invent unrelated terms."""
+    """Keywords = JD skills/tech terms only — never invent or keep prose fragments."""
     from app.ai.parser.enrichment.jd_text_inference import is_plausible_keyword
 
     stop = {
@@ -859,7 +879,13 @@ def _derive_jd_keywords(
         "job", "role", "position", "team", "work", "working", "experience", "years",
         "year", "required", "preferred", "nice", "have", "must", "strong", "good",
         "knowledge", "ability", "skills", "skill", "etc", "including", "using",
-        "jd", "engineer", "developer",  # bare titles alone are weak keywords
+        "jd", "engineer", "developer", "analyst", "manager", "lead", "senior",
+        "junior", "associate", "intern", "consultant",
+        "lpa", "ctc", "inr", "usd", "eur", "gbp", "salary", "compensation", "pay",
+        "full-time", "part-time", "contract", "remote", "hybrid", "onsite",
+        "employment", "type", "full", "part", "time",
+        "go", "rest", "rest api", "rest apis", "apis", "api", "ai", "it", "qa", "hr",
+        "genai applications", "rag systems",  # prose fragments
     }
     skill_list = [
         _str(s)
@@ -870,24 +896,41 @@ def _derive_jd_keywords(
         )
         if _str(s)
     ]
-    skill_set = {s.lower() for s in skill_list}
-
-    # Prefer skills first; only keep short keyword tokens from parser keywords
-    candidates = skill_list + _ensure_string_array(existing)
 
     text_lower = (jd_text or "").lower()
+
+    def _keep(token: str) -> bool:
+        kw = _str(token)
+        if not is_plausible_keyword(kw):
+            return False
+        key = kw.lower()
+        if key in stop:
+            return False
+        # Must appear in the JD text when we have it
+        if text_lower and key not in text_lower:
+            return False
+        return True
+
+    # 1) Skills from the JD (primary — form Keywords should mirror real JD skills)
     result: list[str] = []
     seen: set[str] = set()
-    for raw in candidates:
+    for raw in skill_list:
         kw = _str(raw)
-        if not is_plausible_keyword(kw):
-            continue
         key = kw.lower()
-        if key in stop or key in seen:
+        if key in seen or not _keep(kw):
             continue
-        # Only keep terms present in the JD text, or already extracted as JD skills
-        if text_lower and key not in text_lower and key not in skill_set:
+        seen.add(key)
+        result.append(kw)
+        if len(result) >= max_keywords:
+            return result
+
+    # 2) Extra tech terms from JD text only if not already covered (and present in text)
+    for raw in _ensure_string_array(existing):
+        kw = _str(raw)
+        key = kw.lower()
+        if key in seen or not _keep(kw):
             continue
+        # Skip if it's only a generic 2–3 letter token already rejected above
         seen.add(key)
         result.append(kw)
         if len(result) >= max_keywords:

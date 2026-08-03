@@ -52,47 +52,45 @@ def _trace(
 
 def format_jd_description(profile: JobProfile) -> str:
     """
-    Named transform: Description = overview prose + Key Responsibilities (own bullets).
-    If no description/overview is available, fall back to Required Skills only.
+    Description from whatever the JD has:
+      overview → responsibilities → qualifications → required skills.
+    Other details (title, location, salary, skills fields) fill their own form fields.
     """
     from app.ai.parser.enrichment.jd_text_inference import (
-        compose_jd_description,
+        build_description_from_available,
         has_responsibilities_section,
+        strip_foreign_form_sections_from_description,
         strip_source_bullets_to_prose,
     )
 
-    narrative = strip_source_bullets_to_prose(profile.basic.description.strip())
-    responsibilities = [
-        strip_source_bullets_to_prose(r) for r in profile.responsibilities.items if r and str(r).strip()
-    ]
-    responsibilities = [r for r in responsibilities if r]
-
-    # Prefer structured narrative when it already has our Key Responsibilities block
-    if narrative and '**Key Responsibilities:**' in narrative:
+    raw = (profile.basic.description or '').strip()
+    narrative = strip_foreign_form_sections_from_description(
+        raw,
+        title=profile.basic.title or '',
+    )
+    if narrative and len(narrative) >= 15:
         return narrative
 
+    responsibilities = [
+        strip_source_bullets_to_prose(r)
+        for r in profile.responsibilities.items
+        if r and str(r).strip()
+    ]
+    responsibilities = [r for r in responsibilities if r]
     include_kr = bool(responsibilities) and (
-        has_responsibilities_section(narrative)
-        or bool(responsibilities)
+        has_responsibilities_section(raw) or '• ' in raw or bool(responsibilities)
     )
-    composed = compose_jd_description(
-        narrative,
-        responsibilities if include_kr else [],
+
+    return build_description_from_available(
+        overview='',
+        responsibilities=responsibilities,
+        mandatory_skills=list(profile.skills.mandatory or []),
+        preferred_skills=list(profile.skills.preferred or profile.skills.general or []),
+        qualifications=list(profile.requirements.qualifications or []),
         title=profile.basic.title or '',
+        source_text=raw,
         include_responsibilities=include_kr,
     )
-    if composed:
-        return composed
-
-    # No overview / KR — put Required Skills only into Description
-    required = [
-        s.strip()
-        for s in (list(profile.skills.mandatory) or list(profile.skills.general) or [])
-        if s and str(s).strip()
-    ]
-    if required:
-        return f"**Required Skills:**\n{', '.join(required)}"
-    return ''
 
 
 def map_job_to_form(profile: JobProfile) -> JobCreateFormDTO:
@@ -234,12 +232,20 @@ def map_job_to_form(profile: JobProfile) -> JobCreateFormDTO:
 
     responsibilities = [r for r in profile.responsibilities.items if r.strip()]
     qualifications = [q for q in profile.requirements.qualifications if q.strip()]
-    keywords = [k for k in profile.requirements.keywords if k.strip()]
-    # Prefer short skill/tech terms when keywords empty
+    from app.ai.parser.enrichment.jd_text_inference import is_plausible_keyword
+
+    # Keywords: only short JD skill/tech terms already on the profile (no invented extras)
+    keywords = [
+        k.strip()
+        for k in profile.requirements.keywords
+        if k and is_plausible_keyword(str(k).strip())
+    ]
     if not keywords:
-        keywords = list(dict.fromkeys(
-            [s for s in (mandatory + preferred + general) if s and len(s.split()) <= 4][:20]
-        ))
+        keywords = [
+            s for s in (mandatory + preferred + general)
+            if s and is_plausible_keyword(s) and len(s.split()) <= 4
+        ][:20]
+    keywords = list(dict.fromkeys(keywords))
 
     return JobCreateFormDTO(
         title=title,
