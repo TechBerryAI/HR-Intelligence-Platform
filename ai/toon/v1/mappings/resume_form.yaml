@@ -1,54 +1,62 @@
-# Form Mapping Contract — Resume TOON → Apply form
-# Version: 1.0.0
-# Source of truth for autofill; frontend mapResumeTOONToForm must honor these paths.
+# Form Mapping Contract — CandidateProfile → Application Form DTO
+# Version: 2.0.0
+# Executed by: app.ai.document_intelligence.mapping.resume_form
+# Frontend MUST consume Form DTO only — never map TOON.
 
-version: "1.0.0"
+version: "2.0.0"
 document_type: resume
+mapper: document_intelligence.mapping.resume_form.v1
+engine: document_intelligence
 
 mappings:
-  - toon: person.name
+  - canonical: personal.full_name
     form: fullName
-  - toon: person.email
+  - canonical: contact.email
     form: email
-  - toon: person.phone
+    validator: validate_email
+  - canonical: contact.phone
     form: phone
-  - toon: person.linkedin
+    validator: validate_phone
+  - canonical: contact.linkedin
     form: linkedinUrl
-  - toon: person.portfolio
+    validator: validate_url
+  - canonical: contact.portfolio
     form: portfolioUrl
-  - toon: person.github
+    validator: validate_url
+  - canonical: contact.github
     form: githubUrl
-  - toon: person.location
+    validator: validate_url
+  - canonical: contact.location
     form: currentLocation
-  - toon: person.preferred_location
+  - canonical: contact.preferred_location
     form: preferredLocation
-  - toon: skills
-    form: skills
-    transform: join_comma
-  - toon: summary
-    form: summary
-  - toon: total_experience_years
+    note: No fallback to currentLocation
+  - canonical: total_experience_years|experience[]
     form: experienceLevel
     transform: fresher_or_experienced
-  - toon: education[]
+  - canonical: skills[].canonical
+    form: skills
+    transform: join_comma
+  - canonical: personal.summary
+    form: summary
+  - canonical: education[]
     form: education[]
     fields:
-      degree: degree
-      field: field
+      degree: degree+field
       institution: institution
       gpa: cgpa
-      from: startMonth
-      to: endMonth
-  - toon: experience[]
+      start: startMonth
+      end: endMonth
+  - canonical: experience[]
     form: experiences[]
     fields:
       company: company
-      title: role
-      from: startMonth
-      to: endMonth
+      role: role
+      start: startMonth
+      end: endMonth
+      is_current: isCurrent
       description: description
-  - toon: certifications[]
+  - canonical: certificates[]
     form: certifications[]
 
 # Not mapped (user-input only): servingNotice, noticePeriod, lastWorkingDay
-# Backend-filtered titles are trusted; frontend must not re-filter plausibility.

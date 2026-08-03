@@ -72,7 +72,7 @@ def runtime_env(require_ollama):
 
 
 def test_parse_via_runtime_returns_structured_resume(runtime_env):
-    from ai_runtime_adapter import normalize_proposal, parse_via_runtime
+    from app.ai.adapter.runtime_adapter import normalize_proposal, parse_via_runtime
 
     structured = parse_via_runtime(SAMPLE_RESUME, "resume")
     assert isinstance(structured, dict)
@@ -88,7 +88,7 @@ def test_parse_via_runtime_returns_structured_resume(runtime_env):
 
 
 def test_call_llm_gateway_path(runtime_env):
-    from llm_service import call_llm
+    from app.integrations.openai.llm_service import call_llm
 
     toon = call_llm(SAMPLE_RESUME, "resume")
     assert toon["type"] == "resume"

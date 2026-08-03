@@ -9,7 +9,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2] / 'apps' / 'backend'
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from resume_text_inference import (
+from app.ai.parser.enrichment.resume_text_inference import (
     compute_total_experience_years,
     dedupe_skills,
     extract_certifications_from_text,
@@ -189,7 +189,7 @@ Education
 
 
 def test_extract_experience_skips_objective_prose_as_title():
-    from resume_text_inference import is_plausible_job_title
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_job_title
 
     assert not is_plausible_job_title("to help the company achieve its objectiv")
     assert not is_plausible_job_title("Seeking a challenging role in HR")
@@ -213,7 +213,7 @@ Education
 
 
 def test_normalize_experience_drops_objective_title_without_company():
-    from ai_runtime_adapter import canonicalize_resume_toon
+    from app.ai.adapter.runtime_adapter import canonicalize_resume_toon
 
     toon = {
         "type": "resume",
@@ -256,7 +256,7 @@ SQL
 
 
 def test_biodata_lines_are_not_job_titles():
-    from resume_text_inference import is_plausible_job_title
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_job_title
 
     assert not is_plausible_job_title("PERSONAL DETAILS")
     assert not is_plausible_job_title("Date of Birth")

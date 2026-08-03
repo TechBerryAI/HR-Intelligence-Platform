@@ -20,6 +20,7 @@ SKILL_SECTION_STOP = (
 SKILL_SECTION_PATTERN = re.compile(
     r'(?i)(?:^|\n)\s*(?:\*\*)?(?:'
     r'technical\s+skills?|core\s+skills?|key\s+skills?|skill\s*sets?|skills?\s*sets?|'
+    r'skills?\s+and\s+abilities|skills?\s+&\s+abilities|'
     r'skills?|tools?|technologies?|'
     r'tech\s+stack|frameworks?|programming\s+languages?|competencies?|expertise'
     r')(?:\*\*)?\s*:?\s*([\s\S]*?)(?=\n\s*(?:\*\*)?(?:' + SKILL_SECTION_STOP + r')\b|\Z)',
@@ -48,8 +49,10 @@ SECTION_HEADERS = frozenset({
     'summary', 'objective', 'profile', 'experience', 'work experience',
     'professional experience', 'employment', 'education', 'skills', 'technical skills',
     'technical skill', 'core skills', 'core skill', 'key skills', 'key skill',
-    'skill set', 'skills set', 'tools', 'technologies', 'tech stack', 'project', 'projects',
-    'certifications', 'certificates', 'languages', 'awards', 'interests',
+    'skill set', 'skills set', 'skills and abilities', 'abilities',
+    'tools', 'technologies', 'tech stack', 'project', 'projects',
+    'certifications', 'certificates', 'certifications and licenses', 'licenses',
+    'languages', 'awards', 'interests',
     'references', 'contact', 'resume', 'curriculum vitae', 'cv', 'about me',
     'work history', 'qualifications', 'achievements',
     'personal details', 'personal information', 'biodata', 'bio data', 'contact details',
@@ -370,20 +373,44 @@ MONTH_MAP = {
 
 
 def split_list_items(text: str) -> list[str]:
-    """Split comma, pipe, or newline-separated prose into trimmed non-empty lines."""
+    """Split comma, pipe (ASCII/Unicode), or newline-separated prose into items."""
     if not text or not str(text).strip():
         return []
     raw = str(text).strip()
+    # Strip leftover section-header crumbs (e.g. "AND ABILITIES" after matching "SKILLS")
+    raw = re.sub(r'(?i)^(?:and\s+)?abilities\s*[:\-–—]?\s*', '', raw).strip()
+    # Normalize Unicode box-drawing / fullwidth pipes to ASCII
+    raw = re.sub(r'[│︱｜¦]', '|', raw)
+
+    def _is_institutionish(s: str) -> bool:
+        return bool(
+            re.search(r'(?i)\b(?:university|college|school|institute|commerce)\b', s)
+        )
+
     if '|' in raw:
-        parts = [p.strip() for p in raw.split('|')]
+        # Flatten newlines inside pipe lists (PDF wrap mid-skill)
+        flat = re.sub(r'\s*\n\s*', ' ', raw)
+        parts = [p.strip() for p in flat.split('|')]
     elif ',' in raw and '\n' not in raw:
         parts = [p.strip() for p in raw.split(',')]
     else:
         parts = [p.strip() for p in re.split(r'\n+', raw)]
+        expanded: list[str] = []
+        for p in parts:
+            p2 = re.sub(r'[│︱｜¦]', '|', p)
+            if '|' in p2:
+                expanded.extend(x.strip() for x in p2.split('|'))
+            elif ',' in p2 and not _is_institutionish(p2):
+                expanded.extend(x.strip() for x in p2.split(','))
+            else:
+                expanded.append(p)
+        parts = expanded
     result: list[str] = []
     for part in parts:
         cleaned = re.sub(r'^[\s•·\-\*]+', '', part).strip()
         cleaned = re.sub(r'^\d+[\.\)]\s*', '', cleaned).strip()
+        if re.fullmatch(r'(?i)(?:and\s+)?abilities?', cleaned):
+            continue
         if cleaned and len(cleaned) > 1:
             result.append(cleaned[:120])
     return result
@@ -508,6 +535,16 @@ def extract_name_from_text(text: str) -> str:
             continue
         if is_section_header_line(stripped):
             continue
+        # PDF spaced letters: "R O S H A N  P A N I C K E R" → "Roshan Panicker"
+        if re.fullmatch(r'(?:[A-Za-z]\s+){2,}[A-Za-z](?:\s{2,}(?:[A-Za-z]\s+)*[A-Za-z])?', stripped):
+            parts = re.split(r'\s{2,}', stripped)
+            words = []
+            for part in parts:
+                chars = [c for c in part.split() if len(c) == 1 and c.isalpha()]
+                if chars and len(chars) == len(part.split()):
+                    words.append(''.join(chars).title())
+            if 2 <= len(words) <= 5:
+                return ' '.join(words)[:80]
         if re.search(r'\d', stripped):
             continue
         words = stripped.split()

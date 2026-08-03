@@ -82,19 +82,20 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
 
   const handleAutofill = (mapped) => {
+    // Form DTO only — 1:1 assignment. No FE interpretation / soft fallbacks.
     setForm((prev) => ({
       ...prev,
-      fullName: mapped.fullName || prev.fullName,
-      email: mapped.email || prev.email,
-      phone: mapped.phone || prev.phone,
-      linkedinUrl: mapped.linkedinUrl || prev.linkedinUrl,
-      portfolioUrl: mapped.portfolioUrl || prev.portfolioUrl,
-      githubUrl: mapped.githubUrl || prev.githubUrl,
-      currentLocation: mapped.currentLocation || prev.currentLocation,
-      preferredLocation: mapped.preferredLocation || mapped.currentLocation || prev.preferredLocation,
-      experienceLevel: mapped.experienceLevel || prev.experienceLevel,
-      skills: mapped.skills || (mapped._skills || []).join(', ') || prev.skills,
-      summary: mapped.summary || mapped._summary || prev.summary,
+      fullName: mapped.fullName ?? prev.fullName,
+      email: mapped.email ?? prev.email,
+      phone: mapped.phone ?? prev.phone,
+      linkedinUrl: mapped.linkedinUrl ?? prev.linkedinUrl,
+      portfolioUrl: mapped.portfolioUrl ?? prev.portfolioUrl,
+      githubUrl: mapped.githubUrl ?? prev.githubUrl,
+      currentLocation: mapped.currentLocation ?? prev.currentLocation,
+      preferredLocation: mapped.preferredLocation ?? prev.preferredLocation,
+      experienceLevel: mapped.experienceLevel ?? prev.experienceLevel,
+      skills: mapped.skills ?? prev.skills,
+      summary: mapped.summary ?? prev.summary,
       education: mapped.education?.length ? mapped.education : prev.education,
       experiences: mapped.experiences?.length ? mapped.experiences : prev.experiences,
       certifications: mapped.certifications?.length ? mapped.certifications : prev.certifications,

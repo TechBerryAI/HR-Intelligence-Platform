@@ -1,35 +1,39 @@
-# Form Mapping Contract — JD TOON → Recruiter job form
-# Version: 1.0.0
+# Form Mapping Contract — JobProfile → Job Create Form DTO
+# Version: 2.0.0
+# Executed by: app.ai.document_intelligence.mapping.jd_form
+# Frontend MUST consume Form DTO only — never map TOON.
 
-version: "1.0.0"
+version: "2.0.0"
 document_type: job_description
+mapper: document_intelligence.mapping.jd_form.v1
+engine: document_intelligence
 
 mappings:
-  - toon: title
+  - canonical: basic.title
     form: title
-  - toon: location
+  - canonical: location.primary
     form: location
-  - toon: company
+  - canonical: basic.company
     form: company
-    note: HR account company may override display; parsed company retained in TOON via parsedJdId
-  - toon: salary_range
+    note: HR account company may override display; parsed company retained via parsedJdId
+  - canonical: compensation.salary_range
     form: salary
-  - toon: min_experience_years
+  - canonical: requirements.min_experience_years
     form: experienceFrom
-  - toon: max_experience_years
+  - canonical: requirements.max_experience_years
     form: experienceTo
-  - toon: mandatory_skills
+  - canonical: skills.mandatory
     form: mandatorySkills
-  - toon: preferred_skills
+  - canonical: skills.preferred
     form: preferredSkills
-  - toon: skills
+  - canonical: skills.general
     form: _skills
-  - toon: responsibilities
+  - canonical: responsibilities.items
     form: _responsibilities
-  - toon: qualifications
+  - canonical: requirements.qualifications
     form: _qualifications
-  - toon: employment_type + responsibilities + skills + qualifications + benefits
+  - canonical: format_jd_description(...)
     form: description
-    transform: formatJDDescription
+    transform: format_jd_description
 
 # ATS consumes mandatory_skills / preferred_skills from parsed_jds.toon via parsedJdId

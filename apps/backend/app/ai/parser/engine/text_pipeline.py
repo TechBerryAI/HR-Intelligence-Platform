@@ -1,19 +1,16 @@
 """
 In-memory Intelligence Engine path (no DB / no HTTP).
 
-Used by bulk parser and unit/integration tests so all consumers share
-sections → deterministic parsers → knowledge → optional LLM.
+Used by bulk parser and unit/integration tests.
+Canonical-first: sections → parsers → CandidateProfile → TOON serialize.
 """
 from __future__ import annotations
 
 import os
 from typing import Any
 
-from app.ai.parser.engine.confidence import prefer_deterministic_person
+from app.ai.document_intelligence.pipeline import parse_resume_text_to_canonical
 from app.ai.parser.engine.hardware import apply_hardware_env
-from app.ai.parser.engine.knowledge import apply_knowledge_to_resume
-from app.ai.parser.engine.parsers import parse_resume_from_text
-from app.ai.parser.engine.sections import detect_sections, unresolved_semantic_text
 
 
 def parse_resume_text_via_engine(
@@ -29,69 +26,37 @@ def parse_resume_text_via_engine(
     source_tag: deterministic | llm | text-fallback
     """
     apply_hardware_env()
-    notes: list[str] = []
+    notes: list[str] = ['canonical_pipeline']
     text = (raw_text or '').strip()
     if not text:
         return {}, 'empty', ['empty_text']
 
-    # Layout structure for rules parsing
-    try:
-        from app.ai.parser.layout.detector import enhance_resume_text
-
-        structured = enhance_resume_text(text)
-        if structured and structured != text:
-            text = structured
-            notes.append('layout_structure')
-    except Exception as exc:
-        notes.append(f'layout_skip:{exc}')
-
-    sections = detect_sections(text, 'resume')
-    notes.append(f'sections={len(sections)}')
-
-    # Composable parsers (wired — not dead façade)
-    parse_resume_from_text(text)
-    notes.append('parsers=resume_from_text')
-
-    from app.ai.parser.deterministic_resume import parse_resume_deterministic
-
+    # Temporarily honor skip/allow via env for nested parse
+    prev = os.environ.get('RESUME_SKIP_LLM_WHEN_DETERMINISTIC')
     skip = (
         skip_llm_when_deterministic
         if skip_llm_when_deterministic is not None
         else os.getenv('RESUME_SKIP_LLM_WHEN_DETERMINISTIC', 'true').lower()
         in ('1', 'true', 'yes')
     )
-
-    det_toon, conf, missing, passes = parse_resume_deterministic(text)
-    notes.append(f'det_conf={conf:.2f}')
-    if missing:
-        notes.append('missing=' + ','.join(missing[:6]))
-
-    if skip and passes and isinstance(det_toon, dict):
-        toon = apply_knowledge_to_resume(det_toon)
-        return toon, 'deterministic', notes
-
     if not allow_llm:
-        toon = apply_knowledge_to_resume(det_toon if isinstance(det_toon, dict) else {})
-        return toon, 'deterministic', notes + ['llm_disabled']
-
-    semantic = unresolved_semantic_text(sections, 'resume') or text
-    prompt = semantic if len(semantic) < len(text) else text
-    preamble = next((s.text for s in sections if s.label == 'Preamble'), '')
-    if prompt is not text and preamble:
-        prompt = f'{preamble}\n\n{prompt}'
+        os.environ['RESUME_SKIP_LLM_WHEN_DETERMINISTIC'] = 'true'
+    elif skip:
+        os.environ['RESUME_SKIP_LLM_WHEN_DETERMINISTIC'] = 'true'
+    else:
+        os.environ['RESUME_SKIP_LLM_WHEN_DETERMINISTIC'] = 'false'
 
     try:
-        from app.integrations.openai.llm_service import call_llm
-
-        toon = call_llm(prompt, 'resume')
-        if isinstance(det_toon, dict) and det_toon:
-            toon = prefer_deterministic_person(toon, det_toon)
-        toon = apply_knowledge_to_resume(toon if isinstance(toon, dict) else {})
-        return toon, 'llm', notes
-    except Exception as exc:
-        notes.append(f'llm_fail:{type(exc).__name__}')
-        from app.ai.parser.pipelines.resume_toon_pipeline import build_resume_toon
-
-        toon = build_resume_toon(text, {})
-        toon = apply_knowledge_to_resume(toon if isinstance(toon, dict) else {})
-        return toon, 'text-fallback', notes
+        profile, _form, toon = parse_resume_text_to_canonical(text)
+        has_id = bool(profile.personal.full_name and profile.contact.email)
+        has_body = bool(profile.skills and (profile.experience or profile.education))
+        tag = 'deterministic' if (has_id and has_body) else 'llm'
+        notes.append(f'name={profile.personal.full_name!r}')
+        notes.append(f'skills={len(profile.skills)}')
+        notes.append(f'exp={len(profile.experience)}')
+        return toon if isinstance(toon, dict) else {}, tag, notes
+    finally:
+        if prev is None:
+            os.environ.pop('RESUME_SKIP_LLM_WHEN_DETERMINISTIC', None)
+        else:
+            os.environ['RESUME_SKIP_LLM_WHEN_DETERMINISTIC'] = prev

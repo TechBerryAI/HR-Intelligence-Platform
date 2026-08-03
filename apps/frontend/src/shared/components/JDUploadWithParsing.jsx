@@ -1,12 +1,12 @@
 import React, { useState, useRef } from 'react';
-import { uploadAndParseJDStream, mapJDTOONToForm, validateFileForParsing } from '@/core/api/parsingApi.js';
+import { uploadAndParseJDStream, takeJDFormDTO, validateFileForParsing } from '@/core/api/parsingApi.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiZap } from 'react-icons/fi';
 
 /**
- * Premium Job Description Upload Component with AI Parsing
- * Uploads JD, parses it, and autofills job form
+ * Job Description Upload — Document Intelligence Engine.
+ * Autofill uses Form DTO only — never raw TOON.
  */
 export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
   const [isUploading, setIsUploading] = useState(false);
@@ -83,9 +83,8 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
 
       const result = await uploadAndParseJDStream(file, currentJobId, { onStage });
 
-      if (result.status === 'ok' && result.toon) {
-        // Map TOON to form fields
-        const formData = mapJDTOONToForm(result.toon);
+      if (result.status === 'ok' && result.form) {
+        const formData = takeJDFormDTO(result);
         
         // Store confidence and parsed ID
         setConfidence(result.confidence);
@@ -98,13 +97,14 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
           setParseSuccess('✨ Job description parsed successfully! Fields auto-filled below.');
         }
 
-        // Autofill form
+        // Autofill form from Form DTO only
         if (onAutofill) {
           onAutofill({
             ...formData,
             _parsedId: result.parsed_id,
             _rawFileId: result.raw_file_id,
             _confidence: result.confidence,
+            _trace: formData.trace || [],
           });
         }
 

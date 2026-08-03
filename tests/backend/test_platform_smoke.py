@@ -187,7 +187,7 @@ def test_job_create_links_parsed_jd_id(app_client):
     """When parsedJdId is provided, jobs.parsed_jd_id and parsed_jds.job_id are linked."""
     import uuid
 
-    from toon import toon_dumps
+    from app.ai.toon.runtime import toon_dumps
 
     token, user = _staff_login(app_client, RECRUITER_EMAIL, RECRUITER_PASSWORD)
     headers = _auth_header(token)
@@ -201,7 +201,7 @@ def test_job_create_links_parsed_jd_id(app_client):
         "responsibilities": ["Build APIs"],
         "description": "Backend role",
     }
-    from ai_runtime_adapter import normalize_proposal
+    from app.ai.adapter.runtime_adapter import normalize_proposal
 
     parsed_id = str(uuid.uuid4())
     raw_id = str(uuid.uuid4())

@@ -120,6 +120,8 @@ def score_jd_fields(actual: dict, expected: dict) -> tuple[float, list[str]]:
 
 
 def run_resume_case(case_dir: Path) -> dict:
+    from app.ai.document_intelligence.canonical.from_toon import candidate_profile_from_toon
+    from app.ai.document_intelligence.mapping.resume_form import map_candidate_to_form
     from app.ai.parser.deterministic_resume import parse_resume_deterministic
     from app.ai.parser.engine.knowledge import apply_knowledge_to_resume
     from app.ai.parser.engine.sections import detect_sections
@@ -130,10 +132,31 @@ def run_resume_case(case_dir: Path) -> dict:
     toon, conf, missing, passes = parse_resume_deterministic(text)
     toon = apply_knowledge_to_resume(toon)
     score, misses = score_resume_fields(toon, expected)
+
+    form_score = 1.0
+    form_misses: list[str] = []
+    expected_form_path = case_dir / 'expected_form.json'
+    if expected_form_path.exists():
+        expected_form = json.loads(expected_form_path.read_text(encoding='utf-8'))
+        form = map_candidate_to_form(candidate_profile_from_toon(toon)).to_autofill_dict()
+        checks = 0
+        hits = 0
+        for key, value in expected_form.items():
+            if key.startswith('_'):
+                continue
+            checks += 1
+            if form.get(key) == value:
+                hits += 1
+            else:
+                form_misses.append(key)
+        form_score = hits / checks if checks else 1.0
+
     return {
         'id': case_dir.name,
         'type': 'resume',
         'score': score,
+        'form_score': form_score,
+        'form_misses': form_misses,
         'passes_gate': passes,
         'confidence': conf,
         'sections': len(sections),
@@ -142,6 +165,8 @@ def run_resume_case(case_dir: Path) -> dict:
 
 
 def run_jd_case(case_dir: Path) -> dict:
+    from app.ai.document_intelligence.canonical.from_toon import job_profile_from_toon
+    from app.ai.document_intelligence.mapping.jd_form import map_job_to_form
     from app.ai.parser.engine.deterministic_jd import parse_jd_deterministic
     from app.ai.parser.engine.knowledge import apply_knowledge_to_jd
     from app.ai.parser.engine.sections import detect_sections
@@ -152,10 +177,31 @@ def run_jd_case(case_dir: Path) -> dict:
     toon, conf, missing, passes = parse_jd_deterministic(text)
     toon = apply_knowledge_to_jd(toon)
     score, misses = score_jd_fields(toon, expected)
+
+    form_score = 1.0
+    form_misses: list[str] = []
+    expected_form_path = case_dir / 'expected_form.json'
+    if expected_form_path.exists():
+        expected_form = json.loads(expected_form_path.read_text(encoding='utf-8'))
+        form = map_job_to_form(job_profile_from_toon(toon)).to_autofill_dict()
+        checks = 0
+        hits = 0
+        for key, value in expected_form.items():
+            if key.startswith('_'):
+                continue
+            checks += 1
+            if form.get(key) == value:
+                hits += 1
+            else:
+                form_misses.append(key)
+        form_score = hits / checks if checks else 1.0
+
     return {
         'id': case_dir.name,
         'type': 'jd',
         'score': score,
+        'form_score': form_score,
+        'form_misses': form_misses,
         'passes_gate': passes,
         'confidence': conf,
         'sections': len(sections),
@@ -200,12 +246,15 @@ def main() -> int:
     jd_mean = sum(r['score'] for r in results if r['type'] == 'jd') / max(
         1, sum(1 for r in results if r['type'] == 'jd')
     )
+    form_mean = sum(r.get('form_score', 1.0) for r in results) / len(results)
 
     report = {
+        'engine': 'document_intelligence',
         'cases': len(results),
         'mean_accuracy': round(mean, 4),
         'resume_mean': round(resume_mean, 4),
         'jd_mean': round(jd_mean, 4),
+        'form_autofill_mean': round(form_mean, 4),
         'threshold': args.threshold,
         'target': args.target,
         'pass': mean >= args.threshold,

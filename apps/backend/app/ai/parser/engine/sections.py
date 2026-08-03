@@ -115,15 +115,16 @@ def unresolved_semantic_text(sections: list[SectionSpan], doc_type: str) -> str:
     Falls back to full document if no semantic sections found.
     """
     if doc_type == 'resume':
+        # Never include Projects — LLM must not invent experience from project narratives
         keys = (
             'Experience',
             'Work Experience',
-            'Projects',
             'Summary',
             'Professional Summary',
             'Objective',
             'Skills',
             'Technical Skills',
+            'Education',
         )
     else:
         keys = (

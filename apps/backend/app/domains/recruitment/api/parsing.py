@@ -1,7 +1,8 @@
 """
 Resume and Job Description Parsing Routes.
 
-Thin HTTP layer over the Human Capital Intelligence Engine.
+Thin HTTP layer over the Document Intelligence Engine.
+Frontend clients receive Form DTOs only — never raw TOON/AI output.
 """
 from __future__ import annotations
 
@@ -14,11 +15,27 @@ from flask import Blueprint, Response, jsonify, request, stream_with_context
 from werkzeug.utils import secure_filename
 
 from app.api.middleware.auth import authenticate_token, require_recruiter
+from app.ai.document_intelligence.response import (
+    build_jd_client_payload,
+    build_resume_client_payload,
+)
 from app.ai.parser.engine import get_parse_job, run_jd_parse_pipeline, run_resume_parse_pipeline
 from app.ai.parser.engine.confidence import calculate_confidence
 from app.ai.parser.engine.progress import create_parse_job
 from app.ai.toon.runtime import toon_loads_flex
 from app.domains.identity.authorization.rbac import STAFF_ROLES, get_role, get_user_id
+
+
+def _resume_client(body: dict, status: int):
+    if status != 200 or body.get('status') != 'ok':
+        return jsonify(body), status
+    return jsonify(build_resume_client_payload(body)), status
+
+
+def _jd_client(body: dict, status: int):
+    if status != 200 or body.get('status') != 'ok':
+        return jsonify(body), status
+    return jsonify(build_jd_client_payload(body)), status
 
 parsing_bp = Blueprint('parsing', __name__)
 
@@ -122,7 +139,7 @@ def parse_resume_public():
             candidate_id=None,
             enrichment_context=None,
         )
-        return jsonify(body), status
+        return _resume_client(body, status)
     except Exception as e:
         print(f"Public resume parsing error: {str(e)}")
         return jsonify({'status': 'error', 'error': str(e)}), 500
@@ -174,7 +191,7 @@ def parse_resume_upload():
             candidate_id=candidate_id,
             enrichment_context=None,
         )
-        return jsonify(body), status
+        return _resume_client(body, status)
     except Exception as e:
         print(f"Resume parsing error: {str(e)}")
         return jsonify({'status': 'error', 'error': str(e)}), 500
@@ -232,7 +249,7 @@ def parse_jd_upload():
             uploader_role=uploader_role,
             job_id=job_id,
         )
-        return jsonify(body), status
+        return _jd_client(body, status)
     except Exception as e:
         print(f"JD parsing error: {str(e)}")
         return jsonify({'status': 'error', 'error': str(e)}), 500
@@ -311,16 +328,17 @@ def parse_resume_public_stream():
             while not future.done():
                 while events_q:
                     ev = events_q.pop(0)
-                    yield f"event: stage\ndata: {json.dumps(ev.to_dict())}\n\n"
+                    yield f"event: stage\ndata: {json.dumps(ev.to_dict(), default=str)}\n\n"
                 time.sleep(0.05)
             while events_q:
                 ev = events_q.pop(0)
-                yield f"event: stage\ndata: {json.dumps(ev.to_dict())}\n\n"
+                yield f"event: stage\ndata: {json.dumps(ev.to_dict(), default=str)}\n\n"
             body, status = future.result()
             if status == 200:
-                yield f"event: result\ndata: {json.dumps(body)}\n\n"
+                payload = build_resume_client_payload(body)
+                yield f"event: result\ndata: {json.dumps(payload, default=str)}\n\n"
             else:
-                yield f"event: error\ndata: {json.dumps(body)}\n\n"
+                yield f"event: error\ndata: {json.dumps(body, default=str)}\n\n"
 
     return Response(
         stream_with_context(generate()),
@@ -390,16 +408,17 @@ def parse_jd_stream():
             while not future.done():
                 while events_q:
                     ev = events_q.pop(0)
-                    yield f"event: stage\ndata: {json.dumps(ev.to_dict())}\n\n"
+                    yield f"event: stage\ndata: {json.dumps(ev.to_dict(), default=str)}\n\n"
                 time.sleep(0.05)
             while events_q:
                 ev = events_q.pop(0)
-                yield f"event: stage\ndata: {json.dumps(ev.to_dict())}\n\n"
+                yield f"event: stage\ndata: {json.dumps(ev.to_dict(), default=str)}\n\n"
             body, status = future.result()
             if status == 200:
-                yield f"event: result\ndata: {json.dumps(body)}\n\n"
+                payload = build_jd_client_payload(body)
+                yield f"event: result\ndata: {json.dumps(payload, default=str)}\n\n"
             else:
-                yield f"event: error\ndata: {json.dumps(body)}\n\n"
+                yield f"event: error\ndata: {json.dumps(body, default=str)}\n\n"
 
     return Response(
         stream_with_context(generate()),
@@ -424,16 +443,20 @@ def get_parsed_resume(parsed_id):
         )
         if not result:
             return jsonify({'status': 'error', 'error': 'Parsed resume not found'}), 404
-        return jsonify({
+        toon = toon_loads_flex(result['toon'])
+        payload = build_resume_client_payload({
             'status': 'ok',
             'parsed_id': result['id'],
-            'toon': toon_loads_flex(result['toon']),
+            'toon': toon,
             'confidence': result['confidence'],
             'model_version': result['model_version'],
-            'created_at': result['created_at'].isoformat()
+        })
+        payload['created_at'] = (
+            result['created_at'].isoformat()
             if hasattr(result['created_at'], 'isoformat')
-            else str(result['created_at']),
-        }), 200
+            else str(result['created_at'])
+        )
+        return jsonify(payload), 200
     except Exception as e:
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
@@ -450,15 +473,19 @@ def get_parsed_jd(parsed_id):
         )
         if not result:
             return jsonify({'status': 'error', 'error': 'Parsed JD not found'}), 404
-        return jsonify({
+        toon = toon_loads_flex(result['toon'])
+        payload = build_jd_client_payload({
             'status': 'ok',
             'parsed_id': result['id'],
-            'toon': toon_loads_flex(result['toon']),
+            'toon': toon,
             'confidence': result['confidence'],
             'model_version': result['model_version'],
-            'created_at': result['created_at'].isoformat()
+        })
+        payload['created_at'] = (
+            result['created_at'].isoformat()
             if hasattr(result['created_at'], 'isoformat')
-            else str(result['created_at']),
-        }), 200
+            else str(result['created_at'])
+        )
+        return jsonify(payload), 200
     except Exception as e:
         return jsonify({'status': 'error', 'error': str(e)}), 500

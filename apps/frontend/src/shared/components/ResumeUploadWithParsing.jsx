@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { uploadAndParseResume, uploadAndParseResumePublic, uploadAndParseResumePublicStream, mapResumeTOONToForm, validateFileForParsing } from '@/core/api/parsingApi.js';
+import { uploadAndParseResume, uploadAndParseResumePublicStream, takeResumeFormDTO, validateFileForParsing } from '@/core/api/parsingApi.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiExternalLink, FiTrash2 } from 'react-icons/fi';
 import { tokenService } from '@/core/auth/tokenService.js';
 
 /**
- * Premium Resume Upload Component with AI Parsing
+ * Premium Resume Upload Component with Document Intelligence Engine parsing.
  * publicMode: use unauthenticated /api/parse/resume/public (apply form).
+ * Autofill uses Form DTO only — never raw TOON.
  */
 export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, currentFileName, onRemove, onOpenResume, publicMode = false }) {
   const [isUploading, setIsUploading] = useState(false);
@@ -99,8 +100,8 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
         ? await uploadAndParseResumePublicStream(file, { onStage })
         : await uploadAndParseResume(file);
 
-      if (result.status === 'ok' && result.toon) {
-        const formData = mapResumeTOONToForm(result.toon);
+      if (result.status === 'ok' && result.form) {
+        const formData = takeResumeFormDTO(result);
         setConfidence(result.confidence);
         setProgressPct(100);
         
@@ -121,6 +122,7 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
             _publicUploaderId: result.public_uploader_id || null,
             _confidence: result.confidence,
             _modelVersion: result.model_version,
+            _trace: formData.trace || [],
           });
         }
 

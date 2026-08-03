@@ -7,11 +7,8 @@ import uuid
 from typing import Dict, Any, Optional, Tuple
 
 from app.ai.toon.runtime import toon_dumps, toon_loads_flex
-import requests
 from datetime import datetime
 
-PARSING_API_URL = os.getenv('PARSING_API_URL', 'http://localhost:4000')
-PARSING_API_KEY = os.getenv('PARSING_API_KEY', 'dev-api-key')
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', './uploads')
 
 
@@ -42,67 +39,6 @@ def save_file_to_storage(file_data: bytes, filename: str, uploader_id: str) -> s
     
     # Return storage URL (local path for now, can be S3 URL in production)
     return f"file://{os.path.abspath(file_path)}"
-
-
-def call_parsing_api(
-    file_data: bytes, 
-    filename: str, 
-    document_type: str,
-    raw_file_id: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Call Parsing API microservice to parse document
-    
-    Args:
-        file_data: Binary file content
-        filename: Original filename
-        document_type: 'resume' or 'jd'
-        raw_file_id: UUID of raw_file record (optional)
-    
-    Returns:
-        Parsing API response dict
-    
-    Raises:
-        requests.exceptions.RequestException: If API call fails
-        ValueError: If response is invalid
-    """
-    endpoint = f"{PARSING_API_URL}/api/v1/parse/{document_type}"
-    
-    headers = {
-        'X-API-Key': PARSING_API_KEY
-    }
-    
-    files = {
-        'file': (filename, file_data)
-    }
-    
-    data = {}
-    if raw_file_id:
-        data['raw_file_id'] = raw_file_id
-    
-    try:
-        response = requests.post(
-            endpoint,
-            headers=headers,
-            files=files,
-            data=data,
-            timeout=90  # 90 seconds timeout
-        )
-        
-        response.raise_for_status()
-        return response.json()
-        
-    except requests.exceptions.Timeout:
-        raise Exception('Parsing API request timed out. Please try again.')
-    except requests.exceptions.RequestException as e:
-        error_msg = f'Parsing API error: {str(e)}'
-        if hasattr(e.response, 'json'):
-            try:
-                error_data = e.response.json()
-                error_msg = error_data.get('error', error_msg)
-            except:
-                pass
-        raise Exception(error_msg)
 
 
 def collect_toon_validation_issues(toon: Dict[str, Any], document_type: str) -> list[str]:
@@ -351,6 +287,19 @@ def store_parsed_jd(
     return parsed_id
 
 
+def _cache_model_acceptable(model_version: str | None) -> bool:
+    """
+    Skip stale cache entries from pre-canonical / broken parsers.
+    Require DOCUMENT_INTELLIGENCE_CACHE_TAG (default 'canonical') in model_version.
+    """
+    import os
+
+    tag = (os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG') or 'canonical-v3').strip()
+    if not tag:
+        return True
+    return tag.lower() in str(model_version or '').lower()
+
+
 def get_cached_parsing_result(
     file_hash: str,
     uploader_id: str,
@@ -377,7 +326,7 @@ def get_cached_parsing_result(
         (file_hash, uploader_id)
     )
     
-    if result:
+    if result and _cache_model_acceptable(result.get('model_version')):
         return {
             'parsed_id': result['id'],
             'raw_file_id': result['raw_file_id'],
@@ -418,7 +367,7 @@ def get_cached_parsing_result_by_hash(
         (file_hash,),
     )
 
-    if result:
+    if result and _cache_model_acceptable(result.get('model_version')):
         return {
             'parsed_id': result['id'],
             'raw_file_id': result['raw_file_id'],
