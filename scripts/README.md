@@ -10,6 +10,8 @@ Root-level scripts that support local development, CI preflight, and database co
 
 | Script | Purpose |
 |--------|---------|
+| `../start.js` | Local stack: env, venv, npm, backend + frontend + Ollama |
+| `../start-vm.js` | Full VM stack: DB (Hyper-V / Docker) + backend + frontend + Ollama |
 | `db-preflight.js` | PostgreSQL connectivity diagnostics (reads `apps/backend/.env`, WSL-aware) |
 | `database/test_db_connection.py` | Python DB connection test |
 
