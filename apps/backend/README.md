@@ -57,6 +57,8 @@ Or from repo root: `node start.js`
 
 ## Related documentation
 
-- [Engineering docs (backend + APIs)](../../docs/ENGINEERING.md#backend)
-- [Architecture](../../docs/ARCHITECTURE.md)
+- [HCIP docs index](../../docs/README.md)
+- [API map](../../docs/07-API.md)
+- [System architecture](../../docs/03-System-Architecture.md)
+- [Legacy engineering archive](../../docs/legacy/ENGINEERING.md#backend)
 - [Database test script](../../scripts/database/test_db_connection.py)
