@@ -13,7 +13,7 @@ benchmark:
     - confidence_calibration_error <= 0.15
 
   latency_target_ms: 8000
-  accuracy_target: 0.85
+  accuracy_target: 0.99
   cost_target_usd: 0.05
 
   future_metrics:
@@ -126,11 +126,13 @@ profiles:
     weight: 1.1
 
 execution:
-  mode: template_only
+  mode: gold_lake
+  dataset: ai/dataset/lake/benchmark/parsing/v1/resumes
+  harness: ai/eval/run_parsing_benchmark.py
   note: >
-    Benchmark templates define evaluation scenarios only. Populate input slots with
-    sanitized dataset documents from datasets/evaluation/resume_parsing at run time.
-    Do not embed production HR data in capability package.
+    Gold lake under ai/dataset/lake/benchmark/parsing/v1. Run
+    `PYTHONPATH=apps/backend python ai/eval/run_parsing_benchmark.py`.
+    Templates above remain scenario documentation.
 
 scoring:
   field_weights:

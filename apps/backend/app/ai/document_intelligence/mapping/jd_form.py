@@ -1,0 +1,271 @@
+"""
+Explicit JD → Job Create Form mappings.
+
+Every form field has exactly ONE canonical source.
+description is composed by a named transform (format_jd_description), not heuristics.
+"""
+from __future__ import annotations
+
+from app.ai.document_intelligence.models.form_dtos import FieldTrace, JobCreateFormDTO
+from app.ai.document_intelligence.models.job import JobProfile
+from app.ai.document_intelligence.validation.engine import validate_nonempty
+
+MAPPER_ID = 'document_intelligence.mapping.jd_form.v1'
+
+JD_FORM_MAPPING_GRAPH: dict[str, str] = {
+    'title': 'basic.title',
+    'location': 'location.primary',
+    'company': 'basic.company',
+    'salary': 'compensation.salary_range',
+    'experienceFrom': 'requirements.min_experience_years',
+    'experienceTo': 'requirements.max_experience_years',
+    'mandatorySkills': 'skills.mandatory',
+    'preferredSkills': 'skills.preferred',
+    'employmentType': 'basic.employment_type',
+    'description': 'format_jd_description(basic,responsibilities,skills,requirements,benefits)',
+    '_skills': 'skills.general',
+    '_responsibilities': 'responsibilities.items',
+    '_qualifications': 'requirements.qualifications',
+    '_keywords': 'requirements.keywords',
+}
+
+
+def _trace(
+    form_field: str,
+    canonical_path: str,
+    *,
+    source: str,
+    validator: str,
+    confidence: float,
+    reason: str,
+) -> FieldTrace:
+    return FieldTrace(
+        form_field=form_field,
+        canonical_path=canonical_path,
+        mapper=MAPPER_ID,
+        source=source,
+        validator=validator,
+        confidence=confidence,
+        reason=reason,
+    )
+
+
+def format_jd_description(profile: JobProfile) -> str:
+    """
+    Named transform: compose markdown description from canonical sections.
+    Prefer structured narrative when already present; otherwise build sections.
+    """
+    parts: list[str] = []
+    employment = profile.basic.employment_type.strip()
+    if employment:
+        parts.append(f'**Employment Type:** {employment}\n')
+
+    narrative = profile.basic.description.strip()
+    responsibilities = [r for r in profile.responsibilities.items if r.strip()]
+    mandatory = [s for s in profile.skills.mandatory if s.strip()]
+    preferred = [s for s in profile.skills.preferred if s.strip()]
+    qualifications = [q for q in profile.requirements.qualifications if q.strip()]
+    benefits = [b for b in profile.benefits.items if b.strip()]
+    general = [s for s in profile.skills.general if s.strip()]
+
+    looks_structured = bool(
+        narrative
+        and (
+            '**Responsibilities:**' in narrative
+            or '**Required Skills:**' in narrative
+            or '**Mandatory Skills:**' in narrative
+            or '**Qualifications:**' in narrative
+        )
+    )
+
+    if looks_structured:
+        parts.append(narrative)
+        if preferred and '**Preferred Skills:**' not in narrative:
+            parts.append('\n**Preferred Skills:**\n' + ', '.join(preferred))
+        if benefits and '**Benefits:**' not in narrative:
+            parts.append('\n**Benefits:**\n' + '\n'.join(f'• {b}' for b in benefits))
+        return '\n'.join(parts).strip()
+
+    if narrative:
+        parts.append(narrative)
+
+    if responsibilities:
+        block = '**Responsibilities:**\n' + '\n'.join(f'• {r}' for r in responsibilities)
+        parts.append(block)
+
+    skills_for_required = mandatory or general
+    if skills_for_required:
+        parts.append('**Required Skills:**\n' + ', '.join(skills_for_required))
+
+    if preferred:
+        parts.append('**Preferred Skills:**\n' + ', '.join(preferred))
+
+    if qualifications:
+        parts.append('**Qualifications:**\n' + '\n'.join(f'• {q}' for q in qualifications))
+
+    if benefits:
+        parts.append('**Benefits:**\n' + '\n'.join(f'• {b}' for b in benefits))
+
+    return '\n\n'.join(p.strip() for p in parts if p and p.strip()).strip()
+
+
+def map_job_to_form(profile: JobProfile) -> JobCreateFormDTO:
+    traces: list[FieldTrace] = []
+
+    title_ok, title_reason = validate_nonempty(profile.basic.title, 'title')
+    title = profile.basic.title if title_ok else ''
+    traces.append(
+        _trace(
+            'title',
+            'basic.title',
+            source='semantic_ai',
+            validator='validate_nonempty' if title_ok else 'none',
+            confidence=0.95 if title_ok else 0.0,
+            reason=title_reason if title_ok else 'empty',
+        )
+    )
+
+    loc_ok, loc_reason = validate_nonempty(profile.location.primary, 'location')
+    location = profile.location.primary if loc_ok else ''
+    traces.append(
+        _trace(
+            'location',
+            'location.primary',
+            source='deterministic',
+            validator='validate_nonempty' if loc_ok else 'none',
+            confidence=0.9 if loc_ok else 0.0,
+            reason=loc_reason if loc_ok else 'empty',
+        )
+    )
+
+    company = profile.basic.company.strip()
+    traces.append(
+        _trace(
+            'company',
+            'basic.company',
+            source='semantic_ai',
+            validator='validate_nonempty' if company else 'none',
+            confidence=0.85 if company else 0.0,
+            reason='ok' if company else 'empty',
+        )
+    )
+
+    salary = profile.compensation.salary_range.strip()
+    traces.append(
+        _trace(
+            'salary',
+            'compensation.salary_range',
+            source='deterministic',
+            validator='validate_nonempty' if salary else 'none',
+            confidence=0.85 if salary else 0.0,
+            reason='ok' if salary else 'empty',
+        )
+    )
+
+    exp_from = (
+        str(int(profile.requirements.min_experience_years))
+        if profile.requirements.min_experience_years is not None
+        else ''
+    )
+    # Preserve decimals if not integer
+    if profile.requirements.min_experience_years is not None:
+        y = profile.requirements.min_experience_years
+        exp_from = str(int(y)) if float(y).is_integer() else str(y)
+    traces.append(
+        _trace(
+            'experienceFrom',
+            'requirements.min_experience_years',
+            source='deterministic',
+            validator='numeric' if exp_from else 'none',
+            confidence=0.9 if exp_from else 0.0,
+            reason='ok' if exp_from else 'empty',
+        )
+    )
+
+    exp_to = ''
+    if profile.requirements.max_experience_years is not None:
+        y = profile.requirements.max_experience_years
+        exp_to = str(int(y)) if float(y).is_integer() else str(y)
+    traces.append(
+        _trace(
+            'experienceTo',
+            'requirements.max_experience_years',
+            source='deterministic',
+            validator='numeric' if exp_to else 'none',
+            confidence=0.9 if exp_to else 0.0,
+            reason='ok' if exp_to else 'empty',
+        )
+    )
+
+    mandatory = [s for s in profile.skills.mandatory if s.strip()]
+    preferred = [s for s in profile.skills.preferred if s.strip()]
+    general = [s for s in profile.skills.general if s.strip()]
+    # mandatorySkills source is ONLY skills.mandatory (canonical already filled from skills if empty)
+    traces.append(
+        _trace(
+            'mandatorySkills',
+            'skills.mandatory',
+            source='knowledge',
+            validator='skill_list' if mandatory else 'none',
+            confidence=0.9 if mandatory else 0.0,
+            reason=f'{len(mandatory)} skills',
+        )
+    )
+    traces.append(
+        _trace(
+            'preferredSkills',
+            'skills.preferred',
+            source='knowledge',
+            validator='skill_list' if preferred else 'none',
+            confidence=0.85 if preferred else 0.0,
+            reason=f'{len(preferred)} skills',
+        )
+    )
+
+    employment = profile.basic.employment_type.strip()
+    traces.append(
+        _trace(
+            'employmentType',
+            'basic.employment_type',
+            source='deterministic',
+            validator='validate_nonempty' if employment else 'none',
+            confidence=0.85 if employment else 0.0,
+            reason='ok' if employment else 'empty',
+        )
+    )
+
+    description = format_jd_description(profile)
+    traces.append(
+        _trace(
+            'description',
+            JD_FORM_MAPPING_GRAPH['description'],
+            source='derived',
+            validator='format_jd_description',
+            confidence=0.9 if description else 0.0,
+            reason='composed' if description else 'empty',
+        )
+    )
+
+    responsibilities = [r for r in profile.responsibilities.items if r.strip()]
+    qualifications = [q for q in profile.requirements.qualifications if q.strip()]
+    keywords = [k for k in profile.requirements.keywords if k.strip()]
+
+    return JobCreateFormDTO(
+        title=title,
+        location=location,
+        experienceFrom=exp_from,
+        experienceTo=exp_to,
+        description=description,
+        salary=salary,
+        company=company,
+        mandatorySkills=mandatory,
+        preferredSkills=preferred,
+        employmentType=employment,
+        skillsList=general or mandatory,
+        mandatorySkillsList=mandatory,
+        preferredSkillsList=preferred,
+        responsibilitiesList=responsibilities,
+        qualificationsList=qualifications,
+        keywordsList=keywords,
+        trace=traces,
+    )

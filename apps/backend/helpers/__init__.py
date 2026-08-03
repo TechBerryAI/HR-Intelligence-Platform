@@ -1,2 +1,0 @@
-# Helper package placeholder
-

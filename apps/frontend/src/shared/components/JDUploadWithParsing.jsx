@@ -1,18 +1,20 @@
 import React, { useState, useRef } from 'react';
-import { uploadAndParseJD, mapJDTOONToForm, validateFileForParsing } from '@/core/api/parsingApi.js';
+import { uploadAndParseJDStream, takeJDFormDTO, validateFileForParsing } from '@/core/api/parsingApi.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiZap } from 'react-icons/fi';
 
 /**
- * Premium Job Description Upload Component with AI Parsing
- * Uploads JD, parses it, and autofills job form
+ * Job Description Upload — Document Intelligence Engine.
+ * Autofill uses Form DTO only — never raw TOON.
  */
 export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
   const [isUploading, setIsUploading] = useState(false);
   const [parseError, setParseError] = useState('');
   const [parseSuccess, setParseSuccess] = useState('');
   const [confidence, setConfidence] = useState(null);
+  const [stageLabel, setStageLabel] = useState(null);
+  const [progressPct, setProgressPct] = useState(null);
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -68,17 +70,25 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
 
     // Start AI parsing - show premium overlay
     setIsUploading(true);
+    setStageLabel('text');
+    setProgressPct(10);
     
     try {
-      // Call parsing API
-      const result = await uploadAndParseJD(file, currentJobId);
+      const onStage = (ev) => {
+        if (ev?.stage) setStageLabel(ev.stage);
+        const order = ['cache', 'persist_raw', 'layout', 'text', 'sections', 'deterministic', 'semantic', 'knowledge', 'validate', 'persist'];
+        const idx = order.indexOf(ev?.stage);
+        if (idx >= 0) setProgressPct(Math.round(((idx + 1) / order.length) * 100));
+      };
 
-      if (result.status === 'ok' && result.toon) {
-        // Map TOON to form fields
-        const formData = mapJDTOONToForm(result.toon);
+      const result = await uploadAndParseJDStream(file, currentJobId, { onStage });
+
+      if (result.status === 'ok' && result.form) {
+        const formData = takeJDFormDTO(result);
         
         // Store confidence and parsed ID
         setConfidence(result.confidence);
+        setProgressPct(100);
         
         // Show success message
         if (result.is_duplicate) {
@@ -87,13 +97,14 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
           setParseSuccess('✨ Job description parsed successfully! Fields auto-filled below.');
         }
 
-        // Autofill form
+        // Autofill form from Form DTO only
         if (onAutofill) {
           onAutofill({
             ...formData,
             _parsedId: result.parsed_id,
             _rawFileId: result.raw_file_id,
             _confidence: result.confidence,
+            _trace: formData.trace || [],
           });
         }
 
@@ -116,13 +127,20 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
       console.error('JD parsing error:', error);
     } finally {
       setIsUploading(false);
+      setStageLabel(null);
+      setProgressPct(null);
     }
   };
 
   return (
     <>
       {/* Premium Upload Overlay */}
-      <PremiumUploadOverlay isVisible={isUploading} type="jd" />
+      <PremiumUploadOverlay
+        isVisible={isUploading}
+        type="jd"
+        stageLabel={stageLabel}
+        progressPct={progressPct}
+      />
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -154,7 +172,7 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
+              accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
               onChange={handleFileChange}
               disabled={isUploading}
               className="hidden"

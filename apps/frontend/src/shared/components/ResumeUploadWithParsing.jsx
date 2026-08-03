@@ -1,19 +1,22 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { uploadAndParseResume, uploadAndParseResumePublic, mapResumeTOONToForm, validateFileForParsing } from '@/core/api/parsingApi.js';
+import { uploadAndParseResume, uploadAndParseResumePublicStream, takeResumeFormDTO, validateFileForParsing } from '@/core/api/parsingApi.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiExternalLink, FiTrash2 } from 'react-icons/fi';
 import { tokenService } from '@/core/auth/tokenService.js';
 
 /**
- * Premium Resume Upload Component with AI Parsing
+ * Premium Resume Upload Component with Document Intelligence Engine parsing.
  * publicMode: use unauthenticated /api/parse/resume/public (apply form).
+ * Autofill uses Form DTO only — never raw TOON.
  */
 export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, currentFileName, onRemove, onOpenResume, publicMode = false }) {
   const [isUploading, setIsUploading] = useState(false);
   const [parseError, setParseError] = useState('');
   const [parseSuccess, setParseSuccess] = useState('');
   const [confidence, setConfidence] = useState(null);
+  const [stageLabel, setStageLabel] = useState(null);
+  const [progressPct, setProgressPct] = useState(null);
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -82,15 +85,25 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
     }
 
     setIsUploading(true);
+    setStageLabel('text');
+    setProgressPct(10);
     
     try {
+      const onStage = (ev) => {
+        if (ev?.stage) setStageLabel(ev.stage);
+        const order = ['cache', 'persist_raw', 'layout', 'text', 'sections', 'deterministic', 'semantic', 'knowledge', 'validate', 'persist'];
+        const idx = order.indexOf(ev?.stage);
+        if (idx >= 0) setProgressPct(Math.round(((idx + 1) / order.length) * 100));
+      };
+
       const result = publicMode
-        ? await uploadAndParseResumePublic(file)
+        ? await uploadAndParseResumePublicStream(file, { onStage })
         : await uploadAndParseResume(file);
 
-      if (result.status === 'ok' && result.toon) {
-        const formData = mapResumeTOONToForm(result.toon);
+      if (result.status === 'ok' && result.form) {
+        const formData = takeResumeFormDTO(result);
         setConfidence(result.confidence);
+        setProgressPct(100);
         
         if (result.is_duplicate) {
           setParseSuccess('Resume recognized! Using previously parsed data.');
@@ -109,11 +122,21 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
             _publicUploaderId: result.public_uploader_id || null,
             _confidence: result.confidence,
             _modelVersion: result.model_version,
+            _trace: formData.trace || [],
           });
         }
 
-        if (result.confidence < 0.75) {
-          setParseError('Parsing confidence is low. Please verify all auto-filled fields.');
+        if (result.partial || result.confidence < 0.75) {
+          const mv = String(result.model_version || '');
+          if (mv.includes('text-fallback')) {
+            setParseError(
+              'AI model unavailable; used rules-based parse — please verify all auto-filled fields.'
+            );
+          } else if (result.partial) {
+            setParseError('Parsing was partial. Please verify all auto-filled fields.');
+          } else {
+            setParseError('Parsing confidence is low. Please verify all auto-filled fields.');
+          }
         }
       } else {
         throw new Error(result.error || 'Parsing failed');
@@ -130,6 +153,8 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
       console.error('Resume parsing error:', error);
     } finally {
       setIsUploading(false);
+      setStageLabel(null);
+      setProgressPct(null);
     }
   };
 
@@ -137,7 +162,12 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
 
   return (
     <>
-      <PremiumUploadOverlay isVisible={isUploading} type="resume" />
+      <PremiumUploadOverlay
+        isVisible={isUploading}
+        type="resume"
+        stageLabel={stageLabel}
+        progressPct={progressPct}
+      />
 
       <div className="space-y-4">
         <AnimatePresence mode="wait">
@@ -199,7 +229,7 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp"
+                accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
                 onChange={handleFileChange}
                 disabled={isUploading}
                 className="hidden"

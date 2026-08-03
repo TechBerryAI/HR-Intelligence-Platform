@@ -28,6 +28,8 @@ Use EXACTLY this structure (no extra keys at root):
 
 Rules:
 - type must be "job_description"
+- Focus on SEMANTIC fields: responsibilities, qualifications phrasing, skill inference / must-have vs nice-to-have classification, narrative description
+- Do NOT invent salary figures, employment_type, or locations not in the source — leave "" / null if unsure; deterministic extractors fill regex-friendly salary/location/dates
 - title, location are required non-empty strings when present in the source (infer title from the first prominent job title line if unlabeled)
 - company: employer name when stated
 - employment_type: e.g. Full-time, Part-time, Contract, Internship, Remote when stated

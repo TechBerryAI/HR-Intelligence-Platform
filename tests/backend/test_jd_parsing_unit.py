@@ -9,15 +9,15 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2] / "apps" / "backend"
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from ai_runtime_adapter import (
+from app.ai.adapter.runtime_adapter import (
     _ensure_array,
     _ensure_string_array,
     _repair_jd_structure,
     normalize_proposal,
     repair_jd_toon,
 )
-from jd_toon_pipeline import build_jd_toon
-from parsing_utils import validate_toon_format
+from app.ai.parser.pipelines.jd_toon_pipeline import build_jd_toon
+from app.domains.recruitment.services.parsing_storage import validate_toon_format
 
 SAMPLE_JD_RAW = {
     "title": "Senior Python Developer",

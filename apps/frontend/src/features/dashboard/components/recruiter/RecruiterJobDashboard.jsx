@@ -27,6 +27,9 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
   const [experienceFrom, setExperienceFrom] = useState('')
   const [experienceTo, setExperienceTo] = useState('')
   const [description, setDescription] = useState('')
+  const [mandatorySkills, setMandatorySkills] = useState('')
+  const [preferredSkills, setPreferredSkills] = useState('')
+  const [parsedCompany, setParsedCompany] = useState('')
   const [parsedJdId, setParsedJdId] = useState(null)
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
@@ -57,12 +60,28 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     setExperienceFrom(parsedData.experienceFrom || '')
     setExperienceTo(parsedData.experienceTo || '')
     setDescription(parsedData.description || '')
+    setMandatorySkills(
+      Array.isArray(parsedData.mandatorySkills)
+        ? parsedData.mandatorySkills.join(', ')
+        : (parsedData._mandatorySkills || []).join(', ') || '',
+    )
+    setPreferredSkills(
+      Array.isArray(parsedData.preferredSkills)
+        ? parsedData.preferredSkills.join(', ')
+        : (parsedData._preferredSkills || []).join(', ') || '',
+    )
+    setParsedCompany(parsedData.company || '')
     if (parsedData._parsedId) {
       setParsedJdId(parsedData._parsedId)
     }
-    setCompany(user?.company || '')
+    // Keep HR account company as posting company; retain parsed company for display note
+    setCompany(user?.company || parsedData.company || '')
     setError('')
-    setSuccess('Job description parsed! Please review the fields below.')
+    setSuccess(
+      parsedData.company && user?.company && parsedData.company !== user.company
+        ? `Job description parsed! Using your HR company (${user.company}). Parsed employer: ${parsedData.company}.`
+        : 'Job description parsed! Please review the fields below.',
+    )
     setTimeout(() => setSuccess(''), 5000)
   }
 
@@ -72,7 +91,33 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     setError('')
     try {
       const companyToUse = user?.company || company
-      const payload = { title, company: companyToUse, location, salary, experienceFrom, experienceTo, description }
+      // Keep description skill sections in sync with structured skill fields
+      let descriptionToSend = description
+      const mand = mandatorySkills.split(',').map((s) => s.trim()).filter(Boolean)
+      const pref = preferredSkills.split(',').map((s) => s.trim()).filter(Boolean)
+      if (mand.length || pref.length) {
+        let body = descriptionToSend
+        // Strip old skill sections then append current
+        body = body.replace(/\*\*(?:Required|Mandatory|Preferred)\s*Skills?:\*\*[\s\S]*?(?=\n\*\*|\n*$)/gi, '').trim()
+        if (mand.length) {
+          body += `\n\n**Required Skills:**\n${mand.join(', ')}`
+        }
+        if (pref.length) {
+          body += `\n\n**Preferred Skills:**\n${pref.join(', ')}`
+        }
+        descriptionToSend = body.trim()
+      }
+      const payload = {
+        title,
+        company: companyToUse,
+        location,
+        salary,
+        experienceFrom,
+        experienceTo,
+        description: descriptionToSend,
+        mandatorySkills: mand,
+        preferredSkills: pref,
+      }
       if (parsedJdId) payload.parsedJdId = parsedJdId
       const result = await addJob(payload)
       if (!result?.success) {
@@ -86,6 +131,9 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
       setExperienceFrom('')
       setExperienceTo('')
       setDescription('')
+      setMandatorySkills('')
+      setPreferredSkills('')
+      setParsedCompany('')
       setParsedJdId(null)
       setSuccess('Job posted! It now appears in your job posts below.')
       setTimeout(() => setSuccess(''), 2500)
@@ -235,6 +283,25 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                 </div>
               </div>
             </div>
+
+            <PremiumInput
+              label="Required / Mandatory Skills"
+              value={mandatorySkills}
+              onChange={(e) => setMandatorySkills(e.target.value)}
+              placeholder="Python, SQL, Docker (comma-separated)"
+            />
+            <PremiumInput
+              label="Preferred Skills"
+              value={preferredSkills}
+              onChange={(e) => setPreferredSkills(e.target.value)}
+              placeholder="Kubernetes, AWS (comma-separated)"
+            />
+            {parsedCompany ? (
+              <p className={`text-xs ${embedded ? 'text-[#9FB2C4]' : 'text-slate-500'}`}>
+                Parsed employer from JD: {parsedCompany}
+                {parsedJdId ? ' · ATS will use linked parsed JD (re-parse if you change requirements significantly).' : ''}
+              </p>
+            ) : null}
 
             <PremiumInput
               label="Description"

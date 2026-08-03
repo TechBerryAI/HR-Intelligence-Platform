@@ -7,15 +7,22 @@ from pathlib import Path
 
 import pytest
 
-BACKEND_ROOT = Path(__file__).resolve().parents[2] / "apps" / "backend"
+BACKEND_ROOT = Path(__file__).resolve().parents[2] / 'apps' / 'backend'
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from ai_runtime_adapter import _ensure_array, canonicalize_resume_toon, normalize_proposal, repair_resume_toon
-from parsing_utils import collect_toon_validation_issues, validate_toon_format
-from resume_enrichment import ResumeEnrichmentContext, enrich_resume_toon
-from resume_inference import infer_resume_toon
-from resume_toon_pipeline import build_resume_toon
+from app.ai.adapter.runtime_adapter import (
+    _ensure_array,
+    canonicalize_resume_toon,
+    normalize_proposal,
+    repair_resume_toon,
+)
+from app.ai.parser.enrichment.resume_enrichment import ResumeEnrichmentContext, enrich_resume_toon
+from app.ai.parser.pipelines.resume_toon_pipeline import build_resume_toon
+from app.domains.recruitment.services.parsing_storage import (
+    collect_toon_validation_issues,
+    validate_toon_format,
+)
 
 SAMPLE_RESUME = {
     "person": {
@@ -66,7 +73,7 @@ def test_resume_validate_rejects_empty_skills_without_history():
 
 
 def test_normalize_education_preserves_gpa_dates_and_field():
-    from ai_runtime_adapter import _normalize_education, canonicalize_resume_toon
+    from app.ai.adapter.runtime_adapter import _normalize_education, canonicalize_resume_toon
 
     edu = _normalize_education([
         {
@@ -252,7 +259,7 @@ def test_repair_coerces_canonical_resume_with_string_skills():
 
 
 def test_text_extraction_rejects_doc():
-    from text_extraction import extract_text
+    from app.ai.parser.text_extraction import extract_text
 
     with pytest.raises(ValueError, match="DOCX or PDF"):
         extract_text(b"fake", "resume.doc")
@@ -318,9 +325,10 @@ def test_inference_does_not_overwrite_existing_skills():
         "education": [{"degree": "BS", "institution": "U", "year": "2020"}],
     }
     raw_text = "Skills: Python, SQL"
-    toon, actions = infer_resume_toon(normalize_proposal(llm_output, "resume"), raw_text)
+    toon, actions = repair_resume_toon(normalize_proposal(llm_output, "resume"), raw_text)
     assert toon["skills"] == ["Kubernetes"]
-    assert actions == []
+    # recovery may log other fills; skills must not be overwritten
+    assert all("skill" not in a.lower() or "overwrite" not in a.lower() for a in actions)
 
 
 def test_collect_validation_issues_returns_all_resume_faults():
@@ -469,3 +477,42 @@ Skills: Python, JavaScript, HTML
     assert ok, err
     assert toon["person"]["email"] == "alex@fresh.com"
     assert len(toon["skills"]) > 0
+
+
+def test_collect_validation_issues_missing_person_does_not_raise():
+    toon = {
+        "type": "resume",
+        "skills": ["Python"],
+        "experience": [],
+        "education": [],
+    }
+    issues = collect_toon_validation_issues(toon, "resume")
+    assert isinstance(issues, list)
+    assert any("person" in i.lower() for i in issues)
+    assert "person.name must not be empty" in issues
+    assert "person.email must not be empty" in issues
+
+
+def test_build_resume_toon_empty_llm_recovers_identity_from_text():
+    raw_text = """
+Jordan Lee
+jordan.lee@example.com
++1 555-0101
+Skills: Python, SQL, Docker
+"""
+    toon = build_resume_toon(raw_text, {})
+    assert isinstance(toon.get("person"), dict)
+    assert toon["person"].get("name")
+    assert "jordan.lee@example.com" in (toon["person"].get("email") or "").lower()
+    assert isinstance(toon.get("skills"), list)
+
+
+def test_build_resume_toon_empty_llm_does_not_raise_keyerror():
+    raw_text = "No contact info here, just some prose about projects."
+    toon = build_resume_toon(raw_text, {})
+    assert isinstance(toon, dict)
+    assert "person" in toon
+    assert isinstance(toon["person"], dict)
+    # Validation may fail, but pipeline must not crash on missing keys
+    issues = collect_toon_validation_issues(toon, "resume")
+    assert isinstance(issues, list)

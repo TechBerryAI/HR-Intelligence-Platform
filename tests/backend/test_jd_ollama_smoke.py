@@ -9,12 +9,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-BACKEND_ROOT = Path(__file__).resolve().parents[2] / "apps" / "backend"
-REPO_ROOT = BACKEND_ROOT.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = REPO_ROOT / "apps" / "backend"
 AI_ROOT = REPO_ROOT / "ai"
 
 if str(AI_ROOT) not in sys.path:
     sys.path.insert(0, str(AI_ROOT))
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
 
 SAMPLE_JD = """
 Senior Python Developer — Acme Corp — Remote
@@ -44,8 +46,8 @@ def _ollama_available() -> bool:
 
 @pytest.mark.skipif(not _ollama_available(), reason="Ollama not available")
 def test_jd_parse_via_runtime_has_mandatory_skills():
-    from ai_runtime_adapter import parse_via_runtime, normalize_proposal
-    from parsing_utils import validate_toon_format
+    from app.ai.adapter.runtime_adapter import parse_via_runtime, normalize_proposal
+    from app.domains.recruitment.services.parsing_storage import validate_toon_format
 
     raw = parse_via_runtime(SAMPLE_JD, "jd")
     toon = normalize_proposal(raw, "jd")

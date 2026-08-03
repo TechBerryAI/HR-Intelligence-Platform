@@ -368,12 +368,18 @@ async function waitForOllama(host, maxWaitMs = 45000) {
 }
 
 function modelIsPresent(tags, modelName) {
-  const wanted = String(modelName || '').toLowerCase();
-  const wantedBase = wanted.split(':')[0];
+  const wanted = String(modelName || '').toLowerCase().trim();
+  if (!wanted) return false;
   const models = (tags && tags.models) || [];
   return models.some((m) => {
-    const name = String((m && (m.name || m.model)) || '').toLowerCase();
-    return name === wanted || name.startsWith(`${wantedBase}:`) || name === wantedBase;
+    const name = String((m && (m.name || m.model)) || '').toLowerCase().trim();
+    if (!name) return false;
+    // Exact tag match only (e.g. qwen2.5:14b-instruct). Fuzzy base matches
+    // falsely skip pull when a different size/tag of the same family exists.
+    if (name === wanted) return true;
+    // Bare base name (no tag) may appear as name:latest in Ollama tags.
+    if (!wanted.includes(':') && (name === `${wanted}:latest` || name === wanted)) return true;
+    return false;
   });
 }
 
@@ -385,10 +391,10 @@ async function setupOllama() {
   log(`Using Ollama model: ${model}`);
   log(`Using Ollama host: ${host}`);
 
-  if (!commandExists('ollama')) {
+    if (!commandExists('ollama')) {
     log(
       'Ollama CLI not found. Install from https://ollama.com/download then re-run start.js. ' +
-        'Resume/JD parsing will fall back to Grok only if XAI_API_KEY is set.',
+        'Parsing requires Ollama (Grok cloud fallback is disabled).',
       'warn'
     );
     return { host, model, ready: false };
