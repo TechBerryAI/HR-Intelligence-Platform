@@ -52,61 +52,47 @@ def _trace(
 
 def format_jd_description(profile: JobProfile) -> str:
     """
-    Named transform: compose markdown description from canonical sections.
-    Prefer structured narrative when already present; otherwise build sections.
+    Named transform: Description = overview prose + Key Responsibilities (own bullets).
+    If no description/overview is available, fall back to Required Skills only.
     """
-    parts: list[str] = []
-    employment = profile.basic.employment_type.strip()
-    if employment:
-        parts.append(f'**Employment Type:** {employment}\n')
-
-    narrative = profile.basic.description.strip()
-    responsibilities = [r for r in profile.responsibilities.items if r.strip()]
-    mandatory = [s for s in profile.skills.mandatory if s.strip()]
-    preferred = [s for s in profile.skills.preferred if s.strip()]
-    qualifications = [q for q in profile.requirements.qualifications if q.strip()]
-    benefits = [b for b in profile.benefits.items if b.strip()]
-    general = [s for s in profile.skills.general if s.strip()]
-
-    looks_structured = bool(
-        narrative
-        and (
-            '**Responsibilities:**' in narrative
-            or '**Required Skills:**' in narrative
-            or '**Mandatory Skills:**' in narrative
-            or '**Qualifications:**' in narrative
-        )
+    from app.ai.parser.enrichment.jd_text_inference import (
+        compose_jd_description,
+        has_responsibilities_section,
+        strip_source_bullets_to_prose,
     )
 
-    if looks_structured:
-        parts.append(narrative)
-        if preferred and '**Preferred Skills:**' not in narrative:
-            parts.append('\n**Preferred Skills:**\n' + ', '.join(preferred))
-        if benefits and '**Benefits:**' not in narrative:
-            parts.append('\n**Benefits:**\n' + '\n'.join(f'• {b}' for b in benefits))
-        return '\n'.join(parts).strip()
+    narrative = strip_source_bullets_to_prose(profile.basic.description.strip())
+    responsibilities = [
+        strip_source_bullets_to_prose(r) for r in profile.responsibilities.items if r and str(r).strip()
+    ]
+    responsibilities = [r for r in responsibilities if r]
 
-    if narrative:
-        parts.append(narrative)
+    # Prefer structured narrative when it already has our Key Responsibilities block
+    if narrative and '**Key Responsibilities:**' in narrative:
+        return narrative
 
-    if responsibilities:
-        block = '**Responsibilities:**\n' + '\n'.join(f'• {r}' for r in responsibilities)
-        parts.append(block)
+    include_kr = bool(responsibilities) and (
+        has_responsibilities_section(narrative)
+        or bool(responsibilities)
+    )
+    composed = compose_jd_description(
+        narrative,
+        responsibilities if include_kr else [],
+        title=profile.basic.title or '',
+        include_responsibilities=include_kr,
+    )
+    if composed:
+        return composed
 
-    skills_for_required = mandatory or general
-    if skills_for_required:
-        parts.append('**Required Skills:**\n' + ', '.join(skills_for_required))
-
-    if preferred:
-        parts.append('**Preferred Skills:**\n' + ', '.join(preferred))
-
-    if qualifications:
-        parts.append('**Qualifications:**\n' + '\n'.join(f'• {q}' for q in qualifications))
-
-    if benefits:
-        parts.append('**Benefits:**\n' + '\n'.join(f'• {b}' for b in benefits))
-
-    return '\n\n'.join(p.strip() for p in parts if p and p.strip()).strip()
+    # No overview / KR — put Required Skills only into Description
+    required = [
+        s.strip()
+        for s in (list(profile.skills.mandatory) or list(profile.skills.general) or [])
+        if s and str(s).strip()
+    ]
+    if required:
+        return f"**Required Skills:**\n{', '.join(required)}"
+    return ''
 
 
 def map_job_to_form(profile: JobProfile) -> JobCreateFormDTO:
@@ -249,6 +235,11 @@ def map_job_to_form(profile: JobProfile) -> JobCreateFormDTO:
     responsibilities = [r for r in profile.responsibilities.items if r.strip()]
     qualifications = [q for q in profile.requirements.qualifications if q.strip()]
     keywords = [k for k in profile.requirements.keywords if k.strip()]
+    # Prefer short skill/tech terms when keywords empty
+    if not keywords:
+        keywords = list(dict.fromkeys(
+            [s for s in (mandatory + preferred + general) if s and len(s.split()) <= 4][:20]
+        ))
 
     return JobCreateFormDTO(
         title=title,
@@ -256,6 +247,7 @@ def map_job_to_form(profile: JobProfile) -> JobCreateFormDTO:
         experienceFrom=exp_from,
         experienceTo=exp_to,
         description=description,
+        keywords=', '.join(keywords),
         salary=salary,
         company=company,
         mandatorySkills=mandatory,

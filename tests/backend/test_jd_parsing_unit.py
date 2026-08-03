@@ -47,12 +47,50 @@ Location: Bengaluru, India
 
 def test_ensure_array_splits_pipe_and_comma():
     assert _ensure_array("Python|Django|React") == ["Python", "Django", "React"]
-    assert _ensure_array("Python, Django, React") == ["Python", "Django", "React"]
+    # Skills still split on commas via dedicated skill tokenizer
+    from app.ai.adapter.runtime_adapter import _normalize_skills
+    assert _normalize_skills("Python, Django, React") == ["Python", "Django", "React"]
 
 
 def test_ensure_string_array_splits_newlines_and_bullets():
     text = "• Design APIs\n- Write tests\n* Deploy services"
     assert _ensure_string_array(text) == ["Design APIs", "Write tests", "Deploy services"]
+
+
+def test_ensure_string_array_keeps_commas_inside_sentences():
+    """Commas must not become new bullet lines in responsibilities."""
+    text = "Design, build, and ship APIs\nLead code reviews"
+    assert _ensure_string_array(text) == [
+        "Design, build, and ship APIs",
+        "Lead code reviews",
+    ]
+    assert _ensure_string_array([
+        "Design, build, and ship APIs",
+        "Collaborate with product, design, and QA",
+    ]) == [
+        "Design, build, and ship APIs",
+        "Collaborate with product, design, and QA",
+    ]
+
+
+def test_repair_preserves_comma_sentences_in_responsibilities():
+    llm_output = {
+        "type": "job_description",
+        "title": "Backend Engineer",
+        "location": "Remote",
+        "skills": ["Python", "Django"],
+        "responsibilities": [
+            "Design, build, and maintain APIs",
+            "Partner with product, design, and QA teams",
+        ],
+        "qualifications": ["BS in CS, or equivalent experience"],
+    }
+    repaired, _actions = repair_jd_toon(llm_output)
+    assert repaired["responsibilities"] == [
+        "Design, build, and maintain APIs",
+        "Partner with product, design, and QA teams",
+    ]
+    assert repaired["qualifications"] == ["BS in CS, or equivalent experience"]
 
 
 def test_repair_jd_structure_promotes_required_skills():
@@ -216,3 +254,154 @@ Responsibilities:
     assert repaired["salary_range"]
     assert "LPA" in repaired["salary_range"].upper() or "12" in repaired["salary_range"]
     assert any("inferred_min_experience" in a or "inferred_title" in a for a in actions)
+
+
+def test_str_coerces_location_object_with_city_country():
+    from app.ai.adapter.runtime_adapter import _str
+
+    assert _str({"city": "Bengaluru", "country": "India"}) == "Bengaluru, India"
+    assert _str({"raw": "Remote, US"}) == "Remote, US"
+    assert _str({"remote": True}) == "Remote"
+    assert _str({"name": "Acme Corp"}) == "Acme Corp"
+
+
+def test_repair_location_object_and_experience_aliases():
+    llm_output = {
+        "type": "job_description",
+        "job_title": "Staff Engineer",
+        "employer": "Acme Labs",
+        "location": {"city": "Bengaluru", "region": "KA", "country": "India"},
+        "required_skills": [{"name": "Python"}, {"name": "Django"}],
+        "experience": "4-7 years",
+        "compensation": "18-25 LPA",
+        "duties": ["Design systems", "Mentor engineers"],
+        "requirements": ["Bachelor's in CS"],
+    }
+    repaired, actions = repair_jd_toon(llm_output)
+    assert repaired["title"] == "Staff Engineer"
+    assert repaired["company"] == "Acme Labs"
+    assert repaired["location"] == "Bengaluru, KA, India"
+    assert repaired["skills"] == ["Python", "Django"]
+    assert repaired["mandatory_skills"] == ["Python", "Django"]
+    assert repaired["min_experience_years"] == 4.0
+    assert repaired["max_experience_years"] == 7.0
+    assert "18-25 LPA" in repaired["salary_range"]
+    assert repaired["responsibilities"] == ["Design systems", "Mentor engineers"]
+    assert repaired["qualifications"] == ["Bachelor's in CS"]
+    assert "coalesced_experience_years_alias" in actions
+
+
+def test_repair_experience_range_object_alias():
+    llm_output = {
+        "type": "job_description",
+        "title": "Data Analyst",
+        "location": "Remote",
+        "skills": ["SQL"],
+        "responsibilities": ["Analyze data"],
+        "experience_range": {"min": 2, "max": 4},
+    }
+    repaired, actions = repair_jd_toon(llm_output)
+    assert repaired["min_experience_years"] == 2.0
+    assert repaired["max_experience_years"] == 4.0
+    assert "coalesced_experience_years_alias" in actions
+
+
+def test_normalize_rejoins_comma_split_responsibility_fragments():
+    from app.ai.adapter.runtime_adapter import _normalize_responsibility_items
+
+    assert _normalize_responsibility_items([
+        "Design",
+        "build",
+        "and maintain scalable GenAI applications",
+        "Collaborate with product",
+        "design",
+        "and engineering teams",
+    ]) == [
+        "Design, build, and maintain scalable GenAI applications",
+        "Collaborate with product, design, and engineering teams",
+    ]
+    assert _normalize_responsibility_items(["Build APIs", "Write tests"]) == [
+        "Build APIs",
+        "Write tests",
+    ]
+
+
+def test_description_overview_only_when_jd_has_no_responsibilities_section():
+    jd_text = """
+AI Engineer
+Location: Remote
+
+About the role:
+We are seeking a skilled AI Engineer to build RAG systems.
+
+Required Skills: Python, RAG, GenAI
+"""
+    repaired, actions = repair_jd_toon(
+        {
+            "type": "job_description",
+            "title": "AI Engineer",
+            "location": "Remote",
+            "skills": ["Python", "RAG"],
+            "responsibilities": ["Hallucinated duty from model"],
+            "description": "We are seeking a skilled AI Engineer to build RAG systems.",
+        },
+        raw_jd_text=jd_text,
+    )
+    assert "Key Responsibilities" not in repaired["description"]
+    assert "Hallucinated" not in repaired["description"]
+    assert repaired.get("has_key_responsibilities") is False
+
+
+def test_rebuilds_own_bullets_from_jd_responsibility_sentences():
+    jd_text = """
+Backend Engineer
+Location: Remote
+
+About the role:
+We need a backend engineer for APIs.
+
+Key Responsibilities:
+- Design, build, and maintain APIs
+* Partner with product, design, and QA
+1. Own production reliability
+
+Required Skills: Python, Django
+"""
+    repaired, _actions = repair_jd_toon(
+        {
+            "type": "job_description",
+            "title": "Backend Engineer",
+            "location": "Remote",
+            "skills": ["Python"],
+            "responsibilities": [],
+            "description": "",
+        },
+        raw_jd_text=jd_text,
+    )
+    assert repaired.get("has_key_responsibilities") is True
+    assert "Key Responsibilities" in repaired["description"]
+    bullets = [ln.strip() for ln in repaired["description"].splitlines() if ln.strip().startswith("•")]
+    assert any("Design, build, and maintain APIs" in b for b in bullets)
+    assert "- Design" not in repaired["description"]
+    assert "* Partner" not in repaired["description"]
+    assert "1. Own" not in repaired["description"]
+
+
+def test_description_falls_back_to_required_skills_when_missing():
+    repaired, actions = repair_jd_toon(
+        {
+            "type": "job_description",
+            "title": "Python Developer",
+            "location": "Remote",
+            "skills": ["Python", "Django", "PostgreSQL"],
+            "mandatory_skills": ["Python", "Django", "PostgreSQL"],
+            "responsibilities": [],
+            "description": "",
+        },
+        raw_jd_text="Python Developer\nLocation: Remote\nRequired Skills: Python, Django, PostgreSQL\n",
+    )
+    assert "**Required Skills:**" in repaired["description"]
+    assert "Python" in repaired["description"]
+    assert "Key Responsibilities" not in repaired["description"]
+    assert "filled_description_from_required_skills" in actions
+

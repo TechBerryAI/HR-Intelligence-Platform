@@ -27,6 +27,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
   const [experienceFrom, setExperienceFrom] = useState('')
   const [experienceTo, setExperienceTo] = useState('')
   const [description, setDescription] = useState('')
+  const [keywords, setKeywords] = useState('')
   const [mandatorySkills, setMandatorySkills] = useState('')
   const [preferredSkills, setPreferredSkills] = useState('')
   const [parsedCompany, setParsedCompany] = useState('')
@@ -42,6 +43,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
   const [editExperienceFrom, setEditExperienceFrom] = useState('')
   const [editExperienceTo, setEditExperienceTo] = useState('')
   const [editDescription, setEditDescription] = useState('')
+  const [editKeywords, setEditKeywords] = useState('')
 
   useEffect(() => {
     if (user?.company && (!company || company.trim() === '')) {
@@ -60,6 +62,10 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     setExperienceFrom(parsedData.experienceFrom || '')
     setExperienceTo(parsedData.experienceTo || '')
     setDescription(parsedData.description || '')
+    const kw = parsedData.keywords
+      || (Array.isArray(parsedData._keywords) ? parsedData._keywords.join(', ') : '')
+      || ''
+    setKeywords(kw)
     setMandatorySkills(
       Array.isArray(parsedData.mandatorySkills)
         ? parsedData.mandatorySkills.join(', ')
@@ -115,6 +121,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
         experienceFrom,
         experienceTo,
         description: descriptionToSend,
+        keywords,
         mandatorySkills: mand,
         preferredSkills: pref,
       }
@@ -131,6 +138,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
       setExperienceFrom('')
       setExperienceTo('')
       setDescription('')
+      setKeywords('')
       setMandatorySkills('')
       setPreferredSkills('')
       setParsedCompany('')
@@ -151,6 +159,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     setEditExperienceFrom(job.experienceFrom || '')
     setEditExperienceTo(job.experienceTo || '')
     setEditDescription(job.description || '')
+    setEditKeywords(job.keywords || '')
   }
 
   const handleEditCancel = () => {
@@ -161,6 +170,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     setEditExperienceFrom('')
     setEditExperienceTo('')
     setEditDescription('')
+    setEditKeywords('')
   }
 
   const handleEditSubmit = async (e) => {
@@ -173,6 +183,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
       experienceFrom: editExperienceFrom,
       experienceTo: editExperienceTo,
       description: editDescription,
+      keywords: editKeywords,
     })
     setSuccess('Job updated successfully!')
     setTimeout(() => setSuccess(''), 2500)
@@ -311,6 +322,13 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe responsibilities, requirements, and perks"
               className="min-h-[120px] resize-y"
+            />
+            <PremiumInput
+              label="Keywords"
+              value={keywords}
+              onChange={(e) => setKeywords(e.target.value)}
+              placeholder="Python, RAG, GenAI (comma-separated)"
+              helperText="Auto-filled from the job description — only JD-related terms"
             />
 
             <div className="pt-4">
@@ -518,6 +536,12 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                   onChange={(e) => setEditDescription(e.target.value)}
                   placeholder="Describe responsibilities, requirements, and perks"
                   className="min-h-[120px] resize-y"
+                />
+                <PremiumInput
+                  label="Keywords"
+                  value={editKeywords}
+                  onChange={(e) => setEditKeywords(e.target.value)}
+                  placeholder="Python, RAG, GenAI (comma-separated)"
                 />
 
                 <div className="flex gap-3 pt-2">

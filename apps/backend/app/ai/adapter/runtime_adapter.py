@@ -592,8 +592,17 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
                 continue
             if isinstance(val, list) and len(val) == 0:
                 continue
+            if isinstance(val, dict) and len(val) == 0:
+                continue
             return val
         return None
+
+    def _first_str(*keys: str) -> str:
+        for key in keys:
+            s = _str(source.get(key))
+            if s:
+                return s
+        return ""
 
     resp_raw = _first_nonempty(
         "responsibilities", "duties", "key_responsibilities",
@@ -602,12 +611,33 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
     if resp_raw is not source.get("responsibilities") and resp_raw is not None:
         actions.append("coalesced_responsibilities_alias")
 
+    min_years, max_years = _coerce_experience_years(source)
+    if (
+        (min_years is not None or max_years is not None)
+        and (
+            source.get("min_experience_years") in (None, "")
+            or source.get("max_experience_years") in (None, "")
+        )
+        and any(
+            source.get(k) not in (None, "")
+            for k in (
+                "experience_years",
+                "years_of_experience",
+                "experience",
+                "experience_range",
+                "exp",
+                "experience_required",
+            )
+        )
+    ):
+        actions.append("coalesced_experience_years_alias")
+
     repaired = {
         "type": "job_description",
-        "title": _str(source.get("title") or source.get("job_title")),
-        "company": _str(source.get("company")),
-        "location": _str(source.get("location")),
-        "employment_type": _str(source.get("employment_type") or source.get("employmentType")),
+        "title": _first_str("title", "job_title", "position"),
+        "company": _first_str("company", "employer", "organization", "organisation"),
+        "location": _first_str("location", "job_location", "work_location", "city"),
+        "employment_type": _first_str("employment_type", "employmentType"),
         "skills": _normalize_skills(source.get("skills")),
         "mandatory_skills": _normalize_skills(
             source.get("mandatory_skills") or source.get("required_skills")
@@ -615,16 +645,18 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
         "preferred_skills": _normalize_skills(
             source.get("preferred_skills") or source.get("nice_to_have_skills")
         ),
-        "responsibilities": _ensure_string_array(resp_raw),
-        "qualifications": _ensure_string_array(
+        "responsibilities": _normalize_responsibility_items(resp_raw),
+        "qualifications": _normalize_responsibility_items(
             _first_nonempty("qualifications", "requirements", "education_requirements")
         ),
         "benefits": _ensure_string_array(source.get("benefits")),
         "keywords": _ensure_string_array(source.get("keywords")),
         "description": _str(source.get("description")),
-        "min_experience_years": source.get("min_experience_years"),
-        "max_experience_years": source.get("max_experience_years"),
-        "salary_range": _str(source.get("salary_range") or source.get("salary")),
+        "min_experience_years": min_years,
+        "max_experience_years": max_years,
+        "salary_range": _first_str(
+            "salary_range", "salary", "compensation", "ctc", "pay_range", "pay"
+        ),
         "confidence": source.get("confidence"),
     }
 
@@ -644,14 +676,14 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
             from app.ai.parser.enrichment.jd_text_inference import extract_responsibilities_from_text
             inferred = extract_responsibilities_from_text(desc)
             if inferred:
-                repaired["responsibilities"] = inferred
+                repaired["responsibilities"] = _normalize_responsibility_items(inferred)
                 actions.append("inferred_responsibilities_from_description")
 
     if not repaired["responsibilities"] and raw_jd_text:
         from app.ai.parser.enrichment.jd_text_inference import extract_responsibilities_from_text
         inferred = extract_responsibilities_from_text(raw_jd_text)
         if inferred:
-            repaired["responsibilities"] = inferred
+            repaired["responsibilities"] = _normalize_responsibility_items(inferred)
             actions.append("inferred_responsibilities_from_raw_text")
 
     infer_source = _str(repaired.get("description") or raw_jd_text)
@@ -706,8 +738,161 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
                 repaired["qualifications"] = quals
                 actions.append("inferred_qualifications_from_text")
 
+        if not repaired.get("description") and inferred_fields.get("description"):
+            repaired["description"] = inferred_fields["description"]
+            actions.append("inferred_description_from_text")
+
+    # Ensure responsibilities present only when JD has a responsibilities section
+    from app.ai.parser.enrichment.jd_text_inference import (
+        clean_jd_description,
+        compose_jd_description,
+        extract_overview_from_text,
+        extract_responsibilities_from_text,
+        extract_tech_keywords_from_text,
+        has_responsibilities_section,
+    )
+
+    source_text = (raw_jd_text or repaired.get("description") or "").strip()
+    jd_has_kr = has_responsibilities_section(source_text)
+    # When raw JD is unavailable, trust non-empty LLM responsibilities; when raw JD
+    # is present, only include KR if that section actually exists in the document.
+    if not jd_has_kr and not (raw_jd_text or "").strip() and repaired.get("responsibilities"):
+        jd_has_kr = True
+        actions.append("assumed_responsibilities_without_raw_jd")
+
+    if jd_has_kr:
+        # Prefer sentences extracted from the JD section; rebuild our own bullets later
+        inferred_resp = extract_responsibilities_from_text(source_text)
+        if inferred_resp:
+            repaired["responsibilities"] = _normalize_responsibility_items(inferred_resp)
+            actions.append("extracted_responsibilities_from_jd_section")
+        elif repaired.get("responsibilities"):
+            repaired["responsibilities"] = _normalize_responsibility_items(
+                repaired.get("responsibilities")
+            )
+    else:
+        # No KR section → Description stays overview-only (array may remain for ATS/validation)
+        if repaired.get("responsibilities"):
+            repaired["responsibilities"] = _normalize_responsibility_items(
+                repaired.get("responsibilities")
+            )
+            actions.append("responsibilities_excluded_from_description")
+
+    # Compose Description = overview [+ Key Responsibilities only if JD has that section]
+    overview = clean_jd_description(
+        repaired.get("description") or "",
+        title=repaired.get("title") or "",
+    )
+    if not overview and raw_jd_text:
+        overview = extract_overview_from_text(raw_jd_text)
+        if overview:
+            actions.append("filled_description_from_overview")
+
+    resp_for_desc = (repaired.get("responsibilities") or []) if jd_has_kr else []
+    composed = compose_jd_description(
+        overview,
+        resp_for_desc,
+        title=repaired.get("title") or "",
+        include_responsibilities=jd_has_kr,
+    )
+    if composed:
+        if composed != (repaired.get("description") or ""):
+            actions.append(
+                "composed_description_with_responsibilities"
+                if jd_has_kr and resp_for_desc
+                else "composed_description_overview_only"
+            )
+        repaired["description"] = composed
+    elif resp_for_desc:
+        repaired["description"] = compose_jd_description(
+            "",
+            resp_for_desc,
+            title=repaired.get("title") or "",
+            include_responsibilities=True,
+        )
+        actions.append("filled_description_from_responsibilities")
+    else:
+        # No overview / KR — Description = Required Skills only
+        required = [
+            _str(s)
+            for s in (
+                list(repaired.get("mandatory_skills") or [])
+                or list(repaired.get("skills") or [])
+            )
+            if _str(s)
+        ]
+        if required:
+            repaired["description"] = f"**Required Skills:**\n{', '.join(required)}"
+            actions.append("filled_description_from_required_skills")
+
+    # Flag for frontend autofill: only show KR block when JD had that section
+    repaired["has_key_responsibilities"] = bool(jd_has_kr and resp_for_desc)
+
+    # Keywords: skills first, then short tech terms found in the JD (never sentences)
+    tech_from_text = extract_tech_keywords_from_text(
+        raw_jd_text or repaired.get("description") or ""
+    )
+    repaired["keywords"] = _derive_jd_keywords(
+        list(repaired.get("keywords") or []) + tech_from_text,
+        repaired,
+        raw_jd_text or repaired.get("description") or "",
+    )
+    if repaired["keywords"]:
+        actions.append("derived_keywords_from_jd")
+
     repaired["type"] = "job_description"
     return repaired, actions
+
+
+def _derive_jd_keywords(
+    existing: Any,
+    repaired: dict[str, Any],
+    jd_text: str,
+    *,
+    max_keywords: int = 20,
+) -> list[str]:
+    """Build keywords strictly from JD content — never invent unrelated terms."""
+    from app.ai.parser.enrichment.jd_text_inference import is_plausible_keyword
+
+    stop = {
+        "and", "or", "the", "a", "an", "to", "of", "in", "for", "with", "on", "at",
+        "job", "role", "position", "team", "work", "working", "experience", "years",
+        "year", "required", "preferred", "nice", "have", "must", "strong", "good",
+        "knowledge", "ability", "skills", "skill", "etc", "including", "using",
+        "jd", "engineer", "developer",  # bare titles alone are weak keywords
+    }
+    skill_list = [
+        _str(s)
+        for s in (
+            list(repaired.get("mandatory_skills") or [])
+            + list(repaired.get("preferred_skills") or [])
+            + list(repaired.get("skills") or [])
+        )
+        if _str(s)
+    ]
+    skill_set = {s.lower() for s in skill_list}
+
+    # Prefer skills first; only keep short keyword tokens from parser keywords
+    candidates = skill_list + _ensure_string_array(existing)
+
+    text_lower = (jd_text or "").lower()
+    result: list[str] = []
+    seen: set[str] = set()
+    for raw in candidates:
+        kw = _str(raw)
+        if not is_plausible_keyword(kw):
+            continue
+        key = kw.lower()
+        if key in stop or key in seen:
+            continue
+        # Only keep terms present in the JD text, or already extracted as JD skills
+        if text_lower and key not in text_lower and key not in skill_set:
+            continue
+        seen.add(key)
+        result.append(kw)
+        if len(result) >= max_keywords:
+            break
+    return result
 
 
 def repair_jd_toon(data: dict[str, Any], raw_jd_text: str | None = None) -> tuple[dict[str, Any], list[str]]:
@@ -746,13 +931,78 @@ def _str(value: Any) -> str:
         return str(value).strip()
     if isinstance(value, list):
         parts = [_str(item) for item in value]
-        return " ".join(p for p in parts if p)
+        return ", ".join(p for p in parts if p)
     if isinstance(value, dict):
-        for key in ("name", "title", "text", "value", "label", "email", "phone"):
-            if key in value and value[key] is not None:
+        for key in ("name", "title", "text", "value", "label", "raw", "email", "phone"):
+            if key in value and value[key] is not None and str(value[key]).strip():
                 return _str(value[key])
+        # Location-style objects: {city, region/state, country, remote}
+        city = _str(value.get("city"))
+        region = _str(value.get("region") or value.get("state"))
+        country = _str(value.get("country"))
+        loc_parts = [p for p in (city, region, country) if p]
+        if loc_parts:
+            return ", ".join(loc_parts)
+        if value.get("remote") is True:
+            return "Remote"
         return ""
     return str(value).strip()
+
+
+def _coerce_experience_years(source: dict[str, Any]) -> tuple[Any, Any]:
+    """Pull min/max years from canonical fields or common LLM aliases."""
+    from app.ai.parser.enrichment.jd_text_inference import extract_experience_years
+
+    def _as_number(val: Any) -> Any:
+        if val is None or val == "":
+            return None
+        if isinstance(val, bool):
+            return None
+        if isinstance(val, (int, float)):
+            return float(val)
+        if isinstance(val, str):
+            try:
+                return float(val.strip())
+            except ValueError:
+                return None
+        return None
+
+    min_y = _as_number(source.get("min_experience_years"))
+    max_y = _as_number(source.get("max_experience_years"))
+    if min_y is not None and max_y is not None:
+        return min_y, max_y
+
+    for key in (
+        "experience_years",
+        "years_of_experience",
+        "experience",
+        "experience_range",
+        "exp",
+        "experience_required",
+    ):
+        val = source.get(key)
+        if val is None or val == "":
+            continue
+        if isinstance(val, dict):
+            mn = val.get("min") or val.get("from") or val.get("min_years") or val.get("minimum")
+            mx = val.get("max") or val.get("to") or val.get("max_years") or val.get("maximum")
+            if min_y is None:
+                min_y = _as_number(mn)
+            if max_y is None:
+                max_y = _as_number(mx)
+        elif isinstance(val, (int, float)):
+            if min_y is None:
+                min_y = float(val)
+        elif isinstance(val, str):
+            parsed_min, parsed_max = extract_experience_years(val)
+            if min_y is None and parsed_min is not None:
+                min_y = parsed_min
+            if max_y is None and parsed_max is not None:
+                max_y = parsed_max
+        if min_y is not None or max_y is not None:
+            break
+
+    return min_y, max_y
 
 
 def _coerce_record_strings(records: Any, keys: tuple[str, ...]) -> Any:
@@ -769,14 +1019,16 @@ def _coerce_record_strings(records: Any, keys: tuple[str, ...]) -> Any:
 
 
 def _split_string_to_items(text: str) -> list[str]:
-    import re
+    """Split prose lists on pipes, newlines, or bullets — never on commas.
+
+    Commas appear inside normal sentences ("Design, build, and ship APIs") and must
+    not become separate bullet lines in JD responsibilities/qualifications.
+    """
     raw = text.strip()
     if not raw:
         return []
     if '|' in raw:
         parts = [p.strip() for p in raw.split('|')]
-    elif ',' in raw and '\n' not in raw:
-        parts = [p.strip() for p in raw.split(',')]
     else:
         parts = [p.strip() for p in re.split(r'\n+', raw)]
     result: list[str] = []
@@ -786,6 +1038,127 @@ def _split_string_to_items(text: str) -> list[str]:
         if cleaned:
             result.append(cleaned)
     return result
+
+
+def _split_skill_tokens(text: str) -> list[str]:
+    """Split skill lists on commas, pipes, or newlines (skills are short tokens)."""
+    raw = text.strip()
+    if not raw:
+        return []
+    if '|' in raw:
+        parts = [p.strip() for p in raw.split('|')]
+    elif '\n' in raw:
+        parts = [p.strip() for p in re.split(r'\n+', raw)]
+    else:
+        parts = [p.strip() for p in re.split(r'[,;•·]+', raw)]
+    result: list[str] = []
+    for part in parts:
+        cleaned = re.sub(r'^[\s•·\-\*]+', '', part).strip()
+        cleaned = re.sub(r'^\d+[\.\)]\s*', '', cleaned).strip()
+        if cleaned:
+            result.append(cleaned)
+    return result
+
+
+def _rejoin_comma_split_prose_items(items: list[str]) -> list[str]:
+    """Rejoin items wrongly split on in-sentence commas into one bullet.
+
+    Example: ["Design", "build", "and maintain APIs"]
+          -> ["Design, build, and maintain APIs"]
+
+    Does not join adjacent complete duties like ["Build APIs", "Write tests"].
+    """
+    if not items or len(items) < 2:
+        return items
+
+    def _is_continuation(prev: str, nxt: str) -> bool:
+        p = (prev or "").strip()
+        n = (nxt or "").strip()
+        if not p or not n:
+            return False
+        if p.endswith((".", "!", "?", ";", ":")):
+            return False
+        lower = n.lower()
+        if lower.startswith(("and ", "or ", "but ", "with ", "including ", "plus ")):
+            return True
+        # Mid-list fragment after a comma ("build", "design", "evaluation")
+        if n[0].islower():
+            return True
+        return False
+
+    out: list[str] = []
+    buf = items[0].strip()
+    for raw in items[1:]:
+        nxt = (raw or "").strip()
+        if not nxt:
+            continue
+        if _is_continuation(buf, nxt) and (len(buf) + len(nxt) < 240):
+            buf = f"{buf}, {nxt}"
+        else:
+            out.append(buf)
+            buf = nxt
+    if buf:
+        out.append(buf)
+    return out
+
+
+def _flatten_string_array_items(value: Any) -> list[str]:
+    """Flatten list/string blobs without case-insensitive dedupe (needed before rejoin)."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return _split_string_to_items(value)
+    if isinstance(value, dict):
+        for key in ("text", "description", "value", "name", "title"):
+            if key in value and value[key]:
+                return _flatten_string_array_items(value[key])
+        return []
+    if isinstance(value, list):
+        result: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                stripped = item.strip()
+                if not stripped:
+                    continue
+                if '|' in stripped or '\n' in stripped:
+                    result.extend(_split_string_to_items(stripped))
+                else:
+                    cleaned = re.sub(r'^[\s•·\-\*]+', '', stripped).strip()
+                    cleaned = re.sub(r'^\d+[\.\)]\s*', '', cleaned).strip()
+                    if cleaned:
+                        result.append(cleaned)
+            elif isinstance(item, dict):
+                result.extend(_flatten_string_array_items(item))
+            elif item is not None:
+                part = _str(item)
+                if part:
+                    result.append(part)
+        return result
+    part = _str(value)
+    return [part] if part else []
+
+
+def _dedupe_string_items(items: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        key = item.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
+
+
+def _normalize_responsibility_items(value: Any) -> list[str]:
+    """Normalize responsibilities: strip source bullets, rejoin comma fragments, dedupe."""
+    from app.ai.parser.enrichment.jd_text_inference import _strip_list_marker
+
+    flat = _flatten_string_array_items(value)
+    flat = [_strip_list_marker(x) for x in flat]
+    flat = [x for x in flat if x]
+    rejoined = _rejoin_comma_split_prose_items(flat)
+    return _dedupe_string_items([_strip_list_marker(x) for x in rejoined if _strip_list_marker(x)])
 
 
 def _ensure_string_array(value: Any) -> list[str]:
@@ -803,7 +1176,17 @@ def _ensure_string_array(value: Any) -> list[str]:
         seen: set[str] = set()
         for item in value:
             if isinstance(item, str):
-                for part in _split_string_to_items(item):
+                # Keep comma-containing sentences intact; only expand pipe/newline blobs.
+                stripped = item.strip()
+                if not stripped:
+                    continue
+                if '|' in stripped or '\n' in stripped:
+                    parts = _split_string_to_items(stripped)
+                else:
+                    cleaned = re.sub(r'^[\s•·\-\*]+', '', stripped).strip()
+                    cleaned = re.sub(r'^\d+[\.\)]\s*', '', cleaned).strip()
+                    parts = [cleaned] if cleaned else []
+                for part in parts:
                     key = part.lower()
                     if key not in seen:
                         seen.add(key)
@@ -840,9 +1223,31 @@ def _ensure_array(value: Any) -> list:
 
 
 def _normalize_skills(skills: Any) -> list:
-    items = _ensure_array(skills)
+    if skills is None:
+        return []
+    raw_items: list = []
+    if isinstance(skills, str):
+        raw_items = _split_skill_tokens(skills)
+    elif isinstance(skills, list):
+        for item in skills:
+            if isinstance(item, str):
+                stripped = item.strip()
+                if not stripped:
+                    continue
+                # Expand compact skill lists; leave long prose alone.
+                if (',' in stripped or ';' in stripped or '|' in stripped) and '\n' not in stripped and len(stripped) <= 180:
+                    raw_items.extend(_split_skill_tokens(stripped))
+                elif '\n' in stripped or '|' in stripped:
+                    raw_items.extend(_split_skill_tokens(stripped))
+                else:
+                    raw_items.append(stripped)
+            else:
+                raw_items.append(item)
+    else:
+        raw_items = _ensure_array(skills)
+
     normalized: list = []
-    for item in items:
+    for item in raw_items:
         if isinstance(item, str):
             if item.strip():
                 normalized.append(item.strip())
@@ -1013,8 +1418,8 @@ def normalize_proposal(structured: dict[str, Any], doc_type: Literal["resume", "
         "skills": skills,
         "mandatory_skills": mandatory,
         "preferred_skills": preferred,
-        "responsibilities": _ensure_string_array(structured.get("responsibilities")),
-        "qualifications": _ensure_string_array(structured.get("qualifications")),
+        "responsibilities": _normalize_responsibility_items(structured.get("responsibilities")),
+        "qualifications": _normalize_responsibility_items(structured.get("qualifications")),
         "benefits": _ensure_string_array(structured.get("benefits")),
         "keywords": _ensure_string_array(structured.get("keywords")),
         "description": _str(structured.get("description")),
@@ -1022,4 +1427,5 @@ def normalize_proposal(structured: dict[str, Any], doc_type: Literal["resume", "
         "max_experience_years": structured.get("max_experience_years"),
         "salary_range": _str(structured.get("salary_range") or structured.get("salary")),
         "confidence": structured.get("confidence"),
+        "has_key_responsibilities": bool(structured.get("has_key_responsibilities")),
     }

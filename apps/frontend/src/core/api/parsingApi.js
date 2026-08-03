@@ -189,7 +189,13 @@ export function takeJDFormDTO(result) {
   if (!result || result.status !== 'ok' || !result.form) {
     throw new Error('Invalid parse response: Form DTO missing');
   }
-  return result.form;
+  const form = result.form;
+  // Normalize keywords for the job form (string field)
+  if (!form.keywords) {
+    const list = Array.isArray(form._keywords) ? form._keywords : [];
+    form.keywords = list.filter(Boolean).join(', ');
+  }
+  return form;
 }
 
 /**
