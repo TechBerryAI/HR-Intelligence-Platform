@@ -44,6 +44,9 @@ function validate(form) {
   if (form.experienceLevel === 'experienced') {
     if (!form.servingNotice) errors.servingNotice = 'Required'
     if (!form.noticePeriod?.trim()) errors.noticePeriod = 'Required'
+    if (form.servingNotice === 'yes' && !form.lastWorkingDay) {
+      errors.lastWorkingDay = 'Required'
+    }
   }
   if (!form.resumeFile && !form.resumeFileName) errors.resume = 'Resume required'
   if (!form._parsedId) errors.resume = errors.resume || 'Please wait for resume AI parsing to finish'
@@ -311,9 +314,16 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Serving notice</label>
                     <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                      className="premium-input w-full text-sm"
                       value={form.servingNotice}
-                      onChange={(e) => setField('servingNotice', e.target.value)}
+                      onChange={(e) => {
+                        const v = e.target.value
+                        setForm((prev) => ({
+                          ...prev,
+                          servingNotice: v,
+                          lastWorkingDay: v === 'yes' ? prev.lastWorkingDay : '',
+                        }))
+                      }}
                     >
                       <option value="">Select</option>
                       <option value="yes">Yes</option>
@@ -324,7 +334,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1">Serving period</label>
                     <select
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                      className="premium-input w-full text-sm"
                       value={form.noticePeriod}
                       onChange={(e) => setField('noticePeriod', e.target.value)}
                     >
@@ -335,6 +345,18 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                     </select>
                     {errors.noticePeriod && <p className="mt-1 text-sm text-red-600">{errors.noticePeriod}</p>}
                   </div>
+                  {form.servingNotice === 'yes' && (
+                    <div className="sm:col-span-2">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">Last working date</label>
+                      <input
+                        type="date"
+                        className="premium-input w-full text-sm text-slate-900"
+                        value={form.lastWorkingDay || ''}
+                        onChange={(e) => setField('lastWorkingDay', e.target.value)}
+                      />
+                      {errors.lastWorkingDay && <p className="mt-1 text-sm text-red-600">{errors.lastWorkingDay}</p>}
+                    </div>
+                  )}
                 </div>
               )}
 
