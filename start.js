@@ -79,10 +79,36 @@ function checkEnv() {
   try {
     const pyVer = nodeExecSync('python --version', { encoding: 'utf8' }).trim();
     log(`Python: ${pyVer}`);
+    const m = /Python\s+(\d+)\.(\d+)/i.exec(pyVer);
+    if (m) {
+      const major = Number(m[1]);
+      const minor = Number(m[2]);
+      if (major < 3 || (major === 3 && minor < 10)) {
+        log(
+          `Python ${major}.${minor} is below the supported range (3.10–3.12). ` +
+            'Type hints like str | None will crash the backend. Install Python 3.10+ ' +
+            'and recreate apps/backend/venv, or continue only if all modules use ' +
+            '`from __future__ import annotations`.',
+          'warn'
+        );
+      }
+    }
   } catch (e) {
     try {
       const py3Ver = nodeExecSync('python3 --version', { encoding: 'utf8' }).trim();
       log(`Python: ${py3Ver}`);
+      const m = /Python\s+(\d+)\.(\d+)/i.exec(py3Ver);
+      if (m) {
+        const major = Number(m[1]);
+        const minor = Number(m[2]);
+        if (major < 3 || (major === 3 && minor < 10)) {
+          log(
+            `Python ${major}.${minor} is below the supported range (3.10–3.12). ` +
+              'Prefer Python 3.10+ for the backend venv on the VM.',
+            'warn'
+          );
+        }
+      }
     } catch (e2) {
       log('Python 3.8+ required for backend.', 'err');
       process.exit(1);
