@@ -389,3 +389,45 @@ def get_cached_parsing_result(
     
     return None
 
+
+def get_cached_parsing_result_by_hash(
+    file_hash: str,
+    document_type: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Content-hash cache independent of uploader_id.
+
+    Used for public resume apply (unique PUB* uploader each request) and
+    cross-uploader JD/resume reuse of identical bytes. Returns a TOON copy
+    reference; callers should treat parsed_id as shared read-only cache hit
+    metadata (is_duplicate=True). Does not expose other users' PII beyond
+    the parsed document content already derived from the same file bytes.
+    """
+    from app.database.connection.db import db_get
+
+    table = 'parsed_resumes' if document_type == 'resume' else 'parsed_jds'
+
+    result = db_get(
+        f"""
+        SELECT p.id, p.toon, p.confidence, p.model_version, p.created_at, r.id as raw_file_id
+        FROM {table} p
+        INNER JOIN raw_files r ON p.raw_file_id = r.id
+        WHERE r.file_hash = ?
+        ORDER BY p.created_at DESC
+        """,
+        (file_hash,),
+    )
+
+    if result:
+        return {
+            'parsed_id': result['id'],
+            'raw_file_id': result['raw_file_id'],
+            'toon': toon_loads_flex(result['toon']),
+            'confidence': result['confidence'],
+            'model_version': result['model_version'],
+            'is_cached': True,
+            'content_hash_hit': True,
+        }
+
+    return None
+

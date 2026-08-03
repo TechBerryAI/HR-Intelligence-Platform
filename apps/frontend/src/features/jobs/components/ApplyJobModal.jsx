@@ -8,7 +8,7 @@ import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import { BASE_URL } from '@/core/api/api.js'
 
 const emptyEducation = () => [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }]
-const emptyExperience = () => [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }]
+const emptyExperience = () => [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false, description: '' }]
 const emptyCerts = () => [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }]
 
 const initialForm = () => ({
@@ -21,9 +21,11 @@ const initialForm = () => ({
   phone: '',
   linkedinUrl: '',
   portfolioUrl: '',
+  githubUrl: '',
   currentLocation: '',
   preferredLocation: '',
   skills: '',
+  summary: '',
   resumeFile: null,
   resumeFileName: '',
   education: emptyEducation(),
@@ -84,10 +86,12 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
       phone: mapped.phone || prev.phone,
       linkedinUrl: mapped.linkedinUrl || prev.linkedinUrl,
       portfolioUrl: mapped.portfolioUrl || prev.portfolioUrl,
+      githubUrl: mapped.githubUrl || prev.githubUrl,
       currentLocation: mapped.currentLocation || prev.currentLocation,
       preferredLocation: mapped.preferredLocation || mapped.currentLocation || prev.preferredLocation,
       experienceLevel: mapped.experienceLevel || prev.experienceLevel,
       skills: mapped.skills || (mapped._skills || []).join(', ') || prev.skills,
+      summary: mapped.summary || mapped._summary || prev.summary,
       education: mapped.education?.length ? mapped.education : prev.education,
       experiences: mapped.experiences?.length ? mapped.experiences : prev.experiences,
       certifications: mapped.certifications?.length ? mapped.certifications : prev.certifications,
@@ -385,6 +389,13 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                         />
                         Currently working here
                       </label>
+                      <div className="sm:col-span-2">
+                        <PremiumInput
+                          label="Description"
+                          value={exp.description || ''}
+                          onChange={(e) => updateList('experiences', i, 'description', e.target.value)}
+                        />
+                      </div>
                       {(form.experiences || []).length > 1 && (
                         <button type="button" className="text-sm text-red-600 sm:col-span-2 text-left" onClick={() => removeListItem('experiences', i, emptyExperience)}>
                           Remove

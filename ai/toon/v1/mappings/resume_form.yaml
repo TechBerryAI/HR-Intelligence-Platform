@@ -1,0 +1,54 @@
+# Form Mapping Contract — Resume TOON → Apply form
+# Version: 1.0.0
+# Source of truth for autofill; frontend mapResumeTOONToForm must honor these paths.
+
+version: "1.0.0"
+document_type: resume
+
+mappings:
+  - toon: person.name
+    form: fullName
+  - toon: person.email
+    form: email
+  - toon: person.phone
+    form: phone
+  - toon: person.linkedin
+    form: linkedinUrl
+  - toon: person.portfolio
+    form: portfolioUrl
+  - toon: person.github
+    form: githubUrl
+  - toon: person.location
+    form: currentLocation
+  - toon: person.preferred_location
+    form: preferredLocation
+  - toon: skills
+    form: skills
+    transform: join_comma
+  - toon: summary
+    form: summary
+  - toon: total_experience_years
+    form: experienceLevel
+    transform: fresher_or_experienced
+  - toon: education[]
+    form: education[]
+    fields:
+      degree: degree
+      field: field
+      institution: institution
+      gpa: cgpa
+      from: startMonth
+      to: endMonth
+  - toon: experience[]
+    form: experiences[]
+    fields:
+      company: company
+      title: role
+      from: startMonth
+      to: endMonth
+      description: description
+  - toon: certifications[]
+    form: certifications[]
+
+# Not mapped (user-input only): servingNotice, noticePeriod, lastWorkingDay
+# Backend-filtered titles are trusted; frontend must not re-filter plausibility.

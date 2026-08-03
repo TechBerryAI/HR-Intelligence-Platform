@@ -16,44 +16,13 @@ function ensureArray(value) {
 }
 
 /**
- * Reject objective/summary/biodata fragments wrongly mapped into experience.role.
+ * Titles are filtered on the backend Intelligence Engine.
+ * Frontend trusts TOON (no divergent re-filter).
  * @param {string} title
  * @returns {boolean}
  */
 function isPlausibleJobTitle(title) {
-  const t = String(title || '').trim().replace(/^:\s*/, '');
-  if (!t) return false;
-  if (t.length > 100) return false;
-  const words = t.split(/\s+/).filter(Boolean);
-  if (words.length > 8) return false;
-  if (
-    /^(to\s+(help|work|seek|obtain|secure|contribute|become|build|develop|gain|pursue|leverage|support|drive|create|deliver|learn|grow|join|explore)|seeking|looking\s+for|aspiring|motivated|passionate|dedicated|results[- ]oriented|i\s+am|i'm|my\s+(goal|objective|aim))/i.test(
-      t,
-    )
-  ) {
-    return false;
-  }
-  if (/\bobjectives?\b/i.test(t)) return false;
-  if (/^[a-z]/.test(t) && words.length >= 4) return false;
-  // Personal details / biodata / address — never job titles
-  if (
-    /^(name|full\s*name|date\s+of\s+birth|d\.?\s*o\.?\s*b\.?|dob|gender|sex|marital\s+status|married|unmarried|single|permanent\s+address|present\s+address|current\s+address|correspondence\s+address|residential\s+address|address|father|mother|nationality|religion|languages?\s+known|blood\s+group|passport|aadhaar|aadhar|pan|personal\s+details|personal\s+information|biodata|bio\s*data|contact\s+details|declaration)\b/i.test(
-      t,
-    )
-  ) {
-    return false;
-  }
-  if (
-    /^(?:\d{1,2}(?:st|nd|rd|th)?\s+)?(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}/i.test(
-      t,
-    )
-  ) {
-    return false;
-  }
-  if (/\b(colony|nagar|tal[\s\-]|dist[\s\-]|pin(?:code)?|h\.?\s*no\.?)\b/i.test(t)) {
-    return false;
-  }
-  return true;
+  return Boolean(String(title || '').trim());
 }
 
 /**
@@ -213,6 +182,99 @@ export async function uploadAndParseResumePublic(file) {
 }
 
 /**
+ * Parse SSE stream from Intelligence Engine.
+ * @param {Response} response
+ * @param {{ onStage?: (ev: object) => void }} options
+ * @returns {Promise<Object>} final result payload
+ */
+async function consumeParseSSE(response, { onStage } = {}) {
+  if (!response.ok || !response.body) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || 'Failed to parse document');
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result = null;
+  let errorPayload = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split('\n\n');
+    buffer = chunks.pop() || '';
+    for (const chunk of chunks) {
+      const lines = chunk.split('\n');
+      let eventName = 'message';
+      let dataLine = '';
+      for (const line of lines) {
+        if (line.startsWith('event:')) eventName = line.slice(6).trim();
+        if (line.startsWith('data:')) dataLine += line.slice(5).trim();
+      }
+      if (!dataLine) continue;
+      let data;
+      try {
+        data = JSON.parse(dataLine);
+      } catch {
+        continue;
+      }
+      if (eventName === 'stage' && onStage) onStage(data);
+      if (eventName === 'result') result = data;
+      if (eventName === 'error') errorPayload = data;
+    }
+  }
+  if (errorPayload) {
+    throw new Error(errorPayload.error || 'Parse failed');
+  }
+  if (!result) {
+    throw new Error('Parse stream ended without result');
+  }
+  return result;
+}
+
+/**
+ * Public resume parse with live stage events (SSE).
+ * Falls back to sync endpoint if stream fails.
+ * @param {File} file
+ * @param {{ onStage?: (ev: object) => void }} options
+ */
+export async function uploadAndParseResumePublicStream(file, { onStage } = {}) {
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    const response = await fetch(`${API_URL}/api/parse/resume/public/stream`, {
+      method: 'POST',
+      body: formData,
+    });
+    return await consumeParseSSE(response, { onStage });
+  } catch (err) {
+    // Fallback to blocking sync path
+    return uploadAndParseResumePublic(file);
+  }
+}
+
+/**
+ * JD parse with live stage events (SSE), sync fallback.
+ */
+export async function uploadAndParseJDStream(file, jobId = null, { onStage } = {}) {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (jobId) formData.append('job_id', jobId);
+  const token = localStorage.getItem('jwtToken');
+  try {
+    const response = await fetch(`${API_URL}/api/parse/jd/stream`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    return await consumeParseSSE(response, { onStage });
+  } catch (err) {
+    return uploadAndParseJD(file, jobId);
+  }
+}
+
+/**
  * Upload and parse job description file
  * @param {File} file - JD file (PDF/DOCX)
  * @param {string} jobId - Optional job ID
@@ -313,6 +375,7 @@ export function mapResumeTOONToForm(toon) {
       startMonth: normalizeToYYYYMM(rawStart),
       endMonth: isPresent ? '' : normalizeToYYYYMM(rawEnd),
       isCurrent: !!isPresent,
+      description: str(exp.description || exp.responsibilities || ''),
     };
   }).filter(e => e.company || e.role || e.startMonth);
 
@@ -384,37 +447,28 @@ export function mapResumeTOONToForm(toon) {
     return true; // If we can't parse it, assume it's valid
   };
   
-  // Map portfolio URL - prioritize GitHub, then portfolio/website, then otherUrls
-  // Portfolio field can contain GitHub, portfolio, or personal website
-  let portfolioUrl = '';
-  
-  // First, check if GitHub URL exists and portfolio is invalid - use GitHub as portfolio
+  // Map portfolio and GitHub separately (do not overwrite portfolio with GitHub)
   const githubUrl = person.github || '';
+  let portfolioUrl = '';
   const portfolioCandidate = person.portfolio || person.website || '';
-  
-  if (githubUrl && (!portfolioCandidate || !isValidPortfolioUrl(portfolioCandidate))) {
-    // Use GitHub as portfolio if portfolio URL is invalid or missing
-    portfolioUrl = githubUrl;
-  } else if (portfolioCandidate && isValidPortfolioUrl(portfolioCandidate)) {
-    // Use portfolio/website if it's valid
+
+  if (portfolioCandidate && isValidPortfolioUrl(portfolioCandidate)) {
     portfolioUrl = portfolioCandidate;
   } else if (otherUrls.length > 0) {
-    // Look for valid portfolio URLs in otherUrls (excluding social media)
-    const portfolioMatch = otherUrls.find(url => 
-      url && 
-      !url.toLowerCase().includes('linkedin') && 
-      !url.toLowerCase().includes('github') && 
+    const portfolioMatch = otherUrls.find(url =>
+      url &&
+      !url.toLowerCase().includes('linkedin') &&
+      !url.toLowerCase().includes('github') &&
       !url.toLowerCase().includes('twitter') &&
       isValidPortfolioUrl(url)
     );
     if (portfolioMatch) {
       portfolioUrl = portfolioMatch;
-    } else if (githubUrl) {
-      // Fallback to GitHub if no valid portfolio found
-      portfolioUrl = githubUrl;
     }
-  } else if (githubUrl) {
-    // Last resort: use GitHub if nothing else is available
+  }
+  // If no portfolio but GitHub exists, use GitHub only as portfolio fallback for forms
+  // that lack a separate github field — still expose githubUrl separately.
+  if (!portfolioUrl && githubUrl) {
     portfolioUrl = githubUrl;
   }
   
@@ -444,12 +498,14 @@ export function mapResumeTOONToForm(toon) {
     phone: str(person.phone || person.mobile || person.phone_number || person.contact),
     linkedinUrl: linkedinUrl ? str(linkedinUrl) : '',
     portfolioUrl: portfolioUrl ? str(portfolioUrl) : '',
+    githubUrl: githubUrl ? str(githubUrl.startsWith('http') ? githubUrl : `https://${githubUrl}`) : '',
     currentLocation,
     preferredLocation,
     experienceLevel,
     skills: skillsList.join(', '),
+    summary: str(toon.summary || ''),
     education: education.length > 0 ? education : [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }],
-    experiences: experiences.length > 0 ? experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }],
+    experiences: experiences.length > 0 ? experiences : [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false, description: '' }],
     certifications: certifications.length > 0 ? certifications : [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }],
     _skills: skillsList,
     _summary: toon.summary || '',
@@ -478,6 +534,11 @@ export function mapJDTOONToForm(toon) {
     experienceTo = String(toon.max_experience_years);
   }
 
+  const mandatorySkills = ensureStringArray(
+    toon.mandatory_skills?.length ? toon.mandatory_skills : toon.skills,
+  );
+  const preferredSkills = ensureStringArray(toon.preferred_skills);
+
   return {
     title: str(toon.title),
     location: str(toon.location),
@@ -486,8 +547,13 @@ export function mapJDTOONToForm(toon) {
     description: formatJDDescription(toon),
     salary: str(toon.salary_range),
     company: str(toon.company),
+    mandatorySkills,
+    preferredSkills,
+    employmentType: str(toon.employment_type || toon.employmentType),
     // Additional data for reference (normalized so downstream always gets arrays)
     _skills: ensureStringArray(toon.skills),
+    _mandatorySkills: mandatorySkills,
+    _preferredSkills: preferredSkills,
     _responsibilities: ensureStringArray(toon.responsibilities),
     _qualifications: ensureStringArray(toon.qualifications),
     _keywords: ensureStringArray(toon.keywords),
@@ -502,6 +568,10 @@ export function mapJDTOONToForm(toon) {
 function formatJDDescription(toon) {
   const str = (v) => (v == null ? '' : String(v)).trim();
   const responsibilities = ensureStringArray(toon?.responsibilities);
+  const mandatory = ensureStringArray(
+    toon?.mandatory_skills?.length ? toon.mandatory_skills : toon?.skills,
+  );
+  const preferred = ensureStringArray(toon?.preferred_skills);
   const skills = ensureStringArray(toon?.skills);
   const qualifications = ensureStringArray(toon?.qualifications);
   const benefits = ensureStringArray(toon?.benefits);
@@ -518,9 +588,15 @@ function formatJDDescription(toon) {
     const looksStructured =
       /\*\*Responsibilities:\*\*/i.test(narrative) ||
       /\*\*Required Skills:\*\*/i.test(narrative) ||
+      /\*\*Mandatory Skills:\*\*/i.test(narrative) ||
       /\*\*Qualifications:\*\*/i.test(narrative);
     if (looksStructured) {
       description += narrative;
+      if (preferred.length > 0 && !/\*\*Preferred Skills:\*\*/i.test(narrative)) {
+        description += '\n\n**Preferred Skills:**\n';
+        description += preferred.map((s) => str(s)).join(', ');
+        description += '\n';
+      }
       if (benefits.length > 0 && !/\*\*Benefits:\*\*/i.test(narrative)) {
         description += '\n\n**Benefits:**\n';
         benefits.forEach((b) => {
@@ -540,9 +616,19 @@ function formatJDDescription(toon) {
     description += '\n';
   }
 
-  if (skills.length > 0) {
+  if (mandatory.length > 0) {
+    description += '**Required Skills:**\n';
+    description += mandatory.map((s) => str(s)).join(', ');
+    description += '\n\n';
+  } else if (skills.length > 0) {
     description += '**Required Skills:**\n';
     description += skills.map((s) => str(s)).join(', ');
+    description += '\n\n';
+  }
+
+  if (preferred.length > 0) {
+    description += '**Preferred Skills:**\n';
+    description += preferred.map((s) => str(s)).join(', ');
     description += '\n\n';
   }
 
@@ -570,30 +656,25 @@ function formatJDDescription(toon) {
  * @returns {Object} - { valid: boolean, error: string }
  */
 export function validateFileForParsing(file) {
-  const allowedTypes = [
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/msword',
-    'image/png',
-    'image/jpeg',
-    'image/webp',
-  ];
-  
-  const allowedExtensions = ['pdf', 'docx', 'doc', 'png', 'jpg', 'jpeg', 'webp'];
+  const allowedExtensions = ['pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp'];
   const maxSize = 10 * 1024 * 1024; // 10MB
 
-  // Get file extension (always check extension as primary validation)
   const extension = file.name.split('.').pop().toLowerCase();
-  
-  // Check file extension first (more reliable than MIME type)
-  if (!allowedExtensions.includes(extension)) {
+
+  if (extension === 'doc') {
     return {
       valid: false,
-      error: 'Invalid file type. Please upload PDF, DOC, DOCX, PNG, JPG, or WEBP files only.',
+      error: 'Legacy .doc format is not supported. Please use DOCX or PDF.',
     };
   }
 
-  // Check file size
+  if (!allowedExtensions.includes(extension)) {
+    return {
+      valid: false,
+      error: 'Invalid file type. Please upload PDF, DOCX, PNG, JPG, or WEBP files only.',
+    };
+  }
+
   if (file.size > maxSize) {
     return {
       valid: false,

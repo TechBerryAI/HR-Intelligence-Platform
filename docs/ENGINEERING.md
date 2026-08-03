@@ -18,9 +18,27 @@ Related: [ARCHITECTURE.md](ARCHITECTURE.md) · [DEVELOPMENT.md](DEVELOPMENT.md) 
 
 **Version:** 1.0  
 **Audience:** Internal engineering, architecture reviews, production readiness  
-**Last Updated:** June 2026
+**Last Updated:** August 2026
 
 > **Related:** AI platform docs live in [`ai/README.md`](../ai/README.md). Full documentation index: [README.md](README.md).
+
+### Intelligence Engine (Resume & JD)
+
+Parsing is orchestrated by the **Human Capital Intelligence Engine** (`apps/backend/app/ai/parser/engine/`):
+
+```
+Document → Layout/Text → Sections → Deterministic parsers → Knowledge →
+Semantic AI (gaps only) → TOON → Validate → Persist → Form mapping
+```
+
+- **Resume:** deterministic-first (`RESUME_SKIP_LLM_WHEN_DETERMINISTIC`); LLM only for semantic gaps.
+- **JD:** deterministic-first (`JD_SKIP_LLM_WHEN_DETERMINISTIC`); same engine entry.
+- **TOON** remains the canonical structured representation.
+- **Progress:** `GET /api/parse/jobs/:id/progress` and SSE streams `/api/parse/resume/public/stream`, `/api/parse/jd/stream`.
+- **Hardware:** auto profile `gpu_high` | `gpu_mid` | `cpu` via `HCIP_HARDWARE_PROFILE` / VRAM detect.
+- **Benchmark:** `ai/eval/run_parsing_benchmark.py` against `ai/dataset/lake/benchmark/parsing/v1/` (≥50+50 gold).
+
+API response keys (`status`, `toon`, `parsed_id`, `confidence`, …) are unchanged; `parse_job_id` is additive.
 
 ---
 

@@ -1,0 +1,35 @@
+# Form Mapping Contract — JD TOON → Recruiter job form
+# Version: 1.0.0
+
+version: "1.0.0"
+document_type: job_description
+
+mappings:
+  - toon: title
+    form: title
+  - toon: location
+    form: location
+  - toon: company
+    form: company
+    note: HR account company may override display; parsed company retained in TOON via parsedJdId
+  - toon: salary_range
+    form: salary
+  - toon: min_experience_years
+    form: experienceFrom
+  - toon: max_experience_years
+    form: experienceTo
+  - toon: mandatory_skills
+    form: mandatorySkills
+  - toon: preferred_skills
+    form: preferredSkills
+  - toon: skills
+    form: _skills
+  - toon: responsibilities
+    form: _responsibilities
+  - toon: qualifications
+    form: _qualifications
+  - toon: employment_type + responsibilities + skills + qualifications + benefits
+    form: description
+    transform: formatJDDescription
+
+# ATS consumes mandatory_skills / preferred_skills from parsed_jds.toon via parsedJdId

@@ -83,9 +83,17 @@ def _split_skill_list(value) -> list:
 
 
 def _normalize_skill(s) -> str:
+    """Normalize skill for matching — share Intelligence Engine knowledge aliases."""
     text = _as_str(s)
     if not text:
         return ""
+    try:
+        from app.ai.parser.engine.knowledge import normalize_skill
+
+        display, _cid = normalize_skill(text)
+        text = display or text
+    except Exception:
+        pass
     return re.sub(r"\s+", " ", text.lower())
 
 
