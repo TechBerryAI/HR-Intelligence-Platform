@@ -5,12 +5,15 @@ import { tokenService } from '@/core/auth/tokenService.js'
 import PanelShell, { usePanelBasePath } from '@/features/organization/pages/org/PanelShell.jsx'
 import CandidateProfilePanel from '@/features/organization/components/org/CandidateProfilePanel.jsx'
 import ApplicationMatchPanel from '@/features/organization/components/org/ApplicationMatchPanel.jsx'
+import ScheduleInterviewPanel from '@/features/interview/components/ScheduleInterviewPanel.jsx'
 import { FiArrowLeft } from 'react-icons/fi'
+import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
 
 export default function HeadHrJobCandidateDetail() {
   const { jdid, cid } = useParams()
   const navigate = useNavigate()
   const basePath = usePanelBasePath()
+  const { readOnly } = useOrgPanel()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get('tab') === 'application' ? 'application' : 'profile'
 
@@ -145,7 +148,17 @@ export default function HeadHrJobCandidateDetail() {
         {tab === 'profile' ? (
           <CandidateProfilePanel candidate={candidate} cid={cid} />
         ) : (
-          <ApplicationMatchPanel application={application} hideHeaderClose jobTitle={jobTitle} />
+          <>
+            <ApplicationMatchPanel application={application} hideHeaderClose jobTitle={jobTitle} />
+            {application?.id && (
+              <ScheduleInterviewPanel
+                applicationId={application.id}
+                candidateName={candidateName}
+                jobTitle={jobTitle}
+                readOnly={readOnly}
+              />
+            )}
+          </>
         )}
       </div>
     </PanelShell>
