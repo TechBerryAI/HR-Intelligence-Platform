@@ -2,12 +2,15 @@
 """
 Intelligence Engine gold-dataset eval harness.
 
-Scores deterministic Resume/JD parse (+ form mapping fields) against expected_toon.
-Target: ≥0.99 field accuracy on supported digital-text formats.
+IMPORTANT (accuracy honesty):
+- Dataset is synthetic text from generate_gold_lake.py unless replaced with real docs.
+- Scores are per-case checklist hit-rates (fuzzy/overlap), not full-TOON exact match.
+- Default path runs deterministic parsers only — does NOT measure LLM or HTTP E2E accuracy.
+- Do not treat mean_accuracy as production >99% field accuracy without a real-document lake.
 
 Usage (from repo root, with backend on PYTHONPATH):
   PYTHONPATH=apps/backend python ai/eval/run_parsing_benchmark.py
-  PYTHONPATH=apps/backend python ai/eval/run_parsing_benchmark.py --threshold 0.90
+  PYTHONPATH=apps/backend python ai/eval/run_parsing_benchmark.py --threshold 0.85
 """
 from __future__ import annotations
 

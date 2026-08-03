@@ -35,10 +35,11 @@ Semantic AI (gaps only) → TOON → Validate → Persist → Form mapping
 - **JD:** deterministic-first (`JD_SKIP_LLM_WHEN_DETERMINISTIC`); same engine entry.
 - **TOON** remains the canonical structured representation.
 - **Progress:** `GET /api/parse/jobs/:id/progress` and SSE streams `/api/parse/resume/public/stream`, `/api/parse/jd/stream`.
-- **Hardware:** auto profile `gpu_high` | `gpu_mid` | `cpu` via `HCIP_HARDWARE_PROFILE` / VRAM detect.
-- **Benchmark:** `ai/eval/run_parsing_benchmark.py` against `ai/dataset/lake/benchmark/parsing/v1/` (≥50+50 gold).
+Adaptive runtime: `apply_hardware_env()` sets `OLLAMA_MODEL` from the hardware tier
+when the operator has not set it (`gpu_high`→14b, `gpu_mid`→7b, `cpu`→3b). Also sets
+concurrency, OCR DPI, and `RESUME_LAYOUT_ENABLED` / `HCIP_ENABLE_DOCLAYOUT`.
 
-API response keys (`status`, `toon`, `parsed_id`, `confidence`, …) are unchanged; `parse_job_id` is additive.
+Bulk resume parsing uses `parse_resume_text_via_engine` (same sections/parsers/knowledge path).
 
 ---
 

@@ -302,7 +302,28 @@ def _run_resume(
         f'Extracted {text_length} chars',
         on_stage=on_stage,
     )
-    _emit(parse_job_id, 'layout', 'completed', on_stage=on_stage)
+
+    # Explicit layout structure stage (not progress-only)
+    try:
+        from app.ai.parser.layout.detector import enhance_resume_text, is_layout_enabled
+
+        if is_layout_enabled():
+            structured = enhance_resume_text(raw_text)
+            if structured and len(structured.strip()) >= 30:
+                raw_text = structured
+                _emit(
+                    parse_job_id,
+                    'layout',
+                    'completed',
+                    'Section headers structured',
+                    on_stage=on_stage,
+                )
+            else:
+                _emit(parse_job_id, 'layout', 'completed', 'No structure change', on_stage=on_stage)
+        else:
+            _emit(parse_job_id, 'layout', 'skipped', 'Layout disabled', on_stage=on_stage)
+    except Exception as layout_err:
+        _emit(parse_job_id, 'layout', 'failed', str(layout_err), on_stage=on_stage)
 
     doc_type = classify_document(raw_text)
     if doc_type == 'unknown':
@@ -311,6 +332,10 @@ def _run_resume(
     _emit(parse_job_id, 'sections', 'started', on_stage=on_stage)
     sections = detect_sections(raw_text, 'resume')
     semantic_text = unresolved_semantic_text(sections, 'resume') or raw_text
+    # Wire composable parsers (audit: must not be dead façade)
+    from app.ai.parser.engine.parsers import parse_resume_from_text
+
+    parse_resume_from_text(raw_text)
     _emit(
         parse_job_id,
         'sections',
@@ -569,6 +594,9 @@ def _run_jd(
     _emit(parse_job_id, 'sections', 'started', on_stage=on_stage)
     sections = detect_sections(raw_text, 'jd')
     semantic_text = unresolved_semantic_text(sections, 'jd') or raw_text
+    from app.ai.parser.engine.parsers import parse_jd_from_text
+
+    parse_jd_from_text(raw_text)
     _emit(
         parse_job_id,
         'sections',

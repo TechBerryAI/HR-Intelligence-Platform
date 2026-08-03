@@ -27,9 +27,19 @@ RESUME_LAYOUT_ENABLED = os.getenv('RESUME_LAYOUT_ENABLED', 'true').lower() in (
 )
 
 
+def is_layout_enabled() -> bool:
+    """
+    Live layout gate. Operator RESUME_LAYOUT_ENABLED wins when set;
+    otherwise HCIP_ENABLE_DOCLAYOUT (set by hardware profile) applies.
+    """
+    if 'RESUME_LAYOUT_ENABLED' in os.environ:
+        return os.getenv('RESUME_LAYOUT_ENABLED', 'true').lower() in ('1', 'true', 'yes')
+    return os.getenv('HCIP_ENABLE_DOCLAYOUT', 'true').lower() in ('1', 'true', 'yes')
+
+
 def enhance_resume_text(raw_text: str) -> str:
     """Structure plain extracted text for rules parsing (always cheap)."""
-    if not RESUME_LAYOUT_ENABLED:
+    if not is_layout_enabled():
         return raw_text or ''
     return structure_text_by_headers(raw_text or '')
 
@@ -48,7 +58,7 @@ def ocr_image_with_layout(
     """
     processed = preprocess_image_bytes(image_bytes)
 
-    if not RESUME_LAYOUT_ENABLED:
+    if not is_layout_enabled():
         return (ocr_fn(processed) or '', 'plain_ocr')
 
     detections = _rapidocr_detections(processed)

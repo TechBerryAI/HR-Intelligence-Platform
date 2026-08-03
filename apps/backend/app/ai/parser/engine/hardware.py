@@ -13,6 +13,13 @@ logger = logging.getLogger(__name__)
 _PROFILE_LOCK = threading.Lock()
 _APPLIED = False
 
+# Tier defaults when operator has NOT set OLLAMA_MODEL
+_TIER_MODELS = {
+    'gpu_high': 'qwen2.5:14b-instruct',
+    'gpu_mid': 'qwen2.5:7b-instruct',
+    'cpu': 'qwen2.5:3b-instruct',
+}
+
 
 @dataclass(frozen=True)
 class HardwareProfile:
@@ -81,6 +88,10 @@ def detect_hardware_profile() -> HardwareProfile:
     else:
         name = 'cpu'
 
+    # Operator OLLAMA_MODEL wins; otherwise tier default becomes the adaptive selection
+    operator_model = (os.getenv('OLLAMA_MODEL') or '').strip()
+    preferred = operator_model or _TIER_MODELS[name]
+
     if name == 'gpu_high':
         profile = HardwareProfile(
             name=name,
@@ -88,7 +99,7 @@ def detect_hardware_profile() -> HardwareProfile:
             bulk_workers=int(os.getenv('BULK_PARSE_MAX_WORKERS', '8')),
             ocr_dpi_start=200,
             enable_doclayout=True,
-            preferred_model_hint=os.getenv('OLLAMA_MODEL', 'qwen2.5:14b-instruct'),
+            preferred_model_hint=preferred,
             vram_mb=vram,
             cpu_count=cpus,
         )
@@ -99,7 +110,7 @@ def detect_hardware_profile() -> HardwareProfile:
             bulk_workers=int(os.getenv('BULK_PARSE_MAX_WORKERS', '4')),
             ocr_dpi_start=180,
             enable_doclayout=True,
-            preferred_model_hint=os.getenv('OLLAMA_MODEL', 'qwen2.5:7b-instruct'),
+            preferred_model_hint=preferred,
             vram_mb=vram,
             cpu_count=cpus,
         )
@@ -111,17 +122,18 @@ def detect_hardware_profile() -> HardwareProfile:
             ocr_dpi_start=150,
             enable_doclayout=os.getenv('HCIP_ENABLE_DOCLAYOUT', 'false').lower()
             in ('1', 'true', 'yes'),
-            preferred_model_hint=os.getenv('OLLAMA_MODEL', 'qwen2.5:3b-instruct'),
+            preferred_model_hint=preferred,
             vram_mb=vram,
             cpu_count=cpus,
         )
 
     logger.info(
-        'HCIP hardware profile=%s vram_mb=%s cpus=%s concurrent=%s',
+        'HCIP hardware profile=%s vram_mb=%s cpus=%s concurrent=%s model=%s',
         profile.name,
         profile.vram_mb,
         profile.cpu_count,
         profile.ollama_max_concurrent,
+        profile.preferred_model_hint,
     )
     return profile
 
@@ -129,6 +141,7 @@ def detect_hardware_profile() -> HardwareProfile:
 def apply_hardware_env(profile: Optional[HardwareProfile] = None) -> HardwareProfile:
     """
     Apply profile defaults into process env once (operator-set env always wins).
+    Sets OLLAMA_MODEL from tier when unset — adaptive model selection.
     Safe to call from pipeline entry.
     """
     global _APPLIED
@@ -144,5 +157,24 @@ def apply_hardware_env(profile: Optional[HardwareProfile] = None) -> HardwarePro
             os.environ['HCIP_OCR_DPI_START'] = str(profile.ocr_dpi_start)
         if 'HCIP_ENABLE_DOCLAYOUT' not in os.environ:
             os.environ['HCIP_ENABLE_DOCLAYOUT'] = 'true' if profile.enable_doclayout else 'false'
+        if 'RESUME_LAYOUT_ENABLED' not in os.environ:
+            os.environ['RESUME_LAYOUT_ENABLED'] = (
+                'true' if profile.enable_doclayout else 'false'
+            )
+        if 'OLLAMA_MODEL' not in os.environ:
+            os.environ['OLLAMA_MODEL'] = profile.preferred_model_hint
+            logger.info(
+                'HCIP adaptive OLLAMA_MODEL=%s (profile=%s)',
+                profile.preferred_model_hint,
+                profile.name,
+            )
         _APPLIED = True
     return profile
+
+
+def reset_hardware_env_for_tests() -> None:
+    """Test helper: allow apply_hardware_env to run again."""
+    global _APPLIED
+    with _PROFILE_LOCK:
+        _APPLIED = False
+        detect_hardware_profile.cache_clear()

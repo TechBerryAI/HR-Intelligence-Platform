@@ -328,7 +328,6 @@ def _process_one_file(args: tuple[str, Path]) -> tuple[str, dict | None, bool, s
     Returns (filename, row or None, failed: bool, message, code).
     Codes: insufficient_text | unsupported_format | llm | validation | empty_fields | exception | ok | partial
     """
-    from app.ai.parser.deterministic_resume import parse_resume_deterministic
     from app.ai.parser.text_extraction import extract_text
     from app.domains.recruitment.services.parsing_storage import validate_toon_format_bulk
 
@@ -371,33 +370,31 @@ def _process_one_file(args: tuple[str, Path]) -> tuple[str, dict | None, bool, s
                 'insufficient_text',
             )
 
-        # --- Fast path: rules / hybrid CV (skip Ollama when confidence is high) ---
+        # --- Intelligence Engine text path (shared with single-file parse) ---
         if BULK_SKIP_LLM_WHEN_DETERMINISTIC:
             try:
-                det_toon, conf, missing, passes = parse_resume_deterministic(raw_text)
+                from app.ai.parser.engine import parse_resume_text_via_engine
+                from app.ai.parser.deterministic_resume import score_resume_toon
+
+                det_toon, source, eng_notes = parse_resume_text_via_engine(
+                    raw_text,
+                    allow_llm=False,
+                    skip_llm_when_deterministic=True,
+                )
+                conf, missing, passes = score_resume_toon(
+                    det_toon if isinstance(det_toon, dict) else {}
+                )
                 if passes and isinstance(det_toon, dict):
                     accept, notes, parse_status = validate_toon_format_bulk(det_toon, 'resume')
                     if accept:
                         row = _flatten_toon(det_toon, filename)
-                        try:
-                            from app.ai.parser.layout import RESUME_LAYOUT_ENABLED as _layout_on
-                        except Exception:
-                            _layout_on = False
-                        source = 'hybrid' if _layout_on else 'deterministic'
-                        note_bits = [
-                            f'source={source}',
-                            f'conf={conf:.2f}',
-                        ]
+                        note_bits = [f'source=engine:{source}', f'conf={conf:.2f}']
+                        note_bits.extend(eng_notes[:4])
                         if missing:
                             note_bits.append('weak=' + ','.join(missing[:6]))
                         if notes:
                             note_bits.append(notes)
-                        row['ParseStatus'] = (
-                            'ok' if parse_status == 'ok' else parse_status
-                        )
-                        # Prefer explicit rules_only marker when fully ok from rules
-                        if parse_status == 'ok':
-                            row['ParseStatus'] = 'ok'
+                        row['ParseStatus'] = 'ok' if parse_status == 'ok' else parse_status
                         row['ParseNotes'] = '; '.join(note_bits)[:2000]
                         if (
                             row.get('Name')
@@ -410,20 +407,26 @@ def _process_one_file(args: tuple[str, Path]) -> tuple[str, dict | None, bool, s
                                 filename,
                                 row,
                                 False,
-                                f'Processing: {filename} ({source})',
+                                f'Processing: {filename} (engine:{source})',
                                 parse_status if parse_status in ('ok', 'partial') else 'ok',
                             )
             except Exception as det_err:
-                print(f'[local_bulk_parser] deterministic path failed for {filename}: {det_err}')
+                print(f'[local_bulk_parser] engine det path failed for {filename}: {det_err}')
 
-        # --- Slow path: Ollama / LLM ---
+        # --- Slow path: engine with LLM (section-scoped + knowledge) ---
         toon = None
         last_err = None
         for attempt in range(BULK_LLM_ATTEMPTS):
             try:
-                toon = _call_llm_throttled(raw_text, 'resume')
+                from app.ai.parser.engine import parse_resume_text_via_engine
+
+                toon, source, eng_notes = parse_resume_text_via_engine(
+                    raw_text,
+                    allow_llm=True,
+                    skip_llm_when_deterministic=False,
+                )
                 if not isinstance(toon, dict):
-                    last_err = 'LLM returned non-object'
+                    last_err = 'Engine returned non-object'
                     toon = None
                     if attempt < BULK_LLM_ATTEMPTS - 1:
                         time.sleep(min(30, 2 ** attempt))
@@ -431,7 +434,8 @@ def _process_one_file(args: tuple[str, Path]) -> tuple[str, dict | None, bool, s
                 accept, notes, parse_status = validate_toon_format_bulk(toon, 'resume')
                 if accept:
                     row = _flatten_toon(toon, filename)
-                    note_bits = [f'source=llm', f'status={parse_status}']
+                    note_bits = [f'source=engine:{source}', f'status={parse_status}']
+                    note_bits.extend(eng_notes[:4])
                     if notes:
                         note_bits.append(notes)
                     row['ParseStatus'] = parse_status
@@ -450,7 +454,7 @@ def _process_one_file(args: tuple[str, Path]) -> tuple[str, dict | None, bool, s
                         filename,
                         row,
                         False,
-                        f'Processing: {filename}',
+                        f'Processing: {filename} (engine:{source})',
                         parse_status if parse_status in ('ok', 'partial') else 'ok',
                     )
                 last_err = notes or 'validation failed'
@@ -459,7 +463,6 @@ def _process_one_file(args: tuple[str, Path]) -> tuple[str, dict | None, bool, s
                 last_err = str(e)[:200]
                 toon = None
                 if _is_retryable_llm_error(last_err) and attempt < BULK_LLM_ATTEMPTS - 1:
-                    # Back off so Ollama can catch up on long queues
                     time.sleep(min(45, 2 ** attempt + 1))
                     continue
 

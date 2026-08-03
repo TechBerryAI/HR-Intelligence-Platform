@@ -8,7 +8,7 @@ import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import { BASE_URL } from '@/core/api/api.js'
 
 const emptyEducation = () => [{ degree: '', institution: '', cgpa: '', startMonth: '', endMonth: '' }]
-const emptyExperience = () => [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false }]
+const emptyExperience = () => [{ company: '', role: '', startMonth: '', endMonth: '', isCurrent: false, description: '' }]
 const emptyCerts = () => [{ name: '', issuer: '', validTill: '', validationUrl: '', status: '' }]
 
 const initialForm = () => ({
@@ -21,9 +21,11 @@ const initialForm = () => ({
   phone: '',
   linkedinUrl: '',
   portfolioUrl: '',
+  githubUrl: '',
   currentLocation: '',
   preferredLocation: '',
   skills: '',
+  summary: '',
   resumeFile: null,
   resumeFileName: '',
   education: emptyEducation(),
@@ -84,10 +86,12 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
       phone: mapped.phone || prev.phone,
       linkedinUrl: mapped.linkedinUrl || prev.linkedinUrl,
       portfolioUrl: mapped.portfolioUrl || prev.portfolioUrl,
+      githubUrl: mapped.githubUrl || prev.githubUrl,
       currentLocation: mapped.currentLocation || prev.currentLocation,
       preferredLocation: mapped.preferredLocation || mapped.currentLocation || prev.preferredLocation,
       experienceLevel: mapped.experienceLevel || prev.experienceLevel,
       skills: mapped.skills || (mapped._skills || []).join(', ') || prev.skills,
+      summary: mapped.summary || mapped._summary || prev.summary,
       education: mapped.education?.length ? mapped.education : prev.education,
       experiences: mapped.experiences?.length ? mapped.experiences : prev.experiences,
       certifications: mapped.certifications?.length ? mapped.certifications : prev.certifications,
@@ -149,10 +153,12 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
       fd.append('phone', form.phone.trim())
       fd.append('linkedinUrl', form.linkedinUrl || '')
       fd.append('portfolioUrl', form.portfolioUrl || '')
+      fd.append('githubUrl', form.githubUrl || '')
       fd.append('currentLocation', form.currentLocation.trim())
       fd.append('preferredLocation', form.preferredLocation.trim())
       fd.append('experienceLevel', form.experienceLevel)
       fd.append('skills', form.skills || '')
+      fd.append('summary', form.summary || '')
       fd.append('servingNotice', form.servingNotice || '')
       fd.append('noticePeriod', form.noticePeriod || '')
       fd.append('lastWorkingDay', form.lastWorkingDay || '')
@@ -286,10 +292,16 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                   onChange={(e) => setField('linkedinUrl', e.target.value)}
                 />
                 <PremiumInput
-                  label="Portfolio / GitHub"
+                  label="Portfolio"
                   icon={FiGlobe}
                   value={form.portfolioUrl}
                   onChange={(e) => setField('portfolioUrl', e.target.value)}
+                />
+                <PremiumInput
+                  label="GitHub URL"
+                  icon={FiGlobe}
+                  value={form.githubUrl || ''}
+                  onChange={(e) => setField('githubUrl', e.target.value)}
                 />
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Experience level</label>
@@ -343,6 +355,15 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                 value={form.skills}
                 onChange={(e) => setField('skills', e.target.value)}
                 placeholder="Python, React, SQL"
+              />
+
+              <PremiumInput
+                label="Professional summary"
+                as="textarea"
+                value={form.summary || ''}
+                onChange={(e) => setField('summary', e.target.value)}
+                placeholder="Short professional summary from resume"
+                className="min-h-[80px] resize-y"
               />
 
               <div>
@@ -414,6 +435,13 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                           <MonthYearPicker value={exp.endMonth} onChange={(v) => updateList('experiences', i, 'endMonth', v)} />
                         </div>
                       )}
+                      <div className="sm:col-span-2">
+                        <PremiumInput
+                          label="Description"
+                          value={exp.description || ''}
+                          onChange={(e) => updateList('experiences', i, 'description', e.target.value)}
+                        />
+                      </div>
                       {(form.experiences || []).length > 1 && (
                         <button type="button" className="text-sm text-red-600 sm:col-span-2 text-left" onClick={() => removeListItem('experiences', i, emptyExperience)}>
                           Remove

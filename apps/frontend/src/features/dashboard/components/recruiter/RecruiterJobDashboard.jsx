@@ -91,7 +91,33 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     setError('')
     try {
       const companyToUse = user?.company || company
-      const payload = { title, company: companyToUse, location, salary, experienceFrom, experienceTo, description }
+      // Keep description skill sections in sync with structured skill fields
+      let descriptionToSend = description
+      const mand = mandatorySkills.split(',').map((s) => s.trim()).filter(Boolean)
+      const pref = preferredSkills.split(',').map((s) => s.trim()).filter(Boolean)
+      if (mand.length || pref.length) {
+        let body = descriptionToSend
+        // Strip old skill sections then append current
+        body = body.replace(/\*\*(?:Required|Mandatory|Preferred)\s*Skills?:\*\*[\s\S]*?(?=\n\*\*|\n*$)/gi, '').trim()
+        if (mand.length) {
+          body += `\n\n**Required Skills:**\n${mand.join(', ')}`
+        }
+        if (pref.length) {
+          body += `\n\n**Preferred Skills:**\n${pref.join(', ')}`
+        }
+        descriptionToSend = body.trim()
+      }
+      const payload = {
+        title,
+        company: companyToUse,
+        location,
+        salary,
+        experienceFrom,
+        experienceTo,
+        description: descriptionToSend,
+        mandatorySkills: mand,
+        preferredSkills: pref,
+      }
       if (parsedJdId) payload.parsedJdId = parsedJdId
       const result = await addJob(payload)
       if (!result?.success) {
