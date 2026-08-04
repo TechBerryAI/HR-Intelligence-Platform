@@ -11,4 +11,5 @@
 
 - Backend: `apps/backend/` — blueprints registered in `app/bootstrap/create_app.py`
 - Frontend: `apps/frontend/`
+- **UI theme (centralized):** `apps/frontend/src/core/theme/themeConfig.js` + `ThemeProvider` — do not add parallel theme state; landing dark-only is configured there
 - Setup: `docs/DEVELOPMENT.md`

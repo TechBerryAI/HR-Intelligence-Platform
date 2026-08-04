@@ -2,6 +2,7 @@ import React, { Suspense, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import { AppProvider, useApp } from '@/core/context/AppContext.jsx'
 import { useTheme } from '@/core/context/ThemeContext.jsx'
+import { isDarkOnlyPath } from '@/core/theme/themeConfig.js'
 import Navbar from '@/shared/components/Navbar.jsx'
 import ErrorBoundary from '@/shared/components/ErrorBoundary.jsx'
 import { ToastProvider, useToast } from '@/shared/components/Toast.jsx'
@@ -37,8 +38,9 @@ function AppShell({ children }) {
     shellClass = isDark
       ? 'bg-[var(--ei-bg-primary)] text-[var(--ei-text-primary)] h-[100dvh] max-h-[100dvh] overflow-hidden'
       : 'bg-[var(--ei-bg-primary)] text-[var(--ei-text-primary)] h-[100dvh] max-h-[100dvh] overflow-hidden'
-  } else if (isLandingRoute) {
-    shellClass = isDark ? 'bg-[#050a14] text-white landing-shell' : 'bg-slate-50 text-slate-900 landing-shell'
+  } else if (isLandingRoute || isDarkOnlyPath(location.pathname)) {
+    // Dark-only routes (see themeConfig.DARK_ONLY_*) — ignore global light preference
+    shellClass = 'bg-[#050a14] text-white landing-shell'
   } else if (isAuthRoute) {
     shellClass = isDark
       ? 'bg-[#050a14] text-[var(--ei-text-primary)]'

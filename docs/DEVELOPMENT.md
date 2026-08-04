@@ -114,6 +114,7 @@ Never commit `.env` files. Use `.env.example` as reference.
 | I am building… | Put it in… |
 |----------------|------------|
 | A new HR page or component | `frontend/src/` |
+| Theme / Dark-Light behavior | `frontend/src/core/theme/themeConfig.js` (+ CSS tokens in `src/styles/index.css`) — do not fork theme logic |
 | A new API endpoint | `backend/` (blueprint) |
 | A native desktop feature | `electron/` (IPC only) |
 | A new AI task | `ai/capabilities/<name>/` |
@@ -121,6 +122,20 @@ Never commit `.env` files. Use `.env.example` as reference.
 | A dataset pipeline stage | `ai/dataset/` |
 | TOON field or mapping | `ai/toon/v1/` |
 | HR domain contract | `ai/contracts/` |
+
+### UI theme (centralized)
+
+Anyone on this branch shares one theme system:
+
+| Piece | Location |
+|-------|----------|
+| Config (storage key, defaults, dark-only routes, surface mapping) | `apps/frontend/src/core/theme/themeConfig.js` |
+| React state | `ThemeProvider` / `useTheme()` — mounted in `main.jsx` |
+| Toggle UI | `ThemeToggle`: Navbar chrome control (icon + Light/Dark); Head HR Overview between Home and Refresh (`org-btn-ghost`); mobile org header |
+| Colors | `--ei-*` in `apps/frontend/src/styles/index.css` |
+| FOUC bootstrap | `apps/frontend/public/theme-init.js` (key must match `THEME_STORAGE_KEY`) |
+
+Landing `/` stays dark-only. Prefer `var(--ei-text-primary)` etc. over hard-coded zinc/hex.
 
 ## Testing strategy
 

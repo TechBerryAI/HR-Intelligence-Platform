@@ -1,8 +1,6 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { NAV_LINKS } from '../constants/landingContent.js'
-import ThemeToggle from '@/shared/components/ThemeToggle.jsx'
-import { useTheme } from '@/core/context/ThemeContext.jsx'
 
 function scrollToHash(href) {
   const id = href.replace('#', '')
@@ -10,22 +8,14 @@ function scrollToHash(href) {
   if (el) el.scrollIntoView({ behavior: 'smooth' })
 }
 
+/** Landing nav is dark-only — no Light/Dark toggle on the home page. */
 export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const scrolled = scrollProgress > 0.02
-  const { isDark } = useTheme()
 
-  const barClass = isDark
-    ? scrolled
-      ? 'bg-[#0a1220]/75 backdrop-blur-2xl border border-white/10 shadow-[0_12px_48px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.07)]'
-      : 'bg-white/[0.06] backdrop-blur-xl border border-white/[0.09] shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.06)]'
-    : scrolled
-      ? 'bg-white/90 backdrop-blur-2xl border border-slate-200 shadow-md'
-      : 'bg-white/70 backdrop-blur-xl border border-slate-200/80 shadow-sm'
-
-  const linkClass = isDark
-    ? 'relative px-5 py-2.5 text-[13px] font-medium uppercase tracking-[0.12em] text-white/55 hover:text-white transition-colors duration-300 group'
-    : 'relative px-5 py-2.5 text-[13px] font-medium uppercase tracking-[0.12em] text-slate-500 hover:text-slate-900 transition-colors duration-300 group'
+  const barClass = scrolled
+    ? 'bg-[#0a1220]/75 backdrop-blur-2xl border border-white/10 shadow-[0_12px_48px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.07)]'
+    : 'bg-white/[0.06] backdrop-blur-xl border border-white/[0.09] shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.06)]'
 
   return (
     <motion.header
@@ -49,18 +39,10 @@ export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
             </div>
           </div>
           <div className="hidden sm:block text-left">
-            <span
-              className={`block font-display font-semibold text-lg sm:text-xl tracking-tight leading-none ${
-                isDark ? 'text-white' : 'text-slate-900'
-              }`}
-            >
+            <span className="block font-display font-semibold text-lg sm:text-xl text-white tracking-tight leading-none">
               HR Intelligence
             </span>
-            <span
-              className={`block text-[11px] sm:text-xs tracking-[0.2em] uppercase mt-1 font-medium ${
-                isDark ? 'text-white/45' : 'text-slate-400'
-              }`}
-            >
+            <span className="block text-[11px] sm:text-xs text-white/45 tracking-[0.2em] uppercase mt-1 font-medium">
               Enterprise Platform
             </span>
           </div>
@@ -72,7 +54,7 @@ export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
               key={link.href}
               type="button"
               onClick={() => scrollToHash(link.href)}
-              className={linkClass}
+              className="relative px-5 py-2.5 text-[13px] font-medium uppercase tracking-[0.12em] text-white/55 hover:text-white transition-colors duration-300 group"
             >
               {link.label}
               <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-px bg-gradient-to-r from-transparent via-sky-400 to-transparent group-hover:w-4/5 transition-all duration-300" />
@@ -80,14 +62,7 @@ export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
           ))}
         </nav>
 
-        <div className="flex items-center gap-2 sm:gap-3">
-          <ThemeToggle
-            className={
-              isDark
-                ? 'text-white/70 hover:text-white hover:bg-white/10'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }
-          />
+        <div className="flex items-center gap-3 sm:gap-4">
           {onGetStarted && (
             <button
               type="button"
@@ -99,9 +74,7 @@ export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
           )}
           <button
             type="button"
-            className={`lg:hidden p-3 rounded-full transition-colors ${
-              isDark ? 'text-white/70 hover:text-white hover:bg-white/5' : 'text-slate-600 hover:bg-slate-100'
-            }`}
+            className="lg:hidden p-3 text-white/70 hover:text-white rounded-full hover:bg-white/5 transition-colors"
             onClick={() => setMenuOpen((o) => !o)}
             aria-label="Toggle menu"
           >
@@ -120,11 +93,7 @@ export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
         <motion.div
           initial={{ opacity: 0, y: -8, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
-          className={`lg:hidden mt-4 mx-1 rounded-2xl p-4 space-y-1 ${
-            isDark
-              ? 'border border-white/10 bg-[#0a1220]/92 backdrop-blur-2xl shadow-[0_24px_64px_rgba(0,0,0,0.55)]'
-              : 'border border-slate-200 bg-white/95 backdrop-blur-2xl shadow-lg'
-          }`}
+          className="lg:hidden mt-4 mx-1 rounded-2xl border border-white/10 bg-[#0a1220]/92 backdrop-blur-2xl p-4 space-y-1 shadow-[0_24px_64px_rgba(0,0,0,0.55)]"
         >
           {NAV_LINKS.map((link) => (
             <button
@@ -134,17 +103,13 @@ export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
                 scrollToHash(link.href)
                 setMenuOpen(false)
               }}
-              className={`block w-full text-left px-4 py-3.5 text-[15px] rounded-xl transition-colors ${
-                isDark
-                  ? 'text-white/65 hover:text-white hover:bg-white/[0.05]'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
+              className="block w-full text-left px-4 py-3.5 text-[15px] text-white/65 hover:text-white rounded-xl hover:bg-white/[0.05] transition-colors"
             >
               {link.label}
             </button>
           ))}
           {onGetStarted && (
-            <div className={`pt-3 mt-3 ${isDark ? 'border-t border-white/[0.08]' : 'border-t border-slate-200'}`}>
+            <div className="pt-3 mt-3 border-t border-white/[0.08]">
               <button
                 type="button"
                 onClick={() => {

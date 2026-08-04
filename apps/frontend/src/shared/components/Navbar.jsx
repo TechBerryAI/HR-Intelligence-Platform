@@ -97,9 +97,9 @@ export default function Navbar() {
 
   const toggleClass = darkChrome
     ? isAuthChrome
-      ? 'auth-nav-link hover:bg-white/5 hover:text-white text-[#94a2af]'
-      : 'text-[var(--ei-text-secondary)] hover:text-[var(--ei-text-primary)] hover:bg-white/[0.06]'
-    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+      ? 'auth-nav-link hover:bg-white/5 hover:text-white text-[#94a2af] border-white/10'
+      : 'text-[var(--ei-text-secondary)] hover:text-[var(--ei-text-primary)] hover:bg-white/[0.09] border-white/10 bg-white/[0.05]'
+    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-slate-200 bg-white'
 
   const headerClass = (() => {
     if (isAuthChrome && darkChrome) return 'sticky top-0 z-30 w-full auth-nav px-3 sm:px-6'
@@ -225,7 +225,7 @@ export default function Navbar() {
             </Link>
           )}
 
-          <ThemeToggle className={toggleClass} />
+          <ThemeToggle variant="chrome" className={toggleClass} />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
