@@ -85,6 +85,21 @@ def _split_skill_list(value) -> list:
     return [s] if s else []
 
 
+def _sanitize_skill_list(skills, *, max_items: int = 30) -> list:
+    """Drop headers/filler from skill lists at match time (safety net for noisy TOON)."""
+    # Older ATS payloads sometimes store a single skill as a bare string.
+    if isinstance(skills, str):
+        skills = _split_skill_list(skills)
+    elif not isinstance(skills, list):
+        skills = _split_skill_list(skills) if skills is not None else []
+    try:
+        from app.ai.parser.enrichment.jd_text_inference import normalize_skill_tokens
+
+        return normalize_skill_tokens(skills, max_items=max_items)
+    except Exception:
+        return [s for s in skills if s and len(str(s).strip()) >= 2][:max_items]
+
+
 def _normalize_skill(s) -> str:
     """Normalize skill for matching — share Intelligence Engine knowledge aliases."""
     text = _as_str(s)
@@ -100,31 +115,649 @@ def _normalize_skill(s) -> str:
     return re.sub(r"\s+", " ", text.lower())
 
 
+def _token_boundary_contains(haystack: str, needle: str) -> bool:
+    """True when needle appears in haystack as a whole token/phrase (not bare substring)."""
+    if not haystack or not needle:
+        return False
+    if haystack == needle:
+        return True
+    # Word-boundary style: needle as whole tokens inside haystack
+    pattern = r"(?:^|[^a-z0-9+#])" + re.escape(needle) + r"(?:[^a-z0-9+#]|$)"
+    return re.search(pattern, haystack) is not None
+
+
 def _skill_match(required, possessed_list: list) -> bool:
-    """Exact or close match (possessed contains required or vice versa)."""
+    """Exact or token-boundary match after alias normalize. Avoids java⊆javascript."""
     r = _normalize_skill(required)
     if not r:
         return False
+    # Very short tokens require exact equality only
+    short_exact = len(r) < 3
     for p in possessed_list:
         pn = _normalize_skill(p)
         if not pn:
             continue
-        if r == pn or r in pn or pn in r:
+        if r == pn:
+            return True
+        if short_exact:
+            continue
+        if _token_boundary_contains(pn, r) or _token_boundary_contains(r, pn):
             return True
     return False
 
 
 def _get_jd_skill_lists(parsed_jd: dict) -> tuple:
     """
-    Return (mandatory_skills, preferred_skills).
+    Return (mandatory_skills, preferred_skills), sanitized.
     JD may have: mandatory_skills, preferred_skills; or legacy single 'skills' (all treated as mandatory).
     """
-    mandatory = _split_skill_list(parsed_jd.get("mandatory_skills"))
-    preferred = _split_skill_list(parsed_jd.get("preferred_skills"))
+    mandatory = _sanitize_skill_list(_split_skill_list(parsed_jd.get("mandatory_skills")), max_items=30)
+    preferred = _sanitize_skill_list(_split_skill_list(parsed_jd.get("preferred_skills")), max_items=20)
     if not mandatory and not preferred:
-        mandatory = _split_skill_list(parsed_jd.get("skills"))
+        mandatory = _sanitize_skill_list(_split_skill_list(parsed_jd.get("skills")), max_items=30)
         preferred = []
+    # Prefer not to double-count preferred tokens as mandatory
+    pref_keys = {s.lower() for s in preferred}
+    mandatory = [s for s in mandatory if s.lower() not in pref_keys]
     return mandatory, preferred
+
+
+def _build_requirement_analysis(skills_result: dict, mandatory_skills: list, preferred_skills: list) -> dict:
+    """Structured matched/missing checklist for UI and narrative."""
+    mand_matched = set(skills_result.get("mandatory_matched") or [])
+    pref_matched = set(skills_result.get("preferred_matched") or [])
+    mandatory_pct = float(skills_result.get("mandatory_skills_match_pct") or 0)
+    mandatory_defined = len(mandatory_skills) > 0
+    gate_passed = (not mandatory_defined) or (mandatory_pct >= MANDATORY_SKILLS_MIN_PCT)
+    return {
+        "mandatory": [
+            {"skill": s, "status": "matched" if s in mand_matched else "missing"}
+            for s in mandatory_skills
+        ],
+        "preferred": [
+            {"skill": s, "status": "matched" if s in pref_matched else "missing"}
+            for s in preferred_skills
+        ],
+        "gate": {
+            "passed": gate_passed,
+            "mandatory_pct": mandatory_pct,
+            "threshold": MANDATORY_SKILLS_MIN_PCT,
+            "mandatory_defined": mandatory_defined,
+        },
+    }
+
+
+def _build_decision_summary(
+    verdict: str,
+    overall: float,
+    skills_result: dict,
+    requirement_analysis: dict,
+) -> str:
+    """Short plain-English why for the verdict banner."""
+    gate = requirement_analysis.get("gate") or {}
+    missing_mand = skills_result.get("mandatory_missing") or []
+    matched_mand = skills_result.get("mandatory_matched") or []
+    if not gate.get("passed", True):
+        missing_preview = ", ".join(missing_mand[:5])
+        if missing_preview:
+            return (
+                f"Rejected: only {gate.get('mandatory_pct')}% of mandatory skills matched "
+                f"(need at least {gate.get('threshold')}%). Still missing: {missing_preview}."
+            )
+        return (
+            f"Rejected: mandatory skills match is {gate.get('mandatory_pct')}% "
+            f"(below the {gate.get('threshold')}% minimum). Auto-disqualified regardless of other scores."
+        )
+    if verdict == "Strong Match":
+        matched_preview = ", ".join(matched_mand[:5]) or "required skills"
+        return (
+            f"Selected for auto-shortlist: overall {overall}% with mandatory skills at "
+            f"{gate.get('mandatory_pct')}%. Strong evidence on: {matched_preview}."
+        )
+    if "Potential" in verdict:
+        gaps = ", ".join(missing_mand[:3])
+        gap_note = f" Review remaining gaps: {gaps}." if gaps else ""
+        return (
+            f"Hold for recruiter review: overall {overall}% passes the mandatory skills gate "
+            f"({gate.get('mandatory_pct')}%) but is below the {VERDICT_STRONG_MIN}% auto-shortlist bar.{gap_note}"
+        )
+    gaps = ", ".join(
+        (skills_result.get("mandatory_missing") or [])[:5]
+        or (skills_result.get("preferred_missing") or [])[:3]
+    )
+    gap_note = f" Main gaps: {gaps}." if gaps else ""
+    return (
+        f"Rejected: overall score {overall}% is below the {VERDICT_POTENTIAL_MIN}% match floor.{gap_note}"
+    )
+
+
+def _build_category_reasons(
+    *,
+    skills_result: dict,
+    mandatory_skills: list,
+    preferred_skills: list,
+    skills_raw: float,
+    exp_score: float,
+    exp_summary: str,
+    education_score: float,
+    education_assessment: str,
+    location_score: float,
+    parsed_resume: dict,
+    parsed_jd: dict,
+) -> list:
+    """Plain-English needed vs present reasons for each score category."""
+    matched_mand = list(skills_result.get("mandatory_matched") or [])
+    missing_mand = list(skills_result.get("mandatory_missing") or [])
+    matched_pref = list(skills_result.get("preferred_matched") or [])
+    missing_pref = list(skills_result.get("preferred_missing") or [])
+    mand_pct = skills_result.get("mandatory_skills_match_pct")
+
+    if not mandatory_skills and not preferred_skills:
+        skills_result_label = "No clear skill checklist"
+        skills_reason = (
+            "The job did not yield a clean mandatory skill checklist, so skills could not be "
+            "compared item-by-item. Treat the skills score cautiously."
+        )
+        skills_verdict = "unclear"
+    elif missing_mand and not matched_mand:
+        skills_result_label = "Not a skills match"
+        skills_reason = (
+            "Role needed: "
+            + ", ".join(mandatory_skills[:8])
+            + ". Candidate had none of these mandatory skills on the resume."
+        )
+        skills_verdict = "not_match"
+    elif missing_mand:
+        skills_result_label = "Partial skills match"
+        skills_reason = (
+            f"Role needed {len(mandatory_skills)} mandatory skill(s). "
+            f"Present: {', '.join(matched_mand[:8]) or 'none'}. "
+            f"Missing: {', '.join(missing_mand[:8])}. "
+            f"That is a {mand_pct}% mandatory match"
+            + (
+                f" (below the {MANDATORY_SKILLS_MIN_PCT}% minimum, so auto-reject)."
+                if (mand_pct or 0) < MANDATORY_SKILLS_MIN_PCT
+                else "."
+            )
+        )
+        skills_verdict = "partial"
+    else:
+        skills_result_label = "Skills match"
+        skills_reason = (
+            "Role needed: "
+            + (", ".join(mandatory_skills[:8]) or "no mandatory list")
+            + ". Candidate has all mandatory skills"
+            + (f" and preferred: {', '.join(matched_pref[:5])}" if matched_pref else "")
+            + "."
+        )
+        skills_verdict = "match"
+
+    if preferred_skills and missing_pref and skills_verdict != "unclear":
+        skills_reason += f" Preferred still missing: {', '.join(missing_pref[:5])}."
+
+    # Experience
+    jd_title = _as_str(parsed_jd.get("title")) or "this role"
+    if exp_score >= 70:
+        exp_label = "Experience match"
+        exp_verdict = "match"
+        exp_reason = (
+            f"Role needed experience relevant to “{jd_title}”. "
+            f"Present: {exp_summary or 'aligned experience on the resume'}. "
+            "So experience is counted as a match."
+        )
+    elif exp_score >= 40:
+        exp_label = "Partial experience match"
+        exp_verdict = "partial"
+        exp_reason = (
+            f"Role needed experience for “{jd_title}”. "
+            f"Present: {exp_summary or 'some experience, but not a clear role/domain match'}. "
+            "So experience is only a partial match."
+        )
+    else:
+        exp_label = "Experience not a match"
+        exp_verdict = "not_match"
+        exp_reason = (
+            f"Role needed experience for “{jd_title}”. "
+            f"Present: {exp_summary or 'little or no matching experience'}. "
+            "So experience does not support this role."
+        )
+
+    # Education
+    jd_qualifications = list(parsed_jd.get("qualifications") or [])
+    if isinstance(jd_qualifications, str):
+        jd_qualifications = [jd_qualifications]
+    jd_degree_bits = [
+        _as_str(q) for q in jd_qualifications
+        if _as_str(q) and re.search(
+            r"\b(bachelor|b\.?s\.?|b\.?e\.?|m\.?s\.?|m\.?a\.?|mba|phd|degree|diploma)\b",
+            _as_str(q),
+            re.I,
+        )
+    ]
+    cand_edu_bits = []
+    for e in list(parsed_resume.get("education") or []):
+        if not isinstance(e, dict):
+            continue
+        bit = _as_str(e.get("degree") or e.get("field") or e.get("institution"))
+        if bit:
+            cand_edu_bits.append(bit)
+
+    if education_score >= 80:
+        edu_label = "Education match"
+        edu_verdict = "match"
+        edu_reason = (
+            f"Role needed: {education_assessment or 'stated education requirements'}. "
+            "Candidate meets this, so education is a match."
+        )
+        if "no degree requirement" in (education_assessment or "").lower():
+            edu_reason = (
+                "Role needed: no degree requirement stated. "
+                "Nothing missing here, so education is treated as a full match."
+            )
+            edu_needed = ["No degree / qualification required"]
+            edu_present = ["Not required — passes by default"]
+            edu_missing = []
+        else:
+            edu_needed = jd_degree_bits[:3] or ["Degree / qualification as stated in the job"]
+            edu_present = cand_edu_bits[:3] or ["Degree or equivalent evidenced on resume"]
+            edu_missing = []
+    elif education_score >= 40:
+        edu_label = "Partial education match"
+        edu_verdict = "partial"
+        edu_reason = (
+            f"Role needed a degree/qualification. "
+            f"Present: {education_assessment or 'education listed but unclear fit'}. "
+            "So education is only a partial match."
+        )
+        edu_needed = jd_degree_bits[:3] or ["Degree / qualification as stated in the job"]
+        edu_present = cand_edu_bits[:3] or ["Education listed, fit unclear"]
+        edu_missing = []
+    else:
+        edu_label = "Education not a match"
+        edu_verdict = "not_match"
+        edu_reason = (
+            f"Role needed a degree/qualification. "
+            f"Present: {education_assessment or 'no matching education on the resume'}. "
+            "So education is not a match."
+        )
+        edu_needed = jd_degree_bits[:3] or ["Degree / qualification as stated in the job"]
+        edu_present = cand_edu_bits[:3]
+        edu_missing = [] if edu_present else ["No matching education on resume"]
+
+    # Location
+    jd_loc = _as_str(parsed_jd.get("location"))
+    cand_loc = ""
+    person = parsed_resume.get("person") or {}
+    if isinstance(person, dict):
+        cand_loc = _as_str(person.get("location"))
+    if not jd_loc:
+        loc_label = "Location match"
+        loc_verdict = "match"
+        loc_reason = (
+            "Role needed: no specific location requirement. "
+            "Nothing to fail here, so location is a match."
+        )
+    elif location_score >= 70:
+        loc_label = "Location match"
+        loc_verdict = "match"
+        loc_reason = (
+            f"Role needed: {jd_loc}. "
+            f"Present: {cand_loc or 'compatible location on the resume'}. "
+            "So location is a match."
+        )
+    elif location_score >= 40:
+        loc_label = "Partial location match"
+        loc_verdict = "partial"
+        loc_reason = (
+            f"Role needed: {jd_loc}. "
+            f"Present: {cand_loc or 'location only partly clear'}. "
+            "So location is a partial match."
+        )
+    else:
+        loc_label = "Location not a match"
+        loc_verdict = "not_match"
+        loc_reason = (
+            f"Role needed: {jd_loc}. "
+            f"Present: {cand_loc or 'no compatible location found'}. "
+            "So location is not a match."
+        )
+
+    return [
+        {
+            "key": "skills",
+            "label": "Core skills",
+            "score": round(skills_raw, 1),
+            "result": skills_verdict,
+            "result_label": skills_result_label,
+            "needed": mandatory_skills[:12],
+            "present": matched_mand[:12],
+            "missing": missing_mand[:12],
+            "preferred_present": matched_pref[:8],
+            "preferred_missing": missing_pref[:8],
+            "reason": skills_reason,
+        },
+        {
+            "key": "experience",
+            "label": "Experience",
+            "score": round(exp_score, 1),
+            "result": exp_verdict,
+            "result_label": exp_label,
+            "needed": [jd_title] if jd_title else [],
+            "present": [exp_summary] if exp_summary and exp_summary != "N/A" else [],
+            "missing": [],
+            "reason": exp_reason,
+        },
+        {
+            "key": "education",
+            "label": "Education",
+            "score": round(education_score, 1),
+            "result": edu_verdict,
+            "result_label": edu_label,
+            "needed": edu_needed,
+            "present": edu_present,
+            "missing": edu_missing,
+            "reason": edu_reason,
+        },
+        {
+            "key": "location",
+            "label": "Location",
+            "score": round(location_score, 1),
+            "result": loc_verdict,
+            "result_label": loc_label,
+            "needed": [jd_loc] if jd_loc else [],
+            "present": [cand_loc] if cand_loc else [],
+            "missing": [],
+            "reason": loc_reason,
+        },
+    ]
+
+
+def _build_score_math(
+    skills_raw: float,
+    exp_score: float,
+    education_score: float,
+    location_score: float,
+    overall: float,
+) -> dict:
+    """Keep weighted math for APIs; UI prefers category_reasons instead."""
+    rows = [
+        {
+            "key": "skills",
+            "label": "Core technical skills",
+            "raw_pct": round(skills_raw, 1),
+            "weight_pct": int(WEIGHT_SKILLS_TOTAL * 100),
+            "points": round(WEIGHT_SKILLS_TOTAL * skills_raw, 2),
+            "how": f"{round(skills_raw, 1)}% category score × {int(WEIGHT_SKILLS_TOTAL * 100)}% weight",
+        },
+        {
+            "key": "experience",
+            "label": "Relevant experience",
+            "raw_pct": round(exp_score, 1),
+            "weight_pct": int(WEIGHT_EXPERIENCE * 100),
+            "points": round(WEIGHT_EXPERIENCE * exp_score, 2),
+            "how": f"{round(exp_score, 1)}% category score × {int(WEIGHT_EXPERIENCE * 100)}% weight",
+        },
+        {
+            "key": "education",
+            "label": "Education / certifications",
+            "raw_pct": round(education_score, 1),
+            "weight_pct": int(WEIGHT_EDUCATION * 100),
+            "points": round(WEIGHT_EDUCATION * education_score, 2),
+            "how": f"{round(education_score, 1)}% category score × {int(WEIGHT_EDUCATION * 100)}% weight",
+        },
+        {
+            "key": "location",
+            "label": "Location / availability",
+            "raw_pct": round(location_score, 1),
+            "weight_pct": int(WEIGHT_LOCATION * 100),
+            "points": round(WEIGHT_LOCATION * location_score, 2),
+            "how": f"{round(location_score, 1)}% category score × {int(WEIGHT_LOCATION * 100)}% weight",
+        },
+    ]
+    parts = " + ".join(f"{r['points']}" for r in rows)
+    return {
+        "rows": rows,
+        "total": overall,
+        "equation": f"{parts} = {overall}",
+        "explainer": (
+            f"Overall match {overall}% combines how well skills, experience, education, "
+            f"and location each fit the role (skills matter most)."
+        ),
+    }
+
+
+def _build_decision_explanation(
+    *,
+    verdict: str,
+    overall: float,
+    skills_result: dict,
+    requirement_analysis: dict,
+    score_math: dict,
+    category_reasons: list,
+    exp_score: float,
+    exp_summary: str,
+    education_score: float,
+    education_assessment: str,
+    location_score: float,
+    verdict_override: bool,
+) -> dict:
+    """Structured, recruiter-facing explanation of reject/select and score."""
+    gate = requirement_analysis.get("gate") or {}
+    matched_mand = skills_result.get("mandatory_matched") or []
+    missing_mand = skills_result.get("mandatory_missing") or []
+    matched_pref = skills_result.get("preferred_matched") or []
+    missing_pref = skills_result.get("preferred_missing") or []
+
+    if verdict == "Strong Match":
+        outcome = "shortlist"
+        outcome_label = "Auto-shortlist"
+    elif "Potential" in verdict:
+        outcome = "review"
+        outcome_label = "Recruiter review"
+    else:
+        outcome = "reject"
+        outcome_label = "Not selected"
+
+    primary_reason = _build_decision_summary(
+        verdict, overall, skills_result, requirement_analysis
+    )
+
+    rules = [
+        "A candidate must have most mandatory skills (at least 60%) or they are not selected.",
+        "Strong overall fit (75%+) with the skills gate passed → auto-shortlist.",
+        "Decent overall fit (60–74%) with the skills gate passed → recruiter review.",
+        "Below 60% overall, or skills gate failed → not a match.",
+    ]
+
+    what_happened = []
+    if verdict_override or not gate.get("passed", True):
+        if missing_mand and matched_mand:
+            what_happened.append(
+                f"Not selected because mandatory skills are incomplete: had "
+                f"{', '.join(matched_mand[:6])}, but still needed "
+                f"{', '.join(missing_mand[:6])}."
+            )
+        elif missing_mand:
+            what_happened.append(
+                "Not selected because required skills were missing: "
+                + ", ".join(missing_mand[:8])
+                + "."
+            )
+        else:
+            what_happened.append(
+                f"Not selected because only {gate.get('mandatory_pct')}% of mandatory skills "
+                f"matched (need at least {gate.get('threshold')}%)."
+            )
+        if exp_score >= 70:
+            what_happened.append(
+                "Experience looks relevant for the role title, but that cannot override missing mandatory skills."
+            )
+    elif outcome == "shortlist":
+        what_happened.append(
+            "Selected because mandatory skills are covered and overall fit is strong enough to auto-shortlist."
+        )
+        if matched_mand:
+            what_happened.append("Present mandatory skills: " + ", ".join(matched_mand[:8]) + ".")
+    elif outcome == "review":
+        what_happened.append(
+            "Worth a recruiter look: mandatory skills mostly pass, but overall fit is not strong enough to auto-shortlist."
+        )
+        if missing_mand or missing_pref:
+            gaps = (missing_mand + missing_pref)[:6]
+            what_happened.append("Still missing: " + ", ".join(gaps) + ".")
+    else:
+        what_happened.append(
+            f"Not selected because overall fit ({overall}%) is below the minimum match level."
+        )
+
+    reconciliation = ""
+    if exp_score >= 70 and (skills_result.get("mandatory_skills_match_pct") or 0) < MANDATORY_SKILLS_MIN_PCT:
+        reconciliation = (
+            "Why experience can look good while skills fail: the resume title/domain aligns "
+            f"with the role ({exp_summary or 'direct role match'}), but mandatory skills are "
+            f"incomplete ({skills_result.get('mandatory_skills_match_pct')}% matched"
+            + (f"; missing {', '.join(missing_mand[:5])}" if missing_mand else "")
+            + "). Missing skills decide the rejection."
+        )
+    elif exp_score >= 70 and overall < VERDICT_STRONG_MIN:
+        reconciliation = (
+            "Experience is strong, but overall fit is held back mainly by skills coverage "
+            "(skills are the largest part of the match decision)."
+        )
+
+    next_step = {
+        "shortlist": "Move this candidate to the next hiring stage.",
+        "review": "Review the missing skills below, then decide to shortlist or reject.",
+        "reject": "Do not shortlist on ATS rules alone. Override only with clear hiring context outside this comparison.",
+    }.get(outcome, "")
+
+    return {
+        "outcome": outcome,
+        "outcome_label": outcome_label,
+        "verdict": verdict,
+        "primary_reason": primary_reason,
+        "what_happened": what_happened,
+        "rules_applied": rules,
+        "score_math": score_math,
+        "category_reasons": category_reasons,
+        "skills_evidence": {
+            "mandatory_matched": matched_mand,
+            "mandatory_missing": missing_mand,
+            "preferred_matched": matched_pref,
+            "preferred_missing": missing_pref,
+            "mandatory_match_pct": skills_result.get("mandatory_skills_match_pct"),
+            "gate_threshold": MANDATORY_SKILLS_MIN_PCT,
+            "gate_passed": gate.get("passed", True),
+            "comparisons": [
+                {
+                    "skill": s,
+                    "needed": True,
+                    "present": True,
+                    "status": "present",
+                }
+                for s in matched_mand
+            ]
+            + [
+                {
+                    "skill": s,
+                    "needed": True,
+                    "present": False,
+                    "status": "missing",
+                }
+                for s in missing_mand
+            ],
+        },
+        "other_factors": {
+            "experience": {"score": exp_score, "summary": exp_summary or ""},
+            "education": {"score": education_score, "summary": education_assessment or ""},
+            "location": {"score": location_score, "summary": ""},
+        },
+        "reconciliation": reconciliation,
+        "next_step": next_step,
+    }
+
+
+def _build_deterministic_narrative(
+    verdict: str,
+    overall: float,
+    skills_result: dict,
+    requirement_analysis: dict,
+    exp_summary: str,
+    education_assessment: str,
+    decision_explanation: dict | None = None,
+) -> str:
+    """Fallback multi-sentence explanation grounded only in scored evidence."""
+    if decision_explanation:
+        parts = [decision_explanation.get("primary_reason") or ""]
+        parts.extend(decision_explanation.get("what_happened") or [])
+        recon = decision_explanation.get("reconciliation") or ""
+        if recon:
+            parts.append(recon)
+        for cat in decision_explanation.get("category_reasons") or []:
+            if cat.get("reason"):
+                parts.append(f"{cat.get('label')}: {cat['reason']}")
+        nxt = decision_explanation.get("next_step") or ""
+        if nxt:
+            parts.append(nxt)
+        return " ".join(p for p in parts if p)
+
+    parts = [_build_decision_summary(verdict, overall, skills_result, requirement_analysis)]
+    matched = skills_result.get("mandatory_matched") or []
+    missing = skills_result.get("mandatory_missing") or []
+    pref_m = skills_result.get("preferred_matched") or []
+    if matched:
+        parts.append("Matched mandatory skills: " + ", ".join(matched[:10]) + ".")
+    if missing:
+        parts.append("Missing mandatory skills: " + ", ".join(missing[:10]) + ".")
+    if pref_m:
+        parts.append("Also has preferred skills: " + ", ".join(pref_m[:5]) + ".")
+    if exp_summary and exp_summary != "N/A":
+        parts.append(exp_summary if exp_summary.endswith(".") else exp_summary + ".")
+    if education_assessment:
+        parts.append(education_assessment if education_assessment.endswith(".") else education_assessment + ".")
+    return " ".join(parts)
+
+
+def _optional_llm_narrative(evidence: dict) -> str:
+    """Best-effort 2–4 sentence narrative from scored evidence; empty on failure."""
+    if os.getenv("ATS_NARRATIVE_LLM", "1").strip().lower() in ("0", "false", "no", "off"):
+        return ""
+    try:
+        from app.ai.document_intelligence.semantic import semantic_ai_enabled
+
+        if not semantic_ai_enabled():
+            return ""
+    except Exception:
+        pass
+    try:
+        import concurrent.futures
+
+        timeout_sec = float(os.getenv("ATS_NARRATIVE_TIMEOUT_SEC", "8"))
+
+        def _invoke() -> str:
+            try:
+                from app.ai.adapter.runtime_adapter import parse_via_runtime
+
+                prompt = (
+                    "You are a recruiting analyst. Using ONLY the JSON evidence below, write 2-4 short "
+                    "plain-English sentences explaining why this candidate received the given verdict. "
+                    "Do not invent skills, employers, or scores. Do not use markdown. "
+                    "Return JSON: {\"narrative\": \"...\"}\n\n"
+                    f"Evidence:\n{json.dumps(evidence, ensure_ascii=False)[:4000]}"
+                )
+                result = parse_via_runtime(prompt, "jd")
+                if isinstance(result, dict):
+                    text = (result.get("narrative") or result.get("explanation") or "").strip()
+                    return text
+            except Exception:
+                return ""
+            return ""
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(_invoke)
+            return (fut.result(timeout=timeout_sec) or "").strip()
+    except Exception:
+        return ""
 
 
 def _compute_skills_scores(cand_skills_list: list, mandatory_skills: list, preferred_skills: list) -> dict:
@@ -400,18 +1033,7 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
         {"category": "Education / Certifications", "weight_pct": int(WEIGHT_EDUCATION * 100), "raw_score_pct": education_score, "weighted_score": round(weighted_edu, 2)},
         {"category": "Location / Availability", "weight_pct": int(WEIGHT_LOCATION * 100), "raw_score_pct": location_score, "weighted_score": round(weighted_loc, 2)},
     ]
-
-    # Decision logic bullets
-    decision_bullets = []
-    if mandatory_defined and mandatory_match_pct < MANDATORY_SKILLS_MIN_PCT:
-        decision_bullets.append(f"Mandatory Skills Match ({mandatory_match_pct}%) is below threshold ({MANDATORY_SKILLS_MIN_PCT}%). Candidate is auto-disqualified.")
-    decision_bullets.append(f"Overall weighted score: {overall}%.")
-    if overall >= VERDICT_STRONG_MIN and not verdict_override:
-        decision_bullets.append(f"Score ≥ {VERDICT_STRONG_MIN}% → Strong Match.")
-    elif overall >= VERDICT_POTENTIAL_MIN and not verdict_override:
-        decision_bullets.append(f"Score in range {VERDICT_POTENTIAL_MIN}%–{VERDICT_STRONG_MIN - 0.1}% → Potential Match (Recruiter Review).")
-    else:
-        decision_bullets.append(f"Score < {VERDICT_POTENTIAL_MIN}% or mandatory skills below threshold → Not a Match.")
+    score_math = _build_score_math(skills_raw, exp_score, education_score, location_score, overall)
 
     # Candidate identity for report
     person = parsed_resume.get("person") or {}
@@ -428,7 +1050,83 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
         "missing_mandatory_skills": skills_result["mandatory_missing"],
         "missing_preferred_skills": skills_result["preferred_missing"],
         "mandatory_skills_match_pct": mandatory_match_pct,
+        "mandatory_matched_skills": skills_result["mandatory_matched"],
+        "preferred_matched_skills": skills_result["preferred_matched"],
     }
+
+    requirement_analysis = _build_requirement_analysis(
+        skills_result, mandatory_skills, preferred_skills
+    )
+    decision_summary = _build_decision_summary(
+        verdict, overall, skills_result, requirement_analysis
+    )
+    category_reasons = _build_category_reasons(
+        skills_result=skills_result,
+        mandatory_skills=mandatory_skills,
+        preferred_skills=preferred_skills,
+        skills_raw=skills_raw,
+        exp_score=exp_score,
+        exp_summary=exp_summary,
+        education_score=education_score,
+        education_assessment=education_assessment,
+        location_score=location_score,
+        parsed_resume=parsed_resume,
+        parsed_jd=parsed_jd,
+    )
+    decision_explanation = _build_decision_explanation(
+        verdict=verdict,
+        overall=overall,
+        skills_result=skills_result,
+        requirement_analysis=requirement_analysis,
+        score_math=score_math,
+        category_reasons=category_reasons,
+        exp_score=exp_score,
+        exp_summary=exp_summary,
+        education_score=education_score,
+        education_assessment=education_assessment,
+        location_score=location_score,
+        verdict_override=verdict_override,
+    )
+    # Human decision bullets (needed vs present, not formula arrows)
+    decision_bullets = list(decision_explanation.get("what_happened") or [])
+    if decision_explanation.get("reconciliation"):
+        decision_bullets.append(decision_explanation["reconciliation"])
+    for cat in category_reasons:
+        if cat.get("reason"):
+            decision_bullets.append(f"{cat['label']}: {cat['reason']}")
+    if decision_explanation.get("next_step"):
+        decision_bullets.append(decision_explanation["next_step"])
+
+    deterministic_narrative = _build_deterministic_narrative(
+        verdict,
+        overall,
+        skills_result,
+        requirement_analysis,
+        exp_summary,
+        education_assessment,
+        decision_explanation,
+    )
+    llm_narrative = ""
+    if os.getenv("ATS_NARRATIVE_LLM", "1").strip().lower() not in ("0", "false", "no", "off"):
+        llm_narrative = _optional_llm_narrative(
+            {
+                "verdict": verdict,
+                "overall_match_score": overall,
+                "mandatory_skills_match_pct": mandatory_match_pct,
+                "requirement_analysis": requirement_analysis,
+                "decision_explanation": decision_explanation,
+                "score_breakdown": {
+                    "skills": round(skills_raw, 1),
+                    "experience": round(exp_score, 1),
+                    "education": round(education_score, 1),
+                    "location": round(location_score, 1),
+                },
+                "experience_summary": exp_summary,
+                "education_assessment": education_assessment,
+                "decision_summary": decision_summary,
+            }
+        )
+    narrative = llm_narrative or deterministic_narrative
 
     evaluation_report = _build_recruiter_report(
         candidate_name=candidate_name,
@@ -444,11 +1142,9 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
         decision_bullets=decision_bullets,
     )
 
-    key_strengths = []
-    if skills_result["mandatory_matched"]:
-        key_strengths.append("Possesses mandatory skills: " + ", ".join(skills_result["mandatory_matched"][:10]))
-    if skills_result["preferred_matched"]:
-        key_strengths.append("Possesses preferred skills: " + ", ".join(skills_result["preferred_matched"][:5]))
+    # Strengths/gaps as skill chips (and short non-skill phrases) for clear UI
+    key_strengths = list(skills_result["mandatory_matched"][:10])
+    key_strengths.extend(skills_result["preferred_matched"][:5])
     if exp_score >= 70:
         key_strengths.append("Experience aligns with role/domain")
     if education_score >= 80:
@@ -456,11 +1152,8 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
     if location_score >= 70:
         key_strengths.append("Location compatible with role")
 
-    key_gaps = []
-    if skills_result["mandatory_missing"]:
-        key_gaps.append("Missing mandatory skills: " + ", ".join(skills_result["mandatory_missing"][:10]))
-    if skills_result["preferred_missing"]:
-        key_gaps.append("Missing preferred skills: " + ", ".join(skills_result["preferred_missing"][:5]))
+    key_gaps = list(skills_result["mandatory_missing"][:10])
+    key_gaps.extend(skills_result["preferred_missing"][:5])
     if exp_score < 50:
         key_gaps.append("Experience below or not clearly aligned with role")
     if education_score < 80 and education_score != 100:
@@ -468,12 +1161,7 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
     if location_score < 50:
         key_gaps.append("Location may not align with job location")
 
-    if verdict == "Not a Match" and mandatory_defined and mandatory_match_pct < MANDATORY_SKILLS_MIN_PCT:
-        final_reasoning = f"Verdict: Not a Match. Mandatory Skills Match is {mandatory_match_pct}% (below {MANDATORY_SKILLS_MIN_PCT}%). " + "; ".join(key_gaps[:3]) if key_gaps else ""
-    elif verdict == "Not a Match":
-        final_reasoning = f"Overall score {overall}% (Not a Match). " + "; ".join(key_gaps[:3]) if key_gaps else f"Overall score {overall}% (Not a Match)."
-    else:
-        final_reasoning = f"Overall score {overall}% ({verdict}). " + "; ".join(key_strengths[:3]) if key_strengths else f"Overall score {overall}% ({verdict})."
+    final_reasoning = narrative
 
     # Map verdict to legacy decision for API/shortlisting
     if verdict == "Strong Match":
@@ -495,6 +1183,12 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
             "education": round(education_score, 1),
             "location": round(location_score, 1),
         },
+        "score_math": score_math,
+        "requirement_analysis": requirement_analysis,
+        "decision_summary": decision_summary,
+        "decision_explanation": decision_explanation,
+        "category_reasons": category_reasons,
+        "narrative": narrative,
         "key_strengths": key_strengths,
         "key_gaps": key_gaps,
         "final_reasoning": final_reasoning,
@@ -559,3 +1253,296 @@ def match_candidate_to_job(candidate_id: str, job_id: str, parsed_resume: dict, 
         "json_output": merged,
         "toon_output": json_output["final_reasoning"],
     }
+
+
+def _filter_requirement_rows(rows: list) -> list:
+    """Keep only displayable skills from requirement_analysis rows."""
+    if not isinstance(rows, list):
+        return []
+    skills = [_as_str(r.get("skill")) for r in rows if isinstance(r, dict)]
+    keep = {s.lower() for s in _sanitize_skill_list(skills, max_items=40)}
+    out = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        skill = _as_str(r.get("skill"))
+        if not skill or skill.lower() not in keep:
+            continue
+        out.append({
+            "skill": skill,
+            "status": "matched" if r.get("status") == "matched" else "missing",
+        })
+    return out
+
+
+def _requirement_rows_from_skills_analysis(json_out: dict) -> tuple:
+    """Build (mandatory_rows, preferred_rows) from legacy skills_analysis / strengths / gaps."""
+    skills_analysis = ((json_out.get("evaluation_report") or {}).get("skills_analysis") or {})
+
+    def _as_skill_list(value) -> list:
+        return _sanitize_skill_list(_split_skill_list(value), max_items=30)
+
+    mand_matched = _as_skill_list(
+        skills_analysis.get("mandatory_matched_skills")
+        or skills_analysis.get("skills_matched")
+        or []
+    )
+    mand_missing = _as_skill_list(skills_analysis.get("missing_mandatory_skills") or [])
+    pref_matched = _as_skill_list(skills_analysis.get("preferred_matched_skills") or [])
+    pref_missing = _as_skill_list(skills_analysis.get("missing_preferred_skills") or [])
+
+    # Recover skills buried in prose chips from older analyses
+    soft = {
+        "experience aligns with role/domain",
+        "education meets or exceeds requirements",
+        "location compatible with role",
+        "experience below or not clearly aligned with role",
+        "education does not clearly meet stated qualifications",
+        "location may not align with job location",
+    }
+
+    def _chips_from(value) -> list:
+        items = value if isinstance(value, list) else ([value] if value else [])
+        out = []
+        for item in items:
+            s = _as_str(item)
+            if not s:
+                continue
+            if ":" in s:
+                # e.g. "Possesses mandatory skills: PostgreSQL" / "Missing mandatory skills: A, B"
+                _, _, rhs = s.partition(":")
+                out.extend(_split_skill_list(rhs))
+            elif s.lower() not in soft:
+                out.append(s)
+        return _sanitize_skill_list(out, max_items=30)
+
+    recovered_present = _chips_from(json_out.get("key_strengths"))
+    recovered_missing = _chips_from(json_out.get("key_gaps"))
+
+    if not mand_matched and recovered_present:
+        mand_matched = list(recovered_present)
+    if not mand_missing and recovered_missing:
+        # Only keep recovered missing that aren't already matched
+        matched_l = {s.lower() for s in mand_matched}
+        mand_missing = [s for s in recovered_missing if s.lower() not in matched_l]
+
+    matched_l = {s.lower() for s in mand_matched}
+    mand_missing = [s for s in mand_missing if s.lower() not in matched_l]
+    pref_matched_l = {s.lower() for s in pref_matched}
+    pref_missing = [s for s in pref_missing if s.lower() not in pref_matched_l]
+    mandatory = (
+        [{"skill": s, "status": "matched"} for s in mand_matched]
+        + [{"skill": s, "status": "missing"} for s in mand_missing]
+    )
+    preferred = (
+        [{"skill": s, "status": "matched"} for s in pref_matched]
+        + [{"skill": s, "status": "missing"} for s in pref_missing]
+    )
+    return mandatory, preferred
+
+
+def reconcile_match_score_from_analysis(ats_analysis, stored_score=None) -> dict:
+    """
+    Recalculate skills + overall when the cleaned checklist disagrees with a
+    polluted stored skills score. Used so list/detail APIs stay in sync.
+    """
+    if not isinstance(ats_analysis, dict):
+        try:
+            score = float(stored_score) if stored_score is not None else None
+        except (TypeError, ValueError):
+            score = None
+        return {
+            "adjusted": False,
+            "match_score": score,
+            "verdict": None,
+            "score_breakdown": None,
+            "ats_analysis": ats_analysis,
+        }
+
+    json_out = ats_analysis.get("json_output") if isinstance(ats_analysis.get("json_output"), dict) else ats_analysis
+    if not isinstance(json_out, dict):
+        json_out = {}
+
+    breakdown = dict(json_out.get("score_breakdown") or {})
+    try:
+        stored_skills = float(breakdown.get("skills")) if breakdown.get("skills") is not None else None
+    except (TypeError, ValueError):
+        stored_skills = None
+    try:
+        exp = float(breakdown.get("experience") or 0)
+        edu = float(breakdown.get("education") or 0)
+        loc = float(breakdown.get("location") or 0)
+    except (TypeError, ValueError):
+        exp = edu = loc = 0.0
+
+    try:
+        original_overall = float(stored_score) if stored_score is not None else float(
+            json_out.get("overall_match_score") or json_out.get("final_score") or 0
+        )
+    except (TypeError, ValueError):
+        original_overall = None
+
+    req = json_out.get("requirement_analysis") or {}
+    mandatory = _filter_requirement_rows(req.get("mandatory") or [])
+    preferred = _filter_requirement_rows(req.get("preferred") or [])
+    filtered_noise = False
+    raw_mand = req.get("mandatory") if isinstance(req.get("mandatory"), list) else []
+    if raw_mand and len(raw_mand) > len(mandatory):
+        filtered_noise = True
+
+    if not mandatory and not preferred:
+        mandatory, preferred = _requirement_rows_from_skills_analysis(json_out)
+        if mandatory or preferred:
+            filtered_noise = True
+
+    skills_score = stored_skills if stored_skills is not None else 0.0
+    adjusted = False
+
+    if mandatory or preferred:
+        mand_pct = (
+            (100.0 * sum(1 for r in mandatory if r["status"] == "matched") / len(mandatory))
+            if mandatory else 100.0
+        )
+        pref_pct = (
+            (100.0 * sum(1 for r in preferred if r["status"] == "matched") / len(preferred))
+            if preferred else 100.0
+        )
+        wm = (WEIGHT_MANDATORY_SKILLS / WEIGHT_SKILLS_TOTAL) if mandatory else 0.0
+        wp = (WEIGHT_PREFERRED_SKILLS / WEIGHT_SKILLS_TOTAL) if preferred else 0.0
+        cleaned_skills = round((wm * mand_pct + wp * pref_pct) / (wm + wp), 1) if (wm + wp) > 0 else 100.0
+        diverges = stored_skills is None or abs(cleaned_skills - stored_skills) >= 5
+        if filtered_noise or diverges:
+            skills_score = cleaned_skills
+            adjusted = abs(cleaned_skills - (stored_skills or 0.0)) >= 1
+
+        mandatory_pct = round(mand_pct, 1)
+    else:
+        try:
+            mandatory_pct = float(json_out.get("mandatory_skills_match_pct") or 100)
+        except (TypeError, ValueError):
+            mandatory_pct = 100.0
+
+    overall = round(skills_score * WEIGHT_SKILLS_TOTAL + exp * WEIGHT_EXPERIENCE + edu * WEIGHT_EDUCATION + loc * WEIGHT_LOCATION, 1)
+    gate_failed = bool(mandatory) and mandatory_pct < MANDATORY_SKILLS_MIN_PCT
+    if gate_failed:
+        verdict = "Not a Match"
+    elif overall >= VERDICT_STRONG_MIN:
+        verdict = "Strong Match"
+    elif overall >= VERDICT_POTENTIAL_MIN:
+        verdict = "Potential Match (Recruiter Review)"
+    else:
+        verdict = "Not a Match"
+
+    if not adjusted:
+        return {
+            "adjusted": False,
+            "match_score": round(original_overall, 1) if original_overall is not None else overall,
+            "verdict": _as_str(json_out.get("verdict")) or verdict,
+            "score_breakdown": {
+                "skills": stored_skills if stored_skills is not None else skills_score,
+                "experience": exp,
+                "education": edu,
+                "location": loc,
+            },
+            "ats_analysis": ats_analysis,
+            "mandatory_skills_match_pct": mandatory_pct,
+        }
+
+    new_breakdown = {
+        "skills": skills_score,
+        "experience": exp,
+        "education": edu,
+        "location": loc,
+    }
+
+    # Patch analysis copy so detail views also see the synced score
+    import copy
+    patched = copy.deepcopy(ats_analysis)
+    target = patched.get("json_output") if isinstance(patched.get("json_output"), dict) else patched
+    if isinstance(target, dict):
+        target["score_breakdown"] = new_breakdown
+        target["overall_match_score"] = overall
+        target["final_score"] = overall
+        target["verdict"] = verdict
+        target["mandatory_skills_match_pct"] = mandatory_pct
+        target["requirement_analysis"] = {
+            "mandatory": mandatory,
+            "preferred": preferred,
+            "gate": {
+                "passed": not gate_failed,
+                "mandatory_pct": mandatory_pct,
+                "threshold": MANDATORY_SKILLS_MIN_PCT,
+                "mandatory_defined": bool(mandatory),
+            },
+        }
+        # Force decision text to rebuild from fresh scores
+        target.pop("decision_explanation", None)
+        target.pop("decision_summary", None)
+        if verdict == "Strong Match":
+            target["decision"] = "strong_match"
+            target["match_tier"] = "strong_match"
+        elif "Potential" in verdict:
+            target["decision"] = "partial_match"
+            target["match_tier"] = "partial_match"
+        else:
+            target["decision"] = "not_a_match"
+            target["match_tier"] = "not_a_match"
+
+    return {
+        "adjusted": True,
+        "match_score": overall,
+        "verdict": verdict,
+        "score_breakdown": new_breakdown,
+        "ats_analysis": patched,
+        "mandatory_skills_match_pct": mandatory_pct,
+        "note": (
+            f"Skills recalculated from cleaned checklist ({skills_score}% vs stored "
+            f"{stored_skills if stored_skills is not None else '—'}%). "
+            f"Overall moved from {round(original_overall) if original_overall is not None else '—'}% "
+            f"to {round(overall)}%."
+        ),
+    }
+
+
+def sync_application_match_score(application_id, ats_analysis, stored_score=None, *, persist=True) -> dict:
+    """
+    Reconcile score from ats_analysis and optionally persist to applications
+    so every API surface (job candidates table, detail, reports) stays synced.
+    """
+    recon = reconcile_match_score_from_analysis(ats_analysis, stored_score)
+    if not persist or not recon.get("adjusted") or application_id is None:
+        return recon
+
+    try:
+        from app.ai.toon.runtime import toon_dumps
+        from app.database.connection.db import db_run
+
+        analysis_toon = toon_dumps(recon["ats_analysis"]) if isinstance(recon.get("ats_analysis"), dict) else None
+        new_score = float(recon["match_score"])
+        if analysis_toon is not None:
+            db_run(
+                """
+                UPDATE applications
+                SET match_score = ?,
+                    matching_percentage = ?,
+                    ats_analysis = ?
+                WHERE id = ?
+                """,
+                (new_score, new_score, analysis_toon, application_id),
+            )
+        else:
+            db_run(
+                """
+                UPDATE applications
+                SET match_score = ?,
+                    matching_percentage = ?
+                WHERE id = ?
+                """,
+                (new_score, new_score, application_id),
+            )
+        recon["persisted"] = True
+    except Exception as exc:
+        recon["persisted"] = False
+        recon["persist_error"] = str(exc)
+    return recon
+

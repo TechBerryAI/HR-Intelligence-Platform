@@ -1,6 +1,18 @@
 import React, { useState } from 'react'
 import { FiAlertTriangle, FiZap, FiDownload } from 'react-icons/fi'
-import { MatchHeader, ScoreCard, ChipGroup, CollapsibleSection } from '@/features/analytics/components/MatchExplanation'
+import {
+  MatchHeader,
+  ScoreCard,
+  ChipGroup,
+  CollapsibleSection,
+  RequirementsChecklist,
+  DetailedAnalysisPanel,
+  toChips,
+  getRequirementAnalysis,
+  getDecisionSummary,
+  getDecisionExplanation,
+  withReconciledScores,
+} from '@/features/analytics/components/MatchExplanation'
 import { generateApplicationMatchPdf } from '@/shared/utils/pdfReportUtils.js'
 
 const SCORE_FACTORS = [
@@ -9,22 +21,6 @@ const SCORE_FACTORS = [
   { name: 'Education', key: 'education', weight: 10 },
   { name: 'Location', key: 'location', weight: 5 },
 ]
-
-function toChips(items) {
-  const out = []
-  const arr = Array.isArray(items) ? items : (items && typeof items === 'object' ? Object.values(items) : [])
-  arr.forEach((item) => {
-    const s = String(item).trim()
-    if (!s) return
-    const colon = s.indexOf(': ')
-    if (colon !== -1) {
-      s.slice(colon + 2).split(',').map((x) => x.trim()).filter(Boolean).forEach((x) => out.push(x))
-    } else {
-      out.push(s)
-    }
-  })
-  return out
-}
 
 function formatDate(ts) {
   if (!ts) return '—'
@@ -61,40 +57,44 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
   const analysis = application.ats_analysis != null && typeof application.ats_analysis === 'object'
     ? application.ats_analysis
     : {}
-  const jsonOut = analysis?.json_output ?? analysis
+  const rawJsonOut = analysis?.json_output ?? analysis
+  const storedScore = application.match_score != null ? Math.round(Number(application.match_score)) : null
+  const { jsonOut, recon, score, verdict: reconciledVerdict } = withReconciledScores(rawJsonOut, { storedScore })
   const breakdown = jsonOut?.score_breakdown ?? {}
   const rawStrengths = Array.isArray(jsonOut?.key_strengths) ? jsonOut.key_strengths : []
   const rawGaps = Array.isArray(jsonOut?.key_gaps) ? jsonOut.key_gaps : []
-  const verdict = (jsonOut?.verdict || (jsonOut?.decision || '').replace(/_/g, ' ') || '').trim()
+  const verdict = (reconciledVerdict || (jsonOut?.verdict || (jsonOut?.decision || '').replace(/_/g, ' ') || '').trim())
   const evalReport = jsonOut?.evaluation_report ?? {}
   const skillsAnalysis = evalReport?.skills_analysis ?? {}
   const mandatoryPct = jsonOut?.mandatory_skills_match_pct ?? skillsAnalysis?.mandatory_skills_match_pct
-  const decisionBullets = Array.isArray(evalReport?.final_decision_logic) ? evalReport.final_decision_logic : []
+  const experienceAssessment = evalReport?.experience_assessment ?? {}
   const educationAssessment = evalReport?.education_certification_assessment
-  const finalReasoning = (jsonOut?.final_reasoning || jsonOut?.rationale || application?.ats_reasoning || '').trim() || 'No detailed reasoning available.'
-  const score = application.match_score != null ? Math.round(Number(application.match_score)) : null
+  const requirementAnalysis = getRequirementAnalysis(jsonOut)
+  const decisionExplanation = getDecisionExplanation(jsonOut, { score })
+  const categoryReasons = Array.isArray(decisionExplanation?.category_reasons) ? decisionExplanation.category_reasons : []
+  const reasonByKey = Object.fromEntries(categoryReasons.map((c) => [c.key, c]))
   const hasMatchDetails = application.ats_analysis != null && typeof application.ats_analysis === 'object'
   const status = String(application.status || '').toLowerCase()
+  const displayMandatoryPct = requirementAnalysis?.gate?.mandatory_pct ?? mandatoryPct
   const isNegativeVerdict =
     status === 'ats_failed' ||
     (verdict && /not a match/i.test(verdict)) ||
-    (mandatoryPct != null && Number(mandatoryPct) < 60)
+    (displayMandatoryPct != null && Number(displayMandatoryPct) < 60)
 
-  const getVerdictReason = () => {
-    if (status === 'ats_failed') {
-      return application.ats_reasoning || 'ATS matching failed for this application.'
-    }
-    if (!hasMatchDetails || score == null) return 'Match details were not generated for this application.'
-    if (mandatoryPct != null && Number(mandatoryPct) < 60) {
-      return `Mandatory skills match is ${Number(mandatoryPct)}% (below 60% threshold).`
-    }
-    if (verdict && /not a match/i.test(verdict)) {
-      return `Overall score is ${score}%, below the required threshold for this role.`
-    }
-    return finalReasoning.split(/\n/)[0]?.trim().slice(0, 200) || 'See detailed analysis below.'
-  }
+  const reason = !hasMatchDetails || score == null
+    ? (status === 'ats_failed'
+      ? (application.ats_reasoning || 'ATS matching failed for this application.')
+      : 'Match details were not generated for this application.')
+    : getDecisionSummary(jsonOut, {
+      score,
+      status,
+      atsReasoning: application.ats_reasoning,
+    })
 
-  const reason = getVerdictReason()
+  const missingMandatory = (requirementAnalysis.mandatory || [])
+    .filter((r) => r.status === 'missing')
+    .map((r) => r.skill)
+    .slice(0, 5)
 
   const handleDownloadReport = () => {
     setReportError('')
@@ -117,7 +117,6 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
         <div className="org-error-banner">{reportError}</div>
       )}
 
-      {/* Application overview — compact metadata; score de-emphasized vs hero */}
       <section className="rounded-[16px] bg-white/[0.025] border border-white/[0.08] px-5 py-[18px]">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#738394]">
@@ -161,7 +160,6 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
         </div>
       </section>
 
-      {/* Primary match analysis */}
       <section className="rounded-[20px] border border-white/[0.08] overflow-hidden bg-[rgba(16,23,30,0.82)] shadow-[0_18px_45px_rgba(0,0,0,0.20)]">
         <div className="px-5 sm:px-6 pt-5 pb-1">
           <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#83909C]">
@@ -179,7 +177,6 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
         />
 
         <div className="p-5 sm:p-6 space-y-6">
-          {/* Why this verdict */}
           <div
             className={`rounded-[14px] px-4 py-3.5 border-l-[3px] ${
               isNegativeVerdict
@@ -202,9 +199,13 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
                   Why this verdict
                 </p>
                 <p className="mt-1.5 text-sm font-medium text-[#F2F5F8] leading-relaxed">{reason}</p>
-                {mandatoryPct != null && Number(mandatoryPct) < 60 && (
+                {recon?.note && (
+                  <p className="mt-2 text-xs text-[#8796A5] leading-relaxed">{recon.note}</p>
+                )}
+                {displayMandatoryPct != null && Number(displayMandatoryPct) < 60 && (
                   <p className="mt-1.5 text-xs text-[#8796A5]">
-                    Required threshold: 60% · Current mandatory skills match: {Number(mandatoryPct)}%
+                    Required threshold: 60% · Current mandatory skills match: {Number(displayMandatoryPct)}%
+                    {missingMandatory.length > 0 ? ` · Missing: ${missingMandatory.join(', ')}` : ''}
                   </p>
                 )}
               </div>
@@ -218,13 +219,18 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
                   Score breakdown
                 </h3>
                 <p className="mt-1 text-xs text-[#738394]">
-                  How this candidate scored across the evaluation criteria
+                  How well the candidate fits each area of the role
+                  {displayMandatoryPct != null
+                    ? ` · Mandatory skills: ${Number(displayMandatoryPct)}% matched`
+                    : ''}
                 </p>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {SCORE_FACTORS.map(({ name, key, weight }) => {
                   const value = breakdown[key]
                   if (value == null) return null
+                  const cat = reasonByKey[key]
+                  const gateFailed = key === 'skills' && displayMandatoryPct != null && Number(displayMandatoryPct) < 60
                   return (
                     <ScoreCard
                       key={key}
@@ -232,13 +238,28 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
                       factorName={name}
                       scorePct={value}
                       weightPct={weight}
-                      badge={key === 'skills' ? 'Mandatory' : undefined}
+                      badge={gateFailed ? 'Not enough skills' : (cat?.result_label || undefined)}
+                      reason={cat?.reason || (
+                        key === 'skills'
+                          ? 'Compares skills the role needs with skills on the resume'
+                          : key === 'experience'
+                            ? 'Compares role experience needed with resume experience'
+                            : key === 'education'
+                              ? 'Compares education needed with resume education'
+                              : 'Compares job location with candidate location'
+                      )}
                     />
                   )
                 })}
               </div>
             </div>
           )}
+
+          <RequirementsChecklist
+            theme="enterprise"
+            requirementAnalysis={requirementAnalysis}
+            mandatoryPct={displayMandatoryPct}
+          />
 
           <ChipGroup
             theme="enterprise"
@@ -255,7 +276,7 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
             id="job-cand-gaps"
           />
 
-          {hasMatchDetails && (decisionBullets.length > 0 || educationAssessment || finalReasoning) && (
+          {hasMatchDetails && (
             <div
               className="rounded-[14px] p-4 border border-[rgba(103,128,255,0.13)]"
               style={{
@@ -264,22 +285,16 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
             >
               <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#83909C] flex items-center gap-2 mb-3">
                 <FiZap className="w-3.5 h-3.5 text-[#00A6FF]" />
-                AI Match Insight
+                Match Insight
               </p>
-              <CollapsibleSection label="Detailed Analysis" variant="enterprise">
-                <div className="space-y-4 text-sm">
-                  {decisionBullets.length > 0 && (
-                    <ul className="list-disc list-inside space-y-1 text-[#A0ABB6]">
-                      {decisionBullets.map((bullet, i) => (
-                        <li key={i}>{bullet}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {educationAssessment && (
-                    <p className="text-[#A0ABB6]">{educationAssessment}</p>
-                  )}
-                  <p className="text-[#A0ABB6] whitespace-pre-wrap">{finalReasoning}</p>
-                </div>
+              <CollapsibleSection label="Detailed Analysis" variant="enterprise" defaultOpen>
+                <DetailedAnalysisPanel
+                  jsonOut={jsonOut}
+                  score={score}
+                  variant="enterprise"
+                  experienceAssessment={experienceAssessment}
+                  educationAssessment={educationAssessment}
+                />
               </CollapsibleSection>
             </div>
           )}

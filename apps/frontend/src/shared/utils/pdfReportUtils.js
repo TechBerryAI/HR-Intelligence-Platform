@@ -4,6 +4,7 @@
  */
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { getApplicationDisplayMatch, withReconciledScores, getDecisionSummary } from '@/features/analytics/components/MatchExplanation'
 
 // ─── Theme colours ────────────────────────────────────────────────────────────
 const C = {
@@ -608,34 +609,49 @@ export function generateApplicationMatchPdf(application, options = {}) {
   const W = doc.internal.pageSize.getWidth()
   const jobTitle = options.jobTitle || application.job_title || '—'
   const candidateName = application.candidate_name || 'Candidate'
-  const score = application.match_score != null ? Math.round(Number(application.match_score)) : null
+  const displayMatch = getApplicationDisplayMatch(application)
+  const score = displayMatch.score
 
   const analysis = application.ats_analysis != null && typeof application.ats_analysis === 'object'
     ? application.ats_analysis
     : {}
-  const jsonOut = analysis?.json_output ?? analysis
+  const rawJsonOut = analysis?.json_output ?? analysis
+  const { jsonOut, score: reconciledScore, verdict: reconciledVerdict } = withReconciledScores(rawJsonOut, {
+    storedScore: application.match_score != null ? Math.round(Number(application.match_score)) : score,
+  })
   const breakdown = jsonOut?.score_breakdown ?? {}
   const rawStrengths = Array.isArray(jsonOut?.key_strengths) ? jsonOut.key_strengths : []
   const rawGaps = Array.isArray(jsonOut?.key_gaps) ? jsonOut.key_gaps : []
-  const verdict = (jsonOut?.verdict || (jsonOut?.decision || '').replace(/_/g, ' ') || '').trim()
+  const verdict = (reconciledVerdict || (jsonOut?.verdict || (jsonOut?.decision || '').replace(/_/g, ' ') || '').trim())
   const evalReport = jsonOut?.evaluation_report ?? {}
   const skillsAnalysis = evalReport?.skills_analysis ?? {}
   const mandatoryPct = jsonOut?.mandatory_skills_match_pct ?? skillsAnalysis?.mandatory_skills_match_pct
   const decisionBullets = Array.isArray(evalReport?.final_decision_logic) ? evalReport.final_decision_logic : []
   const educationAssessment = evalReport?.education_certification_assessment
-  const finalReasoning = (jsonOut?.final_reasoning || jsonOut?.rationale || application?.ats_reasoning || '').trim()
+  const narrative = (jsonOut?.narrative || jsonOut?.final_reasoning || jsonOut?.rationale || application?.ats_reasoning || '').trim()
+  const decisionSummary = getDecisionSummary(jsonOut, {
+    score: reconciledScore ?? score,
+    status: application.status,
+    atsReasoning: application.ats_reasoning,
+  })
+  const requirementAnalysis = jsonOut?.requirement_analysis || null
   const status = String(application.status || '').toLowerCase()
   const displayVerdict = status === 'ats_failed' ? 'ATS Failed' : (verdict || '—')
 
-  let verdictReason = 'See detailed analysis below.'
+  let verdictReason = decisionSummary || 'See detailed analysis below.'
   if (status === 'ats_failed') {
     verdictReason = application.ats_reasoning || 'ATS matching failed for this application.'
-  } else if (mandatoryPct != null && Number(mandatoryPct) < 60) {
-    verdictReason = `Mandatory skills match is ${Number(mandatoryPct)}% (below 60% threshold).`
-  } else if (verdict && /not a match/i.test(verdict) && score != null) {
-    verdictReason = `Overall score is ${score}%, below the required threshold for this role.`
-  } else if (finalReasoning) {
-    verdictReason = finalReasoning.split(/\n/)[0]?.trim().slice(0, 280) || verdictReason
+  } else if (!decisionSummary && mandatoryPct != null && Number(mandatoryPct) < 60) {
+    const missing = (requirementAnalysis?.mandatory || [])
+      .filter((r) => r.status === 'missing')
+      .map((r) => r.skill)
+      .slice(0, 5)
+    const extra = missing.length ? ` Still missing: ${missing.join(', ')}.` : ''
+    verdictReason = `Rejected: only ${Number(mandatoryPct)}% of mandatory skills matched (need at least 60%).${extra}`
+  } else if (!decisionSummary && verdict && /not a match/i.test(verdict) && score != null) {
+    verdictReason = `Rejected: overall score is ${score}%, below the required threshold for this role.`
+  } else if (!decisionSummary && narrative) {
+    verdictReason = narrative.split(/\n/)[0]?.trim().slice(0, 280) || verdictReason
   }
 
   let y = drawPageHeader(
@@ -713,6 +729,78 @@ export function generateApplicationMatchPdf(application, options = {}) {
   y = addWrappedText(doc, verdictReason, 16, y + 2, W - 32, 5)
   y += 6
 
+  const scoreMath = jsonOut?.score_math
+  const mathRows = Array.isArray(scoreMath?.rows) ? scoreMath.rows : []
+  if (mathRows.length) {
+    y = ensureSpace(doc, y, 40)
+    y = sectionHeading(doc, y, 'How The Score Was Calculated')
+    autoTable(doc, {
+      ...tableStyles(y),
+      head: [['Category', 'Score', 'Weight', 'Points']],
+      body: [
+        ...mathRows.map((r) => [r.label, `${r.raw_pct}%`, `${r.weight_pct}%`, String(r.points)]),
+        ['Overall match score', '', '', String(scoreMath.total ?? score ?? '—')],
+      ],
+      columnStyles: {
+        0: { cellWidth: 80 },
+        1: { cellWidth: 30, halign: 'center' },
+        2: { cellWidth: 30, halign: 'center' },
+        3: { cellWidth: 40, halign: 'center', fontStyle: 'bold', textColor: C.accent },
+      },
+    })
+    y = doc.lastAutoTable.finalY + 4
+    if (scoreMath.equation) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      setColor(doc, C.muted)
+      y = addWrappedText(doc, 'Math: ' + scoreMath.equation, 16, y, W - 32, 4)
+      y += 6
+    }
+  }
+
+  const NOISE = new Set([
+    'preferred qualifications', 'plus', 'management', 'for', 'and', 'bonus points', 'public', 'job',
+  ])
+  const isClean = (s) => {
+    const t = String(s || '').trim().toLowerCase()
+    if (!t || NOISE.has(t)) return false
+    const words = t.split(/\s+/)
+    if (words.length && ['for', 'with', 'and', 'or', 'of'].includes(words[words.length - 1])) return false
+    return true
+  }
+
+  const mandRows = Array.isArray(requirementAnalysis?.mandatory) ? requirementAnalysis.mandatory : []
+  const prefRows = Array.isArray(requirementAnalysis?.preferred) ? requirementAnalysis.preferred : []
+  let reqRows = [
+    ...mandRows.filter((r) => isClean(r.skill)).map((r) => ['Mandatory', r.skill, r.status === 'matched' ? 'Matched' : 'Missing']),
+    ...prefRows.filter((r) => isClean(r.skill)).map((r) => ['Preferred', r.skill, r.status === 'matched' ? 'Matched' : 'Missing']),
+  ]
+  if (!reqRows.length) {
+    const missingMand = (skillsAnalysis.missing_mandatory_skills || []).filter(isClean)
+    const missingPref = (skillsAnalysis.missing_preferred_skills || []).filter(isClean)
+    const matched = (skillsAnalysis.skills_matched || skillsAnalysis.mandatory_matched_skills || []).filter(isClean)
+    reqRows = [
+      ...matched.map((s) => ['Mandatory', s, 'Matched']),
+      ...missingMand.map((s) => ['Mandatory', s, 'Missing']),
+      ...missingPref.map((s) => ['Preferred', s, 'Missing']),
+    ]
+  }
+  if (reqRows.length) {
+    y = ensureSpace(doc, y, 40)
+    y = sectionHeading(doc, y, 'Requirements Checklist')
+    autoTable(doc, {
+      ...tableStyles(y),
+      head: [['Tier', 'Skill', 'Status']],
+      body: reqRows,
+      columnStyles: {
+        0: { cellWidth: 35 },
+        1: { cellWidth: 105 },
+        2: { cellWidth: 40, halign: 'center' },
+      },
+    })
+    y = doc.lastAutoTable.finalY + 8
+  }
+
   const strengths = chipsFromItems(rawStrengths)
   const gaps = chipsFromItems(rawGaps)
 
@@ -740,13 +828,26 @@ export function generateApplicationMatchPdf(application, options = {}) {
     y = doc.lastAutoTable.finalY + 8
   }
 
-  if (decisionBullets.length || educationAssessment || finalReasoning) {
+  if (decisionBullets.length || educationAssessment || narrative) {
     y = ensureSpace(doc, y, 40)
     y = sectionHeading(doc, y, 'AI Match Insight')
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
     setColor(doc, C.text)
 
+    if (narrative) {
+      y = ensureSpace(doc, y, 24)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(8.5)
+      setColor(doc, C.muted)
+      doc.text('Summary', 16, y)
+      y += 5
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      setColor(doc, C.text)
+      y = addWrappedText(doc, narrative, 16, y, W - 32, 5)
+      y += 4
+    }
     if (decisionBullets.length) {
       decisionBullets.forEach((bullet) => {
         y = ensureSpace(doc, y, 16)
@@ -767,18 +868,6 @@ export function generateApplicationMatchPdf(application, options = {}) {
       setColor(doc, C.text)
       y = addWrappedText(doc, educationAssessment, 16, y, W - 32, 5)
       y += 4
-    }
-    if (finalReasoning) {
-      y = ensureSpace(doc, y, 24)
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(8.5)
-      setColor(doc, C.muted)
-      doc.text('Detailed Reasoning', 16, y)
-      y += 5
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(9)
-      setColor(doc, C.text)
-      y = addWrappedText(doc, finalReasoning, 16, y, W - 32, 5)
     }
   }
 

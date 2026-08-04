@@ -29,7 +29,7 @@ from app.domains.recruitment.api.applications import (
     _persist_application_atomic,
 )
 from app.domains.recruitment.services.job_delete import cascade_delete_job
-from app.domains.recruitment.services.ats_service import match_candidate_to_job
+from app.domains.recruitment.services.ats_service import match_candidate_to_job, sync_application_match_score
 from app.domains.recruitment.services.company_scope import companies_related
 
 jobs_bp = Blueprint('jobs', __name__)
@@ -418,10 +418,18 @@ def get_job_applications(job_id: str):
                         matching_pct = 100
                 except (ValueError, TypeError):
                     matching_pct = 0
-            score_display = match_score if match_score is not None else matching_pct
-            
+
             ats_analysis_raw = app.get('ats_analysis')
             ats_analysis = toon_loads_flex(ats_analysis_raw) if ats_analysis_raw else None
+            if ats_analysis:
+                recon = sync_application_match_score(app.get('id'), ats_analysis, match_score, persist=True)
+                if recon.get('match_score') is not None:
+                    match_score = float(recon['match_score'])
+                    matching_pct = match_score
+                if recon.get('ats_analysis') is not None:
+                    ats_analysis = recon['ats_analysis']
+            score_display = match_score if match_score is not None else matching_pct
+
             formatted_apps.append({
                 'id': app['id'],
                 'candidateId': app['candidate_id'],

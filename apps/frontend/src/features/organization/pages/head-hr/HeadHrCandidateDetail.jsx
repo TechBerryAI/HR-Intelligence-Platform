@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { apiRequest, BASE_URL } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
 import PanelShell, { usePanelBasePath } from '@/features/organization/pages/org/PanelShell.jsx'
+import { getApplicationDisplayMatch } from '@/features/analytics/components/MatchExplanation'
 import {
   FiArrowLeft, FiUser, FiMail, FiPhone, FiMapPin, FiBriefcase, FiBook, FiAward, FiFileText, FiArrowRight,
 } from 'react-icons/fi'
@@ -156,7 +157,10 @@ export default function HeadHrCandidateDetail() {
                         </p>
                         <p className="text-xs text-[var(--ei-text-muted)] mt-0.5">
                           {app.job_company || '—'} · {formatDate(app.applied_at)} · {app.status || 'Applied'}
-                          {app.match_score != null ? ` · Score ${Math.round(Number(app.match_score))}` : ''}
+                          {(() => {
+                            const { score } = getApplicationDisplayMatch(app)
+                            return score != null ? ` · Score ${score}` : ''
+                          })()}
                         </p>
                       </div>
                       <FiArrowRight className="w-4 h-4 shrink-0 text-[#55B9FF]" />

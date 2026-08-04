@@ -34,6 +34,7 @@ def _needs_resume_semantic(profile_dict: dict[str, Any]) -> bool:
 def _needs_jd_semantic(profile_dict: dict[str, Any]) -> bool:
     from app.ai.parser.enrichment.jd_text_inference import (
         is_plausible_job_title,
+        skills_look_polluted,
         skills_look_skill_like,
     )
 
@@ -41,8 +42,17 @@ def _needs_jd_semantic(profile_dict: dict[str, Any]) -> bool:
     skills = profile_dict.get('skills') or {}
     title = str(basic.get('title') or '').strip()
     mandatory = list(skills.get('mandatory') or [])
+    preferred = list(skills.get('preferred') or [])
     general = list(skills.get('general') or [])
-    return not (is_plausible_job_title(title) and skills_look_skill_like(mandatory or general))
+    skill_pool = mandatory or general
+    # Run residual LLM when title is weak OR skills are missing/polluted
+    if not is_plausible_job_title(title):
+        return True
+    if skills_look_polluted(skill_pool):
+        return True
+    if preferred and skills_look_polluted(preferred):
+        return True
+    return not skills_look_skill_like(skill_pool)
 
 
 def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
@@ -224,6 +234,31 @@ def enrich_jd_semantic(profile, *, unresolved_text: str, force: bool = False):
     if not isinstance(raw, dict):
         return profile
     try:
+        from app.ai.parser.enrichment.jd_text_inference import (
+            normalize_skill_tokens,
+            skills_look_polluted,
+        )
+
+        existing_mand = list(profile.skills.mandatory or [])
+        existing_pref = list(profile.skills.preferred or [])
+        llm_mand = normalize_skill_tokens(
+            raw.get('mandatory_skills') if isinstance(raw.get('mandatory_skills'), list) else [],
+            max_items=30,
+        )
+        llm_pref = normalize_skill_tokens(
+            raw.get('preferred_skills') if isinstance(raw.get('preferred_skills'), list) else [],
+            max_items=20,
+        )
+        # Prefer LLM skills when deterministic lists are polluted; never invent empty over good lists
+        if skills_look_polluted(existing_mand) and llm_mand:
+            merged_mand = llm_mand
+        else:
+            merged_mand = existing_mand or llm_mand
+        if skills_look_polluted(existing_pref) and llm_pref:
+            merged_pref = llm_pref
+        else:
+            merged_pref = existing_pref or llm_pref
+
         toon = {
             'type': 'job_description',
             'title': profile.basic.title or raw.get('title') or '',
@@ -231,9 +266,9 @@ def enrich_jd_semantic(profile, *, unresolved_text: str, force: bool = False):
             'location': profile.location.primary or raw.get('location') or '',
             'employment_type': profile.basic.employment_type or raw.get('employment_type') or '',
             'description': profile.basic.description,
-            'mandatory_skills': profile.skills.mandatory or raw.get('mandatory_skills') or [],
-            'preferred_skills': profile.skills.preferred or raw.get('preferred_skills') or [],
-            'skills': profile.skills.general or [],
+            'mandatory_skills': merged_mand,
+            'preferred_skills': merged_pref,
+            'skills': profile.skills.general or merged_mand,
             'responsibilities': profile.responsibilities.items or raw.get('responsibilities') or [],
             'qualifications': profile.requirements.qualifications or raw.get('qualifications') or [],
             'min_experience_years': profile.requirements.min_experience_years
