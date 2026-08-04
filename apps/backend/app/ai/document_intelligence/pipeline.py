@@ -6,6 +6,7 @@ Frontend receives Form DTOs only. TOON is persistence/ATS serialization.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 from typing import Any, Optional
 
@@ -320,6 +321,11 @@ def _cache_hit_response(
         'model_version': cached['model_version'],
         'partial': 'text-fallback' in str(cached.get('model_version') or ''),
         'parse_job_id': parse_job_id,
+        'raw_text': cached.get('raw_text') or '',
+        'raw_text_chars': len(cached.get('raw_text') or ''),
+        'raw_text_sha256': hashlib.sha256(
+            (cached.get('raw_text') or '').encode('utf-8', errors='ignore')
+        ).hexdigest(),
     }
     if kind == 'resume':
         body['public_uploader_id'] = uploader_id if uploader_role == 'public' else None
@@ -378,7 +384,24 @@ def _run_resume(
         _emit(parse_job_id, 'text', 'failed', str(e), on_stage=on_stage)
         return {'status': 'error', 'error': f'Text extraction failed: {str(e)}'}, 400
 
+    # PostgreSQL text columns reject NUL bytes from some PDF/DOCX extractors
+    if raw_text and '\x00' in raw_text:
+        raw_text = raw_text.replace('\x00', '')
+
     text_length = len(raw_text.strip()) if raw_text else 0
+    # VALIDATION_FIX_ocr_dpi_retry
+    if (not raw_text or text_length < 30) and filename.lower().rsplit('.', 1)[-1] in (
+        'pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp',
+    ):
+        try:
+            raw_text = extract_text(file_data, filename, dpi=300) or ''
+            if raw_text and '\x00' in raw_text:
+                raw_text = raw_text.replace('\x00', '')
+            text_length = len(raw_text.strip()) if raw_text else 0
+            _emit(parse_job_id, 'text', 'completed', f'OCR DPI retry → {text_length} chars', on_stage=on_stage)
+        except Exception as retry_err:
+            _emit(parse_job_id, 'text', 'failed', f'DPI retry: {retry_err}', on_stage=on_stage)
+
     if not raw_text or text_length < 30:
         error_msg = 'Could not extract sufficient text from document'
         _emit(parse_job_id, 'text', 'failed', error_msg, on_stage=on_stage)
@@ -497,6 +520,9 @@ def _run_resume(
         'partial': (not is_valid),
         'missing_fields': validation_issues if not is_valid else [],
         'parse_job_id': parse_job_id,
+        'raw_text': raw_text or '',
+        'raw_text_chars': len(raw_text or ''),
+        'raw_text_sha256': hashlib.sha256((raw_text or '').encode('utf-8', errors='ignore')).hexdigest(),
     }, 200
 
 
@@ -550,6 +576,9 @@ def _run_jd(
     except Exception as e:
         _emit(parse_job_id, 'text', 'failed', str(e), on_stage=on_stage)
         return {'status': 'error', 'error': f'Text extraction failed: {str(e)}'}, 400
+
+    if raw_text and '\x00' in raw_text:
+        raw_text = raw_text.replace('\x00', '')
 
     text_length = len(raw_text.strip()) if raw_text else 0
     if not raw_text or text_length < 30:

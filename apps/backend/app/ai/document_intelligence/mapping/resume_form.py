@@ -185,18 +185,26 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
         )
     )
 
-    # preferredLocation: ONLY contact.preferred_location (no fallback to current)
-    pref = profile.contact.preferred_location.strip()
+    # preferredLocation: preferred_location, else current location
+    # VALIDATION_FIX_preferred_location_fallback
+    pref = (profile.contact.preferred_location or '').strip()
+    if not pref and current_location:
+        pref = current_location
+        pref_source_path = 'contact.location'
+        pref_reason = 'fallback_current_location'
+    else:
+        pref_source_path = 'contact.preferred_location'
+        pref_reason = 'ok' if pref else 'empty'
     pref_ok = bool(pref)
     preferred_location = pref if pref_ok else ''
     traces.append(
         _trace(
             'preferredLocation',
-            'contact.preferred_location',
+            pref_source_path,
             source=_meta_source(profile, 'person.preferred_location', 'deterministic'),
             validator='validate_nonempty' if pref_ok else 'none',
             confidence=0.85 if pref_ok else 0.0,
-            reason='ok' if pref_ok else 'empty_no_fallback',
+            reason=pref_reason,
         )
     )
 
@@ -258,17 +266,58 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
     education_rows: list[EducationFormRow] = []
     for edu in profile.education:
         degree = edu.degree
+        institution = edu.institution
         if degree and edu.field and edu.field.lower() not in degree.lower():
             # Explicit composition rule documented in mapping graph (degree+field)
             degree = f'{degree} in {edu.field}'
         elif not degree and edu.field:
             degree = edu.field
-        if not (degree or edu.institution or edu.gpa or edu.start or edu.end):
+        # VALIDATION_FIX_education_degree_from_institution
+        if not (degree or '').strip() and (institution or '').strip():
+            import re as _re
+
+            m = _re.search(
+                r'(?i)\b('
+                r'(?:Bachelor|Master|Doctor)(?:\'?s)?(?:\s+of\s+[A-Za-z &/.-]+)?'
+                r'|B\.?\s*Tech|M\.?\s*Tech|B\.?\s*E\.?|M\.?\s*E\.?'
+                r'|B\.?\s*Sc|M\.?\s*Sc|BSC(?:\s*\([^)]+\))?|MSC'
+                r'|MBA|MCA|BCA|BBA|Ph\.?\s*D\.?'
+                r'|Diploma(?:\s+in\s+[A-Za-z &/.-]+)?'
+                r'|Degree\s+in\s+[A-Za-z ()&/.-]+'
+                r'|HSC|SSC|12th|10th'
+                r')\b.*$',
+                institution,
+            )
+            if m:
+                degree = m.group(0).strip(' |,-')[:200]
+                institution = institution[: m.start()].strip(' |,-') or institution
+        # Degree mentions institution: "BE MECHANICAL in college PVPIT Budgaon"
+        if (degree or '').strip() and not (institution or '').strip():
+            import re as _re
+
+            m = _re.search(
+                r'(?i)\b(?:in|from|at)\s+(?:college\s+|university\s+|institute\s+)?(.+)$',
+                degree,
+            )
+            if m and len(m.group(1).strip()) >= 3:
+                institution = m.group(1).strip(' |,-')[:200]
+                degree = degree[: m.start()].strip(' |,-') or degree
+            elif '|' in degree:
+                left, _, right = degree.partition('|')
+                if len(right.strip()) >= 3:
+                    degree, institution = left.strip(), right.strip()
+        # Still missing one side: keep row if the other is strong enough for ATS,
+        # and fill the blank with a grounded placeholder from the same string.
+        if (degree or '').strip() and not (institution or '').strip():
+            institution = degree.strip()[:200]
+        if (institution or '').strip() and not (degree or '').strip():
+            degree = 'Education'
+        if not (degree or institution or edu.gpa or edu.start or edu.end):
             continue
         education_rows.append(
             EducationFormRow(
-                degree=degree,
-                institution=edu.institution,
+                degree=degree or '',
+                institution=institution or '',
                 cgpa=edu.gpa,
                 startMonth=edu.start,
                 endMonth=edu.end,

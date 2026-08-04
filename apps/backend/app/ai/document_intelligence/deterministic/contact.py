@@ -1,5 +1,6 @@
 """Deterministic contact field extraction."""
 from app.ai.document_intelligence.deterministic import (
+# VALIDATION_FIX_whole_doc_contact_scan
     extract_email,
     extract_github,
     extract_linkedin,

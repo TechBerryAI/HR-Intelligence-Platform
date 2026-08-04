@@ -31,7 +31,8 @@ SUMMARY_SECTION_PATTERN = re.compile(
 )
 
 EDUCATION_SECTION_PATTERN = re.compile(
-    r'(?i)(?:^|\n)\s*(?:\*\*)?(?:education|academic\s+background|academics|qualifications)(?:\*\*)?\s*:?\s*'
+    r'(?i)(?:^|\n)\s*(?:\*\*)?(?:education(?:al)?\s*(?:qualification|background|details)?s?'
+    r'|academic\s+(?:background|details|qualifications?)|academics|qualifications)(?:\*\*)?\s*:?\s*'
     r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:experience|work\s+experience|professional\s+experience|'
     r'employment|work\s+history|technical\s+skills?|core\s+skills?|key\s+skills?|skill\s*sets?|'
     r'skills?|tools?|technologies?|tech\s+stack|projects?|certifications?|certificates?|'
@@ -55,6 +56,8 @@ SECTION_HEADERS = frozenset({
     'languages', 'awards', 'interests',
     'references', 'contact', 'resume', 'curriculum vitae', 'cv', 'about me',
     'work history', 'qualifications', 'achievements',
+    'academic details', 'academic background', 'academics',
+    'educational qualifications', 'educational background',
     'personal details', 'personal information', 'biodata', 'bio data', 'contact details',
     'declaration', 'permanent address', 'present address', 'correspondence address',
     'current address', 'residential address',
@@ -188,12 +191,41 @@ def is_plausible_job_title(title: str | None) -> bool:
     return True
 
 
+_JOB_TITLE_NAME_BLOCKLIST = frozenset({
+    'human resources', 'system administrator', 'systems administrator',
+    'data engineer', 'software engineer', 'software developer', 'team lead',
+    'project manager', 'delivery manager', 'database administrator',
+    'linux administrator', 'network engineer', 'devops engineer',
+    'career objective', 'professional summary', 'professional', 'summary',
+    'middleware administrator', 'oracle dba', 'sql dba', 'mssql dba',
+    'fresher', 'experienced', 'immediate joining',
+})
+
+
 def is_plausible_person_name(name: str | None) -> bool:
     """Reject metrics, labels, headers, and tech tokens misread as person names."""
     t = (name or '').strip()
     # PDF/Word often appends zero-width spaces to header names
     t = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff\u00ad]', '', t).replace('\xa0', ' ').strip()
+    # Honorific prefixes common on Indian resumes
+    t = re.sub(r'(?i)^(mr|mrs|ms|miss|dr|prof)\.?\s+', '', t).strip()
     if not t or len(t) < 2 or len(t) > 80:
+        return False
+    # Placeholder / form labels wrongly captured as names
+    if t.lower() in {
+        'name', 'full name', 'your name', 'candidate name', 'student', 'resume',
+        'curriculum vitae', 'cv', 'objective', 'career objective', 'profile',
+        'address', 'contact', 'email', 'phone', 'mobile', 'unknown',
+    }:
+        return False
+    if t.lower() in _JOB_TITLE_NAME_BLOCKLIST:
+        return False
+    # Reject sentence / duty fragments
+    if t.endswith('.'):
+        return False
+    if len(t.split()) >= 4 and re.search(
+        r'(?i)\b(?:and|with|the|for|from|processes?|performing|managing|achieved)\b', t
+    ):
         return False
     if '@' in t or 'http' in t.lower() or 'www.' in t.lower():
         return False
@@ -225,7 +257,8 @@ def is_plausible_person_name(name: str | None) -> bool:
         if token.isupper() and len(token) <= 5:
             return False
         return True
-    # Prefer multi-word Title-Case alphabetic names
+    # Multi-word names: allow ALL-CAPS resume headers (RAHUL SURESH SURVASE).
+    # Only reject short ALL-CAPS tokens when they look like tech acronyms (<=3 chars).
     alpha_words = 0
     for w in words:
         cleaned = w.strip(".,'")
@@ -233,7 +266,7 @@ def is_plausible_person_name(name: str | None) -> bool:
             continue
         if not re.match(r"^[A-Za-z][A-Za-z'\-]*$", cleaned):
             return False
-        if cleaned.isupper() and len(cleaned) <= 5:
+        if cleaned.isupper() and len(cleaned) <= 3 and cleaned.lower() in _TECH_SINGLE_TOKEN:
             return False
         if cleaned[0].isupper():
             alpha_words += 1
@@ -676,32 +709,101 @@ def extract_location_from_text(text: str) -> str:
     """Labeled location, Remote/Hybrid, City ST, or common city names in header."""
     if not text:
         return ''
+
+    def _clean_loc(raw: str) -> str:
+        s = (raw or '').strip()
+        # Strip emoji / bullets / labels
+        s = re.sub(r'^[\U0001F300-\U0001FAFF\u2600-\u27BF📍📞✉️🔗·•|\-–—o]+\s*', '', s)
+        s = re.sub(
+            r'(?i)^(address|location|current\s*location|place|city|based\s*in)\s*[:\-]\s*',
+            '',
+            s,
+        ).strip()
+        # Drop trailing date ranges / job metadata
+        s = re.sub(
+            r'(?i)\s*[|•·]\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|'
+            r'present|current|\d{4}).*$',
+            '',
+            s,
+        ).strip()
+        s = s.strip('.,;:| ')
+        low = s.lower()
+        if any(
+            tok in low
+            for tok in (
+                'technologies', 'skills', 'experience', 'summary', 'objective',
+                'linkedin', 'github', 'http', '@', 'vlan', 'configuration',
+                'switchover', 'switchback', 'university', 'college', 'institute',
+                'school', 'cgpi', 'sgpi',
+            )
+        ):
+            # Still allow bare city if present inside a noisy line
+            for city in (
+                'Mumbai', 'Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
+                'Kolkata', 'Pune', 'Nagpur', 'Noida', 'Gurugram', 'Gurgaon',
+            ):
+                if city.lower() in low:
+                    return city
+            return ''
+        # Long address → prefer known city token inside it
+        cities = (
+            'Mumbai', 'Delhi', 'New Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
+            'Kolkata', 'Pune', 'Ahmedabad', 'Gurgaon', 'Gurugram', 'Noida', 'Nagpur',
+            'Indore', 'Thane', 'Navi Mumbai', 'Mulund', 'Kandivali', 'Andheri', 'Powai',
+        )
+        if len(s) > 50:
+            for city in cities:
+                if city.lower() in low:
+                    return city
+            return ''
+        if len(s) < 2:
+            return ''
+        return s
+
     patterns = [
-        r'(?i)(?:location|current\s*location|address|city|based\s*in)\s*[:\-]\s*([^\n]+)',
+        r'(?i)(?:location|current\s*location|address|city|based\s*in|place)\s*[:\-]\s*([^\n]+)',
         r'(?i)\b(remote|hybrid|work\s+from\s+home|wfh)\b',
         r'\b([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*),\s*([A-Z]{2})\b',
+        # Emoji / pin style: 📍 Nagpur, Maharashtra, India
+        r'(?:📍|📌)\s*([^\n]+)',
     ]
     for pat in patterns:
-        m = re.search(pat, text[:800])
+        m = re.search(pat, text[:1200])
         if not m:
             continue
-        if m.lastindex and m.lastindex >= 2 and pat.endswith(r'\b'):
+        if m.lastindex and m.lastindex >= 2 and '([A-Z]{2})' in pat:
             loc = f'{m.group(1)}, {m.group(2)}'
         else:
             loc = m.group(1).strip().strip('.,;:')
-        if 2 <= len(loc) <= 80:
-            return loc
+        cleaned = _clean_loc(loc)
+        if cleaned:
+            return cleaned
 
-    header = text[:500]
     cities = [
-        'Mumbai', 'Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
+        'Mumbai', 'Delhi', 'New Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
         'Kolkata', 'Pune', 'Ahmedabad', 'Gurgaon', 'Gurugram', 'Noida',
-        'Faridabad', 'Jaipur', 'Lucknow', 'Austin', 'Seattle', 'San Francisco',
+        'Faridabad', 'Jaipur', 'Lucknow', 'Nagpur', 'Indore', 'Bhopal', 'Surat',
+        'Vadodara', 'Coimbatore', 'Kochi', 'Chandigarh', 'Mysore', 'Mysuru',
+        'Visakhapatnam', 'Thane', 'Navi Mumbai', 'Mehdipatnam',
+        'Austin', 'Seattle', 'San Francisco',
         'New York', 'London', 'Toronto', 'Singapore', 'Dubai',
     ]
-    for city in cities:
-        if city in header:
+    for window in (text[:800], text[:5000]):
+        for city in cities:
+            if city not in window:
+                continue
+            for line in window.splitlines():
+                if city in line and len(line.strip()) <= 100 and '@' not in line:
+                    cleaned = _clean_loc(line)
+                    if cleaned and city in cleaned:
+                        # Prefer city alone when line is noisy
+                        if len(cleaned) > 60:
+                            return city
+                        return cleaned
             return city
+    # Country-only last resort when clearly labeled
+    if re.search(r'(?i)(?:^|\n)\s*India\s*(?:\n|$)', text[:600]):
+        return 'India'
     return ''
 
 

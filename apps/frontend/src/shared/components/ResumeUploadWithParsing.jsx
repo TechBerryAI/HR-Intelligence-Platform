@@ -30,6 +30,7 @@ function humanizeParseError(raw) {
 export default function ResumeUploadWithParsing({
   onAutofill,
   onFileSelect,
+  onParseComplete,
   currentFileName,
   onRemove,
   onOpenResume,
@@ -130,8 +131,9 @@ export default function ResumeUploadWithParsing({
         const formData = takeResumeFormDTO(result);
         setConfidence(result.confidence);
         setProgressPct(100);
+        onParseComplete?.(result, null);
         onParseError?.(null);
-        
+
         if (result.is_duplicate) {
           setParseSuccess('Resume recognized! Using previously parsed data.');
         } else {
@@ -166,9 +168,11 @@ export default function ResumeUploadWithParsing({
           }
         }
       } else {
+        onParseComplete?.(result, result.error || 'Parsing failed');
         throw new Error(extractParseErrorMessage(result, 'Parsing failed'));
       }
     } catch (error) {
+      onParseComplete?.(null, error?.message || String(error));
       if (error.message.includes('Invalid or expired token') || error.message.includes('Access token required')) {
         console.warn('Session expired, allowing manual upload');
         if (onFileSelect) onFileSelect(file);

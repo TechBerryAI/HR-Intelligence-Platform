@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import re
 import shutil
 from typing import Any
 
@@ -497,12 +498,12 @@ def extract_text_from_pdf(file_data: bytes, *, dpi: int | None = None) -> str:
 
 
 def extract_text_from_docx(file_data: bytes) -> str:
-    """Extract text from DOCX file (paragraphs + tables as Label: Value when possible)."""
+    """Extract text from DOCX (paragraphs + Label: Value tables + XML fallback)."""
+    text_parts: list[str] = []
     try:
         docx_file = io.BytesIO(file_data)
         doc = Document(docx_file)
 
-        text_parts = []
         for paragraph in doc.paragraphs:
             if paragraph.text.strip():
                 text_parts.append(paragraph.text)
@@ -521,10 +522,65 @@ def extract_text_from_docx(file_data: bytes) -> str:
                 serialized = _serialize_table_row(deduped)
                 if serialized:
                     text_parts.append(serialized)
-
-        return '\n\n'.join(text_parts)
     except Exception as e:
-        raise ValueError(f'Failed to extract text from DOCX: {e}') from e
+        logger.warning('python-docx extraction failed, trying XML fallback: %s', e)
+
+    joined = '\n\n'.join(text_parts).strip()
+    if len(joined) >= MIN_TEXT_CHARS:
+        return joined
+
+    # Fallback: unzip word/document.xml (handles some corrupted / odd DOCX)
+    try:
+        import zipfile
+        import xml.etree.ElementTree as ET
+
+        with zipfile.ZipFile(io.BytesIO(file_data)) as zf:
+            xml_name = 'word/document.xml'
+            if xml_name not in zf.namelist():
+                raise ValueError('DOCX missing word/document.xml')
+            root = ET.fromstring(zf.read(xml_name))
+            ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+            chunks = []
+            for node in root.iter('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}t'):
+                if node.text:
+                    chunks.append(node.text)
+                if node.tail:
+                    chunks.append(node.tail)
+            # Also collect paragraph breaks roughly
+            xml_text = ' '.join(chunks)
+            xml_text = re.sub(r'[ \t]+', ' ', xml_text)
+            xml_text = re.sub(r'(\s*\n\s*)+', '\n', xml_text).strip()
+            if len(xml_text) >= MIN_TEXT_CHARS:
+                return xml_text
+    except Exception as xml_err:
+        logger.warning('DOCX XML fallback failed: %s', xml_err)
+
+    if joined:
+        return joined
+    raise ValueError('Failed to extract text from DOCX: empty document')
+
+
+def _force_pdf_ocr(file_data: bytes, *, dpi: int = 300) -> str:
+    """Render every PDF page and OCR — last resort for scanned / empty digital layers."""
+    try:
+        import fitz
+    except ImportError as exc:
+        raise ValueError('PyMuPDF (pymupdf) is not installed') from exc
+    doc = fitz.open(stream=file_data, filetype='pdf')
+    try:
+        page_count = len(doc)
+        if PDF_MAX_PAGES:
+            page_count = min(page_count, PDF_MAX_PAGES)
+        parts: list[str] = []
+        for page_num in range(page_count):
+            page = doc[page_num]
+            png = _render_page_png(page, dpi=dpi)
+            ocr_text = _ocr_image_bytes(png)
+            if ocr_text and ocr_text.strip():
+                parts.append(ocr_text.strip())
+        return '\n\n'.join(parts).strip()
+    finally:
+        doc.close()
 
 
 def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> str:
@@ -553,6 +609,14 @@ def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> 
                     ) from api_error
             else:
                 raise
+        # Empty digital layer / failed OCR → force full-page OCR
+        if len((text or '').strip()) < MIN_TEXT_CHARS:
+            try:
+                forced = _force_pdf_ocr(file_data, dpi=max(dpi or 0, 300))
+                if len(forced) >= MIN_TEXT_CHARS:
+                    text = forced
+            except Exception as force_err:
+                logger.warning('Force PDF OCR failed: %s', force_err)
     elif ext == 'doc':
         raise ValueError('Legacy .doc format is not supported. Please use DOCX or PDF.')
     elif ext == 'docx':

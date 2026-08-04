@@ -58,7 +58,7 @@ def attach_form_dto(body: dict[str, Any], doc_kind: str) -> dict[str, Any]:
 def build_resume_client_payload(body: dict[str, Any]) -> dict[str, Any]:
     """Public/API payload for React — Form DTO only (no raw TOON)."""
     enriched = attach_form_dto(body, 'resume')
-    return {
+    payload = {
         'status': enriched.get('status'),
         'raw_file_id': enriched.get('raw_file_id'),
         'parsed_id': enriched.get('parsed_id'),
@@ -74,6 +74,20 @@ def build_resume_client_payload(body: dict[str, Any]) -> dict[str, Any]:
         'engine': 'document_intelligence',
         'schema_version': '1.0.0',
     }
+    # Opt-in: corpus E2E validation needs canonical + extraction text for grounding.
+    import os
+
+    if os.getenv('DOCUMENT_INTELLIGENCE_VALIDATION_PAYLOAD', '').lower() in ('1', 'true', 'yes'):
+        payload['canonical'] = enriched.get('canonical')
+        payload['partial'] = enriched.get('partial')
+        payload['missing_fields'] = enriched.get('missing_fields')
+        if enriched.get('raw_text') is not None:
+            payload['raw_text'] = enriched.get('raw_text')
+        if enriched.get('raw_text_chars') is not None:
+            payload['raw_text_chars'] = enriched.get('raw_text_chars')
+        if enriched.get('raw_text_sha256'):
+            payload['raw_text_sha256'] = enriched.get('raw_text_sha256')
+    return payload
 
 
 def build_jd_client_payload(body: dict[str, Any]) -> dict[str, Any]:
