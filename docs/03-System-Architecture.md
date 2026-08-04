@@ -155,7 +155,7 @@ React 18 · Vite · React Router 6 · Tailwind · Framer Motion · Radix (select
 | `src/app/` | App shell |
 | `src/routes/` | Route table + lazy pages |
 | `src/features/` | Product features (jobs, organization, admin, auth, …) |
-| `src/core/` | API client, auth guards, RBAC, parsing helpers |
+| `src/core/` | API client, auth guards, RBAC, **theme** (`core/theme/`), parsing helpers |
 | `src/shared/` | Reusable UI (PremiumInput, MonthYearPicker, …) |
 | `src/styles/` | Global + org enterprise theme |
 
@@ -178,9 +178,11 @@ Guards: `RecruiterGuard`, `HeadHrGuard`, `CeoGuard`.
 
 ### Design systems in play
 
-1. **Public / apply** — apply modal forms stay light for readability; job board (`/jobs`) follows the global Dark/Light toggle (default dark enterprise chrome)
-2. **Staff workspace** — `org-shell` shared by Head HR / CEO **and** recruiter routes (`/dashboard`, `/candidates`, `/admin/*`, `/settings`) plus `/jobs`; palette flips via `data-theme` + navbar **Dark/Light** toggle (persisted as `hcip-theme`)
-3. **Auth / landing / support** — login, signup, forgot-password, landing, FAQ, Contact, and admin tools (bulk parse, feedback) respect the same toggle
+**Centralized theme (required):** `apps/frontend/src/core/theme/themeConfig.js` is the single source of truth for Dark/Light (`hcip-theme` storage, default dark, dark-only routes, `surfaceTheme` mapping). Runtime: `ThemeProvider` in `main.jsx` + `useTheme()`. CSS: `--ei-*` tokens in `src/styles/index.css` under `:root` / `html[data-theme="light"]`. Do not add a second theme store or hardcode `hcip-theme` / landing exceptions outside `themeConfig`.
+
+1. **Public / apply** — apply modal (`.apply-modal`) stays **light** for readability even on the dark `/jobs` board; resume upload in `publicMode` uses light chrome
+2. **Staff workspace** — `org-shell` shared by Head HR / CEO **and** recruiter routes (`/dashboard`, `/candidates`, `/admin/*`, `/settings`) plus `/jobs`; palette flips via `data-theme` + navbar **Dark/Light** toggle
+3. **Auth / support / staff** — login, signup, FAQ, Contact, and admin tools respect the Dark/Light toggle. **Landing `/` is dark-only** (`DARK_ONLY_EXACT_PATHS` in `themeConfig`; no toggle on home)
 
 ---
 

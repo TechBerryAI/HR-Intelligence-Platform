@@ -102,6 +102,75 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--ei-text-primary);
   }
 
+  /* Public apply modal stays light even inside org-shell (e.g. /jobs) */
+  .apply-modal,
+  .apply-modal h1,
+  .apply-modal h2,
+  .apply-modal h3,
+  .apply-modal h4,
+  .apply-modal h5,
+  .apply-modal h6 {
+    color: #0f172a !important;
+  }
+
+  .apply-modal {
+    color: #334155 !important;
+    background-color: #ffffff !important;
+    background-image: none !important;
+    border-color: #e2e8f0 !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+    backdrop-filter: none !important;
+  }
+
+  .org-shell .apply-modal.rounded-2xl.bg-white,
+  .org-shell .apply-modal.rounded-t-2xl.bg-white {
+    background: #ffffff !important;
+    background-image: none !important;
+    border-color: #e2e8f0 !important;
+    color: #334155 !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+    backdrop-filter: none !important;
+  }
+
+  .org-shell .apply-modal .premium-input,
+  .org-shell .apply-modal .input-premium {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+  }
+
+  .org-shell .apply-modal .premium-input::placeholder,
+  .org-shell .apply-modal .input-premium::placeholder {
+    color: #94a3b8 !important;
+  }
+
+  .org-shell .apply-modal .premium-input:focus,
+  .org-shell .apply-modal .input-premium:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35) !important;
+  }
+
+  .org-shell .apply-modal .org-field-label,
+  .org-shell .apply-modal label {
+    color: #334155 !important;
+  }
+
+  .org-shell .apply-modal .org-field-icon {
+    color: #64748b !important;
+  }
+
+  .org-shell .apply-modal select,
+  .org-shell .apply-modal textarea.premium-input {
+    background: #ffffff !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+  }
+
+  .org-shell .apply-modal .border-slate-200 {
+    border-color: #e2e8f0 !important;
+  }
+
   .org-shell ::selection {
     background-color: rgba(0, 166, 255, 0.25);
   }

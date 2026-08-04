@@ -55,11 +55,11 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
           : 'org-sidebar hidden lg:flex flex-col w-60 shrink-0 h-screen sticky top-0 self-start'
       }
     >
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-white/[0.08] shrink-0">
+      <div className="flex items-center gap-3 px-5 py-5 border-b border-[var(--ei-border-primary)] shrink-0">
         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00A6FF] to-[#276DFF] text-white grid place-items-center flex-shrink-0 text-xs font-bold shadow-[0_0_20px_rgba(0,166,255,0.25)]">
           {initials}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-[var(--ei-text-primary)] truncate">{displayName}</p>
           <p className="text-xs text-[var(--ei-text-muted)] truncate">{displayEmail || ''}</p>
           <p className="text-[10px] uppercase tracking-[0.08em] text-[#00A6FF]/80 mt-1">
@@ -86,7 +86,6 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
       </nav>
 
       <div className="px-3 pt-1 pb-5 shrink-0 border-t border-[var(--ei-border-primary)]">
-        <ThemeToggle className="org-nav-item w-full mt-2 justify-start text-[var(--ei-text-secondary)] hover:text-[var(--ei-text-primary)]" />
         <button
           type="button"
           onClick={handleLogout}
@@ -136,7 +135,7 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
           <span className="text-sm font-semibold text-[var(--ei-text-primary)] flex items-center gap-2 flex-1">
             <PanelIcon className="w-4 h-4 text-[#00A6FF]" /> {panelTitle}
           </span>
-          <ThemeToggle className="text-[var(--ei-text-secondary)] hover:text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)]" compact />
+          <ThemeToggle variant="org" compact />
         </div>
 
         <main className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-7 lg:p-9">

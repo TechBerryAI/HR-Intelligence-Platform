@@ -221,14 +221,14 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
             initial={{ y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 40, opacity: 0 }}
-            className="relative w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl bg-white shadow-xl"
+            className="apply-modal relative w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl bg-white shadow-xl"
           >
             <div className="shrink-0 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 z-20">
               <div className="min-w-0">
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Apply for</p>
-                <h2 id="apply-job-title" className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+                <h2 id="apply-job-title" className="text-xl font-semibold !text-slate-900 flex items-center gap-2">
                   <FiBriefcase className="text-slate-500 shrink-0" />
-                  <span className="truncate">{job.title}</span>
+                  <span className="truncate !text-slate-900">{job.title}</span>
                 </h2>
                 <p className="text-sm text-slate-500 mt-0.5">{job.company} · {job.location}</p>
               </div>

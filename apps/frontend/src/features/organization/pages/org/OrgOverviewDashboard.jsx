@@ -9,6 +9,7 @@ import { LayoutDashboard } from 'lucide-react'
 import RecruiterJobDashboard from '@/features/dashboard/components/recruiter/RecruiterJobDashboard.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
+import ThemeToggle from '@/shared/components/ThemeToggle.jsx'
 
 const ACCENT_ICON = {
   purple: 'bg-[rgba(121,87,255,0.15)] text-[#A78BFA]',
@@ -477,6 +478,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
             <FiHome className="w-4 h-4" />
             Home
           </button>
+          <ThemeToggle variant="org" />
           <button
             type="button"
             onClick={() => load(true)}

@@ -190,6 +190,8 @@ export default function ResumeUploadWithParsing({
   };
 
   const hasResume = currentFileName && currentFileName.trim() && !isUploading;
+  // Public apply form is always light; staff dashboards keep dark glass upload chrome
+  const light = Boolean(publicMode);
 
   return (
     <>
@@ -210,15 +212,25 @@ export default function ResumeUploadWithParsing({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
-              className="glass-card border-2 border-green-500/30 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4"
+              className={
+                light
+                  ? 'rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-5 flex flex-col sm:flex-row sm:items-center gap-4'
+                  : 'glass-card border-2 border-green-500/30 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4'
+              }
             >
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="flex-shrink-0 w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center border border-green-500/40">
-                  <FiFile className="w-6 h-6 text-green-400" />
+                <div
+                  className={
+                    light
+                      ? 'flex-shrink-0 w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center border border-emerald-200'
+                      : 'flex-shrink-0 w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center border border-green-500/40'
+                  }
+                >
+                  <FiFile className={`w-6 h-6 ${light ? 'text-emerald-600' : 'text-green-400'}`} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-green-300">Resume uploaded</p>
-                  <p className="text-sm text-zinc-300 truncate" title={currentFileName}>{currentFileName}</p>
+                  <p className={`text-sm font-medium ${light ? 'text-emerald-800' : 'text-green-300'}`}>Resume uploaded</p>
+                  <p className={`text-sm truncate ${light ? 'text-slate-600' : 'text-zinc-300'}`} title={currentFileName}>{currentFileName}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
@@ -226,7 +238,11 @@ export default function ResumeUploadWithParsing({
                   <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); onOpenResume(); }}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-zinc-200 text-sm font-medium transition-colors border border-zinc-600"
+                    className={
+                      light
+                        ? 'inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors border border-slate-200'
+                        : 'inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-zinc-200 text-sm font-medium transition-colors border border-zinc-600'
+                    }
                   >
                     <FiExternalLink className="w-4 h-4" />
                     View resume
@@ -235,7 +251,11 @@ export default function ResumeUploadWithParsing({
                 <button
                   type="button"
                   onClick={handleRemove}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 text-sm font-medium transition-colors border border-red-500/40"
+                  className={
+                    light
+                      ? 'inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium transition-colors border border-red-200'
+                      : 'inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 text-sm font-medium transition-colors border border-red-500/40'
+                  }
                 >
                   <FiTrash2 className="w-4 h-4" />
                   Remove
@@ -269,9 +289,14 @@ export default function ResumeUploadWithParsing({
               <label
                 htmlFor="resume-upload-input"
                 className={`
-                  block glass-card p-8 rounded-2xl cursor-pointer
+                  block p-8 rounded-2xl cursor-pointer
                   border-2 border-dashed transition-all duration-300
-                  ${isDragging ? 'border-purple-500 bg-purple-500/10' : 'border-zinc-700 hover:border-purple-500/50 hover:bg-white/10'}
+                  ${light ? 'bg-slate-50' : 'glass-card'}
+                  ${isDragging
+                    ? 'border-purple-500 bg-purple-500/10'
+                    : light
+                      ? 'border-slate-300 hover:border-purple-400 hover:bg-purple-50/50'
+                      : 'border-zinc-700 hover:border-purple-500/50 hover:bg-white/10'}
                   ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}
                 `}
               >
@@ -287,27 +312,31 @@ export default function ResumeUploadWithParsing({
                     </div>
                   </motion.div>
                   <div className="text-center">
-                    <p className="text-lg font-semibold text-white mb-1">
+                    <p className={`text-lg font-semibold mb-1 ${light ? 'text-slate-900' : 'text-white'}`}>
                       {isDragging ? 'Drop your resume here' : 'Upload Your Resume'}
                     </p>
-                    <p className="text-sm text-zinc-400">Drag & drop or click to browse</p>
+                    <p className={`text-sm ${light ? 'text-slate-500' : 'text-zinc-400'}`}>Drag & drop or click to browse</p>
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-zinc-500">
+                  <div className={`flex items-center gap-4 text-xs ${light ? 'text-slate-500' : 'text-zinc-500'}`}>
                     <div className="flex items-center gap-1">
                       <FiFile className="w-4 h-4" />
                       <span>PDF, DOC, DOCX, PNG, JPG, WEBP</span>
                     </div>
-                    <div className="w-1 h-1 bg-zinc-600 rounded-full" />
+                    <div className={`w-1 h-1 rounded-full ${light ? 'bg-slate-300' : 'bg-zinc-600'}`} />
                     <span>Max 10MB</span>
                   </div>
                   <motion.div
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.2 }}
-                    className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-full border border-purple-500/30"
+                    className={
+                      light
+                        ? 'inline-flex items-center gap-2 px-4 py-2 bg-purple-50 rounded-full border border-purple-200'
+                        : 'inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600/20 to-blue-600/20 rounded-full border border-purple-500/30'
+                    }
                   >
                     <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                    <span className="text-xs font-medium text-purple-300">AI-Powered Parsing</span>
+                    <span className={`text-xs font-medium ${light ? 'text-purple-700' : 'text-purple-300'}`}>AI-Powered Parsing</span>
                   </motion.div>
                 </div>
               </label>

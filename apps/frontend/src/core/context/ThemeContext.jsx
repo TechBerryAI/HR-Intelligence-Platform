@@ -1,49 +1,34 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-
-const STORAGE_KEY = 'hcip-theme'
-
-/** @typedef {'dark' | 'light'} ThemeMode */
-
-function readStoredTheme() {
-  if (typeof window === 'undefined') return 'dark'
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
-    if (raw === 'light' || raw === 'dark') return raw
-  } catch {
-    /* ignore */
-  }
-  return 'dark'
-}
-
-function applyThemeToDocument(theme) {
-  if (typeof document === 'undefined') return
-  const root = document.documentElement
-  root.setAttribute('data-theme', theme)
-  root.classList.toggle('dark', theme === 'dark')
-  root.classList.toggle('light', theme === 'light')
-}
+import {
+  applyThemeToDocument,
+  oppositeTheme,
+  persistTheme,
+  readStoredTheme,
+  resolveSurfaceTheme,
+  isThemeMode,
+} from '@/core/theme/themeConfig.js'
 
 const ThemeContext = createContext(null)
 
+/**
+ * App-wide theme. Mount once in `main.jsx`.
+ * Consumers: `useTheme()` — do not add parallel theme state.
+ */
 export function ThemeProvider({ children }) {
   const [theme, setThemeState] = useState(() => readStoredTheme())
 
   useEffect(() => {
     applyThemeToDocument(theme)
-    try {
-      window.localStorage.setItem(STORAGE_KEY, theme)
-    } catch {
-      /* ignore */
-    }
+    persistTheme(theme)
   }, [theme])
 
   const setTheme = useCallback((next) => {
-    if (next !== 'dark' && next !== 'light') return
+    if (!isThemeMode(next)) return
     setThemeState(next)
   }, [])
 
   const toggleTheme = useCallback(() => {
-    setThemeState((prev) => (prev === 'dark' ? 'light' : 'dark'))
+    setThemeState((prev) => oppositeTheme(prev))
   }, [])
 
   const value = useMemo(
@@ -52,8 +37,8 @@ export function ThemeProvider({ children }) {
       isDark: theme === 'dark',
       setTheme,
       toggleTheme,
-      /** Component prop for JobCard / FilterBar / Settings */
-      surfaceTheme: theme === 'dark' ? 'enterprise' : 'default',
+      /** JobCard / FilterBar / Settings / match panels */
+      surfaceTheme: resolveSurfaceTheme(theme),
     }),
     [theme, setTheme, toggleTheme],
   )
