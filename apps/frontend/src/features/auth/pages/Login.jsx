@@ -63,7 +63,6 @@ export default function Login() {
       />
 
       <div className="auth-portal-grid relative z-10">
-        {/* Left — story glass (landing-style container, no hard partition) */}
         <aside className="auth-portal-hero">
           <motion.div
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
@@ -71,20 +70,20 @@ export default function Login() {
             transition={{ duration: fromLanding ? 0.7 : 0.5, delay: fromLanding ? 0.12 : 0 }}
             className="auth-story-glass"
           >
-            <p className="relative z-10 flex items-center gap-2.5 text-sm text-white/75 tracking-wide">
+            <p className="relative z-10 flex items-center gap-2.5 text-sm text-[var(--ei-text-secondary)] tracking-wide">
               <span className="inline-block h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]" />
               next generation HR technology
             </p>
-            <h1 className="relative z-10 mt-5 font-display text-[clamp(2rem,3.5vw,2.85rem)] font-semibold leading-[1.08] tracking-[-0.03em] text-white">
+            <h1 className="relative z-10 mt-5 font-display text-[clamp(2rem,3.5vw,2.85rem)] font-semibold leading-[1.08] tracking-[-0.03em] text-[var(--ei-text-primary)]">
               Smarter Hiring.
               <br />
               Better Decisions.
               <br />
-              <span className="text-[#5EC8FF] [text-shadow:0_0_24px_rgba(56,189,248,0.45)]">
+              <span className="text-[#0284c7] dark:text-[#5EC8FF] [text-shadow:none] dark:[text-shadow:0_0_24px_rgba(56,189,248,0.45)]">
                 Powered by AI.
               </span>
             </h1>
-            <p className="relative z-10 mt-5 max-w-[460px] text-base sm:text-lg font-light leading-relaxed text-white/80 landing-hero-glass-body">
+            <p className="relative z-10 mt-5 max-w-[460px] text-base sm:text-lg font-light leading-relaxed text-[var(--ei-text-secondary)]">
               AI-powered recruitment intelligence designed to help modern HR teams hire faster
               and make better decisions.
             </p>
@@ -92,21 +91,20 @@ export default function Login() {
             <ul className="relative z-10 mt-7 space-y-3">
               {HERO_FEATURES.map(({ icon: Icon, label }) => (
                 <li key={label} className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.06]">
-                    <Icon className="h-4 w-4 text-sky-400" aria-hidden="true" />
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]">
+                    <Icon className="h-4 w-4 text-sky-500" aria-hidden="true" />
                   </span>
-                  <span className="text-sm font-medium text-white/85">{label}</span>
+                  <span className="text-sm font-medium text-[var(--ei-text-primary)]">{label}</span>
                 </li>
               ))}
             </ul>
 
-            <p className="relative z-10 mt-8 border-t border-white/[0.08] pt-5 text-xs font-medium tracking-wide text-white/45">
+            <p className="relative z-10 mt-8 border-t border-[var(--ei-border-primary)] pt-5 text-xs font-medium tracking-wide text-[var(--ei-text-muted)]">
               Enterprise-grade HR technology
             </p>
           </motion.div>
         </aside>
 
-        {/* Right — access panel */}
         <div className="auth-portal-panel">
           <motion.div
             initial={{ opacity: 0, y: fromLanding ? 12 : 16 }}
@@ -117,18 +115,18 @@ export default function Login() {
             <div className="mb-5 lg:mb-6">
               <Link
                 to="/"
-                className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-white/55 transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/40 rounded-lg"
+                className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-[var(--ei-text-muted)] transition-colors hover:text-[var(--ei-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/40 rounded-lg"
               >
                 <FiArrowLeft className="h-4 w-4" aria-hidden="true" />
                 Back to home
               </Link>
-              <p className="mb-3 text-[11px] font-semibold tracking-[0.18em] uppercase text-white/45 lg:hidden">
+              <p className="mb-3 text-[11px] font-semibold tracking-[0.18em] uppercase text-[var(--ei-text-muted)] lg:hidden">
                 HR Intelligence
               </p>
-              <h2 className="font-display text-[clamp(1.75rem,3vw,2.15rem)] font-bold tracking-tight text-white">
+              <h2 className="font-display text-[clamp(1.75rem,3vw,2.15rem)] font-bold tracking-tight text-[var(--ei-text-primary)]">
                 Welcome back
               </h2>
-              <p className="mt-1.5 text-[14px] sm:text-[15px] text-white/55">
+              <p className="mt-1.5 text-[14px] sm:text-[15px] text-[var(--ei-text-secondary)]">
                 Sign in to your HR Intelligence account
               </p>
             </div>
@@ -137,13 +135,13 @@ export default function Login() {
               <div
                 className="mb-5 flex h-14 w-14 items-center justify-center rounded-[14px] border border-sky-400/25 bg-gradient-to-br from-sky-500/20 to-blue-600/20 shadow-[0_0_24px_rgba(14,165,233,0.15)]"
               >
-                <FiShield className="h-7 w-7 text-sky-300" aria-hidden="true" />
+                <FiShield className="h-7 w-7 text-sky-500" aria-hidden="true" />
               </div>
 
-              <h3 className="text-[20px] sm:text-[22px] font-semibold tracking-tight text-white">
+              <h3 className="text-[20px] sm:text-[22px] font-semibold tracking-tight text-[var(--ei-text-primary)]">
                 HR / Admin Access
               </h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-white/55">
+              <p className="mt-1.5 text-sm leading-relaxed text-[var(--ei-text-secondary)]">
                 Manage job postings, review candidates and access recruitment insights.
               </p>
 
@@ -151,9 +149,9 @@ export default function Login() {
                 {CARD_FEATURES.map(({ icon: Icon, text }) => (
                   <li
                     key={text}
-                    className="flex items-center gap-2 text-[13px] sm:text-sm text-white/65"
+                    className="flex items-center gap-2 text-[13px] sm:text-sm text-[var(--ei-text-secondary)]"
                   >
-                    <Icon className="h-3.5 w-3.5 shrink-0 text-sky-400" aria-hidden="true" />
+                    <Icon className="h-3.5 w-3.5 shrink-0 text-sky-500" aria-hidden="true" />
                     {text}
                   </li>
                 ))}
@@ -164,7 +162,7 @@ export default function Login() {
                 <FiArrowRight className="h-4 w-4" aria-hidden="true" />
               </Link>
 
-              <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs text-white/40">
+              <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs text-[var(--ei-text-muted)]">
                 <FiShield className="h-3 w-3 shrink-0" aria-hidden="true" />
                 Secure enterprise authentication
               </p>

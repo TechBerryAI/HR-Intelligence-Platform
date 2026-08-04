@@ -28,9 +28,45 @@ from app.domains.recruitment.api.applications import (
     _jd_toon_from_job_row,
     _persist_application_atomic,
 )
+from app.domains.recruitment.services.job_delete import cascade_delete_job
 from app.domains.recruitment.services.ats_service import match_candidate_to_job
+from app.domains.recruitment.services.company_scope import companies_related
 
 jobs_bp = Blueprint('jobs', __name__)
+
+
+def _jobs_for_recruiter_company(user) -> list:
+    """Recruiters see org/company postings, not only rows they personally posted."""
+    uid = get_user_id(user)
+    hr_company = (user.get('company') or '').strip()
+    if not hr_company and uid:
+        row = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (uid,))
+        hr_company = ((row or {}).get('company') or '').strip()
+    jobs = db_all(
+        '''
+        SELECT j.*, hs.company as company_name
+        FROM jobs j
+        LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+        ORDER BY j.posted_on DESC
+        '''
+    )
+    if not hr_company:
+        return [j for j in jobs if j.get('posted_by') == uid]
+    return [
+        j
+        for j in jobs
+        if j.get('posted_by') == uid
+        or companies_related(hr_company, j.get('company'))
+        or companies_related(hr_company, j.get('company_name'))
+    ]
+
+
+def _job_enabled_flag(job: dict) -> bool:
+    """NULL enabled means visible/active (matches public SQL filter)."""
+    val = job.get('enabled')
+    if val is None:
+        return True
+    return bool(val)
 
 
 def _get_job_for_user(job_id, user, require_write=False):
@@ -39,10 +75,28 @@ def _get_job_for_user(job_id, user, require_write=False):
         return None
     posted_by = job.get('posted_by')
     if require_write:
-        if not can_modify_job(user, posted_by):
-            return None
+        if can_modify_job(user, posted_by):
+            return job
+        # Team/company fallback: allow same-org recruiters to manage this posting
+        if get_role(user) == ROLE_RECRUITER and not is_read_only(user):
+            uid = get_user_id(user)
+            row = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (uid,)) if uid else None
+            my_co = (user or {}).get('company') or (row or {}).get('company')
+            owner = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (posted_by,)) if posted_by else None
+            if companies_related(my_co, job.get('company')) or companies_related(
+                my_co, (owner or {}).get('company')
+            ):
+                return job
+        return None
     elif user and get_user_id(user):
         if not can_access_job(user, posted_by):
+            # Same company fallback for read
+            if get_role(user) == ROLE_RECRUITER:
+                uid = get_user_id(user)
+                row = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (uid,)) if uid else None
+                my_co = (user or {}).get('company') or (row or {}).get('company')
+                if companies_related(my_co, job.get('company')):
+                    return job
             return None
     return job
 
@@ -85,7 +139,7 @@ def _serialize_job(job: dict, company_fallback: str = None) -> dict:
         'experience': job.get('experience'),
         'description': job['description'],
         'keywords': job.get('keywords') or '',
-        'enabled': bool(job['enabled']),
+        'enabled': _job_enabled_flag(job),
         'postedOn': job['posted_on'],
         'parsedJdId': job.get('parsed_jd_id'),
     }
@@ -200,54 +254,22 @@ def generate_jdid_from_title(title):
 @jobs_bp.get('/')
 @optional_authenticate_token
 def get_jobs_public():
-    """List jobs. If authenticated as HR, return only jobs posted by that HR. Otherwise return enabled jobs (public)."""
+    """
+    Public job board: always return enabled jobs (NULL enabled = visible).
+    Staff dashboards should use GET /api/jobs/all for org-scoped lists.
+    Auth is optional and does not change this listing.
+    """
     try:
-        user = getattr(request, 'user', None)
-        role = get_role(user) if user else None
-        if user and get_user_id(user) and role in (ROLE_CEO, ROLE_HEAD_HR):
-            jobs = db_all(
-                '''
-                SELECT j.*, hs.company as company_name
-                FROM jobs j
-                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-                ORDER BY j.posted_on DESC
-                '''
-            )
-        elif user and get_user_id(user) and role == ROLE_RECRUITER:
-            # Admin: only jobs posted by this HR
-            jobs = db_all(
-                '''
-                SELECT j.*, hs.company as company_name
-                FROM jobs j
-                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-                WHERE j.posted_by = ?
-                ORDER BY j.posted_on DESC
-                ''',
-                (get_user_id(user),)
-            )
-            # Optionally restrict to jobs whose company matches JWT; if that would hide all, show all (avoid data mismatch hiding jobs)
-            hr_company = (user.get('company') or '').strip()
-            if hr_company:
-                hr_company_lower = hr_company.lower()
-                filtered = [j for j in jobs if (j.get('company') or '').strip().lower() == hr_company_lower]
-                if len(filtered) > 0 or len(jobs) == 0:
-                    jobs = filtered
-                # else: keep full list so HR still sees their jobs
-        else:
-            # Public / candidate: only enabled jobs (treat NULL enabled as visible)
-            jobs = db_all(
-                '''
-                SELECT j.*, hs.company as company_name
-                FROM jobs j
-                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-                WHERE (j.enabled = ''' + TRUE_SQL + ''' OR j.enabled IS NULL)
-                ORDER BY j.posted_on DESC
-                '''
-            )
-        formatted = [
-            _serialize_job(j)
-            for j in jobs
-        ]
+        jobs = db_all(
+            '''
+            SELECT j.*, hs.company as company_name
+            FROM jobs j
+            LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+            WHERE (j.enabled = ''' + TRUE_SQL + ''' OR j.enabled IS NULL)
+            ORDER BY j.posted_on DESC
+            '''
+        )
+        formatted = [_serialize_job(j) for j in jobs]
         return jsonify(formatted)
     except Exception:
         return jsonify({'error': 'Internal server error'}), 500
@@ -257,6 +279,7 @@ def get_jobs_public():
 @authenticate_token
 @require_recruiter
 def get_jobs_all():
+    """Staff job list: CEO/Head HR see all; recruiters see company postings."""
     try:
         user = request.user
         role = get_role(user)
@@ -270,19 +293,8 @@ def get_jobs_all():
                 '''
             )
         else:
-            jobs = db_all(
-                '''
-                SELECT j.*, hs.company as company_name
-                FROM jobs j
-                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-                WHERE j.posted_by = ?
-                ORDER BY j.posted_on DESC
-                ''', (get_user_id(user),)
-            )
-        formatted = [
-            _serialize_job(j)
-            for j in jobs
-        ]
+            jobs = _jobs_for_recruiter_company(user)
+        formatted = [_serialize_job(j) for j in jobs]
         return jsonify(formatted)
     except Exception:
         return jsonify({'error': 'Internal server error'}), 500
@@ -897,7 +909,7 @@ def toggle_job(job_id: str):
         enabled = bool(data.get('enabled'))
         job = _get_job_for_user(job_id, request.user, require_write=True)
         if not job:
-            return jsonify({'error': 'Job not found or access denied'}), 404
+            return jsonify({'error': 'Job not found or you do not have permission to update this job'}), 403
         _enabled = (True, False) if BACKEND == 'postgresql' else (1, 0)
         db_run('UPDATE jobs SET enabled = ? WHERE jdid = ?', (_enabled[0] if enabled else _enabled[1], job_id))
         return jsonify({'message': 'Job status updated', 'enabled': enabled})
@@ -912,10 +924,12 @@ def delete_job(job_id: str):
     try:
         job = _get_job_for_user(job_id, request.user, require_write=True)
         if not job:
-            return jsonify({'error': 'Job not found or access denied'}), 404
-        db_run('DELETE FROM jobs WHERE jdid = ?', (job_id,))
+            return jsonify({'error': 'Job not found or you do not have permission to delete this job'}), 403
+        # Cascade applications/matches first — FK is NO ACTION on jobs
+        cascade_delete_job(job_id)
         return jsonify({'message': 'Job deleted successfully'})
-    except Exception:
+    except Exception as e:
+        print(f'[JOBS] Error deleting job {job_id}: {e}')
         return jsonify({'error': 'Internal server error'}), 500
 
 

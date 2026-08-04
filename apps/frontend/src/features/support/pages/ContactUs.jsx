@@ -130,7 +130,7 @@ export default function ContactUs() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-4rem)] py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <motion.div
@@ -150,10 +150,10 @@ export default function ContactUs() {
             </div>
           </motion.div>
           
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-zinc-300 bg-clip-text text-transparent mb-3">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-[var(--ei-text-primary)] to-[var(--ei-text-secondary)] bg-clip-text text-transparent mb-3">
             Contact Us
           </h1>
-          <p className="text-zinc-400 text-lg">
+          <p className="text-[var(--ei-text-muted)] text-lg">
             We're here to help! Tell us about any issues or questions you have.
           </p>
         </motion.div>
@@ -163,7 +163,7 @@ export default function ContactUs() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="glass-card rounded-2xl p-8 border border-white/10"
+          className="org-glass-card hover:transform-none rounded-2xl p-8"
         >
           <AnimatePresence mode="wait">
             {submitted ? (
@@ -185,18 +185,18 @@ export default function ContactUs() {
                   </div>
                 </motion.div>
                 
-                <h2 className="text-2xl font-bold text-white mb-3">
+                <h2 className="text-2xl font-bold text-[var(--ei-text-primary)] mb-3">
                   Request Submitted Successfully!
                 </h2>
-                <p className="text-zinc-400 mb-2">
+                <p className="text-[var(--ei-text-muted)] mb-2">
                   Thank you for contacting us. We've received your support request.
                 </p>
                 {requestId && (
-                  <p className="text-sm text-zinc-500">
+                  <p className="text-sm text-[var(--ei-text-muted)]">
                     Request ID: <span className="text-purple-400 font-mono">#{requestId}</span>
                   </p>
                 )}
-                <p className="text-zinc-400 mt-4">
+                <p className="text-[var(--ei-text-muted)] mt-4">
                   We'll get back to you as soon as possible at{' '}
                   <span className="text-purple-400">{form.email}</span>
                 </p>
@@ -316,28 +316,28 @@ export default function ContactUs() {
             transition={{ duration: 0.5, delay: 0.4 }}
             className="mt-8 grid md:grid-cols-3 gap-4"
           >
-            <div className="glass-card p-4 rounded-xl border border-white/10 text-center">
+            <div className="glass-card p-4 rounded-xl border border-[var(--ei-border-primary)] text-center">
               <div className="flex justify-center mb-2">
                 <FiZap className="w-8 h-8 text-amber-400" aria-hidden />
               </div>
-              <h3 className="text-sm font-semibold text-white mb-1">Quick Response</h3>
-              <p className="text-xs text-zinc-400">We typically respond within 24 hours</p>
+              <h3 className="text-sm font-semibold text-[var(--ei-text-primary)] mb-1">Quick Response</h3>
+              <p className="text-xs text-[var(--ei-text-muted)]">We typically respond within 24 hours</p>
             </div>
             
-            <div className="glass-card p-4 rounded-xl border border-white/10 text-center">
+            <div className="glass-card p-4 rounded-xl border border-[var(--ei-border-primary)] text-center">
               <div className="flex justify-center mb-2">
                 <FiLock className="w-8 h-8 text-amber-400" aria-hidden />
               </div>
-              <h3 className="text-sm font-semibold text-white mb-1">Privacy First</h3>
-              <p className="text-xs text-zinc-400">Your information is kept secure</p>
+              <h3 className="text-sm font-semibold text-[var(--ei-text-primary)] mb-1">Privacy First</h3>
+              <p className="text-xs text-[var(--ei-text-muted)]">Your information is kept secure</p>
             </div>
             
-            <div className="glass-card p-4 rounded-xl border border-white/10 text-center">
+            <div className="glass-card p-4 rounded-xl border border-[var(--ei-border-primary)] text-center">
               <div className="flex justify-center mb-2">
                 <FiMessageCircle className="w-8 h-8 text-purple-400" aria-hidden />
               </div>
-              <h3 className="text-sm font-semibold text-white mb-1">Friendly Support</h3>
-              <p className="text-xs text-zinc-400">We're here to help you succeed</p>
+              <h3 className="text-sm font-semibold text-[var(--ei-text-primary)] mb-1">Friendly Support</h3>
+              <p className="text-xs text-[var(--ei-text-muted)]">We're here to help you succeed</p>
             </div>
           </motion.div>
         )}

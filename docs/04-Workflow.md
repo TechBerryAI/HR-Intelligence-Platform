@@ -90,7 +90,7 @@ flowchart TB
 
 ### Purpose
 
-Enable a candidate to discover a role and submit a complete, AI-assisted application without creating a staff account. Landing **Get Started** opens `/jobs` (not login).
+Enable a candidate to discover a role and submit a complete, AI-assisted application without creating a staff account. Landing **Get Started** opens `/jobs` (not login). Public `/jobs` always lists **enabled** openings (even if a recruiter is logged in). Staff dashboards use `/api/jobs/all` for **company/org** postings.
 
 ---
 
@@ -187,15 +187,17 @@ Allow recruiters to publish jobs, attract applicants, and act on match intellige
 
 ### Business rules
 
-1. Recruiter write scope is primarily own jobs.
-2. CEO is read-only; Head HR may act more broadly.
-3. Bulk parse available for high-volume ingest.
+1. Recruiters see **company/org** job postings (not only jobs they personally created).
+2. Recruiters on the same company/team can **enable/disable**, **edit**, and **delete** those org jobs (same operational controls as Head HR for company postings).
+3. **Enable/disable** and **delete** update the public portal (`/jobs`): disabled jobs disappear from the board; deleted jobs are removed from the dashboard and portal (cascade removes applications/matches for that job).
+4. CEO is read-only; Head HR may act across the org.
+5. Bulk parse available for high-volume ingest.
 
 ---
 
 ### Current implementation
 
-`/dashboard`, `/candidates`, `/admin/bulk-resume-parser`, `/api/jobs/*`, parse JD endpoints.
+`/dashboard`, `/candidates`, `/admin/bulk-resume-parser`, `/admin/feedback`, `/api/jobs/*`, parse JD endpoints. Staff UI uses the shared `org-shell` theme (Dark/Light toggle in the navbar; preference stored as `hcip-theme`).
 
 ---
 

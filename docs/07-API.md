@@ -138,13 +138,13 @@ Prefix: `/api/jobs` (`jobs_bp`) — JWT + RBAC
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/jobs/` | List (scoped) |
-| GET | `/api/jobs/all` | Broader list (as authorized) |
+| GET | `/api/jobs/` | Public board: all **enabled** jobs (auth ignored for listing) |
+| GET | `/api/jobs/all` | Staff list: CEO/Head HR all jobs; recruiters **company** postings |
 | GET | `/api/jobs/<job_id>` | Detail |
 | POST | `/api/jobs/` | Create job |
 | PUT | `/api/jobs/<job_id>` | Update job |
-| PATCH | `/api/jobs/<job_id>/enabled` | Enable / disable |
-| DELETE | `/api/jobs/<job_id>` | Delete |
+| PATCH | `/api/jobs/<job_id>/enabled` | Enable / disable (disabled jobs leave public `GET /api/jobs`) |
+| DELETE | `/api/jobs/<job_id>` | Delete job and cascade applications/matches for that job |
 | GET | `/api/jobs/<job_id>/applications` | Applicants for job |
 | GET | `/api/jobs/<job_id>/applications/<candidate_id>/resume` | Resume download/view |
 | POST | `/api/jobs/<job_id>/applications/<candidate_id>/viewed` | Mark viewed |

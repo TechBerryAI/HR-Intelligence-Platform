@@ -87,7 +87,8 @@ _Auto-generated on 2026-08-03 by `scripts/sync_docs_from_code.py`. Do not hand-e
 Includes (among others): experience level, serving notice, notice period, last working day, contact/location fields used by public apply.
 
 ### Jobs
-`jdid` (PK), title, company, location, description, poster/owner fields, `enabled` (public apply requires enabled job).
+`jdid` (PK), title, company, location, description, poster/owner fields, `enabled` (public apply requires enabled job).  
+**Delete:** API cascade clears `matches` and `applications` for the job, then deletes the job (`parsed_jds.job_id` SET NULL; `saved_jobs` CASCADE). DB FKs on applications/matches are currently NO ACTION.
 
 ### Applications
 Links `candidate_id` + `job_id`; status; `match_score`; shortlist / ATS fields; `latest_match_id`.  

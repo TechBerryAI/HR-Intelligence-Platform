@@ -203,8 +203,8 @@ export default function HRMSTestingFeedback() {
                     <FiCheckCircle className="w-10 h-10 text-emerald-500" />
                   </div>
                 </motion.div>
-                <h2 className="text-xl font-bold text-white mb-2">Thank you</h2>
-                <p className="text-zinc-400 text-sm sm:text-base">
+                <h2 className="text-xl font-bold text-[var(--ei-text-primary)] mb-2">Thank you</h2>
+                <p className="text-[var(--ei-text-muted)] text-sm sm:text-base">
                   Your feedback has been recorded and will help improve HRMS.
                 </p>
               </motion.div>
@@ -300,18 +300,18 @@ export default function HRMSTestingFeedback() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-zinc-300 mb-1.5">
-                    <FiImage className="inline w-4 h-4 mr-1.5 text-zinc-400" />
+                  <label className="block text-sm font-medium text-[var(--ei-text-secondary)] mb-1.5">
+                    <FiImage className="inline w-4 h-4 mr-1.5 text-[var(--ei-text-muted)]" />
                     Screenshot (optional)
                   </label>
                   <input
                     type="file"
                     accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp"
                     onChange={onScreenshotChange}
-                    className="block w-full text-sm text-zinc-400 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-white/10 file:text-zinc-200 file:cursor-pointer hover:file:bg-white/15"
+                    className="block w-full text-sm text-[var(--ei-text-muted)] file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-[var(--ei-surface-hover)] file:text-[var(--ei-text-primary)] file:cursor-pointer hover:file:bg-[var(--ei-surface-hover)]"
                   />
                   {screenshotFile && (
-                    <p className="mt-1 text-xs text-zinc-500">{screenshotFile.name}</p>
+                    <p className="mt-1 text-xs text-[var(--ei-text-muted)]">{screenshotFile.name}</p>
                   )}
                   {screenshotError && (
                     <p className="mt-1 text-xs text-red-400">{screenshotError}</p>

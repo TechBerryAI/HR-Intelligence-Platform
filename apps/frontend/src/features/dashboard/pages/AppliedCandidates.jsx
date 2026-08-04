@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useApp } from '@/core/context/AppContext.jsx'
+import { useTheme } from '@/core/context/ThemeContext.jsx'
 import CandidateCard from '@/shared/components/CandidateCard.jsx'
 import { MatchHeader, ScoreCard, ChipGroup, CollapsibleSection } from '@/features/analytics/components/MatchExplanation'
 import { BASE_URL, apiRequest } from '@/core/api/api.js'
@@ -51,6 +52,8 @@ const SCORE_FILTERS = [
 
 export default function AppliedCandidates() {
   const { jobs, fetchApplicationsForJob, auth } = useApp()
+  const { surfaceTheme, isDark } = useTheme()
+  const matchVariant = isDark ? 'enterprise' : 'default'
   const [selectedJobId, setSelectedJobId] = useState(null)
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(false)
@@ -305,7 +308,7 @@ export default function AppliedCandidates() {
     return (
       <section className="py-10">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="text-center text-zinc-400">
+          <div className="text-center text-[var(--ei-text-muted)]">
             <p>You must be logged in as HR to view this page.</p>
           </div>
         </div>
@@ -313,43 +316,54 @@ export default function AppliedCandidates() {
     )
   }
 
+  const panelClass = 'org-glass-card hover:transform-none p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'
+  const selectWrapClass = isDark
+    ? 'relative rounded-xl bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] shadow-[0_12px_30px_rgba(0,0,0,0.35)]'
+    : 'relative rounded-xl bg-white border border-slate-200 shadow-sm'
+  const selectClass = isDark
+    ? 'w-full appearance-none bg-transparent text-sm font-semibold tracking-wide text-[var(--ei-text-primary)] px-4 py-3 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400/50'
+    : 'w-full appearance-none bg-transparent text-sm font-semibold tracking-wide text-slate-900 px-4 py-3 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-400/40'
+
   return (
-    <section className="py-8 min-h-screen">
+    <section className="py-8 min-h-[calc(100vh-4rem)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Applied Candidates</h1>
-          <p className="mt-2 text-zinc-400">Review and manage candidate applications by job posting</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ei-text-muted)]">
+            Recruiter workspace
+          </p>
+          <h1 className="mt-1 text-3xl font-bold text-[var(--ei-text-primary)] tracking-tight">Applied Candidates</h1>
+          <p className="mt-2 text-[var(--ei-text-secondary)]">Review and manage candidate applications by job posting</p>
         </div>
 
         {jobsWithApplications.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-zinc-800 mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-zinc-500">
+          <div className="text-center py-12 org-glass-card hover:transform-none">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[var(--ei-surface-hover)] mb-4">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-[var(--ei-text-muted)]">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 0 0 .75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 0 0-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0 1 12 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 0 1-.673-.38m0 0A2.18 2.18 0 0 1 3 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 0 1 3.413-.387m7.5 0V5.25A2.25 2.25 0 0 0 13.5 3h-3a2.25 2.25 0 0 0-2.25 2.25v.894m7.5 0a48.667 48.667 0 0 0-7.5 0" />
               </svg>
             </div>
-            <h3 className="text-lg font-medium text-white">No Job Postings</h3>
-            <p className="mt-1 text-sm text-zinc-400">Create job postings to start receiving applications</p>
+            <h3 className="text-lg font-medium text-[var(--ei-text-primary)]">No Job Postings</h3>
+            <p className="mt-1 text-sm text-[var(--ei-text-muted)]">Create job postings to start receiving applications</p>
           </div>
         ) : (
           <>
             {/* Job Dropdown */}
             <div className="mb-6">
-              <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className={panelClass}>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs uppercase tracking-[0.2em] text-zinc-500 font-semibold">Job Description</p>
-                  <h2 className="text-lg font-semibold text-white mt-1">Select a job to view applicants</h2>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--ei-text-muted)] font-semibold">Job Description</p>
+                  <h2 className="text-lg font-semibold text-[var(--ei-text-primary)] mt-1">Select a job to view applicants</h2>
                 </div>
                 <div className="w-full sm:min-w-[20rem] sm:w-96 flex-shrink-0">
-                  <div className="relative rounded-xl bg-gradient-to-r from-zinc-900 via-zinc-800 to-zinc-900 border border-white/10 shadow-[0_12px_30px_rgba(0,0,0,0.45)]">
+                  <div className={selectWrapClass}>
                     <select
                       value={selectedJobId || ''}
                       onChange={(e) => setSelectedJobId(e.target.value)}
                       title={jobsWithApplications.find(j => j.id === selectedJobId)
                         ? `JD #${selectedJobId} • ${jobsWithApplications.find(j => j.id === selectedJobId)?.title ?? ''}`
                         : 'Select a job'}
-                      className="w-full appearance-none bg-transparent text-sm font-semibold tracking-wide text-white px-4 py-3 pr-10 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
+                      className={selectClass}
                     >
                       {jobsWithApplications.map(job => (
                         <option
@@ -362,7 +376,7 @@ export default function AppliedCandidates() {
                         </option>
                       ))}
                     </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 pr-4 flex items-center text-zinc-400">
+                    <div className="pointer-events-none absolute inset-y-0 right-0 pr-4 flex items-center text-[var(--ei-text-muted)]">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 011.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
                       </svg>
@@ -374,16 +388,16 @@ export default function AppliedCandidates() {
 
             {/* Score Filter Dropdown */}
             <div className="mb-6">
-              <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className={panelClass}>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-zinc-400">Filter by Match Score</span>
+                  <span className="text-sm font-medium text-[var(--ei-text-secondary)]">Filter by Match Score</span>
                 </div>
                 <div className="w-full sm:w-64">
-                  <div className="relative rounded-xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-white/10 shadow-[0_12px_30px_rgba(0,0,0,0.45)]">
+                  <div className={selectWrapClass}>
                     <select
                       value={selectedFilter}
                       onChange={(e) => setSelectedFilter(e.target.value)}
-                      className="w-full appearance-none bg-transparent text-sm font-semibold tracking-wide text-white px-4 py-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400"
+                      className={selectClass}
                     >
                       {SCORE_FILTERS.map(filter => {
                         const count = applications.filter(app => {
@@ -406,7 +420,7 @@ export default function AppliedCandidates() {
                         )
                       })}
                     </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 pr-4 flex items-center text-zinc-400">
+                    <div className="pointer-events-none absolute inset-y-0 right-0 pr-4 flex items-center text-[var(--ei-text-muted)]">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 011.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
                       </svg>
@@ -419,14 +433,14 @@ export default function AppliedCandidates() {
             {/* Loading State */}
             {loading && (
               <div className="text-center py-12">
-                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-                <p className="mt-4 text-zinc-400">Loading candidates...</p>
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--ei-accent-blue)]"></div>
+                <p className="mt-4 text-[var(--ei-text-muted)]">Loading candidates...</p>
               </div>
             )}
 
             {/* Error State */}
             {error && !loading && (
-              <div className="rounded-lg border border-red-600/40 bg-red-950/50 text-red-200 px-4 py-3">
+              <div className="rounded-lg border border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-200 px-4 py-3">
                 {error}
               </div>
             )}
@@ -435,14 +449,14 @@ export default function AppliedCandidates() {
             {!loading && !error && (
               <div>
                 {filteredCandidates.length === 0 ? (
-                  <div className="text-center py-12 bg-zinc-900/30 rounded-xl ring-1 ring-zinc-800">
-                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-zinc-800 mb-4">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-zinc-500">
+                  <div className="text-center py-12 org-glass-card hover:transform-none">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[var(--ei-surface-hover)] mb-4">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8 text-[var(--ei-text-muted)]">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
                       </svg>
                     </div>
-                    <h3 className="text-lg font-medium text-white">No Candidates Found</h3>
-                    <p className="mt-1 text-sm text-zinc-400">
+                    <h3 className="text-lg font-medium text-[var(--ei-text-primary)]">No Candidates Found</h3>
+                    <p className="mt-1 text-sm text-[var(--ei-text-muted)]">
                       {selectedFilter === 'all' 
                         ? 'No applications received for this job yet' 
                         : 'No candidates match the selected score range'}
@@ -451,19 +465,23 @@ export default function AppliedCandidates() {
                 ) : (
                   <>
                     <div className="mb-4 flex items-center justify-between">
-                      <p className="text-sm text-zinc-400">
-                        Showing <span className="font-semibold text-white">{filteredCandidates.length}</span> candidate{filteredCandidates.length !== 1 ? 's' : ''}
+                      <p className="text-sm text-[var(--ei-text-muted)]">
+                        Showing <span className="font-semibold text-[var(--ei-text-primary)]">{filteredCandidates.length}</span> candidate{filteredCandidates.length !== 1 ? 's' : ''}
                       </p>
                       {/* View Mode Toggle Slider */}
                       <div className="flex items-center gap-3">
                       <div className="relative">
                           <button
                             onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-                          className="relative w-32 h-11 rounded-full bg-zinc-800/90 border border-zinc-700/50 shadow-[inset_0_2px_4px_rgba(0,0,0,0.3)] transition-all duration-300 hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-white/20"
+                          className={`relative w-32 h-11 rounded-full border transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-sky-400/30 ${
+                            isDark
+                              ? 'bg-zinc-800/90 border-zinc-700/50 hover:border-zinc-600 shadow-[inset_0_2px_4px_rgba(0,0,0,0.3)]'
+                              : 'bg-slate-100 border-slate-200 hover:border-slate-300'
+                          }`}
                             aria-label={`Switch to ${viewMode === 'grid' ? 'List' : 'Grid'} view`}
                           >
                             {/* Background with subtle texture */}
-                            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-zinc-800 via-zinc-800 to-zinc-900"></div>
+                            <div className={`absolute inset-0 rounded-full ${isDark ? 'bg-gradient-to-br from-zinc-800 via-zinc-800 to-zinc-900' : 'bg-slate-100'}`}></div>
                             
                             {/* Slider Handle - Modern neumorphic style */}
                             <div
@@ -527,32 +545,32 @@ export default function AppliedCandidates() {
                         ))}
                       </div>
                     ) : (
-                      <div className="bg-zinc-900/50 rounded-xl ring-1 ring-zinc-800 overflow-hidden">
+                      <div className="org-glass-card hover:transform-none overflow-hidden">
                         <div className="overflow-x-auto">
                           <table className="w-full">
-                            <thead className="bg-zinc-800/50 border-b border-zinc-700">
+                            <thead className="bg-[var(--ei-surface-hover)] border-b border-[var(--ei-border-primary)]">
                               <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Sr.no</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Candidate Name</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Match Score</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-zinc-400 uppercase tracking-wider">Action</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-[var(--ei-text-muted)] uppercase tracking-wider">Sr.no</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-[var(--ei-text-muted)] uppercase tracking-wider">Candidate Name</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-[var(--ei-text-muted)] uppercase tracking-wider">Match Score</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-[var(--ei-text-muted)] uppercase tracking-wider">Status</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-[var(--ei-text-muted)] uppercase tracking-wider">Action</th>
                               </tr>
                             </thead>
-                            <tbody className="divide-y divide-zinc-800">
+                            <tbody className="divide-y divide-[var(--ei-border-primary)]">
                               {filteredCandidates.map((candidate, index) => {
                                 const score = Math.round(Number(candidate.matchScore || candidate.score || 0))
                                 const scoreInfo = getScoreInfo(score)
                                 
                                 return (
-                                  <tr key={candidate.id || index} className="hover:bg-zinc-800/30 transition-colors">
+                                  <tr key={candidate.id || index} className="hover:bg-[var(--ei-surface-hover)] transition-colors">
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                      <span className="text-sm font-medium text-zinc-300">{index + 1}</span>
+                                      <span className="text-sm font-medium text-[var(--ei-text-secondary)]">{index + 1}</span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                       <div className="flex items-center gap-3">
                                         <div
-                                          className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm ring-2 ring-zinc-700"
+                                          className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm ring-2 ring-[var(--ei-border-primary)]"
                                           style={{
                                             backgroundImage: getAvatarGradient(
                                               candidate.email || candidate.fullName || String(index)
@@ -562,10 +580,10 @@ export default function AppliedCandidates() {
                                           {(candidate.fullName || candidate.name || 'C').charAt(0).toUpperCase()}
                                         </div>
                                         <div>
-                                          <div className="text-sm font-medium text-white">
+                                          <div className="text-sm font-medium text-[var(--ei-text-primary)]">
                                             {candidate.fullName || candidate.name || 'Unknown Candidate'}
                                           </div>
-                                          <div className="text-xs text-zinc-400">{candidate.email || 'N/A'}</div>
+                                          <div className="text-xs text-[var(--ei-text-muted)]">{candidate.email || 'N/A'}</div>
                                         </div>
                                       </div>
                                     </td>
@@ -685,7 +703,7 @@ export default function AppliedCandidates() {
               {/* Match Score Badge */}
               <div className="flex items-center gap-4 pb-4 border-b border-zinc-800">
                 {profileLoading && (
-                  <span className="text-xs text-zinc-400 animate-pulse">
+                  <span className="text-xs text-[var(--ei-text-muted)] animate-pulse">
                     Syncing latest profile…
                   </span>
                 )}
@@ -810,7 +828,7 @@ export default function AppliedCandidates() {
                           <div className="flex-1">
                             <div className="font-semibold text-white text-base mb-1">{edu.degree || 'N/A'}</div>
                             <div className="text-zinc-300 text-sm mb-2">{edu.institution || 'N/A'}</div>
-                            <div className="flex items-center gap-4 text-xs text-zinc-400">
+                            <div className="flex items-center gap-4 text-xs text-[var(--ei-text-muted)]">
                               {edu.cgpa && (
                                 <span className="flex items-center gap-1">
                                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3">
@@ -853,7 +871,7 @@ export default function AppliedCandidates() {
                           <div className="flex-1">
                             <div className="font-semibold text-white text-base mb-1">{exp.role || 'N/A'}</div>
                             <div className="text-zinc-300 text-sm mb-2">{exp.company || 'N/A'}</div>
-                            <div className="flex items-center gap-1 text-xs text-zinc-400">
+                            <div className="flex items-center gap-1 text-xs text-[var(--ei-text-muted)]">
                               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3">
                                 <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3a.75.75 0 0 1 1.5 0v1.5h1.5a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6.75V3Zm-1.5 4.5v-.75a1.5 1.5 0 0 1 1.5-1.5h13.5a1.5 1.5 0 0 1 1.5 1.5v.75h-16.5Zm16.5 0H4.5v8.25a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5V6.75Z" clipRule="evenodd" />
                               </svg>
@@ -885,7 +903,7 @@ export default function AppliedCandidates() {
                             <div className="font-semibold text-white text-base mb-1">{cert.certification || 'N/A'}</div>
                             <div className="text-zinc-300 text-sm mb-2">{cert.issuer || 'N/A'}</div>
                             {cert.endMonth && (
-                              <div className="flex items-center gap-1 text-xs text-zinc-400">
+                              <div className="flex items-center gap-1 text-xs text-[var(--ei-text-muted)]">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-3 h-3">
                                   <path fillRule="evenodd" d="M6.75 2.25A.75.75 0 0 1 7.5 3v1.5h9V3a.75.75 0 0 1 1.5 0v1.5h1.5a3 3 0 0 1 3 3v11.25a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3V7.5a3 3 0 0 1 3-3H6.75V3Zm-1.5 4.5v-.75a1.5 1.5 0 0 1 1.5-1.5h13.5a1.5 1.5 0 0 1 1.5 1.5v.75h-16.5Zm16.5 0H4.5v8.25a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5V6.75Z" clipRule="evenodd" />
                                 </svg>
@@ -981,6 +999,7 @@ export default function AppliedCandidates() {
         const experienceAssessment = evalReport?.experience_assessment ?? {}
         const educationAssessment = evalReport?.education_certification_assessment
         const finalReasoning = (jsonOut?.final_reasoning || jsonOut?.rationale || reasonCandidate?.atsReasoning || '').trim() || 'No detailed reasoning available.'
+        const isNotMatch = Boolean(verdict && /not a match|ats failed/i.test(verdict))
 
         // Score factors: name, breakdown key, weight % (matches backend)
         const SCORE_FACTORS = [
@@ -992,7 +1011,6 @@ export default function AppliedCandidates() {
 
         // One-line precise verdict reason (no repetition of full reasoning)
         const getVerdictReason = () => {
-          const isNotMatch = verdict && /not a match/i.test(verdict)
           if (mandatoryPct != null && Number(mandatoryPct) < 60 && (skillsAnalysis.missing_mandatory_skills?.length > 0 || breakdown.skills === 0)) {
             return `Mandatory skills match is ${Number(mandatoryPct)}% (below 60% threshold). Candidate does not meet required technical skills.`
           }
@@ -1030,28 +1048,47 @@ export default function AppliedCandidates() {
         const gapChips = toChips(rawGaps)
 
         return (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={closeReasonModal}>
-            <div className="bg-zinc-900 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto ring-1 ring-zinc-700 shadow-2xl" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="match-modal-title">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={closeReasonModal}>
+            <div
+              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[20px] border border-white/[0.08] bg-[rgba(16,23,30,0.96)] shadow-[0_24px_64px_rgba(0,0,0,0.45)]"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-labelledby="match-modal-title"
+            >
               <MatchHeader
+                variant={matchVariant}
                 score={score}
                 candidateName={reasonCandidate.fullName || reasonCandidate.name || 'Candidate'}
                 candidateEmail={reasonCandidate.email || ''}
                 verdict={verdict}
                 onClose={closeReasonModal}
               />
-              <div className="p-6 space-y-6">
-                {/* One-line verdict reason – precise, no repetition */}
-                <div className="rounded-xl bg-zinc-800/50 ring-1 ring-zinc-700/50 px-4 py-3">
-                  <p className="text-sm font-medium text-zinc-300 leading-snug">
-                    <span className="text-zinc-500 font-semibold uppercase tracking-wider text-xs">Why this verdict</span>
-                    <span className="block mt-1.5 text-white">{getVerdictReason()}</span>
+              <div className="p-5 sm:p-6 space-y-6">
+                {/* One-line verdict reason */}
+                <div
+                  className={`rounded-[14px] px-4 py-3.5 border-l-[3px] ${
+                    isNotMatch
+                      ? 'bg-[rgba(255,82,105,0.035)] border border-[rgba(255,82,105,0.12)] border-l-[rgba(255,82,105,0.65)]'
+                      : 'bg-[rgba(55,214,160,0.04)] border border-[rgba(55,214,160,0.12)] border-l-[rgba(55,214,160,0.55)]'
+                  }`}
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#83909C]">
+                    Why this verdict
+                  </p>
+                  <p className="mt-1.5 text-sm font-medium text-[#F2F5F8] leading-relaxed">
+                    {getVerdictReason()}
                   </p>
                 </div>
 
-                {/* Score breakdown – metric cards with progress bars */}
+                {/* Score breakdown */}
                 {(breakdown.skills != null || breakdown.experience != null || breakdown.education != null || breakdown.location != null) && (
                   <div>
-                    <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Score breakdown</h3>
+                    <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-1">
+                      Score breakdown
+                    </h3>
+                    <p className="text-xs text-[#738394] mb-3">
+                      How this candidate scored across the evaluation criteria
+                    </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {SCORE_FACTORS.map(({ name, key, weight }) => {
                         const value = breakdown[key]
@@ -1059,9 +1096,11 @@ export default function AppliedCandidates() {
                         return (
                           <ScoreCard
                             key={key}
+                            variant={matchVariant}
                             factorName={name}
                             scorePct={value}
                             weightPct={weight}
+                            badge={key === 'skills' ? 'Mandatory' : undefined}
                           />
                         )
                       })}
@@ -1069,19 +1108,28 @@ export default function AppliedCandidates() {
                   </div>
                 )}
 
-                {/* Strengths – green chips */}
-                <ChipGroup title="Strengths" items={strengthChips} variant="strength" id="strengths-label" />
+                <ChipGroup
+                  theme={surfaceTheme}
+                  title="Strengths"
+                  items={strengthChips}
+                  variant="strength"
+                  id="strengths-label"
+                />
 
-                {/* Gaps – red chips */}
-                <ChipGroup title="Gaps" items={gapChips} variant="gap" id="gaps-label" />
+                <ChipGroup
+                  theme={surfaceTheme}
+                  title="Gaps"
+                  items={gapChips}
+                  variant="gap"
+                  id="gaps-label"
+                />
 
-                {/* Detailed analysis – structured, no repetition */}
-                <CollapsibleSection label="Detailed Analysis">
+                <CollapsibleSection label="Detailed Analysis" variant={matchVariant}>
                   <div className="space-y-4 text-sm">
                     {decisionBullets.length > 0 && (
                       <div>
-                        <p className="text-zinc-500 font-semibold uppercase tracking-wider text-xs mb-2">Decision logic</p>
-                        <ul className="list-disc list-inside space-y-1 text-zinc-300">
+                        <p className="text-[#83909C] font-semibold uppercase tracking-[0.08em] text-[11px] mb-2">Decision logic</p>
+                        <ul className="list-disc list-inside space-y-1 text-[#C5CED8]">
                           {decisionBullets.map((bullet, i) => (
                             <li key={i} className="leading-relaxed">{bullet}</li>
                           ))}
@@ -1089,27 +1137,27 @@ export default function AppliedCandidates() {
                       </div>
                     )}
                     {(experienceAssessment.relevant_experience_summary || experienceAssessment.gaps_vs_role_expectations) && (
-                      <div className="pt-3 border-t border-zinc-600/50">
-                        <p className="text-zinc-500 font-semibold uppercase tracking-wider text-xs mb-2">Experience</p>
-                        <div className="space-y-1.5 text-zinc-300">
+                      <div className="pt-3 border-t border-white/[0.08]">
+                        <p className="text-[#83909C] font-semibold uppercase tracking-[0.08em] text-[11px] mb-2">Experience</p>
+                        <div className="space-y-1.5 text-[#C5CED8]">
                           {experienceAssessment.relevant_experience_summary && (
-                            <p><span className="text-zinc-400">Relevant:</span> {experienceAssessment.relevant_experience_summary}</p>
+                            <p><span className="text-[#8796A5]">Relevant:</span> {experienceAssessment.relevant_experience_summary}</p>
                           )}
                           {experienceAssessment.gaps_vs_role_expectations && (
-                            <p><span className="text-zinc-400">Gaps:</span> {experienceAssessment.gaps_vs_role_expectations}</p>
+                            <p><span className="text-[#8796A5]">Gaps:</span> {experienceAssessment.gaps_vs_role_expectations}</p>
                           )}
                         </div>
                       </div>
                     )}
                     {educationAssessment != null && String(educationAssessment).trim() !== '' && (
-                      <div className="pt-3 border-t border-zinc-600/50">
-                        <p className="text-zinc-500 font-semibold uppercase tracking-wider text-xs mb-2">Education & certifications</p>
-                        <p className="text-zinc-300 leading-relaxed">{educationAssessment}</p>
+                      <div className="pt-3 border-t border-white/[0.08]">
+                        <p className="text-[#83909C] font-semibold uppercase tracking-[0.08em] text-[11px] mb-2">Education & certifications</p>
+                        <p className="text-[#C5CED8] leading-relaxed">{educationAssessment}</p>
                       </div>
                     )}
-                    <div className="pt-3 border-t border-zinc-600/50">
-                      <p className="text-zinc-500 font-semibold uppercase tracking-wider text-xs mb-2">Full reasoning</p>
-                      <p className="text-zinc-300 leading-relaxed whitespace-pre-wrap">{finalReasoning}</p>
+                    <div className="pt-3 border-t border-white/[0.08]">
+                      <p className="text-[#83909C] font-semibold uppercase tracking-[0.08em] text-[11px] mb-2">Full reasoning</p>
+                      <p className="text-[#C5CED8] leading-relaxed whitespace-pre-wrap">{finalReasoning}</p>
                     </div>
                   </div>
                 </CollapsibleSection>

@@ -138,49 +138,49 @@ export default function HeadHrAdmins() {
       {/* Create admin modal */}
       {showCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className="w-full max-w-md rounded-2xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl">
-            <h3 className="text-lg font-semibold text-white">Create Admin Account</h3>
-            <p className="mt-1 text-sm text-zinc-400">New HR admin can log in and create jobs, manage candidates.</p>
+          <div className="w-full max-w-md rounded-2xl bg-[var(--ei-bg-secondary)] border border-[var(--ei-border-primary)] p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-[var(--ei-text-primary)]">Create Admin Account</h3>
+            <p className="mt-1 text-sm text-[var(--ei-text-muted)]">New HR admin can log in and create jobs, manage candidates.</p>
             <form onSubmit={handleCreateAdmin} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Email</label>
+                <label className="block text-xs font-medium text-[var(--ei-text-muted)] mb-1">Email</label>
                 <input
                   type="email"
                   value={createForm.email}
                   onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] text-[var(--ei-text-primary)] placeholder:text-[var(--ei-text-placeholder)] focus:outline-none focus:border-white/40 text-sm"
                   placeholder="hr@company.com"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Full name</label>
+                <label className="block text-xs font-medium text-[var(--ei-text-muted)] mb-1">Full name</label>
                 <input
                   type="text"
                   value={createForm.fullName}
                   onChange={(e) => setCreateForm((f) => ({ ...f, fullName: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] text-[var(--ei-text-primary)] placeholder:text-[var(--ei-text-placeholder)] focus:outline-none focus:border-white/40 text-sm"
                   placeholder="Jane Doe"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Company</label>
+                <label className="block text-xs font-medium text-[var(--ei-text-muted)] mb-1">Company</label>
                 <input
                   type="text"
                   value={createForm.company}
                   onChange={(e) => setCreateForm((f) => ({ ...f, company: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] text-[var(--ei-text-primary)] placeholder:text-[var(--ei-text-placeholder)] focus:outline-none focus:border-white/40 text-sm"
                   placeholder="Acme Inc"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1">Password (min 6 characters)</label>
+                <label className="block text-xs font-medium text-[var(--ei-text-muted)] mb-1">Password (min 6 characters)</label>
                 <PasswordInput
                   value={createForm.password}
                   onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
-                  className="px-3 py-2 rounded-lg bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500 focus:outline-none focus:border-white/40 text-sm"
+                  className="px-3 py-2 rounded-lg bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] text-[var(--ei-text-primary)] placeholder:text-[var(--ei-text-placeholder)] focus:outline-none focus:border-white/40 text-sm"
                   placeholder="••••••••"
                   minLength={6}
                   required
@@ -210,11 +210,11 @@ export default function HeadHrAdmins() {
       {/* Confirm dialog */}
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className="w-full max-w-sm rounded-2xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl">
-            <h3 className="text-lg font-semibold text-white">Delete Admin?</h3>
-            <p className="mt-2 text-sm text-zinc-400">
+          <div className="w-full max-w-sm rounded-2xl bg-[var(--ei-bg-secondary)] border border-[var(--ei-border-primary)] p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-[var(--ei-text-primary)]">Delete Admin?</h3>
+            <p className="mt-2 text-sm text-[var(--ei-text-muted)]">
               This will permanently delete admin{' '}
-              <span className="text-white font-medium">{confirmDelete.full_name}</span> ({confirmDelete.hrid}). Their jobs and login data will also be removed.
+              <span className="text-[var(--ei-text-primary)] font-medium">{confirmDelete.full_name}</span> ({confirmDelete.hrid}). Their jobs and login data will also be removed.
             </p>
             <div className="mt-5 flex gap-3 justify-end">
               <button
