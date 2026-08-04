@@ -847,15 +847,18 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
     # Flag for frontend autofill: only show responsibilities when JD had that section
     repaired["has_key_responsibilities"] = bool(jd_has_kr and resp_for_desc)
 
-    # Keywords mirror Required / Mandatory Skills exactly (JD-listed only).
-    mandatory_only = [
-        _str(s)
-        for s in (repaired.get("mandatory_skills") or repaired.get("skills") or [])
-        if _str(s)
-    ]
-    repaired["keywords"] = list(dict.fromkeys(mandatory_only))
-    if repaired["keywords"]:
-        actions.append("mirrored_keywords_from_mandatory_skills")
+    # Keywords from overall JD text (tech/domain) — not a mandatory-skills copy
+    derived_kw = _derive_jd_keywords(
+        repaired.get("keywords"),
+        repaired,
+        source_text,
+        max_keywords=20,
+    )
+    if derived_kw:
+        repaired["keywords"] = derived_kw
+        actions.append("derived_keywords_from_overall_jd")
+    else:
+        repaired["keywords"] = []
 
     repaired["type"] = "job_description"
     return repaired, actions
@@ -868,66 +871,37 @@ def _derive_jd_keywords(
     *,
     max_keywords: int = 20,
 ) -> list[str]:
-    """Keywords = JD skills/tech terms only — never invent or keep prose fragments."""
-    from app.ai.parser.enrichment.jd_text_inference import is_plausible_keyword
+    """Keywords from overall JD tech/domain terms — not a Required Skills mirror."""
+    from app.ai.parser.enrichment.jd_text_inference import extract_jd_keywords_from_text
 
-    stop = {
-        "and", "or", "the", "a", "an", "to", "of", "in", "for", "with", "on", "at",
-        "job", "role", "position", "team", "work", "working", "experience", "years",
-        "year", "required", "preferred", "nice", "have", "must", "strong", "good",
-        "knowledge", "ability", "skills", "skill", "etc", "including", "using",
-        "jd", "engineer", "developer", "analyst", "manager", "lead", "senior",
-        "junior", "associate", "intern", "consultant",
-        "lpa", "ctc", "inr", "usd", "eur", "gbp", "salary", "compensation", "pay",
-        "full-time", "part-time", "contract", "remote", "hybrid", "onsite",
-        "employment", "type", "full", "part", "time",
-        "go", "rest", "rest api", "rest apis", "apis", "api", "ai", "it", "qa", "hr",
-        "genai applications", "rag systems",  # prose fragments
-    }
-    skill_list = [
+    preferred = [_str(s) for s in (repaired.get("preferred_skills") or []) if _str(s)]
+    mandatory = [
         _str(s)
-        for s in (
-            list(repaired.get("mandatory_skills") or [])
-            + list(repaired.get("preferred_skills") or [])
-            + list(repaired.get("skills") or [])
-        )
+        for s in (repaired.get("mandatory_skills") or repaired.get("skills") or [])
         if _str(s)
     ]
+    derived = extract_jd_keywords_from_text(
+        jd_text or '',
+        max_items=max_keywords,
+        preferred_skills=preferred,
+        mandatory_skills=mandatory,
+    )
+    if derived:
+        return derived
 
-    text_lower = (jd_text or "").lower()
+    # Fallback: keep existing tokens only when grounded in JD text
+    from app.ai.parser.enrichment.jd_text_inference import is_plausible_keyword
 
-    def _keep(token: str) -> bool:
-        kw = _str(token)
-        if not is_plausible_keyword(kw):
-            return False
-        key = kw.lower()
-        if key in stop:
-            return False
-        # Must appear in the JD text when we have it
-        if text_lower and key not in text_lower:
-            return False
-        return True
-
-    # 1) Skills from the JD (primary — form Keywords should mirror real JD skills)
+    text_lower = (jd_text or '').lower()
     result: list[str] = []
     seen: set[str] = set()
-    for raw in skill_list:
-        kw = _str(raw)
-        key = kw.lower()
-        if key in seen or not _keep(kw):
-            continue
-        seen.add(key)
-        result.append(kw)
-        if len(result) >= max_keywords:
-            return result
-
-    # 2) Extra tech terms from JD text only if not already covered (and present in text)
     for raw in _ensure_string_array(existing):
         kw = _str(raw)
         key = kw.lower()
-        if key in seen or not _keep(kw):
+        if not kw or key in seen or not is_plausible_keyword(kw):
             continue
-        # Skip if it's only a generic 2–3 letter token already rejected above
+        if text_lower and key not in text_lower:
+            continue
         seen.add(key)
         result.append(kw)
         if len(result) >= max_keywords:

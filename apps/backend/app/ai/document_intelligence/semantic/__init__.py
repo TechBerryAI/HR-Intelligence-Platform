@@ -42,7 +42,13 @@ def _needs_jd_semantic(profile_dict: dict[str, Any]) -> bool:
     title = str(basic.get('title') or '').strip()
     mandatory = list(skills.get('mandatory') or [])
     general = list(skills.get('general') or [])
-    return not (is_plausible_job_title(title) and skills_look_skill_like(mandatory or general))
+    if not (is_plausible_job_title(title) and skills_look_skill_like(mandatory or general)):
+        return True
+    desc = str(basic.get('description') or '').strip()
+    resp = list((profile_dict.get('responsibilities') or {}).get('items') or [])
+    if len(desc) < 40 and not resp:
+        return True
+    return False
 
 
 def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
@@ -207,7 +213,8 @@ def enrich_jd_semantic(profile, *, unresolved_text: str, force: bool = False):
 
     if not isinstance(profile, JobProfile):
         return profile
-    if not semantic_ai_enabled() and not force:
+    # force only bypasses the “needs residual” gate — never runs when AI is disabled
+    if not semantic_ai_enabled():
         return profile
     if not force and not _needs_jd_semantic(profile.model_dump()):
         return profile

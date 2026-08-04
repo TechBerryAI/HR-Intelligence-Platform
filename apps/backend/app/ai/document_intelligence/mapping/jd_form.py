@@ -238,16 +238,25 @@ def map_job_to_form(
     responsibilities = [r for r in profile.responsibilities.items if r.strip()]
     qualifications = [q for q in profile.requirements.qualifications if q.strip()]
 
-    # Keywords must match Required / Mandatory Skills exactly (JD-listed only).
-    keywords = list(mandatory)
+    # Keywords from overall JD (profile + raw_text) — not a mandatory-skills copy
+    keywords = [k for k in (profile.requirements.keywords or []) if str(k).strip()]
+    if not keywords and raw_text:
+        from app.ai.parser.enrichment.jd_text_inference import extract_jd_keywords_from_text
+
+        keywords = extract_jd_keywords_from_text(
+            raw_text,
+            max_items=20,
+            preferred_skills=preferred,
+            mandatory_skills=mandatory,
+        )
     traces.append(
         _trace(
             'keywords',
-            'skills.mandatory',
+            'requirements.keywords',
             source='derived',
-            validator='mirror_mandatory_skills',
-            confidence=0.95 if keywords else 0.0,
-            reason=f'{len(keywords)} keywords mirrored from mandatory skills',
+            validator='extract_jd_keywords_from_text',
+            confidence=0.9 if keywords else 0.0,
+            reason=f'{len(keywords)} keywords from overall JD',
         )
     )
 

@@ -31,6 +31,8 @@ def _has_list_marker(text: str) -> bool:
             s,
         )
         or re.match(r'^[\s•·\-–—*]+.', s)
+        # PDF letter-bullet without punctuation: "o Proficiency…"
+        or re.match(r'^[oO]\s+[A-Z]', s)
     )
 
 
@@ -50,6 +52,8 @@ def _strip_list_marker(text: str) -> str:
     )
     cleaned = re.sub(r'^[\s•·\-–—*]+', '', cleaned).strip()
     cleaned = re.sub(r'^\d+[\.\)]\s*', '', cleaned).strip()
+    # PDF letter-bullets without punctuation: "o Proficiency in Figma…"
+    cleaned = re.sub(r'^[oO]\s+(?=[A-Z])', '', cleaned).strip()
     # Trailing markdown bold leftovers
     cleaned = cleaned.strip('*').strip()
     return cleaned.strip()
@@ -169,6 +173,25 @@ _SKILL_PROSE_NOISE_RE = re.compile(
     r'(?i)^(we\s|our\s|looking|seeking|join\s|the\s+candidate|you\s+will|'
     r'ability\s+to|responsible\s+for|must\s+be\s+able)\b'
 )
+_SKILL_GARBAGE_TOKENS = frozenset({
+    'job', 'jd', 'role', 'position', 'title', 'location', 'experience', 'salary',
+    'company', 'notice', 'period', 'education', 'qualification', 'requirements',
+    'responsibilities', 'skills', 'none', 'n/a', 'na', 'tbd', 'etc',
+})
+_SOFT_SKILL_ONLY_RE = re.compile(
+    r'(?i)^(excellent|strong|good|effective|outstanding)\s+'
+    r'(communication|collaboration|interpersonal|problem[- ]solving|critical\s+thinking|'
+    r'teamwork|leadership|analytical)\b|'
+    r'^(communication|collaboration|interpersonal|problem[- ]solving|critical\s+thinking|'
+    r'teamwork|leadership)\s+(skills?|abilities)\b'
+)
+_KNOWN_CITIES = (
+    'mumbai', 'navi mumbai', 'pune', 'bengaluru', 'bangalore', 'chennai', 'hyderabad',
+    'delhi', 'new delhi', 'noida', 'gurgaon', 'gurugram', 'kolkata', 'ahmedabad',
+    'jaipur', 'chandigarh', 'kochi', 'thiruvananthapuram', 'indore', 'bhopal',
+    'lucknow', 'coimbatore', 'nagpur', 'vikhroli', 'andheri', 'airoli', 'powai',
+    'whitefield', 'electronic city', 'remote', 'hybrid', 'wfh', 'work from home',
+)
 
 
 def _is_skill_section_phrase(tok: str, *, from_skill_section: bool) -> bool:
@@ -203,10 +226,13 @@ def normalize_skill_tokens(
     def _add(tok: str) -> bool:
         t = (tok or '').strip().strip('.,;:|')
         t = re.sub(r'^[\s•·▪▫●○\-\*]+', '', t).strip()
+        t = re.sub(r'^[oO]\s+(?=[A-Z])', '', t).strip()
         if not t:
             return False
         key = t.lower()
         if key in seen:
+            return False
+        if key in _SKILL_GARBAGE_TOKENS or len(key) <= 2 and key.isalpha():
             return False
         if not _is_skill_section_phrase(t, from_skill_section=from_skill_section):
             return False
@@ -222,6 +248,8 @@ def normalize_skill_tokens(
         item = _strip_list_marker(str(raw))
         item = re.sub(r'^[\s•·▪▫●○\-\*]+', '', item).strip()
         if not item:
+            continue
+        if item.lower() in _SKILL_GARBAGE_TOKENS:
             continue
         if _QUAL_SKILL_NOISE_RE.match(item) or item.lower().startswith('qualification'):
             continue
@@ -243,6 +271,33 @@ def normalize_skill_tokens(
             tok = _strip_list_marker(part).strip().strip('.,;:|')[:80]
             tok = re.sub(r'^[\s•·▪▫●○\-\*]+', '', tok).strip()
             if not tok:
+                continue
+            # "Proficiency in Figma…" / "Experience with Terraform" → pull the tool
+            prof = re.match(
+                r'(?i)^(?:proficiency\s+in|experience\s+with|knowledge\s+of|hands[- ]?on\s+(?:with\s+)?)\s*(.+)$',
+                tok,
+            )
+            if prof:
+                rest = prof.group(1).strip()
+                # Prefer "Figma" from "Figma and other design tools"
+                head = re.split(r'(?i)\s+(?:and|or|with|,)\s+', rest, maxsplit=1)[0].strip()
+                if head and len(head.split()) <= 4:
+                    if _add(head):
+                        return out
+                for embedded in extract_tech_keywords_from_text(tok, max_items=6):
+                    if _add(embedded):
+                        return out
+                continue
+            # Soft-skill-only phrases: keep only if no tech can be salvaged
+            if _SOFT_SKILL_ONLY_RE.match(tok):
+                embedded = extract_tech_keywords_from_text(tok, max_items=4)
+                if embedded:
+                    for e in embedded:
+                        if _add(e):
+                            return out
+                elif from_skill_section:
+                    # Defer soft skills — prefer tech; add later only if empty
+                    continue
                 continue
             # Long skill-section line: keep if phrase-sized, else extract tech
             if from_skill_section and (len(tok.split()) > 8 or len(tok) > 80):
@@ -311,6 +366,20 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
     mandatory_raw = _collect_skill_section_items(desc, preferred=False)
     preferred_raw = _collect_skill_section_items(desc, preferred=True)
 
+    # Primary / Secondary Technology lines (common in IT ops JDs)
+    tech_raw: list[str] = []
+    for m in re.finditer(
+        r'(?i)(?:primary|secondary)\s*technolog(?:y|ies)\s*[-–—:]\s*([^\n]+)',
+        desc,
+    ):
+        chunk = m.group(1).strip()
+        # Split "Weblogic, Secondary Technology-OHS" leftovers already handled by separate matches
+        for part in re.split(r'[,;|/]', chunk):
+            p = part.strip()
+            p = re.sub(r'(?i)^(?:primary|secondary)\s*technolog(?:y|ies)\s*[-–—:]?\s*', '', p).strip()
+            if p:
+                tech_raw.append(p)
+
     # Fallback: single-line labeled captures when section walk found nothing
     if not mandatory_raw:
         req_block = re.search(
@@ -336,6 +405,10 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
             if block:
                 mandatory_raw = [s.strip() for s in re.split(r'[,•·|]', block.group(1)) if s.strip()]
 
+    if tech_raw:
+        # Prefer primary tech ahead of incidental section noise
+        mandatory_raw = list(dict.fromkeys([*tech_raw, *mandatory_raw]))
+
     if not preferred_raw:
         pref_block = re.search(
             r'(?:\*\*)?(?:Preferred|Nice-to-have|Advanced)\s*Skills?(?:\*\*)?\s*[:\-]\s*([^\n*]+)',
@@ -352,9 +425,22 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
         preferred_raw, max_items=20, from_skill_section=bool(preferred_raw)
     )
 
+    # When a skills section produced only soft skills / garbage, backfill tech from JD
+    if len(mandatory_skills) < 2:
+        tech = extract_tech_keywords_from_text(desc, max_items=20)
+        seen = {s.lower() for s in mandatory_skills}
+        for t in tech:
+            if t.lower() in seen or t.lower() in _SKILL_GARBAGE_TOKENS:
+                continue
+            # Prefer product names over incidental 3-letter acronyms when we have better options
+            mandatory_skills.append(t)
+            seen.add(t.lower())
+            if len(mandatory_skills) >= 15:
+                break
+
     # Keep only tokens that actually appear in the JD (no invented skills).
     # Do NOT scrape the whole document for extra tech when a skills section exists —
-    # Required Skills must mirror what the JD lists.
+    # Required Skills must mirror what the JD lists — except the thin-backfill above.
     src_l = desc.lower()
 
     def _grounded(items: list[str]) -> list[str]:
@@ -365,7 +451,7 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
             if not t:
                 continue
             key = t.lower()
-            if key in seen:
+            if key in seen or key in _SKILL_GARBAGE_TOKENS:
                 continue
             if key not in src_l and not all(
                 part.lower() in src_l for part in re.findall(r'[a-z0-9+#.]{2,}', key) if len(part) >= 3
@@ -381,6 +467,11 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
     mandatory_skills = _grounded(mandatory_skills)
     preferred_skills = _grounded(preferred_skills)
 
+    # Drop soft-skill-only rows when we also have tech skills
+    techish = [s for s in mandatory_skills if not _SOFT_SKILL_ONLY_RE.match(s)]
+    if techish:
+        mandatory_skills = techish
+
     combined = list(dict.fromkeys(mandatory_skills + preferred_skills))[:40]
     return mandatory_skills[:40], preferred_skills[:20], combined
 
@@ -390,7 +481,65 @@ def skills_look_skill_like(skills: list[str] | None) -> bool:
     # Treat caller skills as section-originated so short phrases are not wiped
     # before the deterministic gate (avoids unnecessary LLM fallback hangs).
     toks = normalize_skill_tokens(skills or [], max_items=10, from_skill_section=True)
+    toks = [t for t in toks if t.lower() not in _SKILL_GARBAGE_TOKENS]
+    toks = [t for t in toks if not _SOFT_SKILL_ONLY_RE.match(t)]
     return len(toks) >= 1
+
+
+def extract_jd_keywords_from_text(
+    text: str,
+    *,
+    max_items: int = 20,
+    preferred_skills: list[str] | None = None,
+    mandatory_skills: list[str] | None = None,
+) -> list[str]:
+    """Keywords from the overall JD — tech/domain terms across the document.
+
+    Not a copy of Required Skills. Order of preference:
+      1) grounded tech/domain tokens from full JD text
+      2) preferred / nice-to-have skills present in the JD
+      3) mandatory skills only as fill when slots remain (never sole source)
+    """
+    if not text or not str(text).strip():
+        return []
+    src = str(text)
+    src_l = src.lower()
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def _add(tok: str) -> bool:
+        t = (tok or '').strip().strip('.,;:|')
+        if not t or t.lower() in _SKILL_GARBAGE_TOKENS:
+            return False
+        if not is_plausible_keyword(t) and len(t.split()) > 4:
+            return False
+        key = t.lower()
+        if key in seen:
+            return False
+        if key not in src_l and not any(
+            p in src_l for p in re.findall(r'[a-z0-9+#.]{2,}', key) if len(p) >= 3
+        ):
+            return False
+        if _SOFT_SKILL_ONLY_RE.match(t):
+            return False
+        seen.add(key)
+        out.append(t[:80])
+        return len(out) >= max_items
+
+    for tok in extract_tech_keywords_from_text(src, max_items=max_items):
+        if _add(tok):
+            return out
+
+    for tok in preferred_skills or []:
+        if _add(tok):
+            return out
+
+    # Fill remaining from mandatory only after overall/preferred coverage
+    for tok in mandatory_skills or []:
+        if _add(tok):
+            return out
+
+    return out
 
 
 def extract_tech_keywords_from_text(text: str, max_items: int = 20) -> list[str]:
@@ -405,7 +554,7 @@ def extract_tech_keywords_from_text(text: str, max_items: int = 20) -> list[str]
     skip_acronyms = {
         'JD', 'CEO', 'HR', 'USA', 'PDF', 'DOC', 'AI', 'IT', 'QA', 'PM', 'UI', 'UX',
         'CV', 'LLC', 'INC', 'LTD', 'PTE', 'PVT', 'OKR', 'KPI', 'SLA', 'NDA',
-        'LPA', 'CTC', 'INR', 'USD', 'EUR', 'GBP', 'WFH',
+        'LPA', 'CTC', 'INR', 'USD', 'EUR', 'GBP', 'WFH', 'JOB', 'GUI',
     }
 
     # Acronyms / product tokens: RAG, GenAI, NLP, AWS, LLM, etc.
@@ -438,6 +587,9 @@ def extract_tech_keywords_from_text(text: str, max_items: int = 20) -> list[str]
         'aws', 'azure', 'gcp', 'genai', 'rag', 'llm', 'nlp', 'mlops',
         'vmware', 'windows', 'linux', 'virtualization', 'active directory',
         'netapp', 'palo alto', 'firewall', '.net', 'asp.net',
+        'figma', 'wireframing', 'prototyping', 'adobe premiere', 'premiere pro',
+        'final cut', 'after effects', 'photoshop', 'illustrator', 'sketch',
+        'weblogic', 'websphere', 'terraform', 'cloudformation',
     ]
     lower = text.lower()
     for phrase in phrases:
@@ -590,6 +742,12 @@ def extract_responsibilities_from_text(desc: str, max_items: int = 20) -> list[s
         return []
     if not has_responsibilities_section(desc):
         return []
+    stop_heads = (
+        r'qualifications|requirements|required\s+skills|mandatory\s+skills|'
+        r'preferred\s+skills|skills|benefits|what\s+we|must\s+haves?|about|experience|'
+        r'compensation|salary|employment|education|educational\s+qualifications?|'
+        r'certifications?(?:\s*\([^)]*\))?|notice\s+period'
+    )
     responsibilities: list[str] = []
     heading_re = RESPONSIBILITY_HEADING_RE
     if re.search(rf'(?i){heading_re}\s*:', desc) or re.search(
@@ -597,9 +755,7 @@ def extract_responsibilities_from_text(desc: str, max_items: int = 20) -> list[s
     ):
         block = re.search(
             rf'(?:\*\*)?(?:{heading_re}):?(?:\*\*)?\s*([\s\S]*?)'
-            rf'(?=\n\s*(?:\*\*)?(?:qualifications|requirements|required\s+skills|mandatory\s+skills|'
-            rf'preferred\s+skills|skills|benefits|what\s+we|must\s+haves?|about|experience|'
-            rf'compensation|salary|employment)\b|\n\s*\*\*[A-Z]|\Z)',
+            rf'(?=\n\s*(?:\*\*)?(?:{stop_heads})\b|\n\s*\*\*[A-Z]|\Z)',
             desc,
             re.I,
         )
@@ -624,15 +780,33 @@ def extract_responsibilities_from_text(desc: str, max_items: int = 20) -> list[s
                 continue
             if in_section:
                 if re.match(
-                    r'(?i)^(?:\*\*)?(?:qualifications|requirements|skills|benefits|about|'
-                    r'what\s+we\s+offer|must\s+haves?|experience|compensation|salary)(?:\*\*)?\s*:?\s*$',
+                    rf'(?i)^(?:\*\*)?(?:{stop_heads})(?:\*\*)?\s*:?\s*$',
+                    stripped,
+                ):
+                    break
+                # Bare section word used as a bullet (e.g. "Education")
+                if re.match(
+                    r'(?i)^(?:education|qualifications?|requirements?|skills?|'
+                    r'certifications?|benefits?|experience)\s*:?\s*$',
                     stripped,
                 ):
                     break
                 if stripped:
                     section_lines.append(stripped)
         responsibilities = _split_list_items('\n'.join(section_lines))
-    return responsibilities[:max_items]
+    # Drop heading-only leftovers
+    cleaned: list[str] = []
+    for item in responsibilities:
+        s = (item or '').strip()
+        if not s:
+            continue
+        if re.match(
+            rf'(?i)^(?:{RESPONSIBILITY_HEADING_RE}|education|qualifications?|requirements?)\s*:?\s*$',
+            s,
+        ):
+            continue
+        cleaned.append(s)
+    return cleaned[:max_items]
 
 
 def extract_qualifications_from_text(desc: str, max_items: int = 15) -> list[str]:
@@ -729,27 +903,89 @@ def extract_experience_years(experience_str: str) -> tuple[Any, Any]:
 def extract_location_from_text(text: str) -> str:
     if not text:
         return ''
+
+    def _clean_loc(raw: str) -> str:
+        loc = (raw or '').strip().strip('.,;:')
+        if not loc:
+            return ''
+        # Drop interview / process notes in parentheses
+        if re.search(
+            r'(?i)\((?:final\s+round|face[- ]to[- ]face|interview|onsite\s+interview|'
+            r'telephonic|video\s+call|looking\s+for)[^)]*\)',
+            loc,
+        ):
+            loc = re.sub(r'\s*\([^)]*\)\s*', ' ', loc).strip(' ,;-')
+        # Also strip trailing parenthetical hiring notes after city
+        loc = re.sub(
+            r'(?i)\s*\((?:looking\s+for|candidates?\s+from)[^)]*\)\s*',
+            ' ',
+            loc,
+        ).strip(' ,;-')
+        # Trim trailing process clauses after em-dash / hyphen notes
+        loc = re.split(r'\s*[–—]\s*(?:Final|Face|Interview)', loc, maxsplit=1, flags=re.I)[0]
+        loc = re.sub(r'\s{2,}', ' ', loc).strip(' .,;:-')
+        if 2 <= len(loc) <= 80:
+            return loc
+        return ''
+
+    # Labeled with optional separator: "Location: Mumbai", "Location Mumbai", "Location - Pune"
     patterns = [
         r'(?:location|work\s*location|job\s*location)\s*[:\-–—]+\s*([^\n]+)',
+        r'(?:location|work\s*location|job\s*location)\s+([A-Za-z][A-Za-z0-9\s,\.\-/()]{1,70})',
         r'(?:based\s+in|office\s+location)\s+([A-Za-z][A-Za-z\s,\.\-]{2,60})',
         r'\b(Remote|Hybrid|Work\s+from\s+home|WFH)\b',
     ]
     for pat in patterns:
         m = re.search(pat, text, re.I)
         if m and m.group(1):
-            loc = m.group(1).strip().strip('.,;:')
-            # Drop interview / process notes in parentheses
-            if re.search(
-                r'(?i)\((?:final\s+round|face[- ]to[- ]face|interview|onsite\s+interview|'
-                r'telephonic|video\s+call)[^)]*\)',
-                loc,
-            ):
-                loc = re.sub(r'\s*\([^)]*\)\s*', ' ', loc).strip(' ,;-')
-            # Trim trailing process clauses after em-dash / hyphen notes
-            loc = re.split(r'\s*[–—]\s*(?:Final|Face|Interview)', loc, maxsplit=1, flags=re.I)[0]
-            loc = re.sub(r'\s{2,}', ' ', loc).strip(' .,;:-')
-            if 2 <= len(loc) <= 80:
+            loc = _clean_loc(m.group(1))
+            if loc:
                 return loc
+
+    # City after role title dash: "Cloud Engineer (AWS) – Mumbai"
+    title_city = re.search(
+        r'(?i)(?:job\s*description|title|role|position)\s*[:\-–—].{0,80}?[–—,\-]\s*'
+        r'(' + '|'.join(re.escape(c) for c in sorted(_KNOWN_CITIES, key=len, reverse=True)) + r')\b',
+        text,
+    )
+    if title_city:
+        return _clean_loc(title_city.group(1)) or title_city.group(1).title()
+
+    # City / mode fallback when labeled extract missed but evidence exists
+    lower = text.lower()
+    # Prefer longer city names first (navi mumbai before mumbai)
+    cities = sorted(_KNOWN_CITIES, key=len, reverse=True)
+    for city in cities:
+        if city not in lower:
+            continue
+        # Prefer cities near a location cue
+        near = re.search(
+            rf'(?i)(?:location|based\s+in|office|work\s+from|hiring\s+(?:in|at)|'
+            rf'candidates?\s+from)[^\n]{{0,40}}\b({re.escape(city)})\b'
+            rf'|\b({re.escape(city)})\b[^\n]{{0,30}}(?:location|office|based)',
+            text,
+        )
+        if near:
+            span = near.group(1) or near.group(2) or city
+            # Preserve original casing from source when possible
+            m2 = re.search(re.escape(span), text, re.I)
+            return (m2.group(0) if m2 else span.title())[:80]
+    # Bare known city on its own line or early header
+    for line in text.splitlines()[:25]:
+        s = line.strip()
+        if not s or len(s) > 80:
+            continue
+        sl = s.lower()
+        for city in cities:
+            if sl == city or sl.startswith(city + ',') or sl.startswith(city + ' /'):
+                return s[:80]
+            if re.match(rf'(?i)^{re.escape(city)}\b', s):
+                return _clean_loc(s) or s[:80]
+            # Trailing city on a short header line
+            if re.search(rf'(?i)[–—,\-]\s*{re.escape(city)}\b\s*$', s):
+                m2 = re.search(rf'(?i)({re.escape(city)})\b\s*$', s)
+                if m2:
+                    return m2.group(1)[:80]
     return ''
 
 
@@ -1121,6 +1357,11 @@ def extract_salary_from_text(text: str) -> str:
         m = re.search(pat, text)
         if m:
             val = (m.group(1) if m.lastindex else m.group(0)).strip().strip('.,;:')
+            # Reject currency-only noise ("rs", "₹", "INR") without an amount
+            if re.fullmatch(r'(?i)(?:rs\.?|inr|₹|usd|eur|gbp|\$)', val):
+                continue
+            if not re.search(r'\d', val) and not re.search(r'(?i)lpa|lakh|negotiable', val):
+                continue
             if 2 <= len(val) <= 80:
                 return val
     return ''
