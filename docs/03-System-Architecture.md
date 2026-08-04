@@ -178,10 +178,9 @@ Guards: `RecruiterGuard`, `HeadHrGuard`, `CeoGuard`.
 
 ### Design systems in play
 
-1. **Public / apply** — light modal forms  
-2. **Org control center** — dark glass `org-shell` for Head HR / CEO  
-
-Both are intentional; do not force one theme onto the other without product decision.
+1. **Public / apply** — apply modal forms stay light for readability; job board (`/jobs`) follows the global Dark/Light toggle (default dark enterprise chrome)
+2. **Staff workspace** — `org-shell` shared by Head HR / CEO **and** recruiter routes (`/dashboard`, `/candidates`, `/admin/*`, `/settings`) plus `/jobs`; palette flips via `data-theme` + navbar **Dark/Light** toggle (persisted as `hcip-theme`)
+3. **Auth / landing / support** — login, signup, forgot-password, landing, FAQ, Contact, and admin tools (bulk parse, feedback) respect the same toggle
 
 ---
 

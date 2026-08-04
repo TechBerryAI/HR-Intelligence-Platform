@@ -47,21 +47,21 @@ function StatCard({ icon: Icon, label, value, accent, onClick, disabled, compact
     <div className="flex items-center gap-3">
       {iconWrap}
       <div className="min-w-0 flex-1">
-        <p className="text-xl font-bold text-[#F5F7FA] tabular-nums leading-tight">{value ?? '—'}</p>
-        <p className="text-xs text-[#8E9BA8] truncate">{label}</p>
+        <p className="text-xl font-bold text-[var(--ei-text-primary)] tabular-nums leading-tight">{value ?? '—'}</p>
+        <p className="text-xs text-[var(--ei-text-secondary)] truncate">{label}</p>
       </div>
       {!disabled && onClick && (
-        <FiTrendingUp className="w-3.5 h-3.5 text-[#71808E] group-hover:text-[#00A6FF] transition-colors flex-shrink-0" />
+        <FiTrendingUp className="w-3.5 h-3.5 text-[var(--ei-text-muted)] group-hover:text-[#00A6FF] transition-colors flex-shrink-0" />
       )}
     </div>
   ) : (
     <>
       <div className="flex items-start justify-between">
         {iconWrap}
-        {!disabled && <FiTrendingUp className="w-4 h-4 text-[#71808E] group-hover:text-[#00A6FF] transition-colors" />}
+        {!disabled && <FiTrendingUp className="w-4 h-4 text-[var(--ei-text-muted)] group-hover:text-[#00A6FF] transition-colors" />}
       </div>
-      <p className="mt-4 text-3xl font-bold text-[#F5F7FA] tabular-nums">{value ?? '—'}</p>
-      <p className="mt-1 text-sm text-[#8E9BA8]">{label}</p>
+      <p className="mt-4 text-3xl font-bold text-[var(--ei-text-primary)] tabular-nums">{value ?? '—'}</p>
+      <p className="mt-1 text-sm text-[var(--ei-text-secondary)]">{label}</p>
     </>
   )
   if (disabled || !onClick) {
@@ -78,11 +78,11 @@ function BarRow({ label, count, total, colorClass }) {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0
   return (
     <div className="flex items-center gap-3 py-1.5">
-      <span className="text-sm text-[#A0ABB6] w-24 flex-shrink-0 capitalize">{label}</span>
+      <span className="text-sm text-[var(--ei-text-secondary)] w-24 flex-shrink-0 capitalize">{label}</span>
       <div className="flex-1 h-6 rounded-md bg-white/[0.06] overflow-hidden">
         <div className={`h-full rounded-md transition-all duration-500 ${colorClass}`} style={{ width: `${pct}%` }} />
       </div>
-      <span className="text-sm text-[#8E9BA8] tabular-nums w-10 text-right">{count}</span>
+      <span className="text-sm text-[var(--ei-text-secondary)] tabular-nums w-10 text-right">{count}</span>
     </div>
   )
 }
@@ -499,14 +499,14 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
         <div className="mb-7 grid grid-cols-2 lg:grid-cols-4 gap-3">
           {loading
             ? Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-[72px] rounded-[14px] border border-white/[0.08] bg-white/[0.035] animate-pulse" />
+                <div key={i} className="h-[72px] rounded-[14px] border border-[var(--ei-border-primary)] bg-white/[0.035] animate-pulse" />
               ))
             : overviewMetrics.map(({ label, value, onClick, disabled }) => {
                 const className = `org-glass-card text-left p-4 ${disabled ? 'cursor-default' : 'cursor-pointer'}`
                 const inner = (
                   <>
-                    <p className="text-2xl font-bold text-[#F5F7FA] tabular-nums leading-none">{value ?? '—'}</p>
-                    <p className="mt-2 text-xs font-medium text-[#8E9BA8]">{label}</p>
+                    <p className="text-2xl font-bold text-[var(--ei-text-primary)] tabular-nums leading-none">{value ?? '—'}</p>
+                    <p className="mt-2 text-xs font-medium text-[var(--ei-text-secondary)]">{label}</p>
                   </>
                 )
                 if (disabled || !onClick) {
@@ -548,10 +548,10 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
           <section className="org-glass-panel p-5 sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
               <div>
-                <h2 className="font-display text-[18px] font-semibold text-[#F5F7FA] tracking-tight">
+                <h2 className="font-display text-[18px] font-semibold text-[var(--ei-text-primary)] tracking-tight">
                   Recent / Active Jobs
                 </h2>
-                <p className="mt-0.5 text-sm text-[#8E9BA8]">Latest postings across the organization</p>
+                <p className="mt-0.5 text-sm text-[var(--ei-text-secondary)]">Latest postings across the organization</p>
               </div>
               <button
                 type="button"
@@ -570,12 +570,12 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                 ))}
               </div>
             ) : recentJobs.length === 0 ? (
-              <p className="text-sm text-[#71808E] py-6 text-center">No jobs yet. Create one above.</p>
+              <p className="text-sm text-[var(--ei-text-muted)] py-6 text-center">No jobs yet. Create one above.</p>
             ) : (
               <div className="overflow-x-auto -mx-1">
                 <table className="w-full min-w-[720px] text-left">
                   <thead>
-                    <tr className="border-b border-white/[0.08] text-[11px] uppercase tracking-[0.08em] text-[#738394]">
+                    <tr className="border-b border-[var(--ei-border-primary)] text-[11px] uppercase tracking-[0.08em] text-[#738394]">
                       <th className="pb-3 pr-4 font-semibold">Job</th>
                       <th className="pb-3 pr-4 font-semibold">Status</th>
                       <th className="pb-3 pr-4 font-semibold">Candidates</th>
@@ -604,16 +604,16 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                               className={`inline-flex items-center justify-center min-w-[4.25rem] rounded-full px-2.5 py-0.5 text-xs font-medium ${
                                 active
                                   ? 'bg-[rgba(54,214,160,0.12)] text-[#67DFB4]'
-                                  : 'bg-white/[0.06] text-[#8E9BA8]'
+                                  : 'bg-white/[0.06] text-[var(--ei-text-secondary)]'
                               }`}
                             >
                               {active ? 'Active' : 'Draft'}
                             </span>
                           </td>
-                          <td className="py-3.5 pr-4 text-sm tabular-nums text-[#A0ABB6]">
+                          <td className="py-3.5 pr-4 text-sm tabular-nums text-[var(--ei-text-secondary)]">
                             {count > 0 ? count : '—'}
                           </td>
-                          <td className="py-3.5 pr-4 text-sm text-[#8E9BA8]">{formatShortDate(job.posted_on)}</td>
+                          <td className="py-3.5 pr-4 text-sm text-[var(--ei-text-secondary)]">{formatShortDate(job.posted_on)}</td>
                           {!isCeo && (
                             <td className="py-3.5 text-right whitespace-nowrap w-[1%]" onClick={(e) => e.stopPropagation()}>
                               <div className="inline-flex items-center justify-end gap-2.5 min-w-[9.5rem]">
@@ -645,7 +645,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                                 <button
                                   type="button"
                                   onClick={() => openEditJob(job)}
-                                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-[#E8EDF3] hover:bg-white/[0.09] transition-colors"
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--ei-border-primary)] bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-[var(--ei-text-primary)] hover:bg-white/[0.09] transition-colors"
                                 >
                                   <FiEdit2 className="w-3.5 h-3.5" />
                                   Edit
@@ -671,15 +671,15 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                 onClick={closeEditJob}
               />
               <div
-                className="relative w-full max-w-2xl rounded-2xl overflow-hidden border border-white/[0.08] org-glass-panel"
+                className="relative w-full max-w-2xl rounded-2xl overflow-hidden border border-[var(--ei-border-primary)] org-glass-panel"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.08] bg-white/[0.03]">
-                  <h3 className="text-xl font-semibold text-[#F5F7FA]">Edit Job Post</h3>
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--ei-border-primary)] bg-white/[0.03]">
+                  <h3 className="text-xl font-semibold text-[var(--ei-text-primary)]">Edit Job Post</h3>
                   <button
                     type="button"
                     onClick={closeEditJob}
-                    className="p-2 rounded-xl text-[#8E9BA8] hover:text-white hover:bg-white/[0.05] transition-colors"
+                    className="p-2 rounded-xl text-[var(--ei-text-secondary)] hover:text-white hover:bg-white/[0.05] transition-colors"
                   >
                     <FiX className="w-5 h-5" />
                   </button>
@@ -770,7 +770,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                   ))}
                 </div>
               ) : recentActivity.length === 0 ? (
-                <p className="text-sm text-[#71808E]">No recent activity yet.</p>
+                <p className="text-sm text-[var(--ei-text-muted)]">No recent activity yet.</p>
               ) : (
                 <ul className="space-y-3">
                   {recentActivity.map((item) => (
@@ -797,8 +797,8 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                         key={label}
                         className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.025] px-3.5 py-2.5"
                       >
-                        <span className="text-sm text-[#8E9BA8]">{label}</span>
-                        <span className="text-sm font-semibold tabular-nums text-[#F5F7FA]">{value ?? '—'}</span>
+                        <span className="text-sm text-[var(--ei-text-secondary)]">{label}</span>
+                        <span className="text-sm font-semibold tabular-nums text-[var(--ei-text-primary)]">{value ?? '—'}</span>
                       </div>
                     ))}
               </div>
@@ -809,8 +809,8 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
 
       {!loading && !showAnalytics && !showJobPosting && (
         <div className="mt-10 org-card p-5">
-          <h2 className="text-sm font-semibold text-[#DCE3EA] mb-2">Quick access</h2>
-          <p className="text-sm text-[#8E9BA8] mb-4">
+          <h2 className="text-sm font-semibold text-[var(--ei-text-label)] mb-2">Quick access</h2>
+          <p className="text-sm text-[var(--ei-text-secondary)] mb-4">
             Use the sidebar to manage HR admins, jobs, and platform settings.
             Open a job to review candidates who applied and their match scores.
           </p>
@@ -835,12 +835,12 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
 
       {!loading && showAnalytics && (
         <div className="mt-10 space-y-6">
-          <h2 className="text-lg font-semibold text-[#F5F7FA] flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-[var(--ei-text-primary)] flex items-center gap-2">
             <FiBarChart2 className="w-5 h-5 text-[#00A6FF]" /> Analytics
           </h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="org-card p-5">
-              <h3 className="text-sm font-semibold text-[#DCE3EA] flex items-center gap-2 mb-4">
+              <h3 className="text-sm font-semibold text-[var(--ei-text-label)] flex items-center gap-2 mb-4">
                 <FiPieChart className="w-4 h-4" /> Applications by status
               </h3>
               <div className="space-y-1">
@@ -853,20 +853,20 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                   <BarRow key={key} label={label} count={analytics.byStatus[key] || 0} total={analytics.total} colorClass={color} />
                 ))}
               </div>
-              {analytics.total === 0 && <p className="text-sm text-[#71808E] py-4">No applications yet</p>}
+              {analytics.total === 0 && <p className="text-sm text-[var(--ei-text-muted)] py-4">No applications yet</p>}
             </div>
             <div className="org-card p-5">
-              <h3 className="text-sm font-semibold text-[#DCE3EA] mb-4">Match score & shortlist rate</h3>
+              <h3 className="text-sm font-semibold text-[var(--ei-text-label)] mb-4">Match score & shortlist rate</h3>
               <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="rounded-xl bg-white/[0.035] p-4 border border-white/[0.08]">
+                <div className="rounded-xl bg-white/[0.035] p-4 border border-[var(--ei-border-primary)]">
                   <p className="text-xs text-[#83909C] uppercase tracking-wider">Avg. match score</p>
-                  <p className="text-2xl font-bold text-[#F5F7FA] mt-1 tabular-nums">{analytics.avgScore != null ? `${analytics.avgScore}%` : '—'}</p>
-                  <p className="text-xs text-[#71808E] mt-0.5">{analytics.scoreCount} with score</p>
+                  <p className="text-2xl font-bold text-[var(--ei-text-primary)] mt-1 tabular-nums">{analytics.avgScore != null ? `${analytics.avgScore}%` : '—'}</p>
+                  <p className="text-xs text-[var(--ei-text-muted)] mt-0.5">{analytics.scoreCount} with score</p>
                 </div>
-                <div className="rounded-xl bg-white/[0.035] p-4 border border-white/[0.08]">
+                <div className="rounded-xl bg-white/[0.035] p-4 border border-[var(--ei-border-primary)]">
                   <p className="text-xs text-[#83909C] uppercase tracking-wider">Shortlist rate</p>
                   <p className="text-2xl font-bold text-[#36D6A0] mt-1 tabular-nums">{analytics.shortlistRate}%</p>
-                  <p className="text-xs text-[#71808E] mt-0.5">of applications</p>
+                  <p className="text-xs text-[var(--ei-text-muted)] mt-0.5">of applications</p>
                 </div>
               </div>
               <div>
@@ -878,7 +878,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                     <div className="bg-green-500/80 transition-all duration-500" style={{ width: `${analytics.scoreCount ? (analytics.scoreBuckets.high / analytics.scoreCount) * 100 : 0}%` }} />
                   </div>
                 </div>
-                <div className="flex gap-4 mt-2 text-xs text-[#71808E]">
+                <div className="flex gap-4 mt-2 text-xs text-[var(--ei-text-muted)]">
                   <span><span className="inline-block w-2 h-2 rounded bg-red-500/80 mr-1" /> Low (&lt;30%)</span>
                   <span><span className="inline-block w-2 h-2 rounded bg-amber-500/80 mr-1" /> Medium (30–60%)</span>
                   <span><span className="inline-block w-2 h-2 rounded bg-green-500/80 mr-1" /> High (60%+)</span>
@@ -887,8 +887,8 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
             </div>
           </div>
           <div className="org-card p-5">
-            <h3 className="text-sm font-semibold text-[#DCE3EA] mb-1">Job-level insight</h3>
-            <p className="text-xs text-[#71808E] mb-4">Applications, shortlisted count, and average match score per job.</p>
+            <h3 className="text-sm font-semibold text-[var(--ei-text-label)] mb-1">Job-level insight</h3>
+            <p className="text-xs text-[var(--ei-text-muted)] mb-4">Applications, shortlisted count, and average match score per job.</p>
             {analytics.topJobs.length > 0 ? (
               <div className="space-y-2">
                 {analytics.topJobs.map(({ id, title, count, shortlisted, reviewed, rejected, avgScore }) => (
@@ -896,11 +896,11 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                     key={id}
                     type="button"
                     onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(id)}?tab=candidates`)}
-                    className="w-full flex flex-wrap items-center gap-x-4 gap-y-1 py-3 px-3 rounded-xl bg-white/[0.035] border border-white/[0.08] hover:border-[rgba(0,166,255,0.3)] hover:bg-white/[0.05] transition-all duration-[180ms] text-left"
+                    className="w-full flex flex-wrap items-center gap-x-4 gap-y-1 py-3 px-3 rounded-xl bg-white/[0.035] border border-[var(--ei-border-primary)] hover:border-[rgba(0,166,255,0.3)] hover:bg-white/[0.05] transition-all duration-[180ms] text-left"
                   >
-                    <span className="text-sm font-medium text-[#F5F7FA] truncate flex-1 min-w-0">{title || id}</span>
-                    <span className="text-xs text-[#8E9BA8] tabular-nums">
-                      <span className="text-[#DCE3EA]">{count}</span> applied
+                    <span className="text-sm font-medium text-[var(--ei-text-primary)] truncate flex-1 min-w-0">{title || id}</span>
+                    <span className="text-xs text-[var(--ei-text-secondary)] tabular-nums">
+                      <span className="text-[var(--ei-text-label)]">{count}</span> applied
                       {(reviewed || 0) > 0 && <span className="text-amber-400 ml-2">{reviewed} reviewed</span>}
                       {shortlisted > 0 && <span className="text-[#36D6A0] ml-2">{shortlisted} shortlisted</span>}
                       {(rejected || 0) > 0 && <span className="text-[#FF6685] ml-2">{rejected} rejected</span>}
@@ -910,7 +910,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-[#71808E] py-4">No applications yet</p>
+              <p className="text-sm text-[var(--ei-text-muted)] py-4">No applications yet</p>
             )}
           </div>
         </div>

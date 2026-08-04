@@ -896,3 +896,175 @@ h2, h3 { letter-spacing: -0.02em; }
     0 1px 4px rgba(0, 0, 0, 0.8),
     0 0 1px rgba(0, 0, 0, 1);
 }
+
+/* ——— Global light mode (data-theme on <html>) ——— */
+html[data-theme="light"] {
+  --background: #f8fafc;
+  --card: #ffffff;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+
+  --ei-bg-primary: #f1f5f9;
+  --ei-bg-secondary: #ffffff;
+  --ei-surface-glass: rgba(255, 255, 255, 0.92);
+  --ei-surface-glass-soft: rgba(255, 255, 255, 0.88);
+  --ei-surface-hover: rgba(15, 23, 42, 0.05);
+  --ei-surface-input: #ffffff;
+  --ei-border-primary: rgba(15, 23, 42, 0.1);
+  --ei-border-hover: rgba(15, 23, 42, 0.16);
+  --ei-text-primary: #0f172a;
+  --ei-text-secondary: #475569;
+  --ei-text-muted: #64748b;
+  --ei-text-label: #334155;
+  --ei-text-placeholder: #94a3b8;
+}
+
+html[data-theme="light"] .org-shell {
+  background-image:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 36%),
+    radial-gradient(circle at bottom left, rgba(99, 102, 241, 0.06), transparent 42%);
+}
+
+html[data-theme="light"] .org-shell ::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.18);
+}
+
+html[data-theme="light"] .org-shell ::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 23, 42, 0.28);
+}
+
+html[data-theme="light"] .org-sidebar {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+html[data-theme="light"] .org-nav-item {
+  color: #64748b;
+}
+
+html[data-theme="light"] .org-nav-item:hover {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .org-nav-item-active {
+  color: #0f172a;
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(99, 102, 241, 0.1));
+  border-color: rgba(14, 165, 233, 0.28);
+  box-shadow: none;
+}
+
+html[data-theme="light"] .org-glass-panel {
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme="light"] .org-glass-card {
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+html[data-theme="light"] .org-glass-card:hover {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.14);
+}
+
+html[data-theme="light"] .org-btn-ghost {
+  background: rgba(15, 23, 42, 0.04);
+  border-color: rgba(15, 23, 42, 0.1);
+  color: #0f172a;
+}
+
+html[data-theme="light"] .org-btn-ghost:hover:not(:disabled) {
+  background: rgba(15, 23, 42, 0.07);
+}
+
+html[data-theme="light"] .auth-portal {
+  background-color: #f1f5f9;
+  background-image:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.1), transparent 40%),
+    radial-gradient(circle at bottom left, rgba(99, 102, 241, 0.08), transparent 45%);
+  color: var(--ei-text-secondary);
+}
+
+html[data-theme="light"] .auth-story-glass {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.08);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme="light"] .auth-story-glass::before {
+  background: linear-gradient(160deg, rgba(14, 165, 233, 0.04) 0%, transparent 40%);
+}
+
+html[data-theme="light"] .auth-glass-card {
+  background: #ffffff;
+  border-color: rgba(15, 23, 42, 0.1);
+  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.08);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme="light"] .auth-glass-card:hover {
+  border-color: rgba(15, 23, 42, 0.16);
+}
+
+html[data-theme="light"] .auth-portal .premium-input,
+html[data-theme="light"] .auth-portal .input-premium {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #0f172a;
+}
+
+html[data-theme="light"] .auth-portal .premium-input::placeholder,
+html[data-theme="light"] .auth-portal .input-premium::placeholder {
+  color: #94a3b8;
+}
+
+html[data-theme="light"] .auth-portal button[aria-label='Hide password'],
+html[data-theme="light"] .auth-portal button[aria-label='Show password'] {
+  color: #64748b;
+}
+
+html[data-theme="light"] .auth-portal button[aria-label='Hide password']:hover,
+html[data-theme="light"] .auth-portal button[aria-label='Show password']:hover {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .auth-nav-link {
+  color: #64748b;
+}
+
+html[data-theme="light"] .auth-nav-link:hover {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .auth-nav-link-active {
+  color: #0f172a !important;
+  background: rgba(14, 165, 233, 0.1);
+  border: 1px solid rgba(14, 165, 233, 0.25);
+}
+
+html[data-theme="light"] .auth-cta:focus-visible {
+  box-shadow: 0 0 0 2px #f1f5f9, 0 0 0 4px #38a9ff;
+}
+
+html[data-theme="light"] .landing-hero-glass-title,
+html[data-theme="light"] .landing-hero-glass-body,
+html[data-theme="light"] .landing-text-shadow {
+  text-shadow: none;
+}
+
+html[data-theme="light"] .landing-hero-title {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .landing-headline-gradient {
+  background: linear-gradient(135deg, #0f172a 0%, #0369a1 45%, #0284c7 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+

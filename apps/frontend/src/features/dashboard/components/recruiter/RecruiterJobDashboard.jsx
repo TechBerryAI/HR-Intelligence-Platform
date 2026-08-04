@@ -6,7 +6,7 @@ import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import AnimatedContainer from '@/shared/components/AnimatedContainer.jsx'
 import { Card } from '@/shared/components/ui/index.js'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle } from 'react-icons/fi'
+import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiTrash2 } from 'react-icons/fi'
 
 const formatDisplayDate = (dateString) => {
   if (!dateString) return ''
@@ -19,7 +19,7 @@ const formatDisplayDate = (dateString) => {
 }
 
 export default function RecruiterJobDashboard({ embedded = false, onJobChange, hideJobList = false }) {
-  const { jobs, addJob, updateJob, user } = useApp()
+  const { jobs, addJob, updateJob, setJobEnabled, deleteJob, user } = useApp()
   const [title, setTitle] = useState('')
   const [company, setCompany] = useState(user?.company || '')
   const [location, setLocation] = useState('')
@@ -35,6 +35,9 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
   const [success, setSuccess] = useState('')
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [togglingJobId, setTogglingJobId] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+  const [deleting, setDeleting] = useState(null)
 
   const [editingJobId, setEditingJobId] = useState(null)
   const [editTitle, setEditTitle] = useState('')
@@ -53,6 +56,45 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
 
   const notifyChange = () => {
     onJobChange?.()
+  }
+
+  const handleToggleEnabled = async (job, nextEnabled) => {
+    const jobId = job.id || job.jdid
+    if (!jobId) return
+    setTogglingJobId(jobId)
+    setError('')
+    try {
+      const result = await setJobEnabled(jobId, nextEnabled)
+      if (result?.success === false) {
+        setError(result.error || 'Failed to update job status')
+      } else {
+        setSuccess(nextEnabled ? 'Job enabled' : 'Job disabled (draft)')
+        setTimeout(() => setSuccess(''), 3000)
+        notifyChange()
+      }
+    } finally {
+      setTogglingJobId(null)
+    }
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!confirmDelete) return
+    const jobId = confirmDelete.id || confirmDelete.jdid
+    setDeleting(jobId)
+    setError('')
+    try {
+      const result = await deleteJob(jobId)
+      if (result?.success === false) {
+        setError(result.error || 'Failed to delete job')
+      } else {
+        setSuccess('Job deleted successfully')
+        setTimeout(() => setSuccess(''), 3000)
+        notifyChange()
+      }
+    } finally {
+      setDeleting(null)
+      setConfirmDelete(null)
+    }
   }
 
   const handleJDAutofill = (parsedData) => {
@@ -182,8 +224,8 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     <div className={embedded ? 'min-w-0' : undefined}>
       {embedded && (
         <div className="mb-5">
-          <h2 className="font-display text-[22px] font-semibold text-[#F5F7FA] tracking-tight">Job posting</h2>
-          <p className="mt-1 text-sm text-[#8E9BA8]">Create and manage your job postings</p>
+          <h2 className="font-display text-[22px] font-semibold text-[var(--ei-text-primary)] tracking-tight">Job posting</h2>
+          <p className="mt-1 text-sm text-[var(--ei-text-muted)]">Create and manage your job postings</p>
         </div>
       )}
 
@@ -258,7 +300,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                 placeholder="₹15-25 LPA"
               />
               <div>
-                <label className={`block text-sm font-semibold mb-2 ${embedded ? 'text-[#DCE3EA]' : 'text-slate-700 dark:text-slate-300'}`}>
+                <label className={`block text-sm font-semibold mb-2 ${embedded ? 'text-[var(--ei-text-label)]' : 'text-slate-700 dark:text-slate-300'}`}>
                   Experience Range (years)
                 </label>
                 <div className="grid grid-cols-2 gap-3">
@@ -336,14 +378,14 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
       {!hideJobList && (
       <AnimatedContainer animation="fadeIn" delay={embedded ? 0.1 : 0.4}>
         <div className={embedded ? 'mt-7' : 'mt-10'}>
-          <h3 className={`text-lg font-semibold mb-4 ${embedded ? 'text-[#F5F7FA]' : 'text-slate-900 dark:text-white'}`}>Your Job Posts</h3>
+          <h3 className={`text-lg font-semibold mb-4 ${embedded ? 'text-[var(--ei-text-primary)]' : 'text-slate-900 dark:text-[var(--ei-text-primary)]'}`}>Your Job Posts</h3>
           <div className="grid gap-4">
             {jobs.length === 0 ? (
               <Card className={`p-8 text-center ${embedded ? 'org-glass-panel border-0 shadow-none hover:shadow-none' : ''}`}>
                 <div className={`w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center ${embedded ? 'bg-white/[0.05]' : 'bg-slate-100 dark:bg-slate-700'}`}>
-                  <FiBriefcase className={`w-8 h-8 ${embedded ? 'text-[#8E9BA8]' : 'text-slate-500 dark:text-slate-400'}`} />
+                  <FiBriefcase className={`w-8 h-8 ${embedded ? 'text-[var(--ei-text-muted)]' : 'text-slate-500 dark:text-slate-400'}`} />
                 </div>
-                <p className={embedded ? 'text-[#8E9BA8]' : 'text-slate-500 dark:text-slate-400'}>No jobs yet. Create one above.</p>
+                <p className={embedded ? 'text-[var(--ei-text-muted)]' : 'text-slate-500 dark:text-slate-400'}>No jobs yet. Create one above.</p>
               </Card>
             ) : (
               jobs.map((job, index) => {
@@ -364,28 +406,71 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
-                        <h4 className={`text-lg font-semibold ${isDisabled ? 'text-[#71808E]' : embedded ? 'text-[#F5F7FA]' : 'text-slate-900 dark:text-white'}`}>
+                        <h4 className={`text-lg font-semibold ${isDisabled ? 'text-[var(--ei-text-muted)]' : embedded ? 'text-[var(--ei-text-primary)]' : 'text-slate-900 dark:text-[var(--ei-text-primary)]'}`}>
                           {job.title}
                         </h4>
-                        <p className={`text-sm ${isDisabled ? 'text-[#71808E]' : embedded ? 'text-[#8E9BA8]' : 'text-slate-500 dark:text-slate-400'}`}>
+                        <p className={`text-sm ${isDisabled ? 'text-[var(--ei-text-muted)]' : embedded ? 'text-[var(--ei-text-muted)]' : 'text-slate-500 dark:text-slate-400'}`}>
                           {job.company}
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <label
+                          className="inline-flex items-center cursor-pointer select-none"
+                          title={isDisabled ? 'Disabled — click to enable' : 'Enabled — click to disable'}
+                        >
+                          <span className="sr-only">{isDisabled ? 'Disabled' : 'Enabled'}</span>
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={!isDisabled}
+                            disabled={togglingJobId === (job.id || job.jdid)}
+                            onChange={(e) => handleToggleEnabled(job, e.target.checked)}
+                          />
+                          <span
+                            className={`relative inline-block w-11 h-6 shrink-0 rounded-full transition-colors ${
+                              !isDisabled
+                                ? embedded
+                                  ? 'bg-emerald-500'
+                                  : 'bg-emerald-500'
+                                : embedded
+                                  ? 'bg-white/20'
+                                  : 'bg-slate-300 dark:bg-slate-600'
+                            } ${togglingJobId === (job.id || job.jdid) ? 'opacity-60' : ''}`}
+                            aria-hidden
+                          >
+                            <span
+                              className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                                !isDisabled ? 'translate-x-5' : 'translate-x-0'
+                              }`}
+                            />
+                          </span>
+                        </label>
                         <PremiumButton
                           variant="secondary"
                           size="sm"
                           icon={FiEdit2}
                           onClick={() => handleEditClick(job)}
-                          className={embedded ? '!bg-white/[0.05] !border-white/10 !text-[#E8EDF3] hover:!bg-white/[0.09]' : ''}
+                          className={embedded ? '!bg-white/[0.05] !border-[var(--ei-border-primary)] !text-[var(--ei-text-primary)] hover:!bg-white/[0.09]' : ''}
                         >
                           Edit
                         </PremiumButton>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDelete(job)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                            embedded
+                              ? 'text-red-400 hover:bg-red-500/10 border-red-500/30'
+                              : 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 border-red-200 dark:border-red-500/30'
+                          }`}
+                        >
+                          <FiTrash2 className="w-3.5 h-3.5" />
+                          Delete
+                        </button>
                       </div>
                     </div>
 
-                    <div className={`flex flex-wrap items-center gap-4 text-sm mb-4 ${isDisabled ? 'text-[#71808E]' : embedded ? 'text-[#8E9BA8]' : 'text-slate-500 dark:text-slate-400'}`}>
+                    <div className={`flex flex-wrap items-center gap-4 text-sm mb-4 ${isDisabled ? 'text-[var(--ei-text-muted)]' : embedded ? 'text-[var(--ei-text-muted)]' : 'text-slate-500 dark:text-slate-400'}`}>
                       <div className="flex items-center gap-1">
                         <FiMapPin className="w-4 h-4" />
                         <span>{job.location}</span>
@@ -412,7 +497,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                     </div>
 
                     {job.description && (
-                      <p className={`text-sm line-clamp-3 ${isDisabled ? 'text-[#71808E]' : embedded ? 'text-[#A0ABB6]' : 'text-slate-600 dark:text-slate-300'}`}>
+                      <p className={`text-sm line-clamp-3 ${isDisabled ? 'text-[var(--ei-text-muted)]' : embedded ? 'text-[var(--ei-text-secondary)]' : 'text-slate-600 dark:text-slate-300'}`}>
                         {job.description}
                       </p>
                     )}
@@ -424,6 +509,63 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
         </div>
       </AnimatedContainer>
       )}
+
+      <AnimatePresence>
+        {confirmDelete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[210] flex items-center justify-center p-4"
+          >
+            <div className="absolute inset-0 bg-slate-900/50 dark:bg-black/60 backdrop-blur-sm" onClick={() => !deleting && setConfirmDelete(null)} />
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.96, opacity: 0, y: 10 }}
+              className={`relative w-full max-w-md rounded-2xl overflow-hidden border p-6 ${
+                embedded
+                  ? 'org-glass-panel border-[var(--ei-border-primary)]'
+                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-premium'
+              }`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className={`text-lg font-semibold ${embedded ? 'text-[var(--ei-text-primary)]' : 'text-slate-900 dark:text-[var(--ei-text-primary)]'}`}>
+                Delete Job?
+              </h3>
+              <p className={`mt-2 text-sm ${embedded ? 'text-[var(--ei-text-secondary)]' : 'text-slate-600 dark:text-slate-400'}`}>
+                This will permanently delete{' '}
+                <span className={`font-medium ${embedded ? 'text-[var(--ei-text-primary)]' : 'text-slate-900 dark:text-[var(--ei-text-primary)]'}`}>
+                  &quot;{confirmDelete.title}&quot;
+                </span>
+                . All associated applications will also be removed.
+              </p>
+              <div className="mt-5 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(null)}
+                  disabled={Boolean(deleting)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    embedded
+                      ? 'text-[var(--ei-text-primary)] hover:bg-white/10 border border-[var(--ei-border-primary)]'
+                      : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-600'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteConfirm}
+                  disabled={deleting === (confirmDelete.id || confirmDelete.jdid)}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 transition-colors"
+                >
+                  {deleting === (confirmDelete.id || confirmDelete.jdid) ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {editingJobId && (
@@ -441,23 +583,23 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
               exit={{ scale: 0.96, opacity: 0, y: 10 }}
               className={`relative w-full max-w-2xl rounded-2xl overflow-hidden border ${
                 embedded
-                  ? 'org-glass-panel border-white/[0.08]'
+                  ? 'org-glass-panel border-[var(--ei-border-primary)]'
                   : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-premium'
               }`}
               onClick={(e) => e.stopPropagation()}
             >
               <div className={`flex items-center justify-between px-6 py-4 border-b ${
-                embedded ? 'border-white/[0.08] bg-white/[0.03]' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80'
+                embedded ? 'border-[var(--ei-border-primary)] bg-white/[0.03]' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80'
               }`}>
-                <h3 className={`text-xl font-semibold ${embedded ? 'text-[#F5F7FA]' : 'text-slate-900 dark:text-white'}`}>Edit Job Post</h3>
+                <h3 className={`text-xl font-semibold ${embedded ? 'text-[var(--ei-text-primary)]' : 'text-slate-900 dark:text-[var(--ei-text-primary)]'}`}>Edit Job Post</h3>
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={handleEditCancel}
                   className={`p-2 rounded-xl transition-colors ${
                     embedded
-                      ? 'text-[#8E9BA8] hover:text-white hover:bg-white/[0.05]'
-                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700'
+                      ? 'text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] hover:bg-white/[0.05]'
+                      : 'text-slate-400 hover:text-slate-600 dark:hover:text-[var(--ei-text-primary)] hover:bg-slate-100 dark:hover:bg-slate-700'
                   }`}
                 >
                   <FiX className="w-5 h-5" />

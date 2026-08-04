@@ -51,15 +51,15 @@ export default function LoginAdmin() {
       <div className="mb-5">
         <Link
           to="/"
-          className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-[#94A2AF] transition-colors hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38A9FF]/40 rounded-lg"
+          className="mb-4 inline-flex items-center gap-2 text-sm font-medium text-[var(--ei-text-muted)] transition-colors hover:text-[var(--ei-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#38A9FF]/40 rounded-lg"
         >
           <FiArrowLeft className="h-4 w-4" aria-hidden="true" />
           Back to home
         </Link>
-        <h2 className="font-display text-[clamp(1.75rem,3vw,2.15rem)] font-bold tracking-tight text-[#F5F7FA]">
+        <h2 className="font-display text-[clamp(1.75rem,3vw,2.15rem)] font-bold tracking-tight text-[var(--ei-text-primary)]">
           Welcome back
         </h2>
-        <p className="mt-1.5 text-[14px] sm:text-[15px] text-[#8796A5]">
+        <p className="mt-1.5 text-[14px] sm:text-[15px] text-[var(--ei-text-secondary)]">
           Sign in to your HR Intelligence account
         </p>
       </div>
@@ -71,10 +71,10 @@ export default function LoginAdmin() {
             background: 'linear-gradient(135deg, rgba(0,166,255,0.18), rgba(92,72,255,0.18))',
           }}
         >
-          <FiShield className="h-6 w-6 text-[#55B9FF]" aria-hidden="true" />
+          <FiShield className="h-6 w-6 text-[#0284c7] dark:text-[#55B9FF]" aria-hidden="true" />
         </div>
-        <h3 className="text-xl font-semibold text-[#F4F7FA]">Sign in</h3>
-        <p className="mt-1 text-sm text-[#8796A5]">HR, Head of HR, or Executive access</p>
+        <h3 className="text-xl font-semibold text-[var(--ei-text-primary)]">Sign in</h3>
+        <p className="mt-1 text-sm text-[var(--ei-text-secondary)]">HR, Head of HR, or Executive access</p>
 
         <form onSubmit={onAdminSubmit} className="mt-6 space-y-4">
           {adminError && (
@@ -83,7 +83,7 @@ export default function LoginAdmin() {
             </div>
           )}
           <div className="w-full">
-            <label className="mb-1.5 block text-sm font-medium text-[#DCE4EA]">Email</label>
+            <label className="mb-1.5 block text-sm font-medium text-[var(--ei-text-label)]">Email</label>
             <Input
               type="email"
               className="input-premium h-12 min-h-[3rem] text-base"
@@ -94,7 +94,7 @@ export default function LoginAdmin() {
             />
           </div>
           <div className="w-full">
-            <label className="mb-1.5 block text-sm font-medium text-[#DCE4EA]">Password</label>
+            <label className="mb-1.5 block text-sm font-medium text-[var(--ei-text-label)]">Password</label>
             <PasswordInput
               className="input-premium h-12 min-h-[3rem] text-base"
               placeholder="••••••••"
@@ -113,8 +113,8 @@ export default function LoginAdmin() {
               'Sign in'
             )}
           </button>
-          <p className="pt-2 text-center text-sm text-[#8796A5]">
-            <Link to="/login" className="text-[#94A2AF] transition-colors hover:text-white">
+          <p className="pt-2 text-center text-sm text-[var(--ei-text-secondary)]">
+            <Link to="/login" className="text-[var(--ei-text-muted)] transition-colors hover:text-[var(--ei-text-primary)]">
               ← Back to login
             </Link>
           </p>

@@ -11,6 +11,7 @@ const HERO_FEATURES = [
 /**
  * Two-column auth layout: left = branding glass, right = form card.
  * Shared atmosphere — no hard partition. Hero hidden below 1100px.
+ * Colors follow global Dark/Light via --ei-* tokens.
  */
 export default function AuthPageLayout({ title, subtitle, children, illustration }) {
   return (
@@ -38,25 +39,25 @@ export default function AuthPageLayout({ title, subtitle, children, illustration
                 H
               </div>
             )}
-            <p className="relative z-10 flex items-center gap-2.5 text-sm text-white/75 tracking-wide">
+            <p className="relative z-10 flex items-center gap-2.5 text-sm text-[var(--ei-text-secondary)] tracking-wide">
               <span className="inline-block h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.8)]" />
               next generation HR technology
             </p>
-            <h1 className="relative z-10 mt-5 font-display text-[clamp(1.85rem,3vw,2.5rem)] font-semibold leading-[1.1] tracking-[-0.03em] text-white landing-hero-glass-title">
+            <h1 className="relative z-10 mt-5 font-display text-[clamp(1.85rem,3vw,2.5rem)] font-semibold leading-[1.1] tracking-[-0.03em] text-[var(--ei-text-primary)]">
               {title}
             </h1>
             {subtitle && (
-              <p className="relative z-10 mt-4 max-w-[460px] text-base font-light leading-relaxed text-white/75 landing-hero-glass-body">
+              <p className="relative z-10 mt-4 max-w-[460px] text-base font-light leading-relaxed text-[var(--ei-text-secondary)]">
                 {subtitle}
               </p>
             )}
             <ul className="relative z-10 mt-7 space-y-3">
               {HERO_FEATURES.map(({ icon: Icon, label }) => (
                 <li key={label} className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/[0.06]">
-                    <Icon className="h-4 w-4 text-sky-400" aria-hidden="true" />
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] border border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]">
+                    <Icon className="h-4 w-4 text-sky-500" aria-hidden="true" />
                   </span>
-                  <span className="text-sm font-medium text-white/85">{label}</span>
+                  <span className="text-sm font-medium text-[var(--ei-text-primary)]">{label}</span>
                 </li>
               ))}
             </ul>

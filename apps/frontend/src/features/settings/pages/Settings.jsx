@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useApp } from '@/core/context/AppContext.jsx'
+import { useTheme } from '@/core/context/ThemeContext.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import { motion } from 'framer-motion'
@@ -9,17 +10,18 @@ import { PASSWORD_RULES, isPasswordStrong } from '@/shared/utils/passwordValidat
 
 /**
  * @param {'default' | 'enterprise'} [theme]
- * enterprise = Head HR / CEO org shell (dark glass). default = light staff settings.
+ * When omitted, follows global Dark/Light toggle (`surfaceTheme`).
  */
-export default function Settings({ theme = 'default' }) {
+export default function Settings({ theme }) {
   const { changePasswordHr } = useApp()
+  const { surfaceTheme } = useTheme()
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
 
-  const enterprise = theme === 'enterprise'
+  const enterprise = (theme || surfaceTheme) === 'enterprise'
   const changePassword = changePasswordHr
 
   const newPasswordValid = isPasswordStrong(newPassword)
@@ -55,7 +57,7 @@ export default function Settings({ theme = 'default' }) {
   }
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className={enterprise ? 'max-w-2xl mx-auto px-6 py-10' : 'max-w-2xl mx-auto'}>
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -95,7 +97,7 @@ export default function Settings({ theme = 'default' }) {
         <div
           className={
             enterprise
-              ? 'px-6 py-4 border-b border-white/[0.08] bg-white/[0.03] flex items-center gap-3'
+              ? 'px-6 py-4 border-b border-white/[0.08] bg-[var(--ei-surface-hover)] flex items-center gap-3'
               : 'px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center gap-3'
           }
         >
@@ -103,7 +105,7 @@ export default function Settings({ theme = 'default' }) {
           <h2
             className={
               enterprise
-                ? 'text-lg font-semibold text-[#F5F7FA]'
+                ? 'text-lg font-semibold text-[var(--ei-text-primary)]'
                 : 'text-lg font-semibold text-slate-900 dark:text-white'
             }
           >
@@ -115,7 +117,7 @@ export default function Settings({ theme = 'default' }) {
           <h3
             className={
               enterprise
-                ? 'text-sm font-medium text-[#DCE3EA] mb-4 flex items-center gap-2'
+                ? 'text-sm font-medium text-[var(--ei-text-label)] mb-4 flex items-center gap-2'
                 : 'text-sm font-medium text-slate-700 dark:text-slate-300 mb-4 flex items-center gap-2'
             }
           >
@@ -125,7 +127,7 @@ export default function Settings({ theme = 'default' }) {
           <p
             className={
               enterprise
-                ? 'text-sm text-[#A0ABB6] mb-4 leading-relaxed'
+                ? 'text-sm text-[var(--ei-text-secondary)] mb-4 leading-relaxed'
                 : 'text-sm text-slate-500 dark:text-slate-400 mb-4'
             }
           >
@@ -144,7 +146,7 @@ export default function Settings({ theme = 'default' }) {
                     />
                   ) : (
                     <FiX
-                      className={`w-4 h-4 flex-shrink-0 ${enterprise ? 'text-[#71808E]' : 'text-slate-400'}`}
+                      className={`w-4 h-4 flex-shrink-0 ${enterprise ? 'text-[var(--ei-text-muted)]' : 'text-slate-400'}`}
                       aria-hidden
                     />
                   )}
@@ -152,10 +154,10 @@ export default function Settings({ theme = 'default' }) {
                     className={
                       pass
                         ? enterprise
-                          ? 'text-[#DCE3EA]'
+                          ? 'text-[var(--ei-text-label)]'
                           : 'text-slate-700 dark:text-slate-300'
                         : enterprise
-                          ? 'text-[#8E9BA8]'
+                          ? 'text-[var(--ei-text-secondary)]'
                           : 'text-slate-500'
                     }
                   >

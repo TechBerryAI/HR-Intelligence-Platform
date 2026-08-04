@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
 import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
+import ThemeToggle from '@/shared/components/ThemeToggle.jsx'
 import {
   FiGrid, FiUsers, FiBriefcase, FiLogOut, FiMenu, FiX, FiShield, FiSettings, FiBarChart2, FiLayers,
 } from 'react-icons/fi'
@@ -59,8 +60,8 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
           {initials}
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-[#F5F7FA] truncate">{displayName}</p>
-          <p className="text-xs text-[#8E9BA8] truncate">{displayEmail || ''}</p>
+          <p className="text-sm font-semibold text-[var(--ei-text-primary)] truncate">{displayName}</p>
+          <p className="text-xs text-[var(--ei-text-muted)] truncate">{displayEmail || ''}</p>
           <p className="text-[10px] uppercase tracking-[0.08em] text-[#00A6FF]/80 mt-1">
             {isCeoPanel ? 'Read-only access' : roleLabel}
           </p>
@@ -84,7 +85,8 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
         ))}
       </nav>
 
-      <div className="px-3 pt-1 pb-5 shrink-0 border-t border-white/[0.08]">
+      <div className="px-3 pt-1 pb-5 shrink-0 border-t border-[var(--ei-border-primary)]">
+        <ThemeToggle className="org-nav-item w-full mt-2 justify-start text-[var(--ei-text-secondary)] hover:text-[var(--ei-text-primary)]" />
         <button
           type="button"
           onClick={handleLogout}
@@ -106,13 +108,13 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
           <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
           <div className="org-sidebar relative z-50 flex flex-col w-64 h-full border-r border-white/[0.08]">
             <div className="flex items-center justify-between px-4 py-4 border-b border-white/[0.08]">
-              <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
+              <span className="text-sm font-semibold text-[var(--ei-text-primary)] flex items-center gap-2">
                 <PanelIcon className="w-4 h-4 text-[#00A6FF]" /> {panelTitle}
               </span>
               <button
                 type="button"
                 onClick={() => setSidebarOpen(false)}
-                className="text-[#8E9BA8] hover:text-white p-2 rounded-xl hover:bg-white/[0.05] transition-all duration-[180ms]"
+                className="text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] p-2 rounded-xl hover:bg-white/[0.05] transition-all duration-[180ms]"
               >
                 <FiX className="w-5 h-5" />
               </button>
@@ -123,17 +125,18 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
       )}
 
       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-white/[0.08] bg-[rgba(13,20,27,0.88)] backdrop-blur-xl shrink-0">
+        <div className="lg:hidden flex items-center gap-3 px-4 py-3 border-b border-[var(--ei-border-primary)] bg-[var(--ei-surface-glass)] backdrop-blur-xl shrink-0">
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
-            className="text-[#8E9BA8] hover:text-white p-2 rounded-xl hover:bg-white/[0.05] transition-all duration-[180ms]"
+            className="text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] p-2 rounded-xl hover:bg-[var(--ei-surface-hover)] transition-all duration-[180ms]"
           >
             <FiMenu className="w-5 h-5" />
           </button>
-          <span className="text-sm font-semibold text-[#F5F7FA] flex items-center gap-2">
+          <span className="text-sm font-semibold text-[var(--ei-text-primary)] flex items-center gap-2 flex-1">
             <PanelIcon className="w-4 h-4 text-[#00A6FF]" /> {panelTitle}
           </span>
+          <ThemeToggle className="text-[var(--ei-text-secondary)] hover:text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)]" compact />
         </div>
 
         <main className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-7 lg:p-9">

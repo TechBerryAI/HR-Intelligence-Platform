@@ -9,6 +9,7 @@ from app.database.connection.db import db_all, db_get, db_run
 from app.ai.toon.runtime import toon_loads_flex
 from app.api.middleware.auth import authenticate_token, require_head_hr
 from app.domains.identity.authorization.rbac import is_head_hr, require_analytics_read, is_read_only
+from app.domains.recruitment.services.job_delete import cascade_delete_job
 
 head_hr_bp = Blueprint('head_hr', __name__)
 
@@ -325,7 +326,7 @@ def job_detail_or_delete(jdid):
         if not existing:
             return jsonify({'error': 'Job not found'}), 404
         try:
-            db_run('DELETE FROM jobs WHERE jdid = ?', (jdid,))
+            cascade_delete_job(jdid)
             return jsonify({'message': f'Job {jdid} deleted successfully'})
         except Exception as e:
             print(f'[HEAD HR] Error deleting job {jdid}: {e}')

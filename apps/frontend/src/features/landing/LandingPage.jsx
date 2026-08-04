@@ -7,8 +7,10 @@ import TransitionOverlay from './transitions/TransitionOverlay.jsx'
 import WatchDemoModal from './components/WatchDemoModal.jsx'
 import { useLandingScroll } from './hooks/useLandingScroll.js'
 import { useEnterAppTransition } from './hooks/useEnterAppTransition.js'
+import { useTheme } from '@/core/context/ThemeContext.jsx'
 
 export default function LandingPage() {
+  const { isDark } = useTheme()
   const scrollProgress = useLandingScroll()
 
   const visualRef = useRef(null)
@@ -29,9 +31,13 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-[#050a14] text-white">
+    <div
+      className={`relative min-h-screen ${
+        isDark ? 'bg-[#050a14] text-white' : 'bg-slate-50 text-slate-900'
+      }`}
+    >
       {/* Interactive 3D hero — text-free video used only as subtle motion texture inside scene */}
-      <div className="fixed inset-0 z-0">
+      <div className={`fixed inset-0 z-0 ${isDark ? '' : 'opacity-40'}`}>
         <LandingInteractiveHero ref={visualRef} scrollProgress={scrollProgress} />
       </div>
 

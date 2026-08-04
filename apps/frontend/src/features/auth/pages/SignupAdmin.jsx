@@ -54,43 +54,43 @@ export default function SignupAdmin() {
             subtitle={step === 1 ? 'Manage job postings and candidates.' : `We sent a code to ${email}. Enter it below.`}
         >
             <div className="auth-glass-card">
-                <h2 className="text-xl font-semibold text-[#F4F7FA]">
+                <h2 className="text-xl font-semibold text-[var(--ei-text-primary)]">
                     {step === 1 ? 'Sign Up as Admin' : 'Verify Your Email'}
                 </h2>
-                <p className="mt-1 text-sm text-[#8796A5]">
+                <p className="mt-1 text-sm text-[var(--ei-text-secondary)]">
                     {step === 1 ? 'Create an HR/Admin account to manage jobs' : `We sent a verification code to ${email}. Please enter it below.`}
                 </p>
                 {step === 1 ? (
                     <form onSubmit={onSubmit} className="mt-6 space-y-4">
                         {error && <div className="rounded-xl border border-[rgba(255,90,110,0.55)] bg-[rgba(255,102,133,0.1)] px-4 py-3 text-sm text-[#FF7B8E]">{error}</div>}
                         <div>
-                            <label className="block text-sm font-medium text-[#DCE4EA] mb-1.5">Full Name (Admin)</label>
+                            <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1.5">Full Name (Admin)</label>
                             <input className="input-premium" placeholder="Your name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-[#DCE4EA] mb-1.5">Company</label>
+                            <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1.5">Company</label>
                             <input className="input-premium" placeholder="Company name" value={company} onChange={(e) => setCompany(e.target.value)} required />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-[#DCE4EA] mb-1.5">Work Email</label>
+                            <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1.5">Work Email</label>
                             <input type="email" className="input-premium" placeholder="hr@company.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-[#DCE4EA] mb-1.5">Password</label>
+                            <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1.5">Password</label>
                             <PasswordInput className="input-premium" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
                         </div>
                         <button type="submit" disabled={submitting} className="auth-cta">
                             {submitting ? 'Sending OTP...' : 'Send Verification Code'}
                         </button>
-                        <p className="text-center text-sm text-[#8796A5]">
-                            <Link to="/login" className="text-[#94A2AF] transition-colors hover:text-white">← Back to login</Link>
+                        <p className="text-center text-sm text-[var(--ei-text-secondary)]">
+                            <Link to="/login" className="text-[var(--ei-text-muted)] transition-colors hover:text-[var(--ei-text-primary)]">← Back to login</Link>
                         </p>
                     </form>
                 ) : (
                     <form onSubmit={onVerifyOTP} className="mt-6 space-y-4">
                         {error && <div className="rounded-xl border border-[rgba(255,90,110,0.55)] bg-[rgba(255,102,133,0.1)] px-4 py-3 text-sm text-[#FF7B8E]">{error}</div>}
                         <div>
-                            <label className="block text-sm font-medium text-[#DCE4EA] mb-1.5">Enter OTP</label>
+                            <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1.5">Enter OTP</label>
                             <input type="text" inputMode="numeric" pattern="[0-9]*" maxLength={6} className="input-premium text-center text-2xl tracking-widest font-mono" placeholder="000000" value={otp} onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} required autoFocus />
                         </div>
                         <p className="text-xs text-[#6F7E8B]">Check your email for the 6-digit code</p>
@@ -101,7 +101,7 @@ export default function SignupAdmin() {
                             <button type="button" onClick={async () => { setError(''); setResending(true); try { const res = await resendHROTP({ email }); if (res.ok) { setError(''); alert('OTP resent successfully! Please check your email.'); } else { setError(res.message || 'Failed to resend OTP'); } } catch (err) { setError(err?.message || 'Failed to resend OTP'); } finally { setResending(false); } }} disabled={resending} className="flex-1 text-sm text-[#55B9FF] hover:underline disabled:opacity-50">
                                 {resending ? 'Resending...' : 'Resend OTP'}
                             </button>
-                            <button type="button" onClick={() => setStep(1)} className="flex-1 text-sm text-[#8796A5] hover:text-white transition-colors">
+                            <button type="button" onClick={() => setStep(1)} className="flex-1 text-sm text-[var(--ei-text-secondary)] hover:text-[var(--ei-text-primary)] transition-colors">
                                 ← Back to signup
                             </button>
                         </div>
