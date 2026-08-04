@@ -455,6 +455,10 @@ def parse_personal(text: str, preamble: str) -> PersonalInfo:
             if is_plausible_person_name(cand):
                 name = cand.title() if cand.isupper() else cand
                 break
+    if name:
+        name = re.sub(r'(?i)^(mr|mrs|ms|miss|dr|prof)\.?\s+', '', name).strip()
+        if name.isupper() and len(name.split()) >= 2:
+            name = name.title()
     ok, _ = validate_person_name(name) if name else (False, '')
     # If DI validator is stricter than plausible-name check, still keep plausible names
     if name and not ok and is_plausible_person_name(name):
