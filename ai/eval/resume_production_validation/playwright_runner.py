@@ -281,6 +281,16 @@ def process_one(
 
 def _process_item_in_subprocess(payload: dict) -> dict:
     """One Playwright browser per process (sync API is not thread-safe)."""
+    import os
+    from pathlib import Path as _Path
+
+    browsers_path = payload.get('browsers_path') or ''
+    if not browsers_path:
+        root = _Path(__file__).resolve().parents[3]
+        browsers_path = str(root / '.playwright-browsers')
+    if browsers_path and _Path(browsers_path).is_dir():
+        os.environ['PLAYWRIGHT_BROWSERS_PATH'] = browsers_path
+
     from playwright.sync_api import sync_playwright
 
     item = CorpusItem(
@@ -319,6 +329,12 @@ def run_corpus(
     on_result: Callable[[dict], None] | None = None,
     headless: bool = True,
 ) -> list[dict]:
+    import os
+
+    browsers = Path(__file__).resolve().parents[3] / '.playwright-browsers'
+    if browsers.is_dir():
+        os.environ['PLAYWRIGHT_BROWSERS_PATH'] = str(browsers)
+
     from playwright.sync_api import sync_playwright
 
     dirs = ensure_report_dirs(out_dir)
@@ -339,6 +355,7 @@ def run_corpus(
         if on_result:
             on_result(row)
 
+    # Default to in-process browser: ProcessPool on WSL often loses browser path / greenlet state.
     if workers <= 1:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=headless)
@@ -367,6 +384,7 @@ def run_corpus(
             'base_url': base_url,
             'timeout_ms': timeout_ms,
             'headless': headless,
+            'browsers_path': str(browsers) if browsers.is_dir() else '',
         }
         for it in pending
     ]

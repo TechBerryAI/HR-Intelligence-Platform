@@ -154,6 +154,13 @@ def invalidate_fixable_product_failures(checkpoint_path: Path) -> tuple[dict[str
 
 
 def main(argv: list[str] | None = None) -> int:
+    import os
+
+    # Prefer repo-local Playwright browsers (stable across sandbox/process pools)
+    browsers = ROOT / '.playwright-browsers'
+    if browsers.is_dir() and not os.environ.get('PLAYWRIGHT_BROWSERS_PATH'):
+        os.environ['PLAYWRIGHT_BROWSERS_PATH'] = str(browsers)
+
     parser = argparse.ArgumentParser(description='Resume production E2E validation')
     parser.add_argument('--corpus', type=Path, default=ROOT / 'Resumes')
     parser.add_argument('--out', type=Path, default=ROOT / 'validation-report')
