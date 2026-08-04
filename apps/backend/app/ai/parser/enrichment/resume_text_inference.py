@@ -733,9 +733,17 @@ def extract_location_from_text(text: str) -> str:
             for tok in (
                 'technologies', 'skills', 'experience', 'summary', 'objective',
                 'linkedin', 'github', 'http', '@', 'vlan', 'configuration',
-                'switchover', 'switchback',
+                'switchover', 'switchback', 'university', 'college', 'institute',
+                'school', 'cgpi', 'sgpi',
             )
         ):
+            # Still allow bare city if present inside a noisy line
+            for city in (
+                'Mumbai', 'Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
+                'Kolkata', 'Pune', 'Nagpur', 'Noida', 'Gurugram', 'Gurgaon',
+            ):
+                if city.lower() in low:
+                    return city
             return ''
         # Long address → prefer known city token inside it
         cities = (
