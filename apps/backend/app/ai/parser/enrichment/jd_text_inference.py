@@ -151,23 +151,29 @@ _SKILL_HEADER_RE = re.compile(
 )
 _SKILL_INLINE_HEADER_RE = re.compile(
     r'(?i)^(?:\*\*)?(?:required\s+|core\s+|mandatory\s+|technical\s+|primary\s+|key\s+|must[- ]?have\s+)?'
-    r'(?:skills?(?:\s*(?:&|and)\s*experience)?|tech\s*stack)(?:\*\*)?\s*[:\-]\s*(.+)$'
+    r'(?:skills?(?:\s*(?:&|and)\s*experience)?|tech\s*stack)(?:\*\*)?\s*[:\-][ \t]*(.+)$'
 )
 _SKILL_STOP_HEADER_RE = re.compile(
     r'(?i)^(?:\*\*)?(?:responsibilities|duties|qualifications|requirements|benefits|preferred|'
     r'about|experience|education|employment|location|salary|compensation|what\s+we|'
-    r'nice[- ]?to[- ]?have|must\s+haves?|key\s+responsibilities)(?:\*\*)?\s*:?\s*$'
+    r'nice[- ]?to[- ]?have|must\s+haves?|key\s+responsibilities|bonus\s+points?|'
+    r'soft\s+skills?|candidate\s+profile)(?:\*\*)?\s*:?\s*$'
 )
 _PREF_HEADER_RE = re.compile(
-    r'(?i)^(?:\*\*)?(?:preferred|nice[- ]?to[- ]?have|advanced)\s*skills?(?:\*\*)?\s*:?\s*$'
+    r'(?i)^(?:\*\*)?(?:preferred\s+(?:skills?|qualifications?)|nice[- ]?to[- ]?have(?:\s+skills?)?|'
+    r'advanced\s+skills?|bonus\s+(?:points?|skills?)|good\s+to\s+have)(?:\*\*)?\s*:?\s*$'
 )
 _PREF_INLINE_HEADER_RE = re.compile(
-    r'(?i)^(?:\*\*)?(?:preferred|nice[- ]?to[- ]?have|advanced)\s*skills?(?:\*\*)?\s*[:\-]\s*(.+)$'
+    r'(?i)^(?:\*\*)?(?:preferred\s+(?:skills?|qualifications?)|nice[- ]?to[- ]?have(?:\s+skills?)?|'
+    r'advanced\s+skills?|bonus\s+(?:points?|skills?)|good\s+to\s+have)(?:\*\*)?\s*[:\-][ \t]*(.+)$'
 )
 _QUAL_SKILL_NOISE_RE = re.compile(
     r'(?i)^(qualification|education|bachelor|master|degree|b\.?tech|b\.?e\.?|m\.?c\.?a|'
-    r'b\.?c\.?a|b\.?sc|mba|phd|preferred\s*skills?|required\s*skills?|mandatory\s*skills?|'
-    r'technical\s*skills?|primary\s*skills?|educational\s*qualifications?)\b'
+    r'b\.?c\.?a|b\.?sc|mba|phd|preferred\s*skills?|preferred\s*qualifications?|'
+    r'required\s*skills?|mandatory\s*skills?|technical\s*skills?|primary\s*skills?|'
+    r'educational\s*qualifications?|bonus\s*points?|experience\s*level|'
+    r'soft\s*skills?(?:\s*&\s*competencies)?|preferred\s*candidate\s*profile|'
+    r'nice[- ]?to[- ]?have|good\s*to\s*have|or\s+related\s+field)\b'
 )
 _SKILL_PROSE_NOISE_RE = re.compile(
     r'(?i)^(we\s|our\s|looking|seeking|join\s|the\s+candidate|you\s+will|'
@@ -192,6 +198,46 @@ _KNOWN_CITIES = (
     'lucknow', 'coimbatore', 'nagpur', 'vikhroli', 'andheri', 'airoli', 'powai',
     'whitefield', 'electronic city', 'remote', 'hybrid', 'wfh', 'work from home',
 )
+# Section headers / filler that must never become skills (ATS matching safety)
+_JD_SKILL_DENYLIST = frozenset({
+    'preferred qualifications', 'preferred qualification', 'preferred skills',
+    'preferred skill', 'required skills', 'required skill', 'mandatory skills',
+    'technical skills', 'primary skills', 'core skills', 'key skills',
+    'bonus points', 'bonus point', 'experience level', 'soft skills',
+    'soft skills & competencies', 'preferred candidate profile', 'candidate profile',
+    'qualifications', 'requirements', 'responsibilities', 'nice to have',
+    'nice-to-have', 'good to have', 'or related field', 'related field',
+    'plus', 'and', 'for', 'the', 'with', 'from', 'into', 'onto', 'over',
+    'under', 'management', 'leadership', 'communication', 'teamwork',
+    'public', 'job', 'jobs', 'role', 'roles', 'etc', 'etc.', 'n/a', 'na',
+    'none', 'other', 'others', 'various', 'including', 'such as',
+    'years of experience', 'years experience', 'work experience',
+    'information technology', 'computer science',
+})
+_BANNER_ACRONYMS = frozenset({
+    'PUBLIC', 'JOB', 'JOBS', 'ROLE', 'ROLES', 'TEAM', 'OPEN', 'APPLY',
+    'HIRING', 'CAREER', 'CAREERS', 'EQUAL', 'EOE',
+})
+_CONNECTOR_WORDS = frozenset({
+    'plus', 'and', 'or', 'for', 'the', 'with', 'from', 'into', 'onto',
+    'over', 'under', 'a', 'an', 'to', 'of', 'in', 'on', 'at', 'by',
+    'is', 'as', 'also', 'well',
+})
+
+
+def _looks_like_skill_token_list(line: str) -> bool:
+    """True when a comma/pipe line is a short skill list, not prose."""
+    text = (line or '').strip()
+    if not text or len(text) > 100:
+        return False
+    if re.search(r'(?i)\b(?:is|are|was|were|have|has|will|should|must|looking|seeking)\b', text):
+        if len(text.split()) >= 5:
+            return False
+    parts = [p.strip() for p in re.split(r'[,•·|]', text) if p.strip()]
+    if len(parts) < 2:
+        return False
+    short = sum(1 for p in parts if len(p.split()) <= 4 and len(p) <= 40)
+    return short >= max(2, int(0.7 * len(parts)))
 
 
 def _is_skill_section_phrase(tok: str, *, from_skill_section: bool) -> bool:
@@ -199,10 +245,19 @@ def _is_skill_section_phrase(tok: str, *, from_skill_section: bool) -> bool:
     if not tok:
         return False
     words = tok.split()
+    lower = tok.lower().strip()
+    if lower in _JD_SKILL_DENYLIST or lower in _CONNECTOR_WORDS:
+        return False
+    if tok.upper() in _BANNER_ACRONYMS:
+        return False
+    if words and words[-1].lower() in {'for', 'with', 'and', 'or', 'of', 'to', 'in', 'on', 'at', 'by'}:
+        return False
     if from_skill_section:
         if len(tok) > 80 or len(words) > 8:
             return False
         if _SKILL_PROSE_NOISE_RE.match(tok):
+            return False
+        if _QUAL_SKILL_NOISE_RE.match(tok):
             return False
         return True
     return is_plausible_keyword(tok)
@@ -227,12 +282,18 @@ def normalize_skill_tokens(
         t = (tok or '').strip().strip('.,;:|')
         t = re.sub(r'^[\s•·▪▫●○\-\*]+', '', t).strip()
         t = re.sub(r'^[oO]\s+(?=[A-Z])', '', t).strip()
+        t = re.sub(r'(?i)\s*(?:is\s+)?(?:a\s+)?plus\.?$', '', t).strip()
+        t = re.sub(r'^[\(\)\[\]]+|[\(\)\[\]]+$', '', t).strip()
         if not t:
             return False
         key = t.lower()
         if key in seen:
             return False
-        if key in _SKILL_GARBAGE_TOKENS or len(key) <= 2 and key.isalpha():
+        if key in _SKILL_GARBAGE_TOKENS or key in _JD_SKILL_DENYLIST or key in _CONNECTOR_WORDS:
+            return False
+        if t.upper() in _BANNER_ACRONYMS:
+            return False
+        if len(key) <= 2 and key.isalpha():
             return False
         if not _is_skill_section_phrase(t, from_skill_section=from_skill_section):
             return False
@@ -261,14 +322,16 @@ def normalize_skill_tokens(
             continue
 
         parts = [item]
-        # Split comma lists, but never inside parentheses (AWS (EC2, EKS, VPC))
-        if ',' in item and len(item) < 160 and not (item.count('(') and item.find('(') < item.find(',')):
-            parts = [p.strip() for p in item.split(',') if p.strip()]
-        elif ',' in item and '(' in item:
-            parts = [item]
+        if (',' in item or '|' in item or '•' in item) and _looks_like_skill_token_list(item):
+            parts = [p.strip() for p in re.split(r'[,•·|]', item) if p.strip()]
+        elif ',' in item and len(item) < 160 and from_skill_section:
+            # Skill-section comma lists — only split when parts stay short
+            maybe = [p.strip() for p in item.split(',') if p.strip()]
+            if maybe and all(len(p.split()) <= 4 for p in maybe):
+                parts = maybe
 
         for part in parts:
-            tok = _strip_list_marker(part).strip().strip('.,;:|')[:80]
+            tok = _strip_list_marker(part).strip().rstrip('.,;:|')[:80]
             tok = re.sub(r'^[\s•·▪▫●○\-\*]+', '', tok).strip()
             if not tok:
                 continue
@@ -411,12 +474,14 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
 
     if not preferred_raw:
         pref_block = re.search(
-            r'(?:\*\*)?(?:Preferred|Nice-to-have|Advanced)\s*Skills?(?:\*\*)?\s*[:\-]\s*([^\n*]+)',
+            r'(?:\*\*)?(?:Preferred|Nice[- ]?to[- ]?have|Advanced)\s*(?:Skills?|Qualifications?)(?:\*\*)?\s*[:\-][ \t]*([^\n*]+)',
             desc,
             re.I,
         )
-        if pref_block:
+        if pref_block and pref_block.group(1).strip():
             preferred_raw = [s.strip() for s in re.split(r'[,•·|]', pref_block.group(1)) if s.strip()]
+        if not preferred_raw:
+            preferred_raw = _collect_skill_section_items(desc, preferred=True)
 
     mandatory_skills = normalize_skill_tokens(
         mandatory_raw, max_items=40, from_skill_section=bool(mandatory_raw)
@@ -424,18 +489,30 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
     preferred_skills = normalize_skill_tokens(
         preferred_raw, max_items=20, from_skill_section=bool(preferred_raw)
     )
+    # Prefer not to double-count preferred tokens as mandatory
+    pref_keys = {s.lower() for s in preferred_skills}
+    mandatory_skills = [s for s in mandatory_skills if s.lower() not in pref_keys]
 
-    # When a skills section produced only soft skills / garbage, backfill tech from JD
-    if len(mandatory_skills) < 2:
-        tech = extract_tech_keywords_from_text(desc, max_items=20)
-        seen = {s.lower() for s in mandatory_skills}
-        for t in tech:
-            if t.lower() in seen or t.lower() in _SKILL_GARBAGE_TOKENS:
+    # Tech-keyword backfill when labeled skills are missing/weak.
+    # Do not promote preferred-section keywords into mandatory.
+    if len(mandatory_skills) < 3:
+        backfill_text = desc
+        cut = re.search(
+            r'(?i)(?:preferred\s+(?:skills?|qualifications?)|nice[- ]?to[- ]?have|bonus\s+points?)',
+            desc,
+        )
+        if cut and cut.start() > 40:
+            backfill_text = desc[: cut.start()]
+        tech = extract_tech_keywords_from_text(backfill_text, max_items=20)
+        seen = {s.lower() for s in mandatory_skills} | pref_keys
+        for tok in tech:
+            if tok.lower() in seen or tok.lower() in _SKILL_GARBAGE_TOKENS:
                 continue
-            # Prefer product names over incidental 3-letter acronyms when we have better options
-            mandatory_skills.append(t)
-            seen.add(t.lower())
-            if len(mandatory_skills) >= 15:
+            if tok.upper() in _BANNER_ACRONYMS:
+                continue
+            mandatory_skills.append(tok)
+            seen.add(tok.lower())
+            if len(mandatory_skills) >= 20:
                 break
 
     # Keep only tokens that actually appear in the JD (no invented skills).
@@ -477,13 +554,29 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
 
 
 def skills_look_skill_like(skills: list[str] | None) -> bool:
-    """True when at least one token looks like a real skill/tech keyword."""
-    # Treat caller skills as section-originated so short phrases are not wiped
-    # before the deterministic gate (avoids unnecessary LLM fallback hangs).
-    toks = normalize_skill_tokens(skills or [], max_items=10, from_skill_section=True)
+    """True when skills look like a clean, usable skill list (not junk-heavy)."""
+    raw = [str(s).strip() for s in (skills or []) if s and str(s).strip()]
+    if not raw:
+        return False
+    toks = normalize_skill_tokens(raw, max_items=30, from_skill_section=False)
     toks = [t for t in toks if t.lower() not in _SKILL_GARBAGE_TOKENS]
     toks = [t for t in toks if not _SOFT_SKILL_ONLY_RE.match(t)]
-    return len(toks) >= 1
+    if len(toks) < 2:
+        # Single strong tech token is still usable
+        if len(toks) == 1 and is_plausible_keyword(toks[0]):
+            return True
+        return False
+    if len(raw) >= 3 and len(toks) / len(raw) < 0.5:
+        return False
+    return True
+
+
+def skills_look_polluted(skills: list[str] | None) -> bool:
+    """True when a skill list has headers/filler or fails the clean-list check."""
+    raw = [str(s).strip() for s in (skills or []) if s and str(s).strip()]
+    if not raw:
+        return True
+    return not skills_look_skill_like(raw)
 
 
 def extract_jd_keywords_from_text(
@@ -555,6 +648,7 @@ def extract_tech_keywords_from_text(text: str, max_items: int = 20) -> list[str]
         'JD', 'CEO', 'HR', 'USA', 'PDF', 'DOC', 'AI', 'IT', 'QA', 'PM', 'UI', 'UX',
         'CV', 'LLC', 'INC', 'LTD', 'PTE', 'PVT', 'OKR', 'KPI', 'SLA', 'NDA',
         'LPA', 'CTC', 'INR', 'USD', 'EUR', 'GBP', 'WFH', 'JOB', 'GUI',
+        *_BANNER_ACRONYMS,
     }
 
     # Acronyms / product tokens: RAG, GenAI, NLP, AWS, LLM, etc.
@@ -1589,19 +1683,33 @@ def is_plausible_keyword(token: str) -> bool:
     """Keywords must be short JD terms (skills/tech), never sentence fragments."""
     if not token or not str(token).strip():
         return False
-    kw = str(token).strip().strip('.,;:|')
+    kw = str(token).strip().strip(',;:|')
+    # Keep internal dots for tech tokens (Node.js, Vue.js); only strip trailing punctuation
+    kw = kw.rstrip('.,;:|!?')
+    kw = re.sub(r'^[\(\)\[\]]+|[\(\)\[\]]+$', '', kw).strip()
     if len(kw) < 2 or len(kw) > 48:
         return False
-    if re.search(r'[.!?]', kw):
+    # Reject sentence-like punctuation, but allow dotted product names (Node.js)
+    if re.search(r'[!?]', kw):
+        return False
+    if '.' in kw and not re.match(
+        r'^[A-Za-z0-9+#]+(?:\.[A-Za-z0-9+#]+)+$',
+        kw,
+    ):
         return False
     words = kw.split()
     if len(words) > 4:
         return False
     lower = kw.lower()
+    if lower in _JD_SKILL_DENYLIST or lower in _CONNECTOR_WORDS:
+        return False
+    if kw.upper() in _BANNER_ACRONYMS:
+        return False
     if lower.startswith((
         'we ', 'our ', 'the ', 'a ', 'an ', 'to ', 'looking', 'seeking',
         'join ', 'lead ', 'highly', 'innovative', 'must ', 'should ',
-        'responsible', 'ability ', 'hands-on experience',
+        'responsible', 'ability ', 'hands-on experience', 'preferred ',
+        'required ', 'mandatory ', 'bonus ', 'nice ', 'good to ',
     )):
         return False
     # Reject duty / meta fragments
@@ -1613,9 +1721,14 @@ def is_plausible_keyword(token: str) -> bool:
     ):
         return False
     # Reject prose-y fragments
-    if any(w in lower.split() for w in ('seeking', 'looking', 'join', 'team', 'lead', 'highly', 'years')):
-        if len(words) >= 3:
+    if any(w in lower.split() for w in ('seeking', 'looking', 'join', 'team', 'lead', 'highly', 'years', 'plus')):
+        if len(words) >= 2:
             return False
+    # Reject dangling preposition phrases ("Azure Database for")
+    if words and words[-1].lower() in {'for', 'with', 'and', 'or', 'of', 'to', 'in', 'on', 'at', 'by'}:
+        return False
+    if re.search(r'(?i)\bis\s+a\s+plus\b', lower) or lower.endswith(' a plus'):
+        return False
     return True
 
 

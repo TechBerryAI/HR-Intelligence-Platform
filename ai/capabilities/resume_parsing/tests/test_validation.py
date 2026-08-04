@@ -1,4 +1,4 @@
-"""Validation rules tests for resume_parsing capability."""
+"""Validation rules tests for resume_parsing capability (milestone schema)."""
 
 from __future__ import annotations
 
@@ -56,25 +56,26 @@ def test_runtime_validation_passes_valid_resume(package, validator: OutputValida
     assert output["confidence"] == 0.85
 
 
-def test_runtime_validation_rejects_low_confidence(package, validator: OutputValidator) -> None:
-    with pytest.raises(ValidationError) as exc:
-        validator.validate(
-            _resume_payload(confidence=0.4),
-            schema=package.schema_doc,
-            rules=package.validation_rules,
-        )
-    assert "confidence" in str(exc.value).lower()
+def test_runtime_validation_allows_low_confidence_without_rule(package, validator: OutputValidator) -> None:
+    """Milestone validation.yaml has no confidence threshold — schema-only gate."""
+    output = validator.validate(
+        _resume_payload(confidence=0.4),
+        schema=package.schema_doc,
+        rules=package.validation_rules,
+    )
+    assert output["confidence"] == 0.4
 
 
-def test_runtime_validation_rejects_invalid_email(package, validator: OutputValidator) -> None:
+def test_runtime_validation_allows_email_string_without_format(package, validator: OutputValidator) -> None:
+    """Milestone person.email is plain string (format checks live in Document Intelligence)."""
     payload = json.loads(_resume_payload())
     payload["person"]["email"] = "not-an-email"
-    with pytest.raises(ValidationError):
-        validator.validate(
-            json.dumps(payload),
-            schema=package.schema_doc,
-            rules=package.validation_rules,
-        )
+    output = validator.validate(
+        json.dumps(payload),
+        schema=package.schema_doc,
+        rules=package.validation_rules,
+    )
+    assert output["person"]["email"] == "not-an-email"
 
 
 def test_runtime_validation_rejects_invalid_type_enum(package, validator: OutputValidator) -> None:
@@ -86,15 +87,15 @@ def test_runtime_validation_rejects_invalid_type_enum(package, validator: Output
         )
 
 
-def test_runtime_validation_rejects_invalid_experience_date(package, validator: OutputValidator) -> None:
+def test_runtime_validation_allows_freeform_experience_date(package, validator: OutputValidator) -> None:
     payload = json.loads(_resume_payload())
     payload["experience"][0]["from"] = "not-a-date"
-    with pytest.raises(ValidationError):
-        validator.validate(
-            json.dumps(payload),
-            schema=package.schema_doc,
-            rules=package.validation_rules,
-        )
+    output = validator.validate(
+        json.dumps(payload),
+        schema=package.schema_doc,
+        rules=package.validation_rules,
+    )
+    assert output["experience"][0]["from"] == "not-a-date"
 
 
 def test_runtime_validation_accepts_present_end_date(package, validator: OutputValidator) -> None:
@@ -105,9 +106,9 @@ def test_runtime_validation_accepts_present_end_date(package, validator: OutputV
     )
 
 
-def test_runtime_validation_skill_category_enum(package, validator: OutputValidator) -> None:
+def test_runtime_validation_skills_are_strings(package, validator: OutputValidator) -> None:
     payload = json.loads(_resume_payload())
-    payload["skills"] = [{"name": "Python", "category": "language"}]
+    payload["skills"] = ["Python", "SQL"]
     validator.validate(
         json.dumps(payload),
         schema=package.schema_doc,
@@ -115,9 +116,9 @@ def test_runtime_validation_skill_category_enum(package, validator: OutputValida
     )
 
 
-def test_runtime_validation_rejects_invalid_skill_category(package, validator: OutputValidator) -> None:
+def test_runtime_validation_rejects_skill_objects(package, validator: OutputValidator) -> None:
     payload = json.loads(_resume_payload())
-    payload["skills"] = [{"name": "Python", "category": "invalid_category"}]
+    payload["skills"] = [{"name": "Python", "category": "language"}]
     with pytest.raises(ValidationError):
         validator.validate(
             json.dumps(payload),
@@ -126,16 +127,9 @@ def test_runtime_validation_rejects_invalid_skill_category(package, validator: O
         )
 
 
-def test_validation_rules_cross_field_declared(package) -> None:
-    cross_field = package.validation_rules.get("cross_field", [])
-    rule_ids = {rule["id"] for rule in cross_field}
-    assert "experience_dates_order" in rule_ids
-    assert "person_links_dedupe" in rule_ids
-    assert len(cross_field) >= 5
-
-
-def test_validation_rules_arrays_declared(package) -> None:
-    arrays = package.validation_rules.get("arrays", {})
-    assert "skills" in arrays
-    assert arrays["skills"].get("allow_string_items") is True
-    assert arrays["skills"].get("allow_object_items") is True
+def test_validation_rules_required_fields_declared(package) -> None:
+    rules = package.validation_rules
+    required = set(rules.get("required_fields") or [])
+    assert {"type", "person", "skills", "experience", "education"}.issubset(required)
+    nested = rules.get("nested_required") or {}
+    assert set(nested.get("person") or []) >= {"name", "email", "phone"}

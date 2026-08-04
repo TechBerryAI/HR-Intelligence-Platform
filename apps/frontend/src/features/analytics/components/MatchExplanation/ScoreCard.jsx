@@ -17,21 +17,23 @@ function getBarColorClass(pct) {
 
 /**
  * @param {'default' | 'enterprise'} variant
- * @param {string} [badge] optional pill e.g. MANDATORY
+ * @param {string} [badge] optional pill e.g. GATE FAIL
+ * @param {string} [reason] plain-English why this score (preferred over weight display)
  */
-export default function ScoreCard({ factorName, scorePct, weightPct, variant = 'default', badge }) {
+export default function ScoreCard({ factorName, scorePct, weightPct, variant = 'default', badge, reason }) {
   const score = Math.round(Number(scorePct) || 0)
   const weight = Math.round(Number(weightPct) || 0)
   const enterprise = variant === 'enterprise'
   const barColor = getBarColor(score)
   const barColorClass = getBarColorClass(score)
+  const subtitle = reason || (weight ? `How much this area matters in the overall fit` : '')
 
   if (enterprise) {
     return (
       <div
         className="rounded-[14px] border border-white/[0.07] bg-white/[0.03] p-[18px] transition-all duration-[180ms] hover:bg-white/[0.045] hover:-translate-y-px"
         role="article"
-        aria-label={`${factorName}: ${score}% score, weight ${weight}%`}
+        aria-label={`${factorName}: ${score}%`}
       >
         <div className="flex items-baseline justify-between gap-2 mb-1.5">
           <div className="flex items-center gap-2 min-w-0">
@@ -44,7 +46,9 @@ export default function ScoreCard({ factorName, scorePct, weightPct, variant = '
           </div>
           <span className="flex-shrink-0 text-[22px] font-bold tabular-nums text-[#F7FAFC] leading-none">{score}%</span>
         </div>
-        <p className="text-xs text-[#758596] mb-3">Weight {weight}%</p>
+        {subtitle && (
+          <p className="text-xs text-[#758596] mb-3 line-clamp-2">{subtitle}</p>
+        )}
         <div
           className="h-1.5 rounded-full bg-white/[0.08] overflow-hidden"
           role="progressbar"
@@ -65,16 +69,15 @@ export default function ScoreCard({ factorName, scorePct, weightPct, variant = '
     <div
       className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80 p-4 shadow-card"
       role="article"
-      aria-label={`${factorName}: ${score}% score, weight ${weight}%`}
+      aria-label={`${factorName}: ${score}%`}
     >
       <div className="flex items-baseline justify-between gap-2 mb-2">
         <span className="text-sm font-medium text-slate-900 dark:text-white truncate">{factorName}</span>
         <span className="flex-shrink-0 text-lg font-bold tabular-nums text-slate-900 dark:text-white">{score}%</span>
       </div>
-      <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-2">
-        <span>Weight</span>
-        <span className="font-medium text-slate-600 dark:text-slate-300">{weight}%</span>
-      </div>
+      {subtitle && (
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-2 line-clamp-2">{subtitle}</p>
+      )}
       <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden" role="progressbar" aria-valuenow={score} aria-valuemin={0} aria-valuemax={100}>
         <div
           className={`h-full rounded-full transition-all duration-300 ${barColorClass}`}

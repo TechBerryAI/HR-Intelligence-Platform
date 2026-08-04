@@ -142,6 +142,11 @@ export default function ResumeAutofillHarness() {
 
   const handleAutofill = (mapped) => {
     setForm((prev) => {
+      const currentLocation = mapped.currentLocation ?? prev.currentLocation
+      const preferredLocation =
+        (mapped.preferredLocation && String(mapped.preferredLocation).trim())
+          ? mapped.preferredLocation
+          : (currentLocation || prev.preferredLocation)
       const next = {
         ...prev,
         fullName: mapped.fullName ?? prev.fullName,
@@ -150,8 +155,8 @@ export default function ResumeAutofillHarness() {
         linkedinUrl: mapped.linkedinUrl ?? prev.linkedinUrl,
         portfolioUrl: mapped.portfolioUrl ?? prev.portfolioUrl,
         githubUrl: mapped.githubUrl ?? prev.githubUrl,
-        currentLocation: mapped.currentLocation ?? prev.currentLocation,
-        preferredLocation: mapped.preferredLocation ?? prev.preferredLocation,
+        currentLocation,
+        preferredLocation,
         experienceLevel: mapped.experienceLevel ?? prev.experienceLevel,
         skills: mapped.skills ?? prev.skills,
         summary: mapped.summary ?? prev.summary,

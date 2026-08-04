@@ -23,6 +23,8 @@ const HRMSTestingFeedback = lazy(() => import('@/features/support/pages/HRMSTest
 const NotFound = lazy(() => import('@/features/auth/pages/NotFound.jsx'))
 const HeadHrDashboard = lazy(() => import('@/features/organization/pages/head-hr/HeadHrDashboard.jsx'))
 const HeadHrAdmins = lazy(() => import('@/features/organization/pages/head-hr/HeadHrAdmins.jsx'))
+const HeadHrCandidates = lazy(() => import('@/features/organization/pages/head-hr/HeadHrCandidates.jsx'))
+const HeadHrCandidateDetail = lazy(() => import('@/features/organization/pages/head-hr/HeadHrCandidateDetail.jsx'))
 const HeadHrJobCandidateDetail = lazy(() => import('@/features/organization/pages/head-hr/HeadHrJobCandidateDetail.jsx'))
 const HeadHrJobs = lazy(() => import('@/features/organization/pages/head-hr/HeadHrJobs.jsx'))
 const HeadHrJobDetail = lazy(() => import('@/features/organization/pages/head-hr/HeadHrJobDetail.jsx'))
@@ -60,8 +62,8 @@ export default function AppRoutes() {
       <Route path="/dashboard" element={<RecruiterGuard><Dashboard /></RecruiterGuard>} />
       <Route path="/candidates" element={<RecruiterGuard><AppliedCandidates /></RecruiterGuard>} />
       <Route path="/ceo" element={<CeoGuard><CeoDashboard /></CeoGuard>} />
-      <Route path="/ceo/candidates" element={<Navigate to="/ceo/jobs" replace />} />
-      <Route path="/ceo/candidates/:cid" element={<Navigate to="/ceo/jobs" replace />} />
+      <Route path="/ceo/candidates" element={<CeoGuard><HeadHrCandidates /></CeoGuard>} />
+      <Route path="/ceo/candidates/:cid" element={<CeoGuard><HeadHrCandidateDetail /></CeoGuard>} />
       <Route path="/ceo/applications" element={<Navigate to="/ceo/jobs" replace />} />
       <Route path="/ceo/applications/:id" element={<Navigate to="/ceo/jobs" replace />} />
       <Route path="/ceo/jobs/:jdid/candidates/:cid" element={<CeoGuard><HeadHrJobCandidateDetail /></CeoGuard>} />
@@ -72,8 +74,8 @@ export default function AppRoutes() {
       <Route path="/admin/feedback" element={<RecruiterGuard><FeedbackAdmin /></RecruiterGuard>} />
       <Route path="/head-hr" element={<HeadHrGuard><HeadHrDashboard /></HeadHrGuard>} />
       <Route path="/head-hr/admins" element={<HeadHrGuard><HeadHrAdmins /></HeadHrGuard>} />
-      <Route path="/head-hr/candidates" element={<Navigate to="/head-hr/jobs" replace />} />
-      <Route path="/head-hr/candidates/:cid" element={<Navigate to="/head-hr/jobs" replace />} />
+      <Route path="/head-hr/candidates" element={<HeadHrGuard><HeadHrCandidates /></HeadHrGuard>} />
+      <Route path="/head-hr/candidates/:cid" element={<HeadHrGuard><HeadHrCandidateDetail /></HeadHrGuard>} />
       <Route path="/head-hr/applications" element={<Navigate to="/head-hr/jobs" replace />} />
       <Route path="/head-hr/applications/:id" element={<Navigate to="/head-hr/jobs" replace />} />
       <Route path="/head-hr/jobs/:jdid/candidates/:cid" element={<HeadHrGuard><HeadHrJobCandidateDetail /></HeadHrGuard>} />

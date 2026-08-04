@@ -7,6 +7,8 @@ If a mapping cannot be proven, the field is left empty.
 """
 from __future__ import annotations
 
+import re
+
 from app.ai.document_intelligence.models.candidate import CandidateProfile
 from app.ai.document_intelligence.models.form_dtos import (
     ApplicationFormDTO,
@@ -173,7 +175,11 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
     )
 
     loc_ok, loc_reason = validate_nonempty(profile.contact.location, 'location')
-    current_location = profile.contact.location if loc_ok else ''
+    current_location = (profile.contact.location if loc_ok else '').strip()
+    current_location = re.sub(r'^[\-–—•·]+\s*', '', current_location).strip()
+    if not current_location:
+        loc_ok = False
+        loc_reason = 'empty'
     traces.append(
         _trace(
             'currentLocation',
@@ -185,26 +191,18 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
         )
     )
 
-    # preferredLocation: preferred_location, else current location
-    # VALIDATION_FIX_preferred_location_fallback
+    # preferredLocation: only contact.preferred_location (no fallback to current)
     pref = (profile.contact.preferred_location or '').strip()
-    if not pref and current_location:
-        pref = current_location
-        pref_source_path = 'contact.location'
-        pref_reason = 'fallback_current_location'
-    else:
-        pref_source_path = 'contact.preferred_location'
-        pref_reason = 'ok' if pref else 'empty'
-    pref_ok = bool(pref)
+    pref_ok, pref_reason = validate_nonempty(pref, 'preferred_location')
     preferred_location = pref if pref_ok else ''
     traces.append(
         _trace(
             'preferredLocation',
-            pref_source_path,
+            'contact.preferred_location',
             source=_meta_source(profile, 'person.preferred_location', 'deterministic'),
             validator='validate_nonempty' if pref_ok else 'none',
             confidence=0.85 if pref_ok else 0.0,
-            reason=pref_reason,
+            reason=pref_reason if pref_ok else 'empty',
         )
     )
 
@@ -279,11 +277,14 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
             m = _re.search(
                 r'(?i)\b('
                 r'(?:Bachelor|Master|Doctor)(?:\'?s)?(?:\s+of\s+[A-Za-z &/.-]+)?'
+                r'|BACHELOR\s+OF\s+ENGINEERING(?:\s*[-–—]?\s*[A-Za-z &/.-]+)?'
                 r'|B\.?\s*Tech|M\.?\s*Tech|B\.?\s*E\.?|M\.?\s*E\.?'
                 r'|B\.?\s*Sc|M\.?\s*Sc|BSC(?:\s*\([^)]+\))?|MSC'
+                r'|B\.?\s*Com(?:m(?:erce)?)?|M\.?\s*Com(?:m(?:erce)?)?'
                 r'|MBA|MCA|BCA|BBA|Ph\.?\s*D\.?'
                 r'|Diploma(?:\s+in\s+[A-Za-z &/.-]+)?'
                 r'|Degree\s+in\s+[A-Za-z ()&/.-]+'
+                r'|Pre[\s\-]?University|Higher\s+Secondary|Senior\s+Secondary'
                 r'|HSC|SSC|12th|10th'
                 r')\b.*$',
                 institution,
@@ -291,6 +292,15 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
             if m:
                 degree = m.group(0).strip(' |,-')[:200]
                 institution = institution[: m.start()].strip(' |,-') or institution
+            # "B.com – SV University, Tirupathi …"
+            elif _re.search(r'[-–—]', institution):
+                parts = _re.split(r'\s*[-–—]\s*', institution, maxsplit=1)
+                if len(parts) == 2 and _re.search(
+                    r'(?i)\b(?:b\.?\s*com|b\.?\s*tech|b\.?\s*e|m\.?\s*tech|mba|mca|bca|'
+                    r'bachelor|master|diploma|ph\.?\s*d)\b',
+                    parts[0],
+                ):
+                    degree, institution = parts[0].strip()[:200], parts[1].strip()[:200]
         # Degree mentions institution: "BE MECHANICAL in college PVPIT Budgaon"
         if (degree or '').strip() and not (institution or '').strip():
             import re as _re
@@ -306,13 +316,41 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
                 left, _, right = degree.partition('|')
                 if len(right.strip()) >= 3:
                     degree, institution = left.strip(), right.strip()
+            elif _re.search(r'[-–—]', degree):
+                parts = _re.split(r'\s*[-–—]\s*', degree, maxsplit=1)
+                if len(parts) == 2 and len(parts[1].strip()) >= 3:
+                    degree, institution = parts[0].strip()[:200], parts[1].strip()[:200]
         # Still missing one side: keep row if the other is strong enough for ATS,
         # and fill the blank with a grounded placeholder from the same string.
         if (degree or '').strip() and not (institution or '').strip():
             institution = degree.strip()[:200]
         if (institution or '').strip() and not (degree or '').strip():
-            degree = 'Education'
+            # Only invent generic degree when institution looks academic, not job duty text
+            inst_l = institution.lower()
+            if any(
+                tok in inst_l
+                for tok in (
+                    'university', 'college', 'school', 'institute', 'academy',
+                    'board', 'vidyalaya', 'polytechnic',
+                )
+            ):
+                degree = 'Education'
+            else:
+                continue
+        # Drop experience/project pollution rows
+        blob = f'{degree} {institution}'.lower()
+        if any(
+            tok in blob
+            for tok in (
+                'configured mysql', 'master-slave', 'project name', 'duration',
+                'organizational experience', 'replication setup',
+            )
+        ):
+            continue
         if not (degree or institution or edu.gpa or edu.start or edu.end):
+            continue
+        # Require both sides for apply-form education (matches frontend validator)
+        if not ((degree or '').strip() and (institution or '').strip()):
             continue
         education_rows.append(
             EducationFormRow(

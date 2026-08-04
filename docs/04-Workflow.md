@@ -322,7 +322,7 @@ Provide organization-level control: admins, jobs, stats, bulk parsing, and setti
 ### Business rules
 
 1. Only Head HR manages HR users (`hr_users:manage`).
-2. Job-centric navigation is primary (legacy candidate/application list routes redirect).
+2. Overview links to org sections: Admins, Candidates (applicants), Jobs, Bulk Parsing, Settings.
 3. CEO views are read-only siblings of Head HR routes.
 
 ---
@@ -330,6 +330,15 @@ Provide organization-level control: admins, jobs, stats, bulk parsing, and setti
 ### Current implementation
 
 `/head-hr/*`, `/api/head-hr/*`, `OrgPanelLayout.jsx`, bulk parsing embed.
+
+- **Candidates** nav (`/head-hr/candidates`) — lists people with at least one `applications` row; detail shows profile + applications (open job-scoped match view).
+- CEO: `/ceo/candidates` (read-only).
+
+Overview metric cards (`GET /api/head-hr/stats`):
+
+- **HR Admins** — `COUNT(*)` of `hr_signup` (same population as the Admins page).
+- **Candidates** — distinct `candidate_id` values on `applications` (applicants who applied), not raw `candidate_signup` rows (orphans from parse/apply drafts are excluded).
+- **Active / Draft Jobs** — from `jobs.enabled`.
 
 ---
 
@@ -339,8 +348,11 @@ Provide organization-level control: admins, jobs, stats, bulk parsing, and setti
 flowchart TB
   HH[Head HR login] --> OV[Overview stats]
   HH --> AD[Manage admins]
+  HH --> CA[Candidates / applicants]
   HH --> JB[Org jobs]
-  JB --> CD[Candidate on job]
+  CA --> CD[Candidate detail]
+  CD --> JC[Job-scoped application]
+  JB --> JC
   HH --> BP[Bulk parsing]
   HH --> ST[Settings]
 ```
@@ -513,8 +525,9 @@ Score candidate fit to a job using structured resume and JD intelligence and per
 ### Business rules
 
 1. Matching runs on successful public apply path.
-2. Humans may shortlist independent of score.
-3. Weights are product-defined in ATS service (skills-heavy).
+2. **Auto-shortlist** when overall match ≥ **75%** (Strong Match). Scores 60–74% (Potential Match) stay for recruiter review and are **not** auto-shortlisted. Below 60% or mandatory-skills gate failure → Not a Match.
+3. Humans may still shortlist or reject independent of score.
+4. Weights are product-defined in ATS service (skills-heavy).
 
 ---
 

@@ -27,14 +27,14 @@ from app.ai.parser.enrichment.jd_text_inference import (
     extract_responsibilities_from_text,
     extract_salary_from_text,
     extract_skills_from_text,
+    extract_tech_keywords_from_text,
     extract_title_from_text,
     extract_jd_keywords_from_text,
     is_non_title_label,
     is_plausible_job_title,
     normalize_skill_tokens,
-    normalize_title_candidate,
 )
-from app.ai.parser.enrichment.jd_text_inference import _split_list_items as split_list_items
+from app.ai.parser.enrichment.resume_text_inference import split_list_items
 
 
 def _bullets(text: str) -> list[str]:
@@ -51,22 +51,20 @@ def _bullets(text: str) -> list[str]:
 
 def parse_title(section_text: str, full_text: str) -> str:
     kv = extract_kv_fields_from_text(full_text)
-    if kv.get('title'):
-        cand = normalize_title_candidate(kv['title'])
-        if is_plausible_job_title(cand):
-            return cand[:120]
+    if kv.get('title') and is_plausible_job_title(kv['title']):
+        return kv['title'][:120]
 
-    # Labeled patterns across common JD formats (includes Job Description – Role)
+    # Labeled patterns across common JD formats
     labeled = extract_title_from_text(full_text)
     if labeled and is_plausible_job_title(labeled):
-        return normalize_title_candidate(labeled)[:120]
+        return labeled
 
     m = re.search(
         r'(?im)^(?:job\s+title|title|position(?:\s+title)?|designation)\s*[:\-–—]\s*(.+)$',
         full_text[:1200],
     )
     if m:
-        cand = normalize_title_candidate(m.group(1))[:120]
+        cand = m.group(1).strip()[:120]
         if is_plausible_job_title(cand):
             return cand
 
@@ -74,31 +72,21 @@ def parse_title(section_text: str, full_text: str) -> str:
         s = line.strip()
         if not s:
             continue
-        # Job Description – Role is a title source, not a skip
-        jd_inline = re.match(r'(?i)^job\s*description\s*[:\-–—]\s*(.+)$', s)
-        if jd_inline:
-            cand = normalize_title_candidate(jd_inline.group(1))
-            if is_plausible_job_title(cand):
-                return cand[:120]
-            continue
         low = s.lower()
         if low.startswith((
-            'about', 'company', 'location', 'salary', 'employment',
+            'job description', 'about', 'company', 'location', 'salary', 'employment',
             'experience', 'responsibilit', 'requirement', 'skill', 'qualification',
             'benefit', 'what you', 'notice period', 'primary skills', 'role overview',
-            'job summary', 'overview', 'public', 'confidential', 'certification',
-            'key responsibilities', 'job requirements',
+            'job summary', 'overview', 'public', 'confidential',
         )):
             continue
         if is_non_title_label(s):
             continue
-        s2 = normalize_title_candidate(s)
         s2 = re.sub(
             r'(?i)^(?:job\s+title|title|position(?:\s+title)?|designation|role)\s*[:\-–—]\s*',
             '',
-            s2,
+            s,
         ).strip()
-        s2 = normalize_title_candidate(s2)
         if is_plausible_job_title(s2):
             return s2[:120]
     return ''
@@ -125,23 +113,36 @@ def parse_requirements(section_text: str, full_text: str) -> list[str]:
 
 def parse_preferred_skills(section_text: str, full_text: str) -> list[str]:
     if section_text.strip():
-        return normalize_skill_tokens(
-            _bullets(section_text), max_items=30, from_skill_section=True
-        )
+        return normalize_skill_tokens(_bullets(section_text), max_items=30)
     _, preferred, _ = extract_skills_from_text(full_text)
     return preferred
 
 
 def parse_mandatory_skills(section_text: str, full_text: str) -> list[str]:
     if section_text.strip():
-        skills = normalize_skill_tokens(
-            _bullets(section_text), max_items=40, from_skill_section=True
-        )
+        skills = normalize_skill_tokens(_bullets(section_text), max_items=40)
         if skills:
             return skills
-    mandatory, _, general = extract_skills_from_text(full_text)
-    # Required skills = JD-listed skills only (no whole-doc tech invention)
-    return (mandatory or general)[:40]
+    mandatory, preferred, general = extract_skills_from_text(full_text)
+    skills = mandatory or general
+    if len(skills) < 3:
+        # Prefer text before preferred sections so preferred tech is not promoted to mandatory
+        backfill_text = full_text
+        cut = re.search(
+            r'(?i)(?:preferred\s+(?:skills?|qualifications?)|nice[- ]?to[- ]?have|bonus\s+points?)',
+            full_text or '',
+        )
+        if cut and cut.start() > 40:
+            backfill_text = full_text[: cut.start()]
+        tech = extract_tech_keywords_from_text(backfill_text, max_items=20)
+        seen = {s.lower() for s in skills} | {s.lower() for s in preferred}
+        for tok in tech:
+            if tok.lower() not in seen:
+                skills.append(tok)
+                seen.add(tok.lower())
+            if len(skills) >= 20:
+                break
+    return skills[:40]
 
 
 def parse_benefits(section_text: str, full_text: str) -> list[str]:
@@ -212,7 +213,16 @@ def parse_jd_from_sections(
         'Technical Skills',
         'Skills',
     )
-    pref_text = pick_section(sections, 'Preferred Skills', 'Nice to Have', 'Nice-to-Have')
+    pref_text = pick_section(
+        sections,
+        'Preferred Skills',
+        'Preferred Qualifications',
+        'Nice to Have',
+        'Nice-to-Have',
+        'Nice to Have Skills',
+        'Bonus Points',
+        'Good to Have',
+    )
     ben_text = pick_section(sections, 'Benefits')
     loc_text = pick_section(sections, 'Location')
     sal_text = pick_section(sections, 'Salary', 'Compensation')
@@ -257,8 +267,6 @@ def parse_jd_from_sections(
         )
     general = list(mandatory)
     title = results['title']
-    if title:
-        title = normalize_title_candidate(title)
     if title and not is_plausible_job_title(title):
         title = ''
 

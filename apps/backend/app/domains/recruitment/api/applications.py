@@ -39,7 +39,11 @@ def _apply_log_exception(exc: Exception):
 
 
 def _shortlisted_from_decision(decision: str) -> bool:
-    return (decision or '').lower() in ('shortlist', 'strong_match', 'partial_match')
+    """Auto-shortlist only Strong Match / explicit shortlist (≥75%).
+
+    Potential Match (partial_match) is recruiter-review only — do not auto-shortlist.
+    """
+    return (decision or '').lower() in ('shortlist', 'strong_match')
 
 
 def _extract_ats_result(ats_result: dict) -> tuple:

@@ -84,7 +84,7 @@ def extract_phone(text: str) -> str:
                 return m.group(0).strip()
     # Labeled phone lines anywhere in the doc
     m2 = re.search(
-        r'(?i)(?:phone|mobile|mob|cell|tel|contact)\s*[:.\-]?\s*([+\d][\d\s().-]{7,}\d)',
+        r'(?i)(?:phone|mobile|mob|cell|tel|contact(?:\s*no)?)\s*[:.\-–—]?\s*([+\d][\d\s().-]{7,}\d)',
         text,
     )
     if m2:

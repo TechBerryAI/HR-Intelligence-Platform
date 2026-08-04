@@ -82,11 +82,23 @@ _DEGREE_PAT = re.compile(
     r'|Master(?:\'?s)?(?:\s+(?:of|in)\s+[A-Za-z &\-/]+)?'
     r'|Bachelor(?:\'?s)?(?:\s+(?:of|in)\s+[A-Za-z &\-/]+)?'
     r'|Associate(?:\'?s)?(?:\s+(?:of|in|degree)\s+[A-Za-z &\-/]+)?'
+    r'|BACHELOR\s+OF\s+ENGINEERING(?:\s*[-–—]?\s*[A-Za-z &\-/]+)?'
     r'|B\.?\s?Tech(?:\s+[A-Za-z &\-/]+)?|B\.?\s?E\.?(?![a-z])|'
+    r'B\.?\s?Com(?:m(?:erce)?)?|M\.?\s?Com(?:m(?:erce)?)?|'
+    r'B\.?\s?Sc(?:ience)?|M\.?\s?Sc(?:ience)?|'
     r'M\.?\s?Tech|M\.?\s?S\.?(?![a-z])|M\.?\s?B\.?\s?A\.?(?![a-z])|'
+    r'M\.?\s?C\.?\s?A\.?(?![a-z])|B\.?\s?C\.?\s?A\.?(?![a-z])|B\.?\s?B\.?\s?A\.?(?![a-z])|'
     r'M\.?\s?A\.?(?![a-z])|B\.?\s?A\.?(?![a-z])|'
     r'Ph\.?\s?D\.?(?![a-z])|Diploma(?:\s+in\s+[A-Za-z &\-/]+)?'
+    r'|Pre[\s\-]?University|Higher\s+Secondary|Senior\s+Secondary|Secondary\s+School'
     r'|(?:1[0-2](?:th|st|nd|rd)?|10th|12th)\s+Passed(?:\s+in\s+[A-Za-z &\-/]+)?'
+    r')\b'
+)
+_EDU_DUTY_LINE = re.compile(
+    r'(?i)^(?:'
+    r'configured|setup|performed|effectively|responsible|worked|managed|developed|'
+    r'implemented|maintained|monitoring|backup|restore|project\s+name|role\s*:|'
+    r'duration\s*:|organizational\s+experience'
     r')\b'
 )
 _INSTITUTION_CUE = re.compile(
@@ -292,15 +304,31 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
     """
     raw = section_text.strip()
     if not raw and full_text:
-        m = re.search(
-            r'(?i)(?:^|\n)\s*(?:\*\*)?(?:education(?:al)?\s*(?:qualification|background|details)?s?'
-            r'|academic\s+(?:details|background|qualifications?)|academics|'
-            r'educational\s+(?:qualifications|background))(?:\*\*)?\s*:?\s*'
-            r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:experience|skills|projects?|certifications?|'
-            r'software\s+skills|languages?|awards?|declaration|personal\s+details)\b|\Z)',
+        # Compact labeled line: "Education: - B. Com" / "Education: B.Tech CSE"
+        inline = re.search(
+            r'(?im)^(?:\*\*)?education(?:al)?\s*(?:qualification|background|details)?s?'
+            r'(?:\*\*)?\s*:\s*[-–—]?\s*(.+?)\s*$',
             full_text,
         )
-        raw = (m.group(1) if m else '').strip()
+        if inline:
+            cand = re.sub(r'^[\s•·\-\*]+', '', inline.group(1).strip())
+            # Stop if the "value" is actually the next biodata label
+            if cand and not re.match(
+                r'(?i)^(?:date\s+of\s+birth|dob|marital\s+status|location|address|gender|nationality)\b',
+                cand,
+            ):
+                raw = cand
+        if not raw:
+            m = re.search(
+                r'(?i)(?:^|\n)\s*(?:\*\*)?(?:education(?:al)?\s*(?:qualification|background|details)?s?'
+                r'|academic\s+(?:details|background|qualifications?)|academics|'
+                r'educational\s+(?:qualifications|background))(?:\*\*)?\s*:?\s*'
+                r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:experience|skills|projects?|certifications?|'
+                r'software\s+skills|languages?|awards?|declaration|personal\s+details|'
+                r'date\s+of\s+birth|dob|marital\s+status|location|address)\b|\Z)',
+                full_text,
+            )
+            raw = (m.group(1) if m else '').strip()
         if not raw:
             from app.ai.parser.enrichment.resume_text_inference import extract_education_from_text
 
@@ -324,6 +352,9 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
         stripped = re.sub(r'^[\s•·\-\*]+', '', line.strip())
         if not stripped or is_section_header_line(stripped):
             continue
+        # Experience bullets leak into education when section bounds are weak
+        if _EDU_DUTY_LINE.match(stripped):
+            continue
         lines.append(stripped)
     lines = _join_wrapped_education_lines(lines)
 
@@ -337,6 +368,34 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
         institution = ''
         degree = ''
         field = ''
+
+        # Prefer splitting "B.com – SV University" before institution-only classification
+        if (
+            not institution
+            and not degree
+            and re.search(r'[-–—]', line_wo_dates)
+            and _DEGREE_PAT.search(line_wo_dates)
+        ):
+            parts = re.split(r'\s*[-–—]\s*', line_wo_dates, maxsplit=1)
+            if len(parts) == 2 and _looks_like_degree_line(parts[0]) and (
+                _INSTITUTION_CUE.search(parts[1])
+                or is_institution_like(parts[1])
+                or len(parts[1].strip()) >= 4
+            ):
+                degree, institution = parts[0].strip(), parts[1].strip()
+                i += 1
+                if 'Computer Science' in (degree + ' ' + institution):
+                    field = 'Computer Science'
+                education.append(
+                    EducationEntry(
+                        degree=degree[:200],
+                        field=field,
+                        institution=institution[:200],
+                        start=start,
+                        end=end,
+                    )
+                )
+                continue
 
         if _looks_like_institution_line(line_wo_dates) or (
             start and not _looks_like_degree_line(line_wo_dates)
@@ -383,7 +442,24 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
                     if ym:
                         end = ym.group(1)
 
+        # Compact "B.com – SV University, Tirupathi" one-liners (fallback)
+        if degree and not institution and re.search(r'[-–—]', degree):
+            parts = re.split(r'\s*[-–—]\s*', degree, maxsplit=1)
+            if len(parts) == 2 and _looks_like_degree_line(parts[0]) and (
+                _INSTITUTION_CUE.search(parts[1])
+                or is_institution_like(parts[1])
+                or len(parts[1].strip()) >= 4
+            ):
+                degree, institution = parts[0].strip(), parts[1].strip()
         if degree or institution:
+            # Drop duty / project lines that slipped through
+            blob = f'{degree} {institution}'.strip()
+            if _EDU_DUTY_LINE.match(blob) or (
+                len(blob) > 80
+                and not _DEGREE_PAT.search(blob)
+                and not _INSTITUTION_CUE.search(blob)
+            ):
+                continue
             # Pipe-separated: "Mumbai University | BHARAT COLLEGE OF ENGINEERING"
             if institution and '|' in institution and not degree:
                 left, _, right = institution.partition('|')
@@ -435,8 +511,10 @@ def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
     return out
 
 
-def parse_personal(text: str, preamble: str) -> PersonalInfo:
+def parse_personal(text: str, preamble: str, *, source_filename: str = '') -> PersonalInfo:
     # VALIDATION_FIX_personal_name_fulltext
+    from app.ai.parser.enrichment.resume_text_inference import name_from_resume_filename
+
     src = preamble or text
     name = extract_name_from_text(src)
     if name and not is_plausible_person_name(name):
@@ -450,11 +528,19 @@ def parse_personal(text: str, preamble: str) -> PersonalInfo:
         for line in (src or text or '').splitlines()[:12]:
             cand = re.sub(r'(?i)^(mr|mrs|ms|miss|dr|prof)\.?\s+', '', line.strip())
             cand = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff]', '', cand).strip()
+            cand = cand.rstrip('-:–—|').strip()
             if not cand or '@' in cand or re.search(r'\d{6,}', cand):
                 continue
             if is_plausible_person_name(cand):
                 name = cand.title() if cand.isupper() else cand
                 break
+    file_name = name_from_resume_filename(source_filename) if source_filename else ''
+    # Prefer a multi-word filename name over a weak single-token body guess
+    if file_name:
+        if not name:
+            name = file_name
+        elif len(name.split()) == 1 and len(file_name.split()) >= 2:
+            name = file_name
     if name:
         name = re.sub(r'(?i)^(mr|mrs|ms|miss|dr|prof)\.?\s+', '', name).strip()
         if name.isupper() and len(name.split()) >= 2:
@@ -823,6 +909,7 @@ def parse_resume_from_sections(
     full_text: str,
     *,
     max_workers: int = 4,
+    source_filename: str = '',
 ) -> CandidateProfile:
     preamble = pick_section(sections, 'Preamble') or ''
     if not preamble and sections:
@@ -861,7 +948,7 @@ def parse_resume_from_sections(
 
     results: dict[str, Any] = {}
     # Sequential section parsing — avoids import/thread deadlocks under Flask workers
-    results['personal'] = parse_personal(full_text, preamble)
+    results['personal'] = parse_personal(full_text, preamble, source_filename=source_filename)
     results['contact'] = parse_contact(full_text, preamble)
     results['experience'] = parse_experience(exp_text, full_text)
     results['education'] = parse_education(edu_text, full_text)

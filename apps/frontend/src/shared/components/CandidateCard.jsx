@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react'
 import { getAvatarGradient } from '@/shared/utils/avatarColor.js'
+import { getApplicationDisplayMatch } from '@/features/analytics/components/MatchExplanation'
 
 const getScoreInfo = (score) => {
   if (score >= 80) return { color: 'text-emerald-500 dark:text-emerald-400', bgColor: 'bg-emerald-500/15', borderColor: 'border-emerald-500/40', label: 'Excellent Match' }
@@ -22,8 +23,8 @@ const formatDate = (dateString) => {
 }
 
 export default function CandidateCard({ candidate, onViewDetails, onViewReason }) {
-  const rawScore = candidate.matchScore || candidate.score || 0
-  const score = Math.round(Number(rawScore))
+  const { score: displayScore } = getApplicationDisplayMatch(candidate)
+  const score = Math.round(Number(displayScore ?? candidate.matchScore ?? candidate.score ?? 0))
   const scoreInfo = getScoreInfo(score)
   const avatarGradient = useMemo(() => {
     const key = candidate.email || candidate.fullName || candidate.name || candidate.candidateId || candidate.id || ''

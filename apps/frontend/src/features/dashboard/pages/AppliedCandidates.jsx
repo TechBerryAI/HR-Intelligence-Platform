@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useApp } from '@/core/context/AppContext.jsx'
 import { useTheme } from '@/core/context/ThemeContext.jsx'
 import CandidateCard from '@/shared/components/CandidateCard.jsx'
-import { MatchHeader, ScoreCard, ChipGroup, CollapsibleSection } from '@/features/analytics/components/MatchExplanation'
+import { MatchHeader, ScoreCard, ChipGroup, CollapsibleSection, RequirementsChecklist, DetailedAnalysisPanel, toChips, getRequirementAnalysis, getDecisionSummary, getDecisionExplanation, withReconciledScores, getApplicationDisplayMatch } from '@/features/analytics/components/MatchExplanation'
 import { BASE_URL, apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
 import { getAvatarGradient } from '@/shared/utils/avatarColor.js'
@@ -115,7 +115,7 @@ export default function AppliedCandidates() {
     if (!filter) return []
 
     const filtered = applications.filter(app => {
-      const score = Number(app.matchScore || app.score || 0)
+      const score = Number(getApplicationDisplayMatch(app).score ?? app.matchScore ?? app.score ?? 0)
       
       // Handle "all" filter - include all scores
       if (filter.id === 'all') {
@@ -139,8 +139,8 @@ export default function AppliedCandidates() {
 
     // Sort by score descending
     return filtered.sort((a, b) => {
-      const scoreA = Number(a.matchScore || a.score || 0)
-      const scoreB = Number(b.matchScore || b.score || 0)
+      const scoreA = Number(getApplicationDisplayMatch(a).score ?? a.matchScore ?? a.score ?? 0)
+      const scoreB = Number(getApplicationDisplayMatch(b).score ?? b.matchScore ?? b.score ?? 0)
       return scoreB - scoreA
     })
   }, [applications, selectedFilter])
@@ -401,7 +401,7 @@ export default function AppliedCandidates() {
                     >
                       {SCORE_FILTERS.map(filter => {
                         const count = applications.filter(app => {
-                          const score = Number(app.matchScore || app.score || 0)
+                          const score = Number(getApplicationDisplayMatch(app).score ?? app.matchScore ?? app.score ?? 0)
                           if (filter.id === 'all') return score >= filter.min && score <= filter.max
                           if (filter.id === '80+') return score >= 80 && score <= 100
                           if (filter.id === '<30') return score >= 0 && score < 30
@@ -559,7 +559,7 @@ export default function AppliedCandidates() {
                             </thead>
                             <tbody className="divide-y divide-[var(--ei-border-primary)]">
                               {filteredCandidates.map((candidate, index) => {
-                                const score = Math.round(Number(candidate.matchScore || candidate.score || 0))
+                                const score = Math.round(Number(getApplicationDisplayMatch(candidate).score ?? candidate.matchScore ?? candidate.score ?? 0))
                                 const scoreInfo = getScoreInfo(score)
                                 
                                 return (
@@ -707,17 +707,25 @@ export default function AppliedCandidates() {
                     Syncing latest profile…
                   </span>
                 )}
-                <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${getScoreInfo(Math.round(Number(selectedCandidate.matchScore || selectedCandidate.score || 0))).bgColor} ring-1 ${getScoreInfo(Math.round(Number(selectedCandidate.matchScore || selectedCandidate.score || 0))).ringColor}`}>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-5 h-5 ${getScoreInfo(Math.round(Number(selectedCandidate.matchScore || selectedCandidate.score || 0))).color}`}>
+                {(() => {
+                  const selectedScore = Math.round(Number(getApplicationDisplayMatch(selectedCandidate).score ?? selectedCandidate.matchScore ?? selectedCandidate.score ?? 0))
+                  const selectedScoreInfo = getScoreInfo(selectedScore)
+                  return (
+                    <>
+                <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${selectedScoreInfo.bgColor} ring-1 ${selectedScoreInfo.ringColor}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={`w-5 h-5 ${selectedScoreInfo.color}`}>
                     <path fillRule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clipRule="evenodd" />
                   </svg>
-                  <span className={`text-lg font-bold ${getScoreInfo(Math.round(Number(selectedCandidate.matchScore || selectedCandidate.score || 0))).color}`}>
-                    {Math.round(Number(selectedCandidate.matchScore || selectedCandidate.score || 0))}% Match
+                  <span className={`text-lg font-bold ${selectedScoreInfo.color}`}>
+                    {selectedScore}% Match
                   </span>
                 </div>
-                <span className={`text-sm font-medium ${getScoreInfo(Math.round(Number(selectedCandidate.matchScore || selectedCandidate.score || 0))).color}`}>
-                  {getScoreInfo(Math.round(Number(selectedCandidate.matchScore || selectedCandidate.score || 0))).label}
+                <span className={`text-sm font-medium ${selectedScoreInfo.color}`}>
+                  {selectedScoreInfo.label}
                 </span>
+                    </>
+                  )
+                })()}
                 {selectedCandidate.appliedAt && (
                   <span className="text-sm text-zinc-400 ml-auto">
                     Applied on {new Date(selectedCandidate.appliedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
@@ -981,27 +989,31 @@ export default function AppliedCandidates() {
         </div>
       )}
 
-      {/* View Reason Modal - Decision-first: Header → Verdict reason → Score Cards → Strengths → Gaps → Collapsible Detailed */}
+      {/* View Reason Modal - Decision-first: Header → Verdict reason → Score Cards → Requirements → Strengths → Gaps → Collapsible Detailed */}
       {reasonCandidate && (() => {
-        const score = Math.round(Number(reasonCandidate.matchScore || reasonCandidate.score || 0))
+        const storedScore = Math.round(Number(reasonCandidate.matchScore || reasonCandidate.score || 0))
         const analysis = reasonCandidate.atsAnalysis != null && typeof reasonCandidate.atsAnalysis === 'object'
           ? reasonCandidate.atsAnalysis
           : {}
-        const jsonOut = analysis?.json_output ?? analysis
+        const rawJsonOut = analysis?.json_output ?? analysis
+        const { jsonOut, recon, score, verdict: reconciledVerdict } = withReconciledScores(rawJsonOut, { storedScore })
         const breakdown = jsonOut?.score_breakdown ?? {}
         const rawStrengths = Array.isArray(jsonOut?.key_strengths) ? jsonOut.key_strengths : []
         const rawGaps = Array.isArray(jsonOut?.key_gaps) ? jsonOut.key_gaps : []
-        const verdict = (jsonOut?.verdict || (jsonOut?.decision || '').replace(/_/g, ' ') || '').trim()
+        const verdict = (reconciledVerdict || (jsonOut?.verdict || (jsonOut?.decision || '').replace(/_/g, ' ') || '').trim())
         const evalReport = jsonOut?.evaluation_report ?? {}
         const skillsAnalysis = evalReport?.skills_analysis ?? {}
         const mandatoryPct = jsonOut?.mandatory_skills_match_pct ?? skillsAnalysis?.mandatory_skills_match_pct
-        const decisionBullets = Array.isArray(evalReport?.final_decision_logic) ? evalReport.final_decision_logic : []
         const experienceAssessment = evalReport?.experience_assessment ?? {}
         const educationAssessment = evalReport?.education_certification_assessment
-        const finalReasoning = (jsonOut?.final_reasoning || jsonOut?.rationale || reasonCandidate?.atsReasoning || '').trim() || 'No detailed reasoning available.'
+        const requirementAnalysis = getRequirementAnalysis(jsonOut)
+        const displayMandatoryPct = requirementAnalysis?.gate?.mandatory_pct ?? mandatoryPct
         const isNotMatch = Boolean(verdict && /not a match|ats failed/i.test(verdict))
+        const decisionExplanation = getDecisionExplanation(jsonOut, { score })
+        const reasonByKey = Object.fromEntries(
+          (decisionExplanation?.category_reasons || []).map((c) => [c.key, c]),
+        )
 
-        // Score factors: name, breakdown key, weight % (matches backend)
         const SCORE_FACTORS = [
           { name: 'Core Skills', key: 'skills', weight: 60 },
           { name: 'Experience', key: 'experience', weight: 25 },
@@ -1009,41 +1021,15 @@ export default function AppliedCandidates() {
           { name: 'Location', key: 'location', weight: 5 },
         ]
 
-        // One-line precise verdict reason (no repetition of full reasoning)
-        const getVerdictReason = () => {
-          if (mandatoryPct != null && Number(mandatoryPct) < 60 && (skillsAnalysis.missing_mandatory_skills?.length > 0 || breakdown.skills === 0)) {
-            return `Mandatory skills match is ${Number(mandatoryPct)}% (below 60% threshold). Candidate does not meet required technical skills.`
-          }
-          if (isNotMatch) {
-            return `Overall score is ${score}%, below the required threshold for this role.`
-          }
-          if (verdict && /strong match/i.test(verdict)) {
-            return `Overall score is ${score}%. Candidate meets or exceeds key requirements.`
-          }
-          if (verdict && /potential match/i.test(verdict)) {
-            return `Overall score is ${score}%. Recommended for recruiter review.`
-          }
-          return finalReasoning.split(/\n/)[0]?.trim().slice(0, 200) || 'See detailed analysis below.'
-        }
-
-        // Parse list items into chips: "Label: A, B, C" → ["A", "B", "C"]; else one chip per item.
-        // Ensure items is always an array (API may return object or other shape).
-        const toChips = (items) => {
-          const out = []
-          const arr = Array.isArray(items) ? items : (items && typeof items === 'object' ? Object.values(items) : [])
-          arr.forEach((item) => {
-            const s = String(item).trim()
-            if (!s) return
-            const colon = s.indexOf(': ')
-            if (colon !== -1) {
-              const rest = s.slice(colon + 2).split(',').map((x) => x.trim()).filter(Boolean)
-              rest.forEach((x) => out.push(x))
-            } else {
-              out.push(s)
-            }
-          })
-          return out
-        }
+        const verdictReason = getDecisionSummary(jsonOut, {
+          score,
+          status: reasonCandidate.status,
+          atsReasoning: reasonCandidate.atsReasoning,
+        })
+        const missingMandatory = (requirementAnalysis.mandatory || [])
+          .filter((r) => r.status === 'missing')
+          .map((r) => r.skill)
+          .slice(0, 5)
         const strengthChips = toChips(rawStrengths)
         const gapChips = toChips(rawGaps)
 
@@ -1064,7 +1050,6 @@ export default function AppliedCandidates() {
                 onClose={closeReasonModal}
               />
               <div className="p-5 sm:p-6 space-y-6">
-                {/* One-line verdict reason */}
                 <div
                   className={`rounded-[14px] px-4 py-3.5 border-l-[3px] ${
                     isNotMatch
@@ -1076,23 +1061,33 @@ export default function AppliedCandidates() {
                     Why this verdict
                   </p>
                   <p className="mt-1.5 text-sm font-medium text-[#F2F5F8] leading-relaxed">
-                    {getVerdictReason()}
+                    {verdictReason}
                   </p>
+                  {recon?.note && (
+                    <p className="mt-2 text-xs text-[#8796A5] leading-relaxed">{recon.note}</p>
+                  )}
+                  {displayMandatoryPct != null && Number(displayMandatoryPct) < 60 && missingMandatory.length > 0 && (
+                    <p className="mt-1.5 text-xs text-[#8796A5]">
+                      Missing mandatory: {missingMandatory.join(', ')}
+                    </p>
+                  )}
                 </div>
 
-                {/* Score breakdown */}
                 {(breakdown.skills != null || breakdown.experience != null || breakdown.education != null || breakdown.location != null) && (
                   <div>
                     <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-1">
                       Score breakdown
                     </h3>
                     <p className="text-xs text-[#738394] mb-3">
-                      How this candidate scored across the evaluation criteria
+                      How well the candidate fits each area of the role
+                      {displayMandatoryPct != null ? ` · Mandatory skills: ${Number(displayMandatoryPct)}% matched` : ''}
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {SCORE_FACTORS.map(({ name, key, weight }) => {
                         const value = breakdown[key]
                         if (value == null) return null
+                        const cat = reasonByKey[key]
+                        const gateFailed = key === 'skills' && displayMandatoryPct != null && Number(displayMandatoryPct) < 60
                         return (
                           <ScoreCard
                             key={key}
@@ -1100,13 +1095,28 @@ export default function AppliedCandidates() {
                             factorName={name}
                             scorePct={value}
                             weightPct={weight}
-                            badge={key === 'skills' ? 'Mandatory' : undefined}
+                            badge={gateFailed ? 'Not enough skills' : (cat?.result_label || undefined)}
+                            reason={cat?.reason || (
+                              key === 'skills'
+                                ? 'Compares skills the role needs with skills on the resume'
+                                : key === 'experience'
+                                  ? 'Compares role experience needed with resume experience'
+                                  : key === 'education'
+                                    ? 'Compares education needed with resume education'
+                                    : 'Compares job location with candidate location'
+                            )}
                           />
                         )
                       })}
                     </div>
                   </div>
                 )}
+
+                <RequirementsChecklist
+                  theme={matchVariant === 'enterprise' ? 'enterprise' : 'default'}
+                  requirementAnalysis={requirementAnalysis}
+                  mandatoryPct={displayMandatoryPct}
+                />
 
                 <ChipGroup
                   theme={surfaceTheme}
@@ -1124,42 +1134,14 @@ export default function AppliedCandidates() {
                   id="gaps-label"
                 />
 
-                <CollapsibleSection label="Detailed Analysis" variant={matchVariant}>
-                  <div className="space-y-4 text-sm">
-                    {decisionBullets.length > 0 && (
-                      <div>
-                        <p className="text-[#83909C] font-semibold uppercase tracking-[0.08em] text-[11px] mb-2">Decision logic</p>
-                        <ul className="list-disc list-inside space-y-1 text-[#C5CED8]">
-                          {decisionBullets.map((bullet, i) => (
-                            <li key={i} className="leading-relaxed">{bullet}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {(experienceAssessment.relevant_experience_summary || experienceAssessment.gaps_vs_role_expectations) && (
-                      <div className="pt-3 border-t border-white/[0.08]">
-                        <p className="text-[#83909C] font-semibold uppercase tracking-[0.08em] text-[11px] mb-2">Experience</p>
-                        <div className="space-y-1.5 text-[#C5CED8]">
-                          {experienceAssessment.relevant_experience_summary && (
-                            <p><span className="text-[#8796A5]">Relevant:</span> {experienceAssessment.relevant_experience_summary}</p>
-                          )}
-                          {experienceAssessment.gaps_vs_role_expectations && (
-                            <p><span className="text-[#8796A5]">Gaps:</span> {experienceAssessment.gaps_vs_role_expectations}</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    {educationAssessment != null && String(educationAssessment).trim() !== '' && (
-                      <div className="pt-3 border-t border-white/[0.08]">
-                        <p className="text-[#83909C] font-semibold uppercase tracking-[0.08em] text-[11px] mb-2">Education & certifications</p>
-                        <p className="text-[#C5CED8] leading-relaxed">{educationAssessment}</p>
-                      </div>
-                    )}
-                    <div className="pt-3 border-t border-white/[0.08]">
-                      <p className="text-[#83909C] font-semibold uppercase tracking-[0.08em] text-[11px] mb-2">Full reasoning</p>
-                      <p className="text-[#C5CED8] leading-relaxed whitespace-pre-wrap">{finalReasoning}</p>
-                    </div>
-                  </div>
+                <CollapsibleSection label="Detailed Analysis" variant={matchVariant} defaultOpen>
+                  <DetailedAnalysisPanel
+                    jsonOut={jsonOut}
+                    score={score}
+                    variant={matchVariant}
+                    experienceAssessment={experienceAssessment}
+                    educationAssessment={educationAssessment}
+                  />
                 </CollapsibleSection>
               </div>
             </div>

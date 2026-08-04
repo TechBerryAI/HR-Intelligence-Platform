@@ -266,3 +266,41 @@ def test_biodata_lines_are_not_job_titles():
     assert not is_plausible_job_title(": Married")
     assert is_plausible_job_title("MSSQL DBA")
     assert is_plausible_job_title("Software Engineer")
+
+
+def test_city_and_labels_rejected_as_person_names():
+    from app.ai.parser.enrichment.resume_text_inference import (
+        is_plausible_person_name,
+        name_from_resume_filename,
+    )
+
+    assert not is_plausible_person_name("Bengaluru")
+    assert not is_plausible_person_name("Designation")
+    assert not is_plausible_person_name("Certification")
+    assert not is_plausible_person_name("Career Objective-")
+    assert name_from_resume_filename("ABHISHEK KUMAR.pdf") == "Abhishek Kumar"
+
+
+def test_labeled_biodata_name_and_filename_fallback():
+    from app.ai.document_intelligence.parsers.resume import parse_personal
+
+    biodata = "Curriculum Vitae\nName\n: Ms. Saloni V. Dhuru\nDesignation\n: Assistant Professor\n"
+    assert "Saloni" in extract_name_from_text(biodata)
+
+    summary_only = (
+        "Summary\nIT Team Lead with 5+ years\n"
+        "abhishekkumarak9024@gmail.com\n919024914601\nBengaluru\n"
+    )
+    # Body alone must not treat city as name
+    assert extract_name_from_text(summary_only) != "Bengaluru"
+    pers = parse_personal(summary_only, "", source_filename="ABHISHEK KUMAR.pdf")
+    assert pers.full_name == "Abhishek Kumar"
+
+
+def test_bcom_dash_university_education_line():
+    from app.ai.document_intelligence.parsers.resume import parse_education
+
+    rows = parse_education("", "Education\nB.com – SV University, Tirupathi\n")
+    assert rows
+    assert any("com" in (r.degree or "").lower() for r in rows)
+    assert any("university" in (r.institution or "").lower() for r in rows)
