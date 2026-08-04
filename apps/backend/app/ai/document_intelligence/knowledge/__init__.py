@@ -20,12 +20,14 @@ def apply_knowledge_to_candidate(profile: CandidateProfile) -> CandidateProfile:
 
 
 def apply_knowledge_to_job(profile: JobProfile) -> JobProfile:
-    def _canon_list(items: list[str]) -> list[str]:
+    def _dedupe_keep_jd_wording(items: list[str]) -> list[str]:
+        """Keep JD skill wording as written — do not expand aliases (aws→Amazon Web Services)."""
         out = []
         seen = set()
         for i in items:
-            c, _ = normalize_skill(i) if i else ('', None)
-            val = c or i
+            val = (i or '').strip()
+            if not val:
+                continue
             key = val.lower()
             if key in seen:
                 continue
@@ -35,9 +37,9 @@ def apply_knowledge_to_job(profile: JobProfile) -> JobProfile:
 
     skills = profile.skills.model_copy(
         update={
-            'mandatory': _canon_list(profile.skills.mandatory),
-            'preferred': _canon_list(profile.skills.preferred),
-            'general': _canon_list(profile.skills.general),
+            'mandatory': _dedupe_keep_jd_wording(profile.skills.mandatory),
+            'preferred': _dedupe_keep_jd_wording(profile.skills.preferred),
+            'general': _dedupe_keep_jd_wording(profile.skills.general),
         }
     )
     title, _ = normalize_job_title(profile.basic.title) if profile.basic.title else ('', None)

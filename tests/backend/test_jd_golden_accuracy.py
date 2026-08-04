@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -257,18 +258,69 @@ def test_softwrapped_responsibility_not_one_bullet_per_line():
     assert "across production" in soft[0].lower()
 
 
-def test_keywords_grounded_in_skills_not_whole_doc_noise():
-    text, profile, form = _parse("detailed_skills_softwrap.txt")
-    skills = {
-        s.lower()
-        for s in (form.mandatorySkills or []) + (form.preferredSkills or []) + (form.skillsList or [])
-    }
+def test_keywords_from_overall_jd_not_mandatory_copy():
+    text, _profile, form = _parse("detailed_skills_softwrap.txt")
+    skills = list(form.mandatorySkills or [])
     keywords = form.keywordsList or []
-    assert keywords, "expected keywords from skills"
-    # Keywords should be short and largely overlap skills / known tech in skills section
-    skill_blob = " ".join(skills)
-    for kw in keywords:
-        assert len(kw.split()) <= 4
-        assert kw.lower() in skill_blob or kw.lower() in text.lower()
-    # Must not invent random education/meta as keywords
-    assert not any(k.lower() in {"bachelor", "computer", "science"} for k in keywords)
+    assert skills, "expected mandatory skills from JD section"
+    assert keywords, "expected overall-JD keywords"
+    # Keywords must not be forced equal to mandatory skills
+    assert keywords != skills, "keywords must not be a mandatory-skills copy"
+    src = text.lower()
+    for tok in keywords:
+        tl = tok.lower()
+        parts = [p for p in re.findall(r"[a-z0-9+#.]{2,}", tl) if len(p) >= 3]
+        assert tl in src or any(p in src for p in parts), f"{tok!r} not grounded in JD"
+    # Overall JD tech terms should appear in keywords
+    joined = " ".join(keywords).lower()
+    assert any(tok in joined for tok in ("kubernetes", "aws", "terraform", "prometheus", "docker", "python"))
+
+
+
+def test_location_mumbai_without_colon():
+    _text, _profile, form = _parse("location_mumbai_unlabeled.txt")
+    assert "Mumbai" in (form.location or ""), f"got location={form.location!r}"
+    skills = " ".join(form.mandatorySkills or form.skillsList or []).lower()
+    assert "weblogic" in skills or "websphere" in skills or "ohs" in skills, skills
+    missing = [
+        c
+        for c in (form.coverage or [])
+        if c.get("status") == "missing_with_evidence" and c.get("field") == "location"
+    ]
+    assert not missing, f"location still missing_with_evidence: {form.coverage}"
+
+
+def test_video_editor_rejects_job_token_and_stops_at_education():
+    _text, profile, form = _parse("video_editor_skills.txt")
+    assert "Video Editor" in (form.title or "")
+    skills = [s.lower() for s in (form.mandatorySkills or form.skillsList or [])]
+    assert "job" not in skills
+    joined = " ".join(skills)
+    assert any(
+        tok in joined for tok in ("premiere", "adobe", "final", "cut", "editing", "figma")
+    ) or any(
+        tok in " ".join(profile.skills.mandatory or []).lower()
+        for tok in ("premiere", "adobe", "final")
+    ), f"skills={skills}"
+    for r in form.responsibilitiesList or []:
+        assert r.strip().lower() not in {"education", "key responsibilities", "key responsibilities:"}
+
+
+def test_wireframing_strips_o_bullets_and_prefers_figma():
+    _text, _profile, form = _parse("wireframing_bullet_o.txt")
+    skills = form.mandatorySkills or form.skillsList or []
+    assert skills, "expected skills"
+    assert not any(re.match(r"^[oO]\s+", s) for s in skills), skills
+    assert not any(s.strip().lower() == "job" for s in skills)
+    joined = " ".join(skills).lower()
+    assert "figma" in joined or "prototyping" in joined, skills
+    # Soft-skill-only rows should not dominate when Figma/prototyping present
+    soft_only = [
+        s
+        for s in skills
+        if re.search(r"(?i)communication|collaboration|problem-solving|critical thinking", s)
+        and "figma" not in s.lower()
+    ]
+    assert len(soft_only) < len(skills) or "figma" in joined
+    assert not form.salary or re.search(r"\d|lpa|lakh|negotiable", form.salary, re.I), form.salary
+

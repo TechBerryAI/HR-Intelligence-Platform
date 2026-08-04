@@ -89,28 +89,55 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
         // Store confidence and parsed ID
         setConfidence(result.confidence);
         setProgressPct(100);
+
+        const coverage = Array.isArray(formData.coverage)
+          ? formData.coverage
+          : (Array.isArray(result.coverage) ? result.coverage : []);
+        const missingFields = Array.isArray(result.missing_fields)
+          ? result.missing_fields
+          : coverage
+              .filter((c) => c && c.status === 'missing_with_evidence')
+              .map((c) => c.field);
+        const coreGaps = missingFields.filter((f) =>
+          ['title', 'location', 'experience', 'skills', 'description'].includes(f),
+        );
+        const gapLabels = {
+          title: 'Title',
+          location: 'Location',
+          experience: 'Experience',
+          skills: 'Skills',
+          description: 'Description',
+        };
         
-        // Show success message
-        if (result.is_duplicate) {
-          setParseSuccess('✨ Job description recognized! Using previously parsed data.');
+        // Show success / review message based on coverage gaps
+        if (coreGaps.length > 0) {
+          const labels = coreGaps.map((f) => gapLabels[f] || f).join(', ');
+          setParseSuccess('');
+          setParseError(
+            `Parsed with incomplete fields — please review: ${labels}. Other fields were auto-filled below.`,
+          );
+        } else if (result.is_duplicate) {
+          setParseSuccess('Job description recognized! Using previously parsed data.');
         } else {
-          setParseSuccess('✨ Job description parsed successfully! Fields auto-filled below.');
+          setParseSuccess('Job description parsed successfully! Fields auto-filled below.');
         }
 
         // Autofill form from Form DTO only
         if (onAutofill) {
           onAutofill({
             ...formData,
+            coverage,
             _parsedId: result.parsed_id,
             _rawFileId: result.raw_file_id,
             _confidence: result.confidence,
             _trace: formData.trace || [],
+            _missingFields: coreGaps,
           });
         }
 
-        // Show low confidence warning
-        if (result.confidence < 0.75) {
-          setParseError('⚠️ Parsing confidence is low. Please verify all auto-filled fields.');
+        // Show low confidence warning (only if no coverage gap message)
+        if (coreGaps.length === 0 && result.confidence < 0.75) {
+          setParseError('Parsing confidence is low. Please verify all auto-filled fields.');
         }
       } else {
         throw new Error(result.error || 'Parsing failed');

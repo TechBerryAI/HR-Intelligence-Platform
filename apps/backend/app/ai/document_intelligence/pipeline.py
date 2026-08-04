@@ -54,8 +54,8 @@ _SKIP_LLM = os.getenv('RESUME_SKIP_LLM_WHEN_DETERMINISTIC', 'true').lower() in (
 )
 
 
-def _jd_deterministic_is_strong(profile) -> bool:
-    """Skip LLM only when title and skills look structurally correct — not merely nonempty."""
+def _jd_deterministic_is_strong(profile, coverage=None) -> bool:
+    """Skip LLM only when title/skills look correct and no core coverage gaps remain."""
     from app.ai.parser.enrichment.jd_text_inference import (
         is_plausible_job_title,
         skills_look_skill_like,
@@ -65,7 +65,15 @@ def _jd_deterministic_is_strong(profile) -> bool:
     skills = getattr(profile, 'skills', None)
     mandatory = list(getattr(skills, 'mandatory', None) or [])
     general = list(getattr(skills, 'general', None) or [])
-    return bool(is_plausible_job_title(title) and skills_look_skill_like(mandatory or general))
+    if not (is_plausible_job_title(title) and skills_look_skill_like(mandatory or general)):
+        return False
+    if coverage is not None:
+        missing = getattr(coverage, 'missing_with_evidence', None) or []
+        # Core form fields that should trigger residual LLM when evidence exists
+        core_gap = {'title', 'location', 'experience', 'skills', 'description'}
+        if any(f in core_gap for f in missing):
+            return False
+    return True
 
 
 def _apply_jd_repair(profile, raw_text: str):
@@ -278,16 +286,13 @@ def parse_jd_text_to_canonical(text: str, *, max_workers: int | None = None):
     sections = detect_sections(working, 'jd')
     profile = parse_jd_from_sections(sections, working, max_workers=workers)
     profile = apply_knowledge_to_job(profile)
-    if not _SKIP_LLM:
-        unresolved = unresolved_semantic_text(sections, 'jd') or working
-        profile = enrich_jd_semantic(profile, unresolved_text=unresolved)
-        profile = apply_knowledge_to_job(profile)
-    else:
-        if not _jd_deterministic_is_strong(profile):
-            unresolved = unresolved_semantic_text(sections, 'jd') or working
-            profile = enrich_jd_semantic(profile, unresolved_text=unresolved)
-            profile = apply_knowledge_to_job(profile)
+    # Coverage first so residual LLM only runs when grounded gaps remain
     profile, coverage = recover_jd_profile_gaps(profile, working)
+    run_semantic = (not _SKIP_LLM) or (not _jd_deterministic_is_strong(profile, coverage))
+    if run_semantic:
+        unresolved = unresolved_semantic_text(sections, 'jd') or working
+        profile = enrich_jd_semantic(profile, unresolved_text=unresolved, force=bool(coverage.missing_with_evidence))
+        profile = apply_knowledge_to_job(profile)
     profile, toon = _apply_jd_repair(profile, working)
     profile, coverage = recover_jd_profile_gaps(profile, working)
     toon = job_to_toon(profile)
@@ -491,7 +496,7 @@ def _run_resume(
 
     confidence = calculate_confidence(toon, 'resume')
     model_version = _model_version_label()
-    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v5')
+    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v6-jd-coverage')
     if not used_llm:
         model_version = f'{model_version}+{cache_tag}+deterministic'
     else:
@@ -615,16 +620,6 @@ def _run_jd(
     profile = parse_jd_from_sections(sections, raw_text, max_workers=workers)
     _emit(parse_job_id, 'deterministic', 'completed', on_stage=on_stage)
 
-    used_llm = False
-    _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
-    if _SKIP_LLM and _jd_deterministic_is_strong(profile):
-        _emit(parse_job_id, 'semantic', 'skipped', on_stage=on_stage)
-    else:
-        unresolved = unresolved_semantic_text(sections, 'jd') or raw_text
-        profile = enrich_jd_semantic(profile, unresolved_text=unresolved)
-        used_llm = True
-        _emit(parse_job_id, 'semantic', 'completed', on_stage=on_stage)
-
     _emit(parse_job_id, 'knowledge', 'started', on_stage=on_stage)
     profile = apply_knowledge_to_job(profile)
     _emit(parse_job_id, 'knowledge', 'completed', on_stage=on_stage)
@@ -633,6 +628,22 @@ def _run_jd(
 
     _emit(parse_job_id, 'coverage', 'started', on_stage=on_stage)
     profile, coverage = recover_jd_profile_gaps(profile, raw_text)
+
+    used_llm = False
+    _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
+    if _SKIP_LLM and _jd_deterministic_is_strong(profile, coverage):
+        _emit(parse_job_id, 'semantic', 'skipped', on_stage=on_stage)
+    else:
+        unresolved = unresolved_semantic_text(sections, 'jd') or raw_text
+        profile = enrich_jd_semantic(
+            profile,
+            unresolved_text=unresolved,
+            force=bool(coverage.missing_with_evidence),
+        )
+        used_llm = True
+        profile = apply_knowledge_to_job(profile)
+        _emit(parse_job_id, 'semantic', 'completed', on_stage=on_stage)
+
     profile, toon = _apply_jd_repair(profile, raw_text)
     profile, coverage = recover_jd_profile_gaps(profile, raw_text)
     toon = job_to_toon(profile)
@@ -655,7 +666,8 @@ def _run_jd(
 
     confidence = calculate_confidence(toon, 'job_description')
     model_version = _model_version_label()
-    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v5')
+    # Bump cache tag when shipping parser accuracy fixes so stale TOON is not reused
+    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v6-jd-coverage')
     model_version = f'{model_version}+{cache_tag}+{"hybrid" if used_llm else "deterministic"}'
 
     _emit(parse_job_id, 'persist', 'started', on_stage=on_stage)
