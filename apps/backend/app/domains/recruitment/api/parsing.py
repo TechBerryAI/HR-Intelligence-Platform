@@ -6,6 +6,7 @@ Frontend clients receive Form DTOs only — never raw TOON/AI output.
 """
 from __future__ import annotations
 
+import hmac
 import os
 import time
 import uuid
@@ -44,6 +45,7 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 _PUBLIC_PARSE_LIMIT = int(os.getenv('PUBLIC_PARSE_RATE_LIMIT', '10'))
 _PUBLIC_PARSE_WINDOW_SEC = int(os.getenv('PUBLIC_PARSE_RATE_WINDOW_SEC', '600'))
+_VALIDATION_TOKEN = os.getenv('DOCUMENT_INTELLIGENCE_VALIDATION_TOKEN', '')
 _public_parse_hits: dict[str, deque] = defaultdict(deque)
 
 MIME_TYPE_MAP = {
@@ -80,6 +82,18 @@ def _client_ip() -> str:
 
 
 def _public_parse_rate_limited(ip: str) -> bool:
+    # Corpus E2E validation: shared secret or loopback under validation payload mode.
+    header_token = request.headers.get('X-Validation-Token', '')
+    if _VALIDATION_TOKEN and header_token and hmac.compare_digest(header_token, _VALIDATION_TOKEN):
+        return False
+    validation_payload = os.getenv('DOCUMENT_INTELLIGENCE_VALIDATION_PAYLOAD', '').lower() in (
+        '1',
+        'true',
+        'yes',
+    )
+    if validation_payload and ip in ('127.0.0.1', '::1', 'localhost'):
+        return False
+
     now = time.time()
     q = _public_parse_hits[ip]
     while q and now - q[0] > _PUBLIC_PARSE_WINDOW_SEC:

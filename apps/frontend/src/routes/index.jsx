@@ -30,6 +30,7 @@ const HeadHrSettings = lazy(() => import('@/features/organization/pages/head-hr/
 const HeadHrBulkParsing = lazy(() => import('@/features/organization/pages/head-hr/HeadHrBulkParsing.jsx'))
 const Settings = lazy(() => import('@/features/settings/pages/Settings.jsx'))
 const CeoDashboard = lazy(() => import('@/features/organization/pages/ceo/CeoDashboard.jsx'))
+const ResumeAutofillHarness = lazy(() => import('@/features/validation/ResumeAutofillHarness.jsx'))
 
 function StaffSettingsRoute({ children }) {
   const { auth } = useApp()
@@ -45,6 +46,7 @@ export default function AppRoutes() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/jobs" element={<Jobs />} />
+      <Route path="/validation/resume-autofill" element={<ResumeAutofillHarness />} />
       <Route path="/support/faq" element={<FAQ />} />
       <Route path="/support/contact" element={<ContactUs />} />
       <Route path="/support/hrms-feedback" element={<HRMSTestingFeedback />} />
