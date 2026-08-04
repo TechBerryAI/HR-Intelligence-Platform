@@ -233,8 +233,11 @@ def normalize_skill_tokens(
             continue
 
         parts = [item]
-        if ',' in item and len(item) < 160:
+        # Split comma lists, but never inside parentheses (AWS (EC2, EKS, VPC))
+        if ',' in item and len(item) < 160 and not (item.count('(') and item.find('(') < item.find(',')):
             parts = [p.strip() for p in item.split(',') if p.strip()]
+        elif ',' in item and '(' in item:
+            parts = [item]
 
         for part in parts:
             tok = _strip_list_marker(part).strip().strip('.,;:|')[:80]
@@ -349,23 +352,37 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
         preferred_raw, max_items=20, from_skill_section=bool(preferred_raw)
     )
 
-    # Tech-keyword backfill when labeled skills are missing/weak
-    if len(mandatory_skills) < 3:
-        tech = extract_tech_keywords_from_text(desc, max_items=20)
-        seen = {s.lower() for s in mandatory_skills}
-        for tok in tech:
-            if tok.lower() not in seen:
-                mandatory_skills.append(tok)
-                seen.add(tok.lower())
-            if len(mandatory_skills) >= 20:
-                break
+    # Keep only tokens that actually appear in the JD (no invented skills).
+    # Do NOT scrape the whole document for extra tech when a skills section exists —
+    # Required Skills must mirror what the JD lists.
+    src_l = desc.lower()
 
-    combined = normalize_skill_tokens(
-        list(mandatory_skills) + list(preferred_skills),
-        max_items=40,
-        from_skill_section=True,
-    ) or mandatory_skills
-    return mandatory_skills[:40], preferred_skills[:20], combined[:40]
+    def _grounded(items: list[str]) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for tok in items:
+            t = (tok or '').strip()
+            if not t:
+                continue
+            key = t.lower()
+            if key in seen:
+                continue
+            if key not in src_l and not all(
+                part.lower() in src_l for part in re.findall(r'[a-z0-9+#.]{2,}', key) if len(part) >= 3
+            ):
+                # Allow if a significant token from the skill appears in source
+                parts = [p for p in re.findall(r'[a-z0-9+#.]{2,}', key) if len(p) >= 3]
+                if not parts or not any(p in src_l for p in parts):
+                    continue
+            seen.add(key)
+            out.append(t)
+        return out
+
+    mandatory_skills = _grounded(mandatory_skills)
+    preferred_skills = _grounded(preferred_skills)
+
+    combined = list(dict.fromkeys(mandatory_skills + preferred_skills))[:40]
+    return mandatory_skills[:40], preferred_skills[:20], combined
 
 
 def skills_look_skill_like(skills: list[str] | None) -> bool:

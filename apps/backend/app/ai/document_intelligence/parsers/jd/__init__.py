@@ -27,7 +27,6 @@ from app.ai.parser.enrichment.jd_text_inference import (
     extract_responsibilities_from_text,
     extract_salary_from_text,
     extract_skills_from_text,
-    extract_tech_keywords_from_text,
     extract_title_from_text,
     is_non_title_label,
     is_plausible_job_title,
@@ -140,17 +139,8 @@ def parse_mandatory_skills(section_text: str, full_text: str) -> list[str]:
         if skills:
             return skills
     mandatory, _, general = extract_skills_from_text(full_text)
-    skills = mandatory or general
-    if len(skills) < 3:
-        tech = extract_tech_keywords_from_text(full_text, max_items=20)
-        seen = {s.lower() for s in skills}
-        for tok in tech:
-            if tok.lower() not in seen:
-                skills.append(tok)
-                seen.add(tok.lower())
-            if len(skills) >= 20:
-                break
-    return skills[:40]
+    # Required skills = JD-listed skills only (no whole-doc tech invention)
+    return (mandatory or general)[:40]
 
 
 def parse_benefits(section_text: str, full_text: str) -> list[str]:

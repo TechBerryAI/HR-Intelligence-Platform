@@ -130,15 +130,13 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     setExperienceFrom(parsedData.experienceFrom || '')
     setExperienceTo(parsedData.experienceTo || '')
     setDescription(parsedData.description || '')
-    const kw = parsedData.keywords
-      || (Array.isArray(parsedData._keywords) ? parsedData._keywords.join(', ') : '')
-      || ''
-    setKeywords(kw)
-    setMandatorySkills(
-      Array.isArray(parsedData.mandatorySkills)
-        ? parsedData.mandatorySkills.join(', ')
-        : (parsedData._mandatorySkills || []).join(', ') || '',
-    )
+    const mand = Array.isArray(parsedData.mandatorySkills)
+      ? parsedData.mandatorySkills
+      : (parsedData._mandatorySkills || [])
+    const mandStr = Array.isArray(mand) ? mand.filter(Boolean).join(', ') : ''
+    // Keywords must match Required / Mandatory Skills exactly
+    setMandatorySkills(mandStr)
+    setKeywords(mandStr)
     setPreferredSkills(
       Array.isArray(parsedData.preferredSkills)
         ? parsedData.preferredSkills.join(', ')
@@ -353,8 +351,13 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
             <PremiumInput
               label="Required / Mandatory Skills"
               value={mandatorySkills}
-              onChange={(e) => setMandatorySkills(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value
+                setMandatorySkills(v)
+                setKeywords(v)
+              }}
               placeholder="Python, SQL, Docker (comma-separated)"
+              helperText="Filled only from the JD skills section"
             />
             <PremiumInput
               label="Preferred Skills"
@@ -381,9 +384,13 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
             <PremiumInput
               label="Keywords"
               value={keywords}
-              onChange={(e) => setKeywords(e.target.value)}
-              placeholder="Python, RAG, GenAI (comma-separated)"
-              helperText="Auto-filled from the job description — only JD-related terms"
+              onChange={(e) => {
+                const v = e.target.value
+                setKeywords(v)
+                setMandatorySkills(v)
+              }}
+              placeholder="Python, SQL, Docker (comma-separated)"
+              helperText="Same as Required Skills — JD skills only"
             />
 
             <div className="pt-4 flex flex-wrap items-center gap-3">

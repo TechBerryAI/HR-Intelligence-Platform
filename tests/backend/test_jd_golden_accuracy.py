@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -257,18 +258,19 @@ def test_softwrapped_responsibility_not_one_bullet_per_line():
     assert "across production" in soft[0].lower()
 
 
-def test_keywords_grounded_in_skills_not_whole_doc_noise():
-    text, profile, form = _parse("detailed_skills_softwrap.txt")
-    skills = {
-        s.lower()
-        for s in (form.mandatorySkills or []) + (form.preferredSkills or []) + (form.skillsList or [])
-    }
+def test_keywords_mirror_mandatory_skills_from_jd_only():
+    text, _profile, form = _parse("detailed_skills_softwrap.txt")
+    skills = list(form.mandatorySkills or [])
     keywords = form.keywordsList or []
-    assert keywords, "expected keywords from skills"
-    # Keywords should be short and largely overlap skills / known tech in skills section
-    skill_blob = " ".join(skills)
-    for kw in keywords:
-        assert len(kw.split()) <= 4
-        assert kw.lower() in skill_blob or kw.lower() in text.lower()
-    # Must not invent random education/meta as keywords
-    assert not any(k.lower() in {"bachelor", "computer", "science"} for k in keywords)
+    assert skills, "expected mandatory skills from JD section"
+    assert keywords == skills, "keywords must equal required skills"
+    src = text.lower()
+    joined = " ".join(skills).lower()
+    # Must not invent expanded aliases absent from the JD
+    assert "amazon web services" not in joined
+    assert "aws" in joined or "aws" in src
+    for tok in skills:
+        # Each skill must be grounded in JD text (full phrase or key tokens)
+        tl = tok.lower()
+        parts = [p for p in re.findall(r"[a-z0-9+#.]{2,}", tl) if len(p) >= 3]
+        assert tl in src or any(p in src for p in parts), f"{tok!r} not grounded in JD"

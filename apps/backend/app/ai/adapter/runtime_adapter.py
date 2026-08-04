@@ -755,7 +755,6 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
         detect_responsibility_heading,
         extract_overview_from_text,
         extract_responsibilities_from_text,
-        extract_tech_keywords_from_text,
         extract_title_from_text,
         has_responsibilities_section,
         is_plausible_job_title,
@@ -848,24 +847,15 @@ def _repair_jd_structure(data: dict[str, Any], raw_jd_text: str | None = None) -
     # Flag for frontend autofill: only show responsibilities when JD had that section
     repaired["has_key_responsibilities"] = bool(jd_has_kr and resp_for_desc)
 
-    # Keywords: JD skills first; whole-doc tech scrape only when skills are empty
-    skill_seed = (
-        list(repaired.get("mandatory_skills") or [])
-        + list(repaired.get("preferred_skills") or [])
-        + list(repaired.get("skills") or [])
-    )
-    tech_from_text = (
-        []
-        if skill_seed
-        else extract_tech_keywords_from_text(raw_jd_text or "")
-    )
-    repaired["keywords"] = _derive_jd_keywords(
-        tech_from_text,
-        repaired,
-        raw_jd_text or repaired.get("description") or "",
-    )
+    # Keywords mirror Required / Mandatory Skills exactly (JD-listed only).
+    mandatory_only = [
+        _str(s)
+        for s in (repaired.get("mandatory_skills") or repaired.get("skills") or [])
+        if _str(s)
+    ]
+    repaired["keywords"] = list(dict.fromkeys(mandatory_only))
     if repaired["keywords"]:
-        actions.append("derived_keywords_from_jd")
+        actions.append("mirrored_keywords_from_mandatory_skills")
 
     repaired["type"] = "job_description"
     return repaired, actions
