@@ -286,3 +286,7 @@ apps/backend/data/bulk_uploads/
 apps/backend/data/bulk_exports/
 *.session
 /resumes
+/validation-report/
+/validation-report-smoke/
+/validation-report-smoke2/
+.playwright-browsers/
