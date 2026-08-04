@@ -1,0 +1,73 @@
+{
+  "file": "IT Network Audit & Compliance Executive - JD.pdf",
+  "expected": {
+    "title_from_filename": "IT Network Audit & Compliance Executive"
+  },
+  "form": {
+    "title": "IT Network Audit & Compliance Executive",
+    "company": "",
+    "location": "",
+    "salary": "",
+    "experienceFrom": "",
+    "experienceTo": "",
+    "employmentType": "",
+    "mandatorySkills": [
+      "ISO",
+      "RBI",
+      "GRC"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "ISO",
+      "RBI",
+      "GRC"
+    ],
+    "responsibilities": [
+      "Audit Documentation & Support",
+      "Compile and organize documentation for internal",
+      "external",
+      "ISO",
+      "and RBI audits.",
+      "Prepare preliminary audit data and perform initial data validation and sanity checks.",
+      "Coordinate with auditors and internal teams to provide required information within",
+      "defined timelines.",
+      "Risk & Control Assessment",
+      "Identify potential risks",
+      "control gaps",
+      "and process deficiencies within the IT Network"
+    ],
+    "qualifications": [
+      "and industry standards.",
+      "Key Responsibilities:",
+      "Audit Documentation & Support",
+      "Compile and organize documentation for internal, external, ISO, and RBI audits.",
+      "Prepare preliminary audit data and perform initial data validation and sanity checks.",
+      "Coordinate with auditors and internal teams to provide required information within",
+      "defined timelines.",
+      "Risk & Control Assessment"
+    ],
+    "descriptionPreview": "“The IT Network Audit & Compliance Executive will be responsible for supporting audit\nreadiness, compliance and governance activities within the IT Network function. This\nrole involves preparing audit documentation, identifying risks, evaluating operational\neffectiveness and ensuring compliance with internal policies, regulatory requirements\nand industry standards.",
+    "descriptionLen": 367
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 1.0,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 3,
+    "skills_checked": 3,
+    "skills_count": 3,
+    "location_in_source": null,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "",
+      "parsed_to": "",
+      "source_year_mentions": [],
+      "ok": null
+    },
+    "has_description": true,
+    "source_preview": "IT Network Audit & Compliance Executive | “The IT Network Audit & Compliance Executive will be responsible for supporting audit | readiness, compliance and governance activities within the IT Network function. This | role involves preparing audit documentation, identifying risks, evaluating operational | effectiveness and ensuring compliance with internal policies, regulatory requirements | and industry standards. | Key Responsibilities: | Audit Documentation & Support | Compile and organize documentation for internal, external, ISO, and RBI audits. | Prepare preliminary audit data and perform initial data vali"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'IT Network Audit & Compliance Executive', 'company': '', 'location': '', 'employment_type': '', 'description': 'IT Network Audit & Compliance Executive\\n“The IT Network Audit & Compliance Executive will be responsible for supporting audit\\nreadiness, compliance and governance activities within the IT Network function. This\\nrole involves preparing audit documentation, identifying risks, evaluating operational\\neffectiveness and ensuring compliance with internal policies, regulatory requirements\\nand industry standards.', 'min_experience_years': None, 'max_experience_years': None, 'skills': ['ISO', 'RBI', 'GRC'], 'mandatory_skills': ['ISO', 'RBI', 'GRC'], 'preferred_skills': [], 'responsibilities': ['Audit Documentation & Support', 'Compile and organize documentation for internal', 'external', 'ISO', 'and RBI audits.', 'Prepare preliminary audit data and perform initial data validation and sanity checks.', 'Coordinate with auditors and internal teams to provide required information within', 'defined timelines.', 'Risk & Control Assessment', 'Identify potential risks', 'control gaps', 'and process deficiencies within the IT Network', 'function.', 'Recommend corrective measures to strengthen compliance and operational resilience.', 'Governance & Compliance Alignment', 'Evaluate the operational effectiveness of the IT Network Team in alignment with GRC', 'and Information Security policies.', 'Ensure adherence to regulatory', 'compliance', 'an",
+  "source_preview": "IT Network Audit & Compliance Executive\n“The IT Network Audit & Compliance Executive will be responsible for supporting audit\nreadiness, compliance and governance activities within the IT Network function. This\nrole involves preparing audit documentation, identifying risks, evaluating operational\neffectiveness and ensuring compliance with internal policies, regulatory requirements\nand industry standards.\nKey Responsibilities:\nAudit Documentation & Support\nCompile and organize documentation for internal, external, ISO, and RBI audits.\nPrepare preliminary audit data and perform initial data validation and sanity checks.\nCoordinate with auditors and internal teams to provide required information within\ndefined timelines.\nRisk & Control Assessment\nIdentify potential risks, control gaps, and process deficiencies within the IT Network\nfunction.\nRecommend corrective measures to strengthen compliance and operational resilience.\nGovernance & Compliance Alignment\nEvaluate the operational effectiveness of the IT Network Team in alignment with GRC\nand Information Security policies.\nEnsure adherence to regulatory, compliance, and governance frameworks.\nAsset & Documentation Management\nMaintain and update the IT Network asset inventory with accuracy and compliance\nrequirements.\nReview, update, and maintain Standard Operating Procedures (SOPs) related to\nnetwork operations.\nReporting & Tracking\n\nUpdate and maintain the Branch Health Report on a regular basis.\nTrack ongoing projects and follow up with stakeholders to ensure timely completion.\nAudit Coordination\nAct as a key point of contact during RBI, ISO, and internal audits.\nCoordinate audit responses and ensure closure of audit observations in collaboration\nwith relevant teams.\nStakeholder Collaboration\nWork closely with the GRC and Information Security teams to ensure consistent\ncompliance and control monitoring across IT operations.”"
+}

@@ -1,0 +1,14 @@
+Job Title: Storage Capacity Planner
+Location: Pune
+Experience: 3-6 years
+Employment Type: Full-Time
+Company: Acme Infra
+Salary: 12-18 LPA
+Required Skills: NetApp | EMC | SAN | Capacity Planning
+
+Job Summary
+Plan and optimize enterprise storage capacity across data centers.
+
+Responsibilities:
+• Forecast storage growth and recommend expansions
+• Maintain capacity dashboards for SAN/NAS fleets

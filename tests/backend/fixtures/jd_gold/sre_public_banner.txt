@@ -1,0 +1,15 @@
+PUBLIC
+Role – Site Reliability Engineer
+Work Experience – 5 Years +
+Work Location – Navi Mumbai - Mahape
+
+Role Overview
+We are seeking a highly skilled Site Reliability Engineer (SRE) with deep expertise in Kubernetes
+(GKE), Terraform, and CI/CD automation.
+
+Responsibilities:
+• Automate infrastructure and onboard new applications
+• Conduct Proof of Concepts (POCs) for multi-tier application automation
+
+Required Skills:
+Kubernetes, Terraform, Docker, Prometheus, Grafana

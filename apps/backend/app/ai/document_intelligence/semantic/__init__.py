@@ -32,26 +32,45 @@ def _needs_resume_semantic(profile_dict: dict[str, Any]) -> bool:
 
 
 def _needs_jd_semantic(profile_dict: dict[str, Any]) -> bool:
+    from app.ai.parser.enrichment.jd_text_inference import (
+        is_plausible_job_title,
+        skills_look_skill_like,
+    )
+
     basic = profile_dict.get('basic') or {}
     skills = profile_dict.get('skills') or {}
-    return not (str(basic.get('title') or '').strip() and (skills.get('mandatory') or skills.get('general')))
+    title = str(basic.get('title') or '').strip()
+    mandatory = list(skills.get('mandatory') or [])
+    general = list(skills.get('general') or [])
+    return not (is_plausible_job_title(title) and skills_look_skill_like(mandatory or general))
 
 
 def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
-    """Best-effort section LLM; returns dict or None."""
-    try:
-        from app.ai.adapter.runtime_adapter import parse_via_runtime
+    """Best-effort section LLM with a hard timeout so API/batch never hangs."""
+    import concurrent.futures
 
-        # Runtime expects full resume/jd tasks — pass reduced text; repair may return dict
-        result = parse_via_runtime(prompt, 'resume' if doc_kind == 'resume' else 'jd')
-        if isinstance(result, dict):
-            return result
-    except Exception as exc:
-        logger.debug('semantic AI unavailable: %s', exc)
-    try:
-        # Lightweight local fallback: no network — return None
+    timeout_sec = float(os.getenv('DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC', '25'))
+
+    def _invoke() -> Optional[dict[str, Any]]:
+        try:
+            from app.ai.adapter.runtime_adapter import parse_via_runtime
+
+            result = parse_via_runtime(prompt, 'resume' if doc_kind == 'resume' else 'jd')
+            if isinstance(result, dict):
+                return result
+        except Exception as exc:
+            logger.debug('semantic AI unavailable: %s', exc)
         return None
-    except Exception:
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(_invoke)
+            return fut.result(timeout=timeout_sec)
+    except concurrent.futures.TimeoutError:
+        logger.warning('semantic AI timed out after %ss for %s', timeout_sec, doc_kind)
+        return None
+    except Exception as exc:
+        logger.debug('semantic AI failed: %s', exc)
         return None
 
 

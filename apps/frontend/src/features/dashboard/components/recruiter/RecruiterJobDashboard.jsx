@@ -4,9 +4,10 @@ import JDUploadWithParsing from '@/shared/components/JDUploadWithParsing.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import AnimatedContainer from '@/shared/components/AnimatedContainer.jsx'
+import JobDescriptionView from '@/shared/components/JobDescriptionView.jsx'
 import { Card } from '@/shared/components/ui/index.js'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiTrash2 } from 'react-icons/fi'
+import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiTrash2, FiEye } from 'react-icons/fi'
 
 const formatDisplayDate = (dateString) => {
   if (!dateString) return ''
@@ -38,6 +39,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
   const [togglingJobId, setTogglingJobId] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [showPreview, setShowPreview] = useState(false)
 
   const [editingJobId, setEditingJobId] = useState(null)
   const [editTitle, setEditTitle] = useState('')
@@ -53,6 +55,15 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
       setCompany(user.company)
     }
   }, [user?.company, company])
+
+  useEffect(() => {
+    if (!showPreview) return
+    const onEscape = (e) => {
+      if (e.key === 'Escape') setShowPreview(false)
+    }
+    window.addEventListener('keydown', onEscape)
+    return () => window.removeEventListener('keydown', onEscape)
+  }, [showPreview])
 
   const notifyChange = () => {
     onJobChange?.()
@@ -96,6 +107,21 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
       setConfirmDelete(null)
     }
   }
+
+  const splitList = (value) =>
+    String(value || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+
+  const previewCompany = user?.company || company || ''
+  const previewMandatory = splitList(mandatorySkills)
+  const previewPreferred = splitList(preferredSkills)
+  const previewKeywords = splitList(keywords)
+  const previewExperience =
+    experienceFrom || experienceTo
+      ? `${[experienceFrom, experienceTo].filter((v) => v !== '' && v != null).join('–')} yrs`
+      : ''
 
   const handleJDAutofill = (parsedData) => {
     setTitle(parsedData.title || '')
@@ -231,7 +257,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
 
       <AnimatedContainer animation="slideUp" delay={embedded ? 0 : 0.2}>
         <Card className={`space-y-6 ${embedded ? 'org-glass-panel p-6 sm:p-7 border-0 shadow-none hover:shadow-none bg-transparent' : 'p-8'}`}>
-          <form onSubmit={onSubmit} className="space-y-6">
+          <form id="recruiter-job-form" onSubmit={onSubmit} className="space-y-6">
             {success && (
               <motion.div
                 initial={{ opacity: 0, scale: 0.98 }}
@@ -360,7 +386,17 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
               helperText="Auto-filled from the job description — only JD-related terms"
             />
 
-            <div className="pt-4">
+            <div className="pt-4 flex flex-wrap items-center gap-3">
+              <PremiumButton
+                type="button"
+                variant="primary"
+                icon={FiEye}
+                disabled={isSubmitting}
+                onClick={() => setShowPreview(true)}
+                className={embedded ? '!bg-gradient-to-br !from-[#00A6FF] !to-[#276DFF] !shadow-[0_8px_24px_rgba(0,166,255,0.2)] rounded-xl min-h-[46px]' : ''}
+              >
+                Preview Post
+              </PremiumButton>
               <PremiumButton
                 type="submit"
                 variant="primary"
@@ -682,6 +718,156 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                   </PremiumButton>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showPreview && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+          >
+            <div
+              className="absolute inset-0 bg-slate-900/50 dark:bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowPreview(false)}
+            />
+
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.96, opacity: 0, y: 10 }}
+              className="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="job-preview-title"
+            >
+              <div className="flex-shrink-0 border-b border-slate-200 px-6 pb-4 pt-5">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <span className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+                    <FiEye className="h-3.5 w-3.5" />
+                    Preview
+                  </span>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    type="button"
+                    onClick={() => setShowPreview(false)}
+                    className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                    aria-label="Close preview"
+                  >
+                    <FiX className="h-5 w-5" />
+                  </motion.button>
+                </div>
+                <h3 id="job-preview-title" className="text-xl font-semibold tracking-tight text-slate-900">
+                  {title.trim() || 'Untitled role'}
+                </h3>
+                {previewCompany ? (
+                  <p className="mt-1 text-sm text-slate-500">{previewCompany}</p>
+                ) : null}
+                <div className="mt-3 flex flex-wrap items-center gap-4 text-sm text-slate-500">
+                  {location.trim() ? (
+                    <span className="flex items-center gap-1.5">
+                      <FiMapPin className="h-4 w-4" /> {location}
+                    </span>
+                  ) : null}
+                  {salary.trim() ? <span>{salary}</span> : null}
+                  {previewExperience ? (
+                    <span className="flex items-center gap-1.5">
+                      <FiBriefcase className="h-4 w-4" />
+                      {previewExperience}
+                    </span>
+                  ) : null}
+                  <span className="flex items-center gap-1.5">
+                    <FiClock className="h-3.5 w-3.5" /> Posted today
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                {previewMandatory.length > 0 && (
+                  <div>
+                    <h4 className="mb-2 text-sm font-semibold text-slate-700">Required skills</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {previewMandatory.map((skill) => (
+                        <span
+                          key={`m-${skill}`}
+                          className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-600"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {previewPreferred.length > 0 && (
+                  <div>
+                    <h4 className="mb-2 text-sm font-semibold text-slate-700">Preferred skills</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {previewPreferred.map((skill) => (
+                        <span
+                          key={`p-${skill}`}
+                          className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-xs font-medium text-slate-600"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {previewKeywords.length > 0 && (
+                  <div>
+                    <h4 className="mb-2 text-sm font-semibold text-slate-700">Keywords</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {previewKeywords.map((kw) => (
+                        <span
+                          key={`k-${kw}`}
+                          className="rounded-md border border-sky-100 bg-sky-50/80 px-2 py-0.5 text-xs font-medium text-sky-800"
+                        >
+                          {kw}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <h4 className="mb-2 text-sm font-semibold text-slate-700">Description</h4>
+                  <JobDescriptionView
+                    description={description.trim() || 'No description provided yet.'}
+                    textClassName="text-slate-600"
+                  />
+                </div>
+              </div>
+
+              <div className="flex-shrink-0 border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row gap-3 sm:justify-end">
+                <PremiumButton
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setShowPreview(false)}
+                  className="sm:min-w-[140px] min-h-[46px] rounded-xl"
+                >
+                  Close
+                </PremiumButton>
+                <PremiumButton
+                  type="button"
+                  variant="primary"
+                  loading={isSubmitting}
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    setShowPreview(false)
+                    // Submit the same form the Post Job button uses
+                    const form = document.getElementById('recruiter-job-form')
+                    form?.requestSubmit()
+                  }}
+                  className={`sm:min-w-[140px] ${embedded ? '!bg-gradient-to-br !from-[#00A6FF] !to-[#276DFF] !shadow-[0_8px_24px_rgba(0,166,255,0.2)] rounded-xl min-h-[46px]' : 'rounded-xl min-h-[46px]'}`}
+                >
+                  Post Job
+                </PremiumButton>
+              </div>
             </motion.div>
           </motion.div>
         )}

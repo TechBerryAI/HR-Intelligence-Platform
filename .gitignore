@@ -286,3 +286,4 @@ apps/backend/data/bulk_uploads/
 apps/backend/data/bulk_exports/
 *.session
 /resumes
+/JD

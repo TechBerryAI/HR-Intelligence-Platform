@@ -1,0 +1,83 @@
+{
+  "file": "Oracle_BDS_Specialist_JD.pdf",
+  "expected": {
+    "title_from_filename": "Oracle_BDS_Specialist"
+  },
+  "form": {
+    "title": "JD: Oracle Big Data Service (BDS) Specialist",
+    "company": "",
+    "location": "",
+    "salary": "",
+    "experienceFrom": "5",
+    "experienceTo": "7",
+    "employmentType": "",
+    "mandatorySkills": [
+      "Oracle Linux)",
+      "Ambari",
+      "or Grafana",
+      "Experience Level",
+      "Soft Skills & Competencies",
+      "deadline-driven environments"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "Oracle Linux)",
+      "Ambari",
+      "or Grafana",
+      "Experience Level",
+      "Soft Skills & Competencies",
+      "deadline-driven environments"
+    ],
+    "responsibilities": [
+      "Oracle BDS Cluster Setup & Configuration",
+      "● Design and deploy Oracle BDS clusters on Oracle Cloud Infrastructure (OCI)",
+      "● Configure BDS cluster topologies including HA and non-HA setups",
+      "● Set up and configure cluster nodes (master",
+      "utility",
+      "worker",
+      "edge nodes)",
+      "● Implement cluster security including Kerberos authentication and Ranger policies",
+      "● Configure network settings",
+      "VCN integration",
+      "and security lists",
+      "● Set up cluster auto-scaling policies and node management"
+    ],
+    "qualifications": [
+      "Oracle BDS Expertise",
+      "4+ years of hands-on experience with Oracle Big Data Service (BDS)",
+      "Proven experience in BDS cluster deployment and configuration on OCI",
+      "Deep knowledge of BDS architecture, components, and best practices",
+      "Experience with BDS high availability configurations",
+      "Expertise in BDS patching, upgrades, and cluster maintenance",
+      "Strong understanding of BDS security models (Kerberos, Ranger, Knox)",
+      "Experience with BDS auto-scaling and capacity management"
+    ],
+    "descriptionPreview": "We are seeking an experienced Oracle Big Data Service (BDS) Specialist to design,\nimplement, and maintain our Oracle BDS infrastructure. The ideal candidate will have deep\nexpertise in Oracle BDS cluster setup, configuration, administration, and performance\noptimization, with hands-on experience managing Hadoop ecosystem components within\nOracle Cloud Infrastructure (OCI).",
+    "descriptionLen": 375
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 0.5,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 6,
+    "skills_checked": 6,
+    "skills_count": 6,
+    "location_in_source": null,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "5",
+      "parsed_to": "7",
+      "source_year_mentions": [
+        3,
+        4,
+        7
+      ],
+      "ok": true
+    },
+    "has_description": true,
+    "source_preview": "JD: Oracle Big Data Service (BDS) Specialist | BDS Infrastructure Setup, Administration & Performance Tuning | Position Overview | We are seeking an experienced Oracle Big Data Service (BDS) Specialist to design, | implement, and maintain our Oracle BDS infrastructure. The ideal candidate will have deep | expertise in Oracle BDS cluster setup, configuration, administration, and performance | optimization, with hands-on experience managing Hadoop ecosystem components within | Oracle Cloud Infrastructure (OCI). | Key Responsibilities | Oracle BDS Cluster Setup & Configuration | ● Design and deploy Oracle BDS cluste"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'JD: Oracle Big Data Service (BDS) Specialist', 'company': '', 'location': '', 'employment_type': '', 'description': 'We are seeking an experienced Oracle Big Data Service (BDS) Specialist to design,\\nimplement, and maintain our Oracle BDS infrastructure. The ideal candidate will have deep\\nexpertise in Oracle BDS cluster setup, configuration, administration, and performance\\noptimization, with hands-on experience managing Hadoop ecosystem components within\\nOracle Cloud Infrastructure (OCI).', 'min_experience_years': 5.0, 'max_experience_years': 7.0, 'skills': ['Oracle Linux)', 'Ambari', 'or Grafana', 'Experience Level', 'Soft Skills & Competencies', 'deadline-driven environments'], 'mandatory_skills': ['Oracle Linux)', 'Ambari', 'or Grafana', 'Experience Level', 'Soft Skills & Competencies', 'deadline-driven environments'], 'preferred_skills': [], 'responsibilities': ['Oracle BDS Cluster Setup & Configuration', '● Design and deploy Oracle BDS clusters on Oracle Cloud Infrastructure (OCI)', '● Configure BDS cluster topologies including HA and non-HA setups', '● Set up and configure cluster nodes (master', 'utility', 'worker', 'edge nodes)', '● Implement cluster security including Kerberos authentication and Ranger policies', '● Configure network settings', 'VCN integration', 'and security lists', '● Set up cluster auto-scaling policies and node management', '● Integrate BDS with OCI Object Storage and other OCI services', 'BDS Administrat",
+  "source_preview": "JD: Oracle Big Data Service (BDS) Specialist\nBDS Infrastructure Setup, Administration & Performance Tuning\nPosition Overview\nWe are seeking an experienced Oracle Big Data Service (BDS) Specialist to design,\nimplement, and maintain our Oracle BDS infrastructure. The ideal candidate will have deep\nexpertise in Oracle BDS cluster setup, configuration, administration, and performance\noptimization, with hands-on experience managing Hadoop ecosystem components within\nOracle Cloud Infrastructure (OCI).\nKey Responsibilities\nOracle BDS Cluster Setup & Configuration\n● Design and deploy Oracle BDS clusters on Oracle Cloud Infrastructure (OCI)\n● Configure BDS cluster topologies including HA and non-HA setups\n● Set up and configure cluster nodes (master, utility, worker, edge nodes)\n● Implement cluster security including Kerberos authentication and Ranger policies\n● Configure network settings, VCN integration, and security lists\n● Set up cluster auto-scaling policies and node management\n● Integrate BDS with OCI Object Storage and other OCI services\nBDS Administration & Maintenance\n● Perform day-to-day administration of Oracle BDS clusters\n● Manage cluster lifecycle operations: patching, upgrades, and node operations\n● Monitor cluster health, resource utilization, and service availability\n● Configure and maintain Hadoop ecosystem services (HDFS, YARN, Hive, Spark, HBase,\nKafka)\n● Implement backup and disaster recovery strategies for BDS\n● Manage user access, authentication, and authorization using Ranger\n● Troubleshoot cluster issues and service failures\n● Perform cluster capacity planning and scaling operations\nPerformance Tuning & Optimization\n● Analyze and optimize BDS cluster performance for data processing workloads\n● Tune HDFS configurations for optimal storage performance\n● Optimize YARN resource allocation and job scheduling\n● Tune Spark job configurations and executor settings\n● Optimize Hive query performance and metastore operations\n● Monitor and optimize data ingestion and ETL pipeline performance\n● Implement compression strategies and file format optimizations\n● Identify and resolve bottlenecks in data processing workflows\n● Optimize network throughput and disk I/O performance\n\nIntegration & Data Pipeline Support\n● Integrate BDS with Apache Airflow for workflow orchestration\n● Configure connectivity between BDS and Oracle databases\n● Set up data ingestion pipelines using Sqoop, Spark, and Kafka\n● Configure BDS integration with Object Storage for data lake a"
+}

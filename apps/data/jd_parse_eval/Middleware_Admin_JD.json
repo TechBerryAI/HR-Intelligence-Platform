@@ -1,0 +1,53 @@
+{
+  "file": "Middleware Admin JD.pdf",
+  "expected": {
+    "title_from_filename": "Middleware Admin"
+  },
+  "form": {
+    "title": "Middleware Admin",
+    "company": "",
+    "location": "",
+    "salary": "rs",
+    "experienceFrom": "",
+    "experienceTo": "",
+    "employmentType": "",
+    "mandatorySkills": [
+      "Weblogic",
+      "Jboss",
+      "OHS Administrator",
+      "IBM Websphere"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "Weblogic",
+      "Jboss",
+      "OHS Administrator",
+      "IBM Websphere"
+    ],
+    "responsibilities": [],
+    "qualifications": [],
+    "descriptionPreview": "Primary skills: Weblogic, Jboss, OHS Administrator, IBM Websphere\nEssential Job Duties & Responsibilities\nSupports the installation, configuration, security, operations, and maintenance of all web servers,\napplication servers and other software.\nAdministers the internet/intranet infrastructure, including components such as web servers,\napplication servers, source control and deployment software.\nConducts application and infrastructure monitoring\nMonitors usage statistics and logs and produces re",
+    "descriptionLen": 1432
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 1.0,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 4,
+    "skills_checked": 4,
+    "skills_count": 4,
+    "location_in_source": null,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "",
+      "parsed_to": "",
+      "source_year_mentions": [],
+      "ok": null
+    },
+    "has_description": true,
+    "source_preview": "Middleware Admin | Primary skills: Weblogic, Jboss, OHS Administrator, IBM Websphere |  | Essential Job Duties & Responsibilities | Supports the installation, configuration, security, operations, and maintenance of all web servers, | application servers and other software. | Administers the internet/intranet infrastructure, including components such as web servers, | application servers, source control and deployment software. | Conducts application and infrastructure monitoring | Monitors usage statistics and logs and produces reports on user and web site behavior. | Implement updates, upgrades, and patches in a"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'Middleware Admin', 'company': '', 'location': '', 'employment_type': '', 'description': 'Middleware Admin\\nPrimary skills: Weblogic, Jboss, OHS Administrator, IBM Websphere\\nEssential Job Duties & Responsibilities\\nSupports the installation, configuration, security, operations, and maintenance of all web servers,\\napplication servers and other software.\\nAdministers the internet/intranet infrastructure, including components such as web servers,\\napplication servers, source control and deployment software.\\nConducts application and infrastructure monitoring\\nMonitors usage statistics and logs and produces reports on user and web site behavior.\\nImplement updates, upgrades, and patches in a timely manner to limit loss of service.\\nTroubleshoots web/application server problems and security issues and resolves as necessary.\\nTests backups or recovery plans regularly and resolves any issues.\\nCollaborates with development teams to discuss, analyze, or resolve usability issues.\\nProvides on-call 24x7 system support on a rotational basis.\\nKnowledge, Skills & Abilities\\nKnowledge of Apache Tomcat; JBoss, IIS, OHS, J2EE technologies\\nKnowledge of deployment automation techniques\\nKnowledge of Linux, AIX and/or Solaris operating system(s).\\nBasic familiarity with troubleshooting JAVA applications.\\nStrong problem-solving and analytical skills.\\nAbility to work independently, within a team structure.\\nStrong written and verbal communication and ski",
+  "source_preview": "Middleware Admin\nPrimary skills: Weblogic, Jboss, OHS Administrator, IBM Websphere\n\nEssential Job Duties & Responsibilities\nSupports the installation, configuration, security, operations, and maintenance of all web servers,\napplication servers and other software.\nAdministers the internet/intranet infrastructure, including components such as web servers,\napplication servers, source control and deployment software.\nConducts application and infrastructure monitoring\nMonitors usage statistics and logs and produces reports on user and web site behavior.\nImplement updates, upgrades, and patches in a timely manner to limit loss of service.\nTroubleshoots web/application server problems and security issues and resolves as necessary.\nTests backups or recovery plans regularly and resolves any issues.\nCollaborates with development teams to discuss, analyze, or resolve usability issues.\nProvides on-call 24x7 system support on a rotational basis.\n\nKnowledge, Skills & Abilities\nKnowledge of Apache Tomcat; JBoss, IIS, OHS, J2EE technologies\nKnowledge of deployment automation techniques\nKnowledge of Linux, AIX and/or Solaris operating system(s).\nBasic familiarity with troubleshooting JAVA applications.\nStrong problem-solving and analytical skills.\nAbility to work independently, within a team structure.\nStrong written and verbal communication and skills.\nWillingness to learn new technologies.\nAbility to perform multiple tasks and meet deadlines."
+}

@@ -25,15 +25,27 @@ RESUME_LAYOUT_ENABLED = os.getenv('RESUME_LAYOUT_ENABLED', 'true').lower() in (
     'true',
     'yes',
 )
+JD_LAYOUT_ENABLED = os.getenv('JD_LAYOUT_ENABLED', 'true').lower() in (
+    '1',
+    'true',
+    'yes',
+)
 
 
 def is_layout_enabled() -> bool:
     """
-    Live layout gate. Operator RESUME_LAYOUT_ENABLED wins when set;
+    Live layout gate for resumes. Operator RESUME_LAYOUT_ENABLED wins when set;
     otherwise HCIP_ENABLE_DOCLAYOUT (set by hardware profile) applies.
     """
     if 'RESUME_LAYOUT_ENABLED' in os.environ:
         return os.getenv('RESUME_LAYOUT_ENABLED', 'true').lower() in ('1', 'true', 'yes')
+    return os.getenv('HCIP_ENABLE_DOCLAYOUT', 'true').lower() in ('1', 'true', 'yes')
+
+
+def is_jd_layout_enabled() -> bool:
+    """JD layout gate (default on). Falls back to HCIP_ENABLE_DOCLAYOUT when unset."""
+    if 'JD_LAYOUT_ENABLED' in os.environ:
+        return os.getenv('JD_LAYOUT_ENABLED', 'true').lower() in ('1', 'true', 'yes')
     return os.getenv('HCIP_ENABLE_DOCLAYOUT', 'true').lower() in ('1', 'true', 'yes')
 
 
@@ -44,10 +56,18 @@ def enhance_resume_text(raw_text: str) -> str:
     return structure_text_by_headers(raw_text or '')
 
 
+def enhance_jd_text(raw_text: str) -> str:
+    """Structure JD text for section detection (headers → clear lines)."""
+    if not is_jd_layout_enabled():
+        return raw_text or ''
+    return structure_text_by_headers(raw_text or '')
+
+
 def ocr_image_with_layout(
     image_bytes: bytes,
     *,
     ocr_fn,
+    for_jd: bool | None = None,
 ) -> tuple[str, str]:
     """
     OCR a page image with optional DocLayout / OpenCV region guidance.
@@ -57,8 +77,15 @@ def ocr_image_with_layout(
     Returns (text, source) where source is 'doclayout' | 'opencv_blocks' | 'heuristic_ocr' | 'plain_ocr'.
     """
     processed = preprocess_image_bytes(image_bytes)
+    if for_jd is True:
+        layout_on = is_jd_layout_enabled()
+    elif for_jd is False:
+        layout_on = is_layout_enabled()
+    else:
+        # Shared PDF/image OCR path — enable if either resume or JD layout is on
+        layout_on = is_layout_enabled() or is_jd_layout_enabled()
 
-    if not is_layout_enabled():
+    if not layout_on:
         return (ocr_fn(processed) or '', 'plain_ocr')
 
     detections = _rapidocr_detections(processed)

@@ -1,0 +1,13 @@
+About the company
+We build cloud software for enterprises across India.
+
+Position: Multi Column UX Lead
+Work Location: Bangalore
+Experience: 5+ years
+
+The Multi Column UX Lead will own design systems across product lines.
+Skills: Figma, Wireframing, Design Systems, Prototyping
+
+Key Responsibilities
+Own end-to-end UX for multi-column product surfaces
+Partner with engineering on design tokens

@@ -1,0 +1,175 @@
+{
+  "file": "AI Generalist (Fresher) - JD.pdf",
+  "form": {
+    "title": "AI Generalist (Fresher)",
+    "location": "Mumbai",
+    "experienceFrom": "",
+    "experienceTo": "",
+    "description": "We are looking for enthusiastic freshers who are eager to explore, learn, and\nimplement Artificial Intelligence (AI) concepts in real-world projects. As an AI\nGeneralist, you will be part of a growing startup team experimenting with data,\nautomation, and AI-driven solutions across various business areas.",
+    "keywords": "Basic understanding of Python, data handling, or AI concepts.",
+    "salary": "",
+    "company": "",
+    "mandatorySkills": [
+      "Basic understanding of Python",
+      "data handling",
+      "or AI concepts."
+    ],
+    "preferredSkills": [],
+    "employmentType": "Full-Time | On-site",
+    "_skills": [
+      "Basic understanding of Python",
+      "data handling",
+      "or AI concepts."
+    ],
+    "_mandatorySkills": [
+      "Basic understanding of Python",
+      "data handling",
+      "or AI concepts."
+    ],
+    "_preferredSkills": [],
+    "_responsibilities": [
+      "Learn and apply fundamentals of AI",
+      "Machine Learning",
+      "and Data Processing.",
+      "Assist in building simple AI models",
+      "data pipelines",
+      "and automation workflows.",
+      "Research and explore AI tools",
+      "frameworks",
+      "and APIs for implementation.",
+      "Support proof-of-concept (PoC) development and documentation.",
+      "Collaborate with mentors and teammates to test and deploy new ideas.",
+      "Desired Skills:",
+      "Basic understanding of Python",
+      "data handling",
+      "or AI concepts.",
+      "Curiosity to learn new technologies and solve problems creatively.",
+      "Good logical thinking and teamwork skills.",
+      "No prior experience required \u2013 just a willingness to learn and grow.",
+      "Who Can Apply:",
+      "Fresh graduates or final-year students from Computer Science",
+      "IT",
+      "Engineering",
+      "or",
+      "related backgrounds who are passionate about AI and innovation."
+    ],
+    "_qualifications": [],
+    "_keywords": [
+      "Basic understanding of Python",
+      "data handling",
+      "or AI concepts."
+    ],
+    "trace": [
+      {
+        "form_field": "title",
+        "canonical_path": "basic.title",
+        "mapper": "document_intelligence.mapping.jd_form.v1",
+        "source": "semantic_ai",
+        "validator": "validate_nonempty",
+        "confidence": 0.95,
+        "reason": "ok"
+      },
+      {
+        "form_field": "location",
+        "canonical_path": "location.primary",
+        "mapper": "document_intelligence.mapping.jd_form.v1",
+        "source": "deterministic",
+        "validator": "validate_nonempty",
+        "confidence": 0.9,
+        "reason": "ok"
+      },
+      {
+        "form_field": "company",
+        "canonical_path": "basic.company",
+        "mapper": "document_intelligence.mapping.jd_form.v1",
+        "source": "semantic_ai",
+        "validator": "none",
+        "confidence": 0.0,
+        "reason": "empty"
+      },
+      {
+        "form_field": "salary",
+        "canonical_path": "compensation.salary_range",
+        "mapper": "document_intelligence.mapping.jd_form.v1",
+        "source": "deterministic",
+        "validator": "none",
+        "confidence": 0.0,
+        "reason": "empty"
+      },
+      {
+        "form_field": "experienceFrom",
+        "canonical_path": "requirements.min_experience_years",
+        "mapper": "document_intelligence.mapping.jd_form.v1",
+        "source": "deterministic",
+        "validator": "none",
+        "confidence": 0.0,
+        "reason": "empty"
+      },
+      {
+        "form_field": "experienceTo",
+        "canonical_path": "requirements.max_experience_years",
+        "mapper": "document_intelligence.mapping.jd_form.v1",
+        "source": "deterministic",
+        "validator": "none",
+        "confidence": 0.0,
+        "reason": "empty"
+      },
+      {
+        "form_field": "mandatorySkills",
+        "canonical_path": "skills.mandatory",
+        "mapper": "document_intelligence.mapping.jd_form.v1",
+        "source": "knowledge",
+        "validator": "skill_list",
+        "confidence": 0.9,
+        "reason": "3 skills"
+      },
+      {
+        "form_field": "preferredSkills",
+        "canonical_path": "skills.preferred",
+        "mapper": "document_intelligence.mapping.jd_form.v1",
+        "source": "knowledge",
+        "validator": "none",
+        "confidence": 0.0,
+        "reason": "0 skills"
+      },
+      {
+        "form_field": "employmentType",
+        "canonical_path": "basic.employment_type",
+        "mapper": "document_intelligence.mapping.jd_form.v1",
+        "source": "deterministic",
+        "validator": "validate_nonempty",
+        "confidence": 0.85,
+        "reason": "ok"
+      },
+      {
+        "form_field": "description",
+        "canonical_path": "format_jd_description(basic,responsibilities,skills,requirements,benefits)",
+        "mapper": "document_intelligence.mapping.jd_form.v1",
+        "source": "derived",
+        "validator": "format_jd_description",
+        "confidence": 0.9,
+        "reason": "composed"
+      }
+    ]
+  },
+  "checks": {
+    "title_overlap": 1.0,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 3,
+    "skills_checked": 3,
+    "skills_count": 3,
+    "location_in_source": true,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "",
+      "parsed_to": "",
+      "source_year_mentions": [],
+      "ok": null
+    },
+    "has_description": true,
+    "source_preview": "AI Generalist (Fresher) | Job Title: AI Generalist (Fresher) | Location: Mumbai | Employment Type: Full-Time | On-site | About the Role: | We are looking for enthusiastic freshers who are eager to explore, learn, and | implement Artificial Intelligence (AI) concepts in real-world projects. As an AI | Generalist, you will be part of a growing startup team experimenting with data, | automation, and AI-driven solutions across various business areas. | Key Responsibilities: | Learn and apply fundamentals of AI, Machine"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'AI Generalist (Fresher)', 'company': '', 'location': 'Mumbai', 'employment_type': 'Full-Time | On-site', 'description': 'We are looking for enthusiastic freshers who are eager to explore, learn, and\\nimplement Artificial Intelligence (AI) concepts in real-world projects. As an AI\\nGeneralist, you will be part of a growing startup team experimenting with data,\\nautomation, and AI-driven solutions across various business areas.', 'min_experience_years': None, 'max_experience_years': None, 'skills': ['Basic understanding of Python', 'data handling', 'or AI concepts.'], 'mandatory_skills': ['Basic understanding of Python', 'data handling', 'or AI concepts.'], 'preferred_skills': [], 'responsibilities': ['Learn and apply fundamentals of AI', 'Machine Learning', 'and Data Processing.', 'Assist in building simple AI models', 'data pipelines', 'and automation workflows.', 'Research and explore AI tools', 'frameworks', 'and APIs for implementation.', 'Support proof-of-concept (PoC) development and documentation.', 'Collaborate with mentors and teammates to test and deploy new ideas.', 'Desired Skills:', 'Basic understanding of Python', 'data handling', 'or AI concepts.', 'Curiosity to learn new technologies and solve problems creatively.', 'Good logical thinking and teamwork skills.', 'No prior experience required \u2013 just a willingness to learn and grow.', 'Who Can Apply:', 'Fresh graduates or final-year students from Computer Science', 'IT', 'Engineering', 'or', 'related backgrounds who are passionate about AI and innovation.'], 'qualifications': [], 'keywords': [], 'benefits': [], 'salary_range': ''}",
+  "source_preview": "AI Generalist (Fresher)\nJob Title: AI Generalist (Fresher)\nLocation: Mumbai\nEmployment Type: Full-Time | On-site\nAbout the Role:\nWe are looking for enthusiastic freshers who are eager to explore, learn, and\nimplement Artificial Intelligence (AI) concepts in real-world projects. As an AI\nGeneralist, you will be part of a growing startup team experimenting with data,\nautomation, and AI-driven solutions across various business areas.\nKey Responsibilities:\nLearn and apply fundamentals of AI, Machine Learning, and Data Processing.\nAssist in building simple AI models, data pipelines, and automation workflows.\nResearch and explore AI tools, frameworks, and APIs for implementation.\nSupport proof-of-concept (PoC) development and documentation.\nCollaborate with mentors and teammates to test and deploy new ideas.\nDesired Skills:\nBasic understanding of Python, data handling, or AI concepts.\nCuriosity to learn new technologies and solve problems creatively.\nGood logical thinking and teamwork skills.\nNo prior experience required \u2013 just a willingness to learn and grow.\nWho Can Apply:\nFresh graduates or final-year students from Computer Science, IT, Engineering, or\nrelated backgrounds who are passionate about AI and innovation."
+}

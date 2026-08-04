@@ -1,0 +1,68 @@
+{
+  "file": "JD - Storage Admin - L2 - Mumbai.pdf",
+  "expected": {
+    "title_from_filename": "Storage Admin - L2 - Mumbai"
+  },
+  "form": {
+    "title": "Job Requirements",
+    "company": "",
+    "location": "Navi Mumbai",
+    "salary": "",
+    "experienceFrom": "5",
+    "experienceTo": "",
+    "employmentType": "",
+    "mandatorySkills": [
+      "CDOT",
+      "CIFS",
+      "NFS",
+      "ITIL",
+      "SAN",
+      "RAG"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "CDOT",
+      "CIFS",
+      "NFS",
+      "ITIL",
+      "SAN",
+      "RAG"
+    ],
+    "responsibilities": [],
+    "qualifications": [
+      "To be successful in this role, you would need to have the following:",
+      "Experienced in NetApp Storage (Deploying and administering NetApp Storage – CDOT.",
+      "Troubleshooting Performance Issues, performing firmware and operating system upgrades, using storage",
+      "management tools – OnCommand Unified Manager/ Performance Manager/ Insight, Managing backup",
+      "integration with NetApp technologies)",
+      "Proficient understanding of NetApp Storage concepts, related management tools and related Storage",
+      "technologies (Snapshots, controller failover, provisioning, deduplication, cloning, Snapmirror, IntelliSnap)",
+      "including monitoring and troubleshooting, administration, replication technologies, security hardening and"
+    ],
+    "descriptionPreview": "We are looking for a motivated Storage Engineer to join Managed Services operations team to service our Banking\nCustomers.\n\nYou will provide Level 2 support to our customers by responding to Incidents, working on Service Requests, Problem\nManagement, Infrastructure Improvements and planning and performing NetApp Ontap upgrades. Experience in\nsupporting a varied clientele is essential as is a strong understanding of NetApp storage-based technologies.\n\nTo be successful in this role, you would need",
+    "descriptionLen": 523
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 0.0,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 6,
+    "skills_checked": 6,
+    "skills_count": 6,
+    "location_in_source": true,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "5",
+      "parsed_to": "",
+      "source_year_mentions": [
+        5
+      ],
+      "ok": true
+    },
+    "has_description": true,
+    "source_preview": "Job Summary |  | We are looking for a motivated Storage Engineer to join Managed Services operations team to service our Banking | Customers. |  | You will provide Level 2 support to our customers by responding to Incidents, working on Service Requests, Problem | Management, Infrastructure Improvements and planning and performing NetApp Ontap upgrades. Experience in | supporting a varied clientele is essential as is a strong understanding of NetApp storage-based technologies. |  | Job Requirements | To be successful in this role, you would need to have the following: |  |  | • | Experienced in NetApp Storage (Deploying a"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'Job Requirements', 'company': '', 'location': 'Navi Mumbai', 'employment_type': '', 'description': 'We are looking for a motivated Storage Engineer to join Managed Services operations team to service our Banking\\nCustomers.\\n\\nYou will provide Level 2 support to our customers by responding to Incidents, working on Service Requests, Problem\\nManagement, Infrastructure Improvements and planning and performing NetApp Ontap upgrades. Experience in\\nsupporting a varied clientele is essential as is a strong understanding of NetApp storage-based technologies.\\n\\nJob Requirements\\nTo be successful in this role, you would need to have the following:', 'min_experience_years': 5.0, 'max_experience_years': None, 'skills': ['CDOT', 'CIFS', 'NFS', 'ITIL', 'SAN', 'RAG'], 'mandatory_skills': ['CDOT', 'CIFS', 'NFS', 'ITIL', 'SAN', 'RAG'], 'preferred_skills': [], 'responsibilities': [], 'qualifications': ['To be successful in this role, you would need to have the following:', 'Experienced in NetApp Storage (Deploying and administering NetApp Storage – CDOT.', 'Troubleshooting Performance Issues, performing firmware and operating system upgrades, using storage', 'management tools – OnCommand Unified Manager/ Performance Manager/ Insight, Managing backup', 'integration with NetApp technologies)', 'Proficient understanding of NetApp Storage concepts, related management tools and related Storage', 'technologies (Snapshots, controller failover, provisioning, de",
+  "source_preview": "Job Summary\n\nWe are looking for a motivated Storage Engineer to join Managed Services operations team to service our Banking\nCustomers.\n\nYou will provide Level 2 support to our customers by responding to Incidents, working on Service Requests, Problem\nManagement, Infrastructure Improvements and planning and performing NetApp Ontap upgrades. Experience in\nsupporting a varied clientele is essential as is a strong understanding of NetApp storage-based technologies.\n\nJob Requirements\nTo be successful in this role, you would need to have the following:\n\n\n•\nExperienced in NetApp Storage (Deploying and administering NetApp Storage – CDOT.\n\n•\nTroubleshooting Performance Issues, performing firmware and operating system upgrades, using storage\nmanagement tools – OnCommand Unified Manager/ Performance Manager/ Insight, Managing backup\nintegration with NetApp technologies)\n\n•\nProficient understanding of NetApp Storage concepts, related management tools and related Storage\ntechnologies (Snapshots, controller failover, provisioning, deduplication, cloning, Snapmirror, IntelliSnap)\nincluding monitoring and troubleshooting, administration, replication technologies, security hardening and\nperformance tuning;\n\n•\nExperience in other NetApp storage technologies like StorageGRID, E-Series, SolidFire would be highly regarded\n\n•\nExperience with automation tools such as NetApp Workflow Automation, Ansible\n\n•\nStrong understanding of Storage protocols and technologies (CIFS, NFS, iSCSI, Fiber Channel switching and\nnetworks).\n\n•\nKnowledge in ITIL methodologies: change, incident, problem and configuration management\n\n•\nExpertise in Brocade or Cisco SAN switches administration and troubleshooting SAN connectivity.\n\n•\nSAN zoning.\n\n•\nStrong knowledge on FC and IP based storage replications.\n\n•\nExperience in Windows and Linux System Administration.\n\n•\nStrong customer communication and documentation skills.\n\n•\nBuild and maintain strong relationships with internal and external stakeholders.\n\n•\nPositive, proactive, team-orientated attitude with a flexible and innovative approach to work.\n\nEducation\nGraduate, preferably engineering graduate degree with a minimum of 5 years of Storage experience.\n\n-\nNetApp Certification would be an added advantage\n\nLocation:  Navi Mumbai\nRotational Shift - 24/7"
+}

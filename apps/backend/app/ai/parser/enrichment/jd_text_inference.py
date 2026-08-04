@@ -90,6 +90,55 @@ def _split_list_items(text: str) -> list[str]:
     return result
 
 
+_SKILL_HEADER_RE = re.compile(
+    r'(?i)^(?:\*\*)?(?:required\s+|core\s+|mandatory\s+|technical\s+|primary\s+|key\s+|must[- ]?have\s+)?'
+    r'(?:skills?|tech\s*stack)(?:\*\*)?\s*:?\s*$'
+)
+_SKILL_STOP_HEADER_RE = re.compile(
+    r'(?i)^(?:\*\*)?(?:responsibilities|qualifications|requirements|benefits|preferred|'
+    r'about|experience|education|employment|location|salary)(?:\*\*)?\s*:?\s*$'
+)
+_QUAL_SKILL_NOISE_RE = re.compile(
+    r'(?i)^(qualification|education|bachelor|master|degree|b\.?tech|b\.?e\.?|m\.?c\.?a|'
+    r'b\.?c\.?a|b\.?sc|mba|phd|preferred\s*skills?|required\s*skills?|mandatory\s*skills?|'
+    r'technical\s*skills?|primary\s*skills?|educational\s*qualifications?)\b'
+)
+
+
+def normalize_skill_tokens(items: list[str] | None, *, max_items: int = 30) -> list[str]:
+    """Keep short skill/tech tokens; drop sentence fragments and qualification lines."""
+    if not items:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in items:
+        if not raw or not str(raw).strip():
+            continue
+        item = _strip_list_marker(str(raw))
+        # Extra bullet/encoding leftovers
+        item = re.sub(r'^[\s•·▪▫●○\-\*]+', '', item).strip()
+        if not item:
+            continue
+        if _QUAL_SKILL_NOISE_RE.match(item) or item.lower().startswith('qualification'):
+            continue
+        parts = [item]
+        if ',' in item and len(item) < 120:
+            parts = [p.strip() for p in item.split(',') if p.strip()]
+        for part in parts:
+            tok = _strip_list_marker(part).strip().strip('.,;:|')[:80]
+            tok = re.sub(r'^[\s•·▪▫●○\-\*]+', '', tok).strip()
+            if not tok or not is_plausible_keyword(tok):
+                continue
+            key = tok.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(tok)
+            if len(out) >= max_items:
+                return out
+    return out
+
+
 def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]]:
     """Return (mandatory_skills, preferred_skills, combined skills) from prose."""
     if not desc:
@@ -104,17 +153,24 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
         re.I,
     )
     req_block = re.search(
-        r'(?:\*\*)?(?:Required|Core|Mandatory)\s*Skills?(?:\*\*)?\s*[:\-]\s*([^\n*]+)',
+        r'(?:\*\*)?(?:Required|Core|Mandatory|Primary|Technical|Key|Must[- ]?Have)\s*Skills?(?:\*\*)?\s*[:\-]\s*([^\n*]+)',
+        desc,
+        re.I,
+    )
+    primary_block = re.search(
+        r'(?:\*\*)?Primary\s*skills?(?:\*\*)?\s*[:\-]\s*([^\n*]+)',
         desc,
         re.I,
     )
     if req_block:
         mandatory_skills = [s.strip() for s in re.split(r'[,•·|]', req_block.group(1)) if s.strip()]
+    elif primary_block:
+        mandatory_skills = [s.strip() for s in re.split(r'[,•·|]', primary_block.group(1)) if s.strip()]
     if pref_block:
         preferred_skills = [s.strip() for s in re.split(r'[,•·|]', pref_block.group(1)) if s.strip()]
     if not mandatory_skills:
         block = re.search(
-            r'(?:\*\*)?(?:Required\s+)?Skills(?:\*\*)?\s*[:\-]\s*([^\n*]+)',
+            r'(?:\*\*)?(?:Required\s+|Primary\s+|Technical\s+|Key\s+)?Skills(?:\*\*)?\s*[:\-]\s*([^\n*]+)',
             desc,
             re.I,
         )
@@ -127,22 +183,15 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
         in_skills = False
         for line in desc.split('\n'):
             stripped = line.strip()
-            if re.match(
-                r'(?i)^(?:\*\*)?(?:required\s+|core\s+|mandatory\s+|technical\s+)?skills?(?:\*\*)?\s*:?\s*$',
-                stripped,
-            ):
+            if _SKILL_HEADER_RE.match(stripped):
                 in_skills = True
                 continue
             if in_skills:
-                if re.match(
-                    r'(?i)^(?:\*\*)?(?:responsibilities|qualifications|requirements|benefits|preferred|about|experience)(?:\*\*)?\s*:?\s*$',
-                    stripped,
-                ):
+                if _SKILL_STOP_HEADER_RE.match(stripped):
                     break
-                item = re.sub(r'^[\s•·\-\*]+', '', stripped).strip()
+                item = _strip_list_marker(stripped)
                 item = re.sub(r'^\d+[\.\)]\s*', '', item).strip()
-                if item and 1 < len(item) <= 60 and not item.lower().startswith(('we ', 'you ')):
-                    # Keep short skill lines; split comma lists on a bullet line
+                if item and 1 < len(item) <= 80:
                     if ',' in item and len(item) < 120:
                         mandatory_skills.extend([p.strip() for p in item.split(',') if p.strip()][:12])
                     else:
@@ -155,7 +204,7 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
     if not skills and desc:
         for line in desc.split('\n'):
             if 'skill' in line.lower():
-                if re.match(r'(?i)^(?:\*\*)?(?:required\s+|preferred\s+)?skills?(?:\*\*)?\s*:?\s*$', line.strip()):
+                if re.match(r'(?i)^(?:\*\*)?(?:required\s+|preferred\s+|primary\s+)?skills?(?:\*\*)?\s*:?\s*$', line.strip()):
                     continue
                 parts = re.split(r'[,•·|]', re.sub(r'(?i)^.*skills?\s*[:\-]\s*', '', line))
                 skills.extend([p.strip().strip('*') for p in parts if len(p.strip()) > 1][:15])
@@ -163,8 +212,28 @@ def extract_skills_from_text(desc: str) -> tuple[list[str], list[str], list[str]
                     break
         if skills and not mandatory_skills:
             mandatory_skills = skills
+
+    # Tech-keyword backfill when labeled skills are missing/weak
+    mandatory_skills = normalize_skill_tokens(mandatory_skills, max_items=30)
+    preferred_skills = normalize_skill_tokens(preferred_skills, max_items=20)
+    if len(mandatory_skills) < 3:
+        tech = extract_tech_keywords_from_text(desc, max_items=20)
+        for tok in tech:
+            key = tok.lower()
+            if key not in {s.lower() for s in mandatory_skills}:
+                mandatory_skills.append(tok)
+            if len(mandatory_skills) >= 20:
+                break
+
     combined = (mandatory_skills or skills)[:30]
-    return mandatory_skills[:30], preferred_skills[:20], combined
+    combined = normalize_skill_tokens(combined, max_items=30) or mandatory_skills
+    return mandatory_skills[:30], preferred_skills[:20], combined[:30]
+
+
+def skills_look_skill_like(skills: list[str] | None) -> bool:
+    """True when at least one token looks like a real skill/tech keyword."""
+    toks = normalize_skill_tokens(skills or [], max_items=10)
+    return len(toks) >= 1
 
 
 def extract_tech_keywords_from_text(text: str, max_items: int = 20) -> list[str]:
@@ -438,24 +507,54 @@ def extract_qualifications_from_text(desc: str, max_items: int = 15) -> list[str
 
 
 def extract_experience_years(experience_str: str) -> tuple[Any, Any]:
+    """Parse min/max years. Requires years/yrs (or Fresher); ignores 24x7 windows."""
     if not experience_str:
         return None, None
-    # Prefer range patterns like 3-5 years / 3 to 5 years
+    text = str(experience_str)
+    # Mask on-call / availability windows so they never become experience
+    text = re.sub(r'\b\d+\s*[xX/]\s*\d+\b', ' ', text)
+    text = re.sub(r'\b24\s*[-–—]\s*7\b', ' ', text)
+
+    fresher = re.search(r'(?i)\bfresher\b(?:\s*[–—\-to]+\s*(\d+(?:\.\d+)?)\s*(?:years?|yrs?))?', text)
+    if fresher:
+        if fresher.group(1):
+            return 0.0, float(fresher.group(1))
+        return 0.0, None
+
+    # Require explicit years/yrs on ranges and singles
     range_m = re.search(
-        r'(\d+(?:\.\d+)?)\s*(?:[-–—]|to)\s*(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)?',
-        str(experience_str),
+        r'(\d+(?:\.\d+)?)\s*(?:[-–—]|to)\s*(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)\b',
+        text,
         re.I,
     )
     if range_m:
         return float(range_m.group(1)), float(range_m.group(2))
-    plus_m = re.search(r'(\d+(?:\.\d+)?)\s*\+\s*(?:years?|yrs?)?', str(experience_str), re.I)
+
+    plus_m = re.search(r'(\d+(?:\.\d+)?)\s*\+\s*(?:years?|yrs?)\b', text, re.I)
     if plus_m:
         return float(plus_m.group(1)), None
-    nums = re.findall(r'(\d+(?:\.\d+)?)', str(experience_str))
-    if len(nums) >= 2:
-        return float(nums[0]), float(nums[1])
-    if len(nums) == 1:
-        return float(nums[0]), None
+
+    # Labeled experience without needing the word twice: Experience: 3-5
+    labeled = re.search(
+        r'(?i)(?:experience|work\s*experience|exp\.?)\s*[:\-–—]\s*'
+        r'(\d+(?:\.\d+)?)\s*(?:[-–—]|to)\s*(\d+(?:\.\d+)?)(?:\s*(?:years?|yrs?))?',
+        text,
+    )
+    if labeled:
+        return float(labeled.group(1)), float(labeled.group(2))
+
+    single_labeled = re.search(
+        r'(?i)(?:experience|work\s*experience|exp\.?)\s*[:\-–—]\s*'
+        r'(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)?\b',
+        text,
+    )
+    if single_labeled:
+        return float(single_labeled.group(1)), None
+
+    single = re.search(r'(\d+(?:\.\d+)?)\s*(?:years?|yrs?)\b', text, re.I)
+    if single:
+        return float(single.group(1)), None
+
     return None, None
 
 
@@ -463,7 +562,7 @@ def extract_location_from_text(text: str) -> str:
     if not text:
         return ''
     patterns = [
-        r'(?:location|work\s*location|job\s*location)\s*[:\-]\s*([^\n]+)',
+        r'(?:location|work\s*location|job\s*location)\s*[:\-–—]+\s*([^\n]+)',
         r'(?:based\s+in|office\s+location)\s+([A-Za-z][A-Za-z\s,\.\-]{2,60})',
         r'\b(Remote|Hybrid|Work\s+from\s+home|WFH)\b',
     ]
@@ -471,62 +570,247 @@ def extract_location_from_text(text: str) -> str:
         m = re.search(pat, text, re.I)
         if m and m.group(1):
             loc = m.group(1).strip().strip('.,;:')
+            # Drop interview / process notes in parentheses
+            if re.search(
+                r'(?i)\((?:final\s+round|face[- ]to[- ]face|interview|onsite\s+interview|'
+                r'telephonic|video\s+call)[^)]*\)',
+                loc,
+            ):
+                loc = re.sub(r'\s*\([^)]*\)\s*', ' ', loc).strip(' ,;-')
+            # Trim trailing process clauses after em-dash / hyphen notes
+            loc = re.split(r'\s*[–—]\s*(?:Final|Face|Interview)', loc, maxsplit=1, flags=re.I)[0]
+            loc = re.sub(r'\s{2,}', ' ', loc).strip(' .,;:-')
             if 2 <= len(loc) <= 80:
                 return loc
     return ''
 
 
+# Shared with clean_jd_description — labels that must never become job titles
+_NON_TITLE_LABELS = frozenset({
+    'role overview', 'job summary', 'overview', 'summary', 'public', 'confidential',
+    'jd', 'job description', 'description', 'about the role', 'about the job',
+    'about the position', 'position summary', "we're hiring", 'were hiring', 'hiring',
+    'notice period', 'employment type', 'job type', 'work experience', 'experience',
+    'location', 'company', 'salary', 'compensation', 'responsibilities', 'requirements',
+    'qualifications', 'skills', 'benefits', 'role', 'position', 'designation',
+})
+
+_TITLE_ABBREV_DOT_RE = re.compile(
+    r'\b(?:Jr|Sr|Mgr|Mr|Mrs|Ms|Dr|Inc|Ltd|Pvt|Co|Corp)\.',
+    re.I,
+)
+_DUTY_VERB_START_RE = re.compile(
+    r'(?i)^(participate|design|develop|manage|lead|build|create|ensure|support|'
+    r'collaborate|work|implement|maintain|provide|handle|perform|conduct|define|'
+    r'demonstrate|architect|optimize|automate)\b'
+)
+_TITLE_ROLE_NOUN_RE = re.compile(
+    r'(?i)\b(engineer|developer|manager|analyst|admin|administrator|architect|'
+    r'specialist|officer|associate|executive|consultant|coordinator|trainer|'
+    r'lead|scientist|designer|editor|recruiter|generalist|sme|dba|ciso)\b'
+)
+_TITLE_META_PREFIX_RE = re.compile(
+    r'(?i)^(notice\s*period|employment\s*type|job\s*type|experience|location|'
+    r'salary|ctc|compensation|department|reports?\s*to)\b'
+)
+
+_KV_LABEL_MAP = {
+    'job title': 'title',
+    'title': 'title',
+    'position': 'title',
+    'position title': 'title',
+    'designation': 'title',
+    'role': 'title',
+    'location': 'location',
+    'work location': 'location',
+    'job location': 'location',
+    'experience': 'experience',
+    'work experience': 'experience',
+    'exp': 'experience',
+    'salary': 'salary',
+    'ctc': 'salary',
+    'compensation': 'salary',
+    'employment type': 'employment_type',
+    'job type': 'employment_type',
+    'company': 'company',
+    'employer': 'company',
+    'organization': 'company',
+    'organisation': 'company',
+    'skills': 'skills',
+    'required skills': 'skills',
+    'primary skills': 'skills',
+    'technical skills': 'skills',
+    'key skills': 'skills',
+}
+
+
+def extract_kv_fields_from_text(text: str) -> dict[str, str]:
+    """Parse Label: Value / Label | Value lines (tables + key-value JDs)."""
+    if not text:
+        return {}
+    out: dict[str, str] = {}
+    for raw in str(text).splitlines():
+        line = raw.strip().strip('|').strip()
+        if not line or len(line) > 240:
+            continue
+        m = re.match(
+            r'^([A-Za-z][A-Za-z0-9 /&\-]{1,40}?)\s*[:\-–—|]\s*(.+)$',
+            line,
+        )
+        if not m:
+            # Two-column pipe without colon: Location | Mumbai
+            parts = [p.strip() for p in line.split('|') if p.strip()]
+            if len(parts) == 2 and len(parts[0].split()) <= 4:
+                label, value = parts[0], parts[1]
+            else:
+                continue
+        else:
+            label, value = m.group(1).strip(), m.group(2).strip()
+        key = _KV_LABEL_MAP.get(re.sub(r'\s+', ' ', label.lower()).strip(':'))
+        if not key or not value or key in out:
+            continue
+        # Don't treat section headers as values
+        if is_non_title_label(value) and key == 'title':
+            continue
+        out[key] = value.strip().strip('.,;:')[:200]
+    return out
+
+
+def is_non_title_label(title: str) -> bool:
+    """True for section/meta headings that must not be used as job titles."""
+    t = re.sub(r'\s+', ' ', (title or '').strip()).strip('.:*-–— ').lower()
+    if not t:
+        return True
+    if t in _NON_TITLE_LABELS:
+        return True
+    if re.match(
+        r'(?i)^(?:\*\*)?(?:about(?:\s+the)?\s+(?:role|job|position)|job\s+summary|overview|'
+        r'role\s+overview|position\s+summary|summary|description)(?:\*\*)?\s*:?\s*$',
+        title or '',
+    ):
+        return True
+    return False
+
+
 def is_plausible_job_title(title: str) -> bool:
     """Reject overview sentences and section labels wrongly used as titles."""
     t = re.sub(r'\s+', ' ', (title or '').strip())
+    t = re.sub(r'^[\s•·▪▫●○\-\*]+', '', t).strip()
     if not t or len(t) < 2 or len(t) > 80:
         return False
-    words = t.split()
-    if len(words) > 8:
+    if is_non_title_label(t):
         return False
-    if re.search(r'[.!?]', t):
+    words = t.split()
+    if len(words) > 10:
+        return False
+    # Allow Jr./Sr. abbreviations; reject real sentence punctuation
+    t_no_abbrev = _TITLE_ABBREV_DOT_RE.sub('JR', t)
+    if re.search(r'[!?]', t_no_abbrev) or re.search(r'\.(?:\s|$)', t_no_abbrev):
         return False
     lower = t.lower()
+    if _TITLE_META_PREFIX_RE.match(t):
+        return False
     if lower.startswith((
         'we ', 'our ', 'looking', 'seeking', 'join ', 'the ', 'a ', 'an ',
-        'about ', 'this ', 'you ', 'your ',
+        'about ', 'this ', 'you ', 'your ', "we're ", 'were ',
     )):
         return False
     if re.match(
         r'(?i)^(about|responsibilit|duties|requirements?|qualifications?|skills?|'
-        r'benefits?|what you|employment|location|company|salary|compensation)\b',
+        r'benefits?|what you|employment|location|company|salary|compensation|'
+        r'notice\s*period|primary\s*skills?)\b',
         t,
     ):
         return False
+    if _DUTY_VERB_START_RE.match(t):
+        # Allow short role titles ("Design Engineer") but reject duty sentences
+        if not (_TITLE_ROLE_NOUN_RE.search(t) and len(words) <= 5):
+            return False
+    # Reject industry-only parentheticals or truncated fragments
+    if t.startswith('(') and t.endswith(')'):
+        return False
+    if t.endswith(')') and '(' not in t:
+        return False
+    if t.endswith('(') or (t.count('(') != t.count(')')):
+        return False
+    if re.match(r'(?i)^(?:we[\'’]?re\s+hiring)\b', t):
+        # "We're Hiring: Open Source DBA (L2)" — strip prefix later; raw form is weak
+        if ':' in t:
+            after = t.split(':', 1)[1].strip()
+            return is_plausible_job_title(after) if after != t else False
+        return False
     return True
+
+
+def _title_from_labeled_line(text: str) -> str:
+    """Extract title from common JD label patterns."""
+    patterns = [
+        r'(?im)^(?:job\s*title|position\s*title|position|title)\s*[:\-–—]\s*(.+)$',
+        r'(?im)^(?:designation)\s*[:\-–—]\s*(.+)$',
+        r'(?im)^role\s*[–—\-:]\s*(.+)$',
+        r'(?im)^job\s*description\s*:\s*(.+)$',
+        r'(?im)^(?:we[\'’]?re\s+hiring)\s*:\s*(.+)$',
+    ]
+    for pat in patterns:
+        m = re.search(pat, text)
+        if not m:
+            continue
+        cand = m.group(1).strip().strip('.,;:')
+        cand = re.sub(r'(?i)^(?:jd|job\s*description)\s*:\s*', '', cand).strip()
+        # "Cloud Engineer (AWS) – Mumbai" → keep role, drop trailing city after dash
+        cand = re.sub(
+            r'\s+[–—\-]\s+(?:Mumbai|Navi\s+Mumbai|Pune|Bangalore|Bengaluru|Chennai|'
+            r'Hyderabad|Delhi|Noida|Gurgaon|Gurugram|Remote|India)\b.*$',
+            '',
+            cand,
+            flags=re.I,
+        ).strip()
+        if cand.lower().startswith('designation'):
+            continue
+        if is_plausible_job_title(cand):
+            return cand[:120]
+    return ''
 
 
 def extract_title_from_text(text: str) -> str:
     if not text:
         return ''
-    # Prefer explicit labels — never bare "role:" (matches "About the role:")
-    labeled = re.search(
-        r'(?im)^(?:job\s*title|position|title)\s*[:\-]\s*([^\n]+)$',
+    kv = extract_kv_fields_from_text(text)
+    if kv.get('title') and is_plausible_job_title(kv['title']):
+        return kv['title'][:120]
+    labeled = _title_from_labeled_line(text)
+    if labeled:
+        return labeled
+
+    # Prose: "Looking for a hands-on Platform Reliability Associate to join…"
+    prose = re.search(
+        r'(?i)(?:looking\s+for|seeking|hiring)\s+(?:a|an)\s+'
+        r'(?:hands-?on\s+|skilled\s+|experienced\s+)?'
+        r'([A-Z][A-Za-z0-9][A-Za-z0-9 /&\-]{3,70}?)'
+        r'\s+to\s+(?:join|lead|work|support|drive)',
         text,
     )
-    if labeled and labeled.group(1):
-        title = labeled.group(1).strip().strip('.,;:')
-        if is_plausible_job_title(title):
-            return title[:120]
-    for line in text.split('\n')[:10]:
-        stripped = re.sub(r'^[\s#*•\-]+', '', line.strip())
+    if prose:
+        cand = prose.group(1).strip().strip('.,;:')
+        if is_plausible_job_title(cand):
+            return cand[:120]
+
+    skip_prefix = re.compile(
+        r'(?i)^(company|employer|location|salary|ctc|compensation|experience|'
+        r'employment|about|job\s+description|responsibilit|requirements?|skills?|'
+        r'qualifications?|benefits?|what you|preferred|mandatory|notice\s*period|'
+        r'primary\s*skills?|work\s*experience|employment\s*type|job\s*type|'
+        r'role\s+overview|job\s+summary|overview|summary|public|confidential)\b'
+    )
+    # Scan deeper for multi-column / table-serialized preambles
+    for line in text.split('\n')[:40]:
+        stripped = re.sub(r'^[\s#*•\-–—]+', '', line.strip())
         if not stripped or len(stripped) < 3:
             continue
-        if re.match(
-            r'(?i)^(company|employer|location|salary|ctc|compensation|experience|'
-            r'employment|about|job\s+description|responsibilit|requirements?|skills?|'
-            r'qualifications?|benefits?|what you|preferred|mandatory)\b',
-            stripped,
-        ):
+        if skip_prefix.match(stripped) or is_non_title_label(stripped):
             continue
-        # Strip leading label if present
         stripped = re.sub(
-            r'(?i)^(?:job\s*title|position|title)\s*[:\-]\s*',
+            r'(?i)^(?:job\s*title|position\s*title|position|title|designation|role)\s*[:\-–—]\s*',
             '',
             stripped,
         ).strip()

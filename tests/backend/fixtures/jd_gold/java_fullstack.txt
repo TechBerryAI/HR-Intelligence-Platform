@@ -1,0 +1,15 @@
+Job Description: Java Full Stack Developer
+Experience: 3-5 Years
+Location: Mumbai
+Notice period-   Immediate to 45 days
+Employment Type: Full-Time
+
+Key Responsibilities:
+• Design, develop, and maintain robust, scalable, and high-performance applications.
+• Develop back-end components using Java, Node.js, and databases like MongoDB
+
+Required Skills:
+• Strong proficiency in Java and Node.js
+• Experience with databases: MongoDB, MySQL, PostgreSQL
+• Strong understanding of RESTful APIs and web services
+• Proficiency in version control tools like Git

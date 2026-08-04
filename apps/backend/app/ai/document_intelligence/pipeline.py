@@ -53,6 +53,34 @@ _SKIP_LLM = os.getenv('RESUME_SKIP_LLM_WHEN_DETERMINISTIC', 'true').lower() in (
 )
 
 
+def _jd_deterministic_is_strong(profile) -> bool:
+    """Skip LLM only when title and skills look structurally correct — not merely nonempty."""
+    from app.ai.parser.enrichment.jd_text_inference import (
+        is_plausible_job_title,
+        skills_look_skill_like,
+    )
+
+    title = getattr(getattr(profile, 'basic', None), 'title', '') or ''
+    skills = getattr(profile, 'skills', None)
+    mandatory = list(getattr(skills, 'mandatory', None) or [])
+    general = list(getattr(skills, 'general', None) or [])
+    return bool(is_plausible_job_title(title) and skills_look_skill_like(mandatory or general))
+
+
+def _apply_jd_repair(profile, raw_text: str):
+    """Always run structural JD repair, then remap profile from repaired TOON."""
+    from app.ai.adapter.runtime_adapter import repair_jd_toon
+    from app.ai.document_intelligence.canonical.from_toon import job_profile_from_toon
+
+    toon = job_to_toon(profile)
+    try:
+        toon, _repair_actions = repair_jd_toon(toon, raw_jd_text=raw_text)
+        profile = job_profile_from_toon(toon)
+    except Exception:
+        pass
+    return profile, toon
+
+
 def _mime_type(filename: str) -> str:
     ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
     return MIME_TYPE_MAP.get(ext, 'application/octet-stream')
@@ -236,22 +264,33 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
 
 
 def parse_jd_text_to_canonical(text: str, *, max_workers: int | None = None):
+    from app.ai.document_intelligence.coverage import recover_jd_profile_gaps
+    from app.ai.parser.layout.detector import enhance_jd_text, is_jd_layout_enabled
+
     profile_hw = detect_hardware_profile()
     workers = max_workers or min(4, max(1, profile_hw.cpu_count // 2))
-    sections = detect_sections(text, 'jd')
-    profile = parse_jd_from_sections(sections, text, max_workers=workers)
+    working = text or ''
+    if is_jd_layout_enabled():
+        structured = enhance_jd_text(working)
+        if structured and len(structured.strip()) >= 30:
+            working = structured
+    sections = detect_sections(working, 'jd')
+    profile = parse_jd_from_sections(sections, working, max_workers=workers)
     profile = apply_knowledge_to_job(profile)
     if not _SKIP_LLM:
-        unresolved = unresolved_semantic_text(sections, 'jd') or text
+        unresolved = unresolved_semantic_text(sections, 'jd') or working
         profile = enrich_jd_semantic(profile, unresolved_text=unresolved)
         profile = apply_knowledge_to_job(profile)
     else:
-        if not (profile.basic.title and (profile.skills.mandatory or profile.skills.general)):
-            unresolved = unresolved_semantic_text(sections, 'jd') or text
+        if not _jd_deterministic_is_strong(profile):
+            unresolved = unresolved_semantic_text(sections, 'jd') or working
             profile = enrich_jd_semantic(profile, unresolved_text=unresolved)
             profile = apply_knowledge_to_job(profile)
-    form = map_job_to_form(profile)
+    profile, coverage = recover_jd_profile_gaps(profile, working)
+    profile, toon = _apply_jd_repair(profile, working)
+    profile, coverage = recover_jd_profile_gaps(profile, working)
     toon = job_to_toon(profile)
+    form = map_job_to_form(profile, coverage=coverage.as_dicts(), raw_text=working)
     return profile, form, toon
 
 
@@ -517,7 +556,22 @@ def _run_jd(
         _emit(parse_job_id, 'text', 'failed', 'insufficient text', on_stage=on_stage)
         return {'status': 'error', 'error': 'Could not extract sufficient text from document'}, 400
     _emit(parse_job_id, 'text', 'completed', f'Extracted {text_length} chars', on_stage=on_stage)
-    _emit(parse_job_id, 'layout', 'skipped', 'JD layout optional', on_stage=on_stage)
+
+    _emit(parse_job_id, 'layout', 'started', on_stage=on_stage)
+    try:
+        from app.ai.parser.layout.detector import enhance_jd_text, is_jd_layout_enabled
+
+        if is_jd_layout_enabled():
+            structured = enhance_jd_text(raw_text)
+            if structured and len(structured.strip()) >= 30:
+                raw_text = structured
+                _emit(parse_job_id, 'layout', 'completed', 'JD section headers structured', on_stage=on_stage)
+            else:
+                _emit(parse_job_id, 'layout', 'completed', 'No structure change', on_stage=on_stage)
+        else:
+            _emit(parse_job_id, 'layout', 'skipped', 'JD layout disabled', on_stage=on_stage)
+    except Exception as layout_err:
+        _emit(parse_job_id, 'layout', 'failed', str(layout_err), on_stage=on_stage)
 
     _emit(parse_job_id, 'sections', 'started', on_stage=on_stage)
     sections = detect_sections(raw_text, 'jd')
@@ -532,7 +586,7 @@ def _run_jd(
 
     used_llm = False
     _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
-    if _SKIP_LLM and profile.basic.title and (profile.skills.mandatory or profile.skills.general):
+    if _SKIP_LLM and _jd_deterministic_is_strong(profile):
         _emit(parse_job_id, 'semantic', 'skipped', on_stage=on_stage)
     else:
         unresolved = unresolved_semantic_text(sections, 'jd') or raw_text
@@ -544,17 +598,22 @@ def _run_jd(
     profile = apply_knowledge_to_job(profile)
     _emit(parse_job_id, 'knowledge', 'completed', on_stage=on_stage)
 
-    toon = job_to_toon(profile)
-    # Apply JD repair (description/keywords/KR rules) then remap form
-    try:
-        from app.ai.adapter.runtime_adapter import repair_jd_toon
-        from app.ai.document_intelligence.canonical.from_toon import job_profile_from_toon
+    from app.ai.document_intelligence.coverage import recover_jd_profile_gaps
 
-        toon, _repair_actions = repair_jd_toon(toon, raw_jd_text=raw_text)
-        profile = job_profile_from_toon(toon)
-    except Exception:
-        pass
-    form = map_job_to_form(profile)
+    _emit(parse_job_id, 'coverage', 'started', on_stage=on_stage)
+    profile, coverage = recover_jd_profile_gaps(profile, raw_text)
+    profile, toon = _apply_jd_repair(profile, raw_text)
+    profile, coverage = recover_jd_profile_gaps(profile, raw_text)
+    toon = job_to_toon(profile)
+    missing_ev = coverage.missing_with_evidence
+    _emit(
+        parse_job_id,
+        'coverage',
+        'completed',
+        f'recovered={len(coverage.recovered_fields)} missing_evidence={len(missing_ev)}',
+        on_stage=on_stage,
+    )
+    form = map_job_to_form(profile, coverage=coverage.as_dicts(), raw_text=raw_text)
 
     _emit(parse_job_id, 'validate', 'started', on_stage=on_stage)
     is_valid, error_msg = validate_toon_format(toon, 'job_description')
@@ -582,6 +641,8 @@ def _run_jd(
         'form': form.to_autofill_dict(),
         'is_duplicate': False,
         'model_version': model_version,
-        'partial': not is_valid,
+        'partial': not is_valid or bool(missing_ev),
+        'missing_fields': missing_ev,
+        'coverage': coverage.as_dicts(),
         'parse_job_id': parse_job_id,
     }, 200

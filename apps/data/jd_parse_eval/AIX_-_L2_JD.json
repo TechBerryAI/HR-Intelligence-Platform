@@ -1,0 +1,64 @@
+{
+  "file": "AIX - L2 JD.pdf",
+  "expected": {
+    "title_from_filename": "AIX - L2"
+  },
+  "form": {
+    "title": "AIX Admin (L2)",
+    "company": "",
+    "location": "Navi Mumbai (Airoli)",
+    "salary": "",
+    "experienceFrom": "3",
+    "experienceTo": "",
+    "employmentType": "",
+    "mandatorySkills": [
+      "AIX",
+      "BCA"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "AIX",
+      "BCA"
+    ],
+    "responsibilities": [
+      "Create and manage user accounts, groups, and permissions",
+      "Install, configure, and maintain AIX operating systems and servers.",
+      "Monitor system performance and ensure high availability of AIX infrastructure.",
+      "Perform regular system backups and restore operations.",
+      "Perform routine system maintenance tasks such as applying patches, firmware updates,",
+      "and security fixes",
+      "Troubleshoot and resolve hardware and software issues on AIX platforms.",
+      "Implement and manage system security and compliance measures.",
+      "Collaborate with other IT staff to integrate AIX systems with other network resources.",
+      "Conduct root cause analysis and implement preventive measures to minimize future",
+      "incidents",
+      "Maintain documentation for system configurations, procedures, and tasks."
+    ],
+    "qualifications": [],
+    "descriptionPreview": "**Responsibilities:**\n• Create and manage user accounts, groups, and permissions\n• Install, configure, and maintain AIX operating systems and servers.\n• Monitor system performance and ensure high availability of AIX infrastructure.\n• Perform regular system backups and restore operations.\n• Perform routine system maintenance tasks such as applying patches, firmware updates,\n• and security fixes\n• Troubleshoot and resolve hardware and software issues on AIX platforms.\n• Implement and manage system",
+    "descriptionLen": 793
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 0.667,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 2,
+    "skills_checked": 2,
+    "skills_count": 2,
+    "location_in_source": true,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "3",
+      "parsed_to": "",
+      "source_year_mentions": [
+        3
+      ],
+      "ok": true
+    },
+    "has_description": true,
+    "source_preview": "AIX - L2 JD |  | Role : AIX Admin (L2) | Location: Navi Mumbai (Airoli) | Experience: 3+yrs | Education: B.E/B.Tech/BCA or above |  | Responsibilities |  |  | • | Create and manage user accounts, groups, and permissions |  |  | • | Install, configure, and maintain AIX operating systems and servers. |  |  | • | Monitor system performance and ensure high availability of AIX infrastructure. |  |  | • | Perform regular system backups and restore operations. |  |  | • | Perform routine system maintenance tasks such as applying patches, firmware updates, | and security fixes |  |  | • | Troubleshoot and resolve hardware and software issues on AIX platforms. |  |  | • | "
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'AIX Admin (L2)', 'company': '', 'location': 'Navi Mumbai (Airoli)', 'employment_type': '', 'description': '', 'min_experience_years': 3.0, 'max_experience_years': None, 'skills': ['AIX', 'BCA'], 'mandatory_skills': ['AIX', 'BCA'], 'preferred_skills': [], 'responsibilities': ['Create and manage user accounts, groups, and permissions', 'Install, configure, and maintain AIX operating systems and servers.', 'Monitor system performance and ensure high availability of AIX infrastructure.', 'Perform regular system backups and restore operations.', 'Perform routine system maintenance tasks such as applying patches, firmware updates,', 'and security fixes', 'Troubleshoot and resolve hardware and software issues on AIX platforms.', 'Implement and manage system security and compliance measures.', 'Collaborate with other IT staff to integrate AIX systems with other network resources.', 'Conduct root cause analysis and implement preventive measures to minimize future', 'incidents', 'Maintain documentation for system configurations, procedures, and tasks.'], 'qualifications': [], 'keywords': [], 'benefits': [], 'salary_range': ''}",
+  "source_preview": "AIX - L2 JD\n\nRole : AIX Admin (L2)\nLocation: Navi Mumbai (Airoli)\nExperience: 3+yrs\nEducation: B.E/B.Tech/BCA or above\n\nResponsibilities\n\n\n•\nCreate and manage user accounts, groups, and permissions\n\n\n•\nInstall, configure, and maintain AIX operating systems and servers.\n\n\n•\nMonitor system performance and ensure high availability of AIX infrastructure.\n\n\n•\nPerform regular system backups and restore operations.\n\n\n•\nPerform routine system maintenance tasks such as applying patches, firmware updates,\nand security fixes\n\n\n•\nTroubleshoot and resolve hardware and software issues on AIX platforms.\n\n\n•\nImplement and manage system security and compliance measures.\n\n\n•\nCollaborate with other IT staff to integrate AIX systems with other network resources.\n\n\n•\nConduct root cause analysis and implement preventive measures to minimize future\nincidents\n\n\n•\nMaintain documentation for system configurations, procedures, and tasks."
+}

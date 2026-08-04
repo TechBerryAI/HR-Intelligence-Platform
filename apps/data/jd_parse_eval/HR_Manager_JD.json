@@ -1,0 +1,57 @@
+{
+  "file": "HR Manager JD.pdf",
+  "expected": {
+    "title_from_filename": "HR Manager"
+  },
+  "form": {
+    "title": "HR Manager/HR assistant manager",
+    "company": "",
+    "location": "Vikhroli, Mumbai(On-site)",
+    "salary": "",
+    "experienceFrom": "4",
+    "experienceTo": "6",
+    "employmentType": "",
+    "mandatorySkills": [
+      "Key Skills & Competencies",
+      "HRMS",
+      "ESI",
+      "Amazon Web Services"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "Key Skills & Competencies",
+      "HRMS",
+      "ESI",
+      "Amazon Web Services"
+    ],
+    "responsibilities": [
+      "Recruitment & Onboarding"
+    ],
+    "qualifications": [],
+    "descriptionPreview": "Designation – HR Manager/HR assistant manager\nExperience – 4 to 6 years\nLocation – Vikhroli, Mumbai(On-site)\nNotice Period – Immediate/45 days",
+    "descriptionLen": 142
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 0.667,
+    "title_present": true,
+    "skills_precision": 0.75,
+    "skills_hit": 3,
+    "skills_checked": 4,
+    "skills_count": 4,
+    "location_in_source": true,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "4",
+      "parsed_to": "6",
+      "source_year_mentions": [
+        6
+      ],
+      "ok": true
+    },
+    "has_description": true,
+    "source_preview": "Designation – HR Manager/HR assistant manager | Experience – 4 to 6 years | Location – Vikhroli, Mumbai(On-site) | Notice Period – Immediate/45 days |  | Key Responsibilities | 1. Recruitment & Onboarding |  | • | Manage end-to-end recruitment: sourcing, screening, coordinating interviews, and | offer rollout. |  | • | Conduct new employee orientation and ensure smooth onboarding. | 2. HR Operations |  | • | Maintain and update employee records, HRMS data, and documentation. |  | • | Handle employee queries related to HR policies, attendance, and payroll | coordination. |  | • | Support monthly payroll inputs: attendance, leaves, variable c"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'HR Manager/HR assistant manager', 'company': '', 'location': 'Vikhroli, Mumbai(On-site)', 'employment_type': '', 'description': 'Designation – HR Manager/HR assistant manager\\nExperience – 4 to 6 years\\nLocation – Vikhroli, Mumbai(On-site)\\nNotice Period – Immediate/45 days', 'min_experience_years': 4.0, 'max_experience_years': 6.0, 'skills': ['Key Skills & Competencies', 'HRMS', 'ESI', 'Amazon Web Services'], 'mandatory_skills': ['Key Skills & Competencies', 'HRMS', 'ESI', 'Amazon Web Services'], 'preferred_skills': [], 'responsibilities': ['Recruitment & Onboarding'], 'qualifications': [], 'keywords': [], 'benefits': [], 'salary_range': ''}",
+  "source_preview": "Designation – HR Manager/HR assistant manager\nExperience – 4 to 6 years\nLocation – Vikhroli, Mumbai(On-site)\nNotice Period – Immediate/45 days\n\nKey Responsibilities\n1. Recruitment & Onboarding\n\n•\nManage end-to-end recruitment: sourcing, screening, coordinating interviews, and\noffer rollout.\n\n•\nConduct new employee orientation and ensure smooth onboarding.\n2. HR Operations\n\n•\nMaintain and update employee records, HRMS data, and documentation.\n\n•\nHandle employee queries related to HR policies, attendance, and payroll\ncoordination.\n\n•\nSupport monthly payroll inputs: attendance, leaves, variable components, etc.\n3. Employee Engagement\n\n•\nPlan and execute engagement activities, employee welfare programs, and R&R\ninitiatives.\n\n•\nConduct regular employee connect sessions and feedback surveys.\n4. Performance Management\n\n•\nAssist in goal-setting, mid-year, and annual appraisal processes.\n\n•\nCoordinate with stakeholders to ensure timely evaluations and documentation.\n5. Policy & Compliance\n\n•\nEnsure adherence to company policies and statutory compliances (PF, ESI, gratuity,\nlabor laws).\n\n•\nSupport audits and documentation as required.\n6. Exit Management\n\n•\nManage the full exit process: resignation acceptance, exit interviews, clearance, and\nF&F coordination.\n\n•\nAnalyze attrition trends and share insights.\n\nKey Skills & Competencies\n\n•\nStrong knowledge of HR processes, labor laws, and best practices.\n\n•\nExcellent communication & interpersonal skills.\n\n•\nProficiency in MS Excel, HRMS tools, and reporting.\n\n•\nProblem-solving, stakeholder management, and confidentiality handling.\n\n\nEducation\n\n•\nBachelors degree in HR / Business Administration"
+}
