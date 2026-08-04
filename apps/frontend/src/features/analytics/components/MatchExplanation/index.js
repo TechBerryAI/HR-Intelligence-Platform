@@ -16,4 +16,5 @@ export {
   getDecisionExplanation,
   isDisplayableSkill,
   filterSkillList,
+  asStringList,
 } from './matchAnalysisUtils'

@@ -1,5 +1,5 @@
 import React from 'react'
-import { getComparisonBoard } from './matchAnalysisUtils'
+import { getComparisonBoard, asStringList } from './matchAnalysisUtils'
 
 /**
  * Premium Detailed Analysis: side-by-side needed vs present for every category.
@@ -13,6 +13,9 @@ export default function DetailedAnalysisPanel({
   const board = getComparisonBoard(jsonOut || {}, { score })
   const explanation = board?.explanation
   if (!explanation) return null
+
+  const whatHappened = asStringList(explanation.what_happened)
+  const rulesApplied = asStringList(explanation.rules_applied)
 
   const enterprise = variant === 'enterprise'
   const labelClass = enterprise
@@ -215,9 +218,9 @@ export default function DetailedAnalysisPanel({
         <p className={`text-base sm:text-[17px] leading-snug font-semibold ${titleClass}`}>
           {explanation.primary_reason}
         </p>
-        {explanation.what_happened?.length > 0 && (
+        {whatHappened.length > 0 && (
           <ul className={`mt-3.5 space-y-2 ${mutedClass}`}>
-            {explanation.what_happened.map((line, i) => (
+            {whatHappened.map((line, i) => (
               <li key={i} className="flex gap-2.5 leading-relaxed">
                 <span className={`mt-2 h-1 w-1 shrink-0 rounded-full ${enterprise ? 'bg-[#5CBCFF]' : 'bg-sky-500'}`} />
                 <span>{line}</span>
@@ -322,11 +325,11 @@ export default function DetailedAnalysisPanel({
       </section>
 
       {/* Rules */}
-      {Array.isArray(explanation.rules_applied) && explanation.rules_applied.length > 0 && (
+      {rulesApplied.length > 0 && (
         <section className={`rounded-[14px] border p-4 ${panelBg}`}>
           <p className={labelClass}>How we decide</p>
           <ul className={`mt-3 grid gap-2 sm:grid-cols-2 text-xs ${mutedClass}`}>
-            {explanation.rules_applied.map((rule, i) => (
+            {rulesApplied.map((rule, i) => (
               <li
                 key={i}
                 className={`flex gap-2 rounded-[10px] border px-3 py-2.5 leading-relaxed ${enterprise ? 'border-white/[0.06] bg-black/10' : 'border-slate-100 bg-slate-50'}`}

@@ -57,6 +57,42 @@ export function filterSkillList(items) {
   return items.map((s) => String(s || '').trim()).filter(isDisplayableSkill)
 }
 
+/**
+ * TOON / legacy payloads often collapse a 1-item list into a bare string.
+ * Always normalize explanation list fields before UI .map().
+ */
+export function asStringList(value) {
+  if (value == null || value === '') return []
+  if (Array.isArray(value)) {
+    return value.map((v) => String(v ?? '').trim()).filter(Boolean)
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    // Prefer sentence splits when TOON flattened multiple bullets into one blob
+    if (trimmed.includes('\n')) {
+      return trimmed.split(/\n+/).map((s) => s.trim()).filter(Boolean)
+    }
+    return [trimmed]
+  }
+  if (typeof value === 'object') {
+    return Object.values(value).map((v) => String(v ?? '').trim()).filter(Boolean)
+  }
+  return [String(value)]
+}
+
+function normalizeExplanationLists(explanation = {}) {
+  if (!explanation || typeof explanation !== 'object') return explanation
+  return {
+    ...explanation,
+    what_happened: asStringList(explanation.what_happened),
+    rules_applied: asStringList(explanation.rules_applied),
+    category_reasons: Array.isArray(explanation.category_reasons)
+      ? explanation.category_reasons
+      : [],
+  }
+}
+
 export function toChips(items) {
   const out = []
   const arr = Array.isArray(items)
@@ -702,12 +738,14 @@ export function getDecisionExplanation(jsonOut = {}, { score } = {}) {
         ...missing.map((s) => ({ skill: s, status: 'missing', present: false, needed: true })),
       ],
     }
-    return {
+    return normalizeExplanationLists({
       ...existing,
       category_reasons,
       skills_evidence,
+      what_happened: asStringList(existing.what_happened),
+      rules_applied: asStringList(existing.rules_applied),
       score_math: existing.score_math || jsonOut?.score_math || buildScoreMathFromBreakdown(jsonOut, score),
-    }
+    })
   }
 
   const breakdown = jsonOut?.score_breakdown || {}
@@ -790,7 +828,7 @@ export function getDecisionExplanation(jsonOut = {}, { score } = {}) {
     { overall, gateFailed, matched, missing, breakdown },
   )
 
-  return {
+  return normalizeExplanationLists({
     outcome,
     outcome_label,
     verdict,
@@ -830,7 +868,7 @@ export function getDecisionExplanation(jsonOut = {}, { score } = {}) {
     },
     reconciliation,
     next_step,
-  }
+  })
 }
 
 function buildCategoryReasonsFromLegacy(jsonOut, req, ctx) {
