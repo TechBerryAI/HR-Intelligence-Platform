@@ -4,6 +4,7 @@ import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
 import PanelShell, { usePanelBasePath } from '@/features/organization/pages/org/PanelShell.jsx'
 import JobDescriptionView from '@/shared/components/JobDescriptionView.jsx'
+import { getApplicationDisplayMatch } from '@/features/analytics/components/MatchExplanation'
 import { FiArrowLeft, FiBriefcase, FiMapPin, FiDollarSign, FiUser, FiCalendar, FiUsers } from 'react-icons/fi'
 
 function formatDate(ts) {
@@ -233,7 +234,7 @@ export default function HeadHrJobDetail() {
                   </thead>
                   <tbody className="divide-y divide-white/[0.06]">
                     {applicants.map((app) => {
-                      const score = app.match_score != null ? Math.round(Number(app.match_score)) : null
+                      const { score } = getApplicationDisplayMatch(app)
                       const status = String(app.status || 'applied').toLowerCase()
                       return (
                         <tr

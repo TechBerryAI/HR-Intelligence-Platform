@@ -4,8 +4,8 @@ import { FiChevronDown } from 'react-icons/fi'
 /**
  * @param {'default' | 'enterprise'} variant
  */
-export default function CollapsibleSection({ label = 'Detailed Analysis', children, variant = 'default' }) {
-  const [open, setOpen] = useState(false)
+export default function CollapsibleSection({ label = 'Detailed Analysis', children, variant = 'default', defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen)
   const enterprise = variant === 'enterprise'
 
   if (enterprise) {

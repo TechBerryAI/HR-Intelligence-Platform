@@ -10,6 +10,7 @@ from app.ai.toon.runtime import toon_loads_flex
 from app.api.middleware.auth import authenticate_token, require_head_hr
 from app.domains.identity.authorization.rbac import is_head_hr, require_analytics_read, is_read_only
 from app.domains.recruitment.services.job_delete import cascade_delete_job
+from app.domains.recruitment.services.ats_service import sync_application_match_score
 
 head_hr_bp = Blueprint('head_hr', __name__)
 
@@ -382,7 +383,7 @@ def job_detail_or_delete(jdid):
 def list_applications():
     rows = db_all(
         '''SELECT a.id, a.candidate_id, a.job_id, a.status,
-                  a.applied_at, a.match_score, a.shortlisted,
+                  a.applied_at, a.match_score, a.shortlisted, a.ats_analysis,
                   cs.name AS candidate_name, cs.email AS candidate_email,
                   j.title AS job_title, j.company AS job_company,
                   h.full_name AS hr_name
@@ -393,7 +394,28 @@ def list_applications():
            ORDER BY a.applied_at DESC''',
         (),
     )
-    return jsonify({'applications': rows})
+    applications = []
+    for row in rows or []:
+        item = dict(row)
+        ats_raw = item.pop('ats_analysis', None)
+        ats_analysis = toon_loads_flex(ats_raw) if ats_raw else None
+        stored = item.get('match_score')
+        try:
+            stored_f = float(stored) if stored is not None else None
+        except (TypeError, ValueError):
+            stored_f = None
+        if (ats_analysis):
+            recon = sync_application_match_score(item.get('id'), ats_analysis, stored_f, persist=True)
+            if recon.get('match_score') is not None:
+                item['match_score'] = float(recon['match_score'])
+            if recon.get('verdict'):
+                item['verdict'] = recon['verdict']
+            # Keep analysis available so clients can re-derive display score if needed
+            item['ats_analysis'] = recon.get('ats_analysis') or ats_analysis
+        elif stored_f is not None:
+            item['match_score'] = stored_f
+        applications.append(item)
+    return jsonify({'applications': applications})
 
 
 @head_hr_bp.route('/applications/<int:app_id>', methods=['OPTIONS'])
@@ -424,13 +446,25 @@ def get_application(app_id):
         return jsonify({'error': 'Application not found'}), 404
     ats_raw = row.get('ats_analysis')
     ats_analysis = toon_loads_flex(ats_raw) if ats_raw else None
+    try:
+        stored_f = float(row['match_score']) if row.get('match_score') is not None else None
+    except (TypeError, ValueError):
+        stored_f = None
+    verdict = None
+    if ats_analysis:
+        recon = sync_application_match_score(row['id'], ats_analysis, stored_f, persist=True)
+        if recon.get('match_score') is not None:
+            stored_f = float(recon['match_score'])
+        if recon.get('ats_analysis') is not None:
+            ats_analysis = recon['ats_analysis']
+        verdict = recon.get('verdict')
     payload = {
         'id': row['id'],
         'candidate_id': row['candidate_id'],
         'job_id': row['job_id'],
         'status': row['status'],
         'applied_at': row['applied_at'],
-        'match_score': float(row['match_score']) if row.get('match_score') is not None else None,
+        'match_score': stored_f,
         'shortlisted': bool(row.get('shortlisted')),
         'ats_reasoning': row.get('ats_reasoning'),
         'ats_analysis': ats_analysis,
@@ -439,5 +473,6 @@ def get_application(app_id):
         'job_title': row.get('job_title'),
         'job_company': row.get('job_company'),
         'hr_name': row.get('hr_name'),
+        'verdict': verdict,
     }
     return jsonify(payload)

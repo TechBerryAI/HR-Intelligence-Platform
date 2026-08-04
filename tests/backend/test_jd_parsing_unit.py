@@ -451,3 +451,79 @@ Required Skills: SQL, Excel, Python
     assert "**Required Skills:**" in r2["description"]
     assert "SQL" in r2["description"]
 
+
+def test_normalize_skill_tokens_rejects_headers_and_filler():
+    from app.ai.parser.enrichment.jd_text_inference import normalize_skill_tokens, is_plausible_keyword
+
+    cleaned = normalize_skill_tokens([
+        "PostgreSQL",
+        "Preferred Qualifications",
+        "plus",
+        "Azure Database for",
+        "management",
+        "Azure",
+        "Bonus Points",
+        "PUBLIC",
+    ])
+    lower = {s.lower() for s in cleaned}
+    assert "postgresql" in lower
+    assert "azure" in lower
+    assert "preferred qualifications" not in lower
+    assert "plus" not in lower
+    assert "management" not in lower
+    assert "azure database for" not in lower
+    assert "bonus points" not in lower
+    assert "public" not in lower
+    assert is_plausible_keyword("PostgreSQL")
+    assert not is_plausible_keyword("plus")
+    assert not is_plausible_keyword("Preferred Qualifications")
+
+
+def test_extract_preferred_qualifications_section():
+    from app.ai.parser.enrichment.jd_text_inference import extract_skills_from_text
+
+    jd = """
+Database Administrator
+
+Required Skills:
+• PostgreSQL
+• Linux
+• Shell scripting
+
+Preferred Qualifications:
+• Azure
+• Terraform
+• Kubernetes
+"""
+    mandatory, preferred, _ = extract_skills_from_text(jd)
+    mand_l = {s.lower() for s in mandatory}
+    pref_l = {s.lower() for s in preferred}
+    assert "postgresql" in mand_l
+    assert "linux" in mand_l
+    assert "preferred qualifications" not in mand_l
+    assert "azure" in pref_l or "terraform" in pref_l or "kubernetes" in pref_l
+    # Preferred skills should not be duplicated into mandatory
+    assert not ({"azure", "terraform", "kubernetes"} & mand_l & pref_l) or True
+    for tok in preferred:
+        assert tok.lower() not in mand_l
+
+
+def test_prose_comma_line_not_split_into_fake_skills():
+    from app.ai.parser.enrichment.jd_text_inference import normalize_skill_tokens
+
+    cleaned = normalize_skill_tokens([
+        "Experience with Azure Database for PostgreSQL management is a plus",
+    ])
+    lower = {s.lower() for s in cleaned}
+    assert "plus" not in lower
+    assert "management" not in lower
+    assert "for" not in lower
+
+
+def test_skills_look_polluted_detects_noise():
+    from app.ai.parser.enrichment.jd_text_inference import skills_look_polluted, skills_look_skill_like
+
+    assert skills_look_polluted(["Preferred Qualifications", "plus", "management"])
+    assert skills_look_skill_like(["Python", "Django", "PostgreSQL"])
+    assert not skills_look_skill_like(["plus"])
+
