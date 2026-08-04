@@ -544,6 +544,34 @@ export default function BulkResumeParser({ embedded = false }) {
                   <span className="text-[11px] text-[var(--ei-text-muted)]">PDF · DOC · DOCX · ZIP</span>
                 </div>
 
+                {/* Keep file inputs outside buttons — nesting inputs in <button> breaks pickers in Chrome */}
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  multiple
+                  webkitdirectory=""
+                  directory=""
+                  onChange={(e) => {
+                    addFiles(e.target.files || [], { allowZip: false })
+                    e.target.value = ''
+                  }}
+                  className="hidden"
+                  aria-hidden
+                  tabIndex={-1}
+                />
+                <input
+                  ref={zipInputRef}
+                  type="file"
+                  accept=".zip,application/zip,application/x-zip-compressed"
+                  onChange={(e) => {
+                    addFiles(e.target.files || [], { allowZip: true })
+                    e.target.value = ''
+                  }}
+                  className="hidden"
+                  aria-hidden
+                  tabIndex={-1}
+                />
+
                 <button
                   type="button"
                   onClick={handleInputFolderBrowse}
@@ -553,28 +581,6 @@ export default function BulkResumeParser({ embedded = false }) {
                       : 'border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)] hover:border-[rgba(0,166,255,0.4)] hover:bg-[rgba(0,166,255,0.05)]'
                   }`}
                 >
-                  <input
-                    ref={folderInputRef}
-                    type="file"
-                    multiple
-                    webkitdirectory=""
-                    directory=""
-                    onChange={(e) => {
-                      addFiles(e.target.files || [], { allowZip: false })
-                      e.target.value = ''
-                    }}
-                    className="hidden"
-                  />
-                  <input
-                    ref={zipInputRef}
-                    type="file"
-                    accept=".zip,application/zip"
-                    onChange={(e) => {
-                      addFiles(e.target.files || [], { allowZip: true })
-                      e.target.value = ''
-                    }}
-                    className="hidden"
-                  />
                   <div className="flex items-start sm:items-center gap-4 flex-col sm:flex-row">
                     <div
                       className={`w-12 h-12 rounded-2xl grid place-items-center flex-shrink-0 ${
@@ -622,7 +628,11 @@ export default function BulkResumeParser({ embedded = false }) {
                   </div>
                   <button
                     type="button"
-                    onClick={() => zipInputRef.current?.click()}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      zipInputRef.current?.click()
+                    }}
                     className="org-btn-ghost shrink-0"
                   >
                     <FiUpload className="w-4 h-4" />

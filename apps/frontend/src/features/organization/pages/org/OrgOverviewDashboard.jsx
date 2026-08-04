@@ -4,8 +4,8 @@ import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
 import { useApp } from '@/core/context/AppContext.jsx'
 import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
-import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiRefreshCw, FiHome, FiArrowRight, FiEdit2, FiX } from 'react-icons/fi'
-import { LayoutDashboard } from 'lucide-react'
+import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiArrowRight, FiEdit2, FiX } from 'react-icons/fi'
+import { LayoutDashboard, Home, RefreshCw } from 'lucide-react'
 import RecruiterJobDashboard from '@/features/dashboard/components/recruiter/RecruiterJobDashboard.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
@@ -391,7 +391,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
     {
       label: 'Candidates',
       value: stats?.totalCandidates,
-      onClick: () => go('jobs'),
+      onClick: () => go('candidates'),
     },
     {
       label: 'HR Admins',
@@ -424,7 +424,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
       disabled: isCeo,
       onClick: isCeo ? undefined : () => go('admins'),
     },
-    { icon: FiUser, label: 'Total Candidates', value: stats?.totalCandidates, accent: 'blue', onClick: () => go('jobs') },
+    { icon: FiUser, label: 'Total Candidates', value: stats?.totalCandidates, accent: 'blue', onClick: () => go('candidates') },
     { icon: FiBriefcase, label: 'Total Jobs', value: stats?.totalJobs, accent: 'purple', onClick: () => go('jobs') },
     { icon: FiBriefcase, label: 'Active Jobs', value: stats?.activeJobs, accent: 'green', onClick: () => go('jobs') },
     { icon: FiFileText, label: 'Total Applications', value: stats?.totalApplications, accent: 'rose', onClick: () => go('jobs') },
@@ -475,7 +475,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
             onClick={() => navigate('/')}
             className="org-btn-ghost"
           >
-            <FiHome className="w-4 h-4" />
+            <Home className="w-4 h-4" strokeWidth={2} />
             Home
           </button>
           <ThemeToggle variant="org" />
@@ -485,7 +485,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
             disabled={refreshing || loading}
             className="org-btn-ghost"
           >
-            <FiRefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} strokeWidth={2} />
             {refreshing ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>

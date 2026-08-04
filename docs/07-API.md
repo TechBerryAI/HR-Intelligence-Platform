@@ -178,11 +178,11 @@ Prefix: `/api/head-hr` — JWT `HEAD_HR` (CEO read where allowed)
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/head-hr/stats` | Org dashboard stats |
+| GET | `/api/head-hr/stats` | Org dashboard stats (`totalAdmins` = all `hr_signup`; `totalCandidates` = distinct applicants on `applications`) |
 | GET | `/api/head-hr/admins` | List admins |
 | POST | `/api/head-hr/admins` | Create admin |
 | DELETE | `/api/head-hr/admins/<hrid>` | Remove admin |
-| GET | `/api/head-hr/candidates` | Org candidates |
+| GET | `/api/head-hr/candidates` | Applicants who applied (with application counts / jobs) |
 | GET | `/api/head-hr/candidates/<cid>` | Candidate detail |
 | GET | `/api/head-hr/candidates/<cid>/resume` | Resume |
 | DELETE | `/api/head-hr/candidates/<cid>` | Delete candidate |
