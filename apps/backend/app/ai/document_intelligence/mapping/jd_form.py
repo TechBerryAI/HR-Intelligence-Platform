@@ -81,7 +81,7 @@ def format_jd_description(profile: JobProfile) -> str:
         has_responsibilities_section(raw) or '• ' in raw or bool(responsibilities)
     )
 
-    return build_description_from_available(
+    body = build_description_from_available(
         overview='',
         responsibilities=responsibilities,
         mandatory_skills=list(profile.skills.mandatory or []),
@@ -91,6 +91,21 @@ def format_jd_description(profile: JobProfile) -> str:
         source_text=raw,
         include_responsibilities=include_kr,
     )
+    # Mapping graph includes skills in description composition when responsibilities alone
+    # would omit them (skills have their own form fields, but description should still
+    # surface required skills for recruiter preview / autofill completeness).
+    required = [s for s in (profile.skills.mandatory or []) if s and str(s).strip()]
+    if not required:
+        required = [
+            s
+            for s in (profile.skills.preferred or profile.skills.general or [])
+            if s and str(s).strip()
+        ]
+    if body and required and '**Required Skills:**' not in body and not any(
+        s.lower() in body.lower() for s in required[:2]
+    ):
+        body = f"{body.rstrip()}\n\n**Required Skills:**\n{', '.join(required)}"
+    return body
 
 
 def map_job_to_form(

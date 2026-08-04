@@ -125,7 +125,7 @@ def normalize_skill_tokens(items: list[str] | None, *, max_items: int = 30) -> l
         if ',' in item and len(item) < 120:
             parts = [p.strip() for p in item.split(',') if p.strip()]
         for part in parts:
-            tok = _strip_list_marker(part).strip().strip('.,;:|')[:80]
+            tok = _strip_list_marker(part).strip().rstrip('.,;:|')[:80]
             tok = re.sub(r'^[\s•·▪▫●○\-\*]+', '', tok).strip()
             if not tok or not is_plausible_keyword(tok):
                 continue
@@ -1060,10 +1060,18 @@ def is_plausible_keyword(token: str) -> bool:
     """Keywords must be short JD terms (skills/tech), never sentence fragments."""
     if not token or not str(token).strip():
         return False
-    kw = str(token).strip().strip('.,;:|')
+    kw = str(token).strip().strip(',;:|')
+    # Keep internal dots for tech tokens (Node.js, Vue.js); only strip trailing punctuation
+    kw = kw.rstrip('.,;:|!?')
     if len(kw) < 2 or len(kw) > 48:
         return False
-    if re.search(r'[.!?]', kw):
+    # Reject sentence-like punctuation, but allow dotted product names (Node.js)
+    if re.search(r'[!?]', kw):
+        return False
+    if '.' in kw and not re.match(
+        r'^[A-Za-z0-9+#]+(?:\.[A-Za-z0-9+#]+)+$',
+        kw,
+    ):
         return False
     words = kw.split()
     if len(words) > 4:

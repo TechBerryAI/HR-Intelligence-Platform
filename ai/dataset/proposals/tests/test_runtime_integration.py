@@ -30,7 +30,7 @@ def test_processor_uses_runtime_only(silver_document, proposal_output) -> None:
     assert result.artifact_id == "ART-00000001"
     assert result.provider_id == "mock"
     assert result.prompt_id == "resume_parser_v1"
-    assert result.schema_id == "resume_v1"
+    assert result.schema_id == "resume_milestone_v1"
     assert result.validation_passed is True
 
 

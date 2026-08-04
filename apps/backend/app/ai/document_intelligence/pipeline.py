@@ -438,7 +438,9 @@ def _run_resume(
     workers = min(6, max(2, hw.cpu_count // 2))
 
     _emit(parse_job_id, 'deterministic', 'started', 'Section parsers', on_stage=on_stage)
-    profile = parse_resume_from_sections(sections, raw_text, max_workers=workers)
+    profile = parse_resume_from_sections(
+        sections, raw_text, max_workers=workers, source_filename=filename or '',
+    )
     _emit(parse_job_id, 'deterministic', 'completed', on_stage=on_stage)
 
     used_llm = False

@@ -87,28 +87,36 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
 
   const handleAutofill = (mapped) => {
-    // Form DTO only — 1:1 assignment. No FE interpretation / soft fallbacks.
-    setForm((prev) => ({
-      ...prev,
-      fullName: mapped.fullName ?? prev.fullName,
-      email: mapped.email ?? prev.email,
-      phone: mapped.phone ?? prev.phone,
-      linkedinUrl: mapped.linkedinUrl ?? prev.linkedinUrl,
-      portfolioUrl: mapped.portfolioUrl ?? prev.portfolioUrl,
-      githubUrl: mapped.githubUrl ?? prev.githubUrl,
-      currentLocation: mapped.currentLocation ?? prev.currentLocation,
-      preferredLocation: mapped.preferredLocation ?? prev.preferredLocation,
-      experienceLevel: mapped.experienceLevel ?? prev.experienceLevel,
-      skills: mapped.skills ?? prev.skills,
-      summary: mapped.summary ?? prev.summary,
-      education: mapped.education?.length ? mapped.education : prev.education,
-      experiences: mapped.experiences?.length ? mapped.experiences : prev.experiences,
-      certifications: mapped.certifications?.length ? mapped.certifications : prev.certifications,
-      resumeFile: mapped.resumeFile || prev.resumeFile,
-      resumeFileName: mapped.resumeFileName || prev.resumeFileName,
-      _parsedId: mapped._parsedId || prev._parsedId,
-      _publicUploaderId: mapped._publicUploaderId || prev._publicUploaderId,
-    }))
+    // Form DTO 1:1 assignment. Preferred location defaults to current only when
+    // the DTO left preferred empty (apply form requires both; not invention).
+    setForm((prev) => {
+      const currentLocation = mapped.currentLocation ?? prev.currentLocation
+      const preferredLocation =
+        (mapped.preferredLocation && String(mapped.preferredLocation).trim())
+          ? mapped.preferredLocation
+          : (currentLocation || prev.preferredLocation)
+      return {
+        ...prev,
+        fullName: mapped.fullName ?? prev.fullName,
+        email: mapped.email ?? prev.email,
+        phone: mapped.phone ?? prev.phone,
+        linkedinUrl: mapped.linkedinUrl ?? prev.linkedinUrl,
+        portfolioUrl: mapped.portfolioUrl ?? prev.portfolioUrl,
+        githubUrl: mapped.githubUrl ?? prev.githubUrl,
+        currentLocation,
+        preferredLocation,
+        experienceLevel: mapped.experienceLevel ?? prev.experienceLevel,
+        skills: mapped.skills ?? prev.skills,
+        summary: mapped.summary ?? prev.summary,
+        education: mapped.education?.length ? mapped.education : prev.education,
+        experiences: mapped.experiences?.length ? mapped.experiences : prev.experiences,
+        certifications: mapped.certifications?.length ? mapped.certifications : prev.certifications,
+        resumeFile: mapped.resumeFile || prev.resumeFile,
+        resumeFileName: mapped.resumeFileName || prev.resumeFileName,
+        _parsedId: mapped._parsedId || prev._parsedId,
+        _publicUploaderId: mapped._publicUploaderId || prev._publicUploaderId,
+      }
+    })
     setErrors((prev) => {
       const next = { ...prev }
       delete next.resume
