@@ -8,6 +8,9 @@ _EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
 _PHONE_PATTERNS = [
     re.compile(r'\+?\d{1,3}[\s\-]?\(?\d{2,4}\)?[\s\-]?\d{3,4}[\s\-]?\d{4}'),
     re.compile(r'\b\d{10}\b'),
+    # Indian mobile with optional mid-space / hyphen
+    re.compile(r'\b[6-9]\d{4}[\s\-]?\d{5}\b'),
+    re.compile(r'\b0\d{2,4}[\s\-]?\d{6,8}\b'),
 ]
 _LINKEDIN_RE = re.compile(
     r'(?i)(?:https?://)?(?:www\.)?linkedin\.com/in/[A-Za-z0-9_\-/%]+',
@@ -41,17 +44,57 @@ _DATE_RANGE_RE = re.compile(
 def extract_email(text: str) -> str:
     if not text:
         return ''
+    # Heal OCR/PDF line breaks inside emails: "aditi.patil2904\n@gmail.com"
+    healed = re.sub(
+        r'([A-Za-z0-9._%+\-]+)\s*[\r\n]+\s*(@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})',
+        r'\1\2',
+        text,
+    )
+    healed = re.sub(
+        r'([A-Za-z0-9._%+\-]+)\s+(@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})',
+        r'\1\2',
+        healed,
+    )
+    m = _EMAIL_RE.search(healed)
+    if m:
+        return m.group(0).strip()
     m = _EMAIL_RE.search(text)
     return m.group(0).strip() if m else ''
 
 
 def extract_phone(text: str) -> str:
+    # VALIDATION_FIX_whole_doc_phone_scan
     if not text:
         return ''
-    for pat in _PHONE_PATTERNS:
-        m = pat.search(text[:2500])
-        if m:
-            return m.group(0).strip()
+
+    def _normalize_phone_blob(blob: str) -> str:
+        # Collapse digit groups separated by spaces: "+91- 99 70 38 80 01" → "+91-9970388001"
+        return re.sub(r'(?<=\d)\s+(?=\d)', '', blob or '')
+
+    # Prefer header/preamble, then fall back to whole document
+    for window in (text[:2500], text):
+        normalized = _normalize_phone_blob(window)
+        for pat in _PHONE_PATTERNS:
+            m = pat.search(normalized)
+            if m:
+                return m.group(0).strip()
+        for pat in _PHONE_PATTERNS:
+            m = pat.search(window)
+            if m:
+                return m.group(0).strip()
+    # Labeled phone lines anywhere in the doc
+    m2 = re.search(
+        r'(?i)(?:phone|mobile|mob|cell|tel|contact)\s*[:.\-]?\s*([+\d][\d\s().-]{7,}\d)',
+        text,
+    )
+    if m2:
+        return _normalize_phone_blob(m2.group(1)).strip()
+    # Spaced Indian mobiles: 99 70 38 80 01 or 99703 88001
+    m3 = re.search(r'(?:\+91[\s\-]*)?([6-9](?:\s*\d){9})', text)
+    if m3:
+        digits = re.sub(r'\D', '', m3.group(1))
+        if len(digits) == 10:
+            return digits
     return ''
 
 
@@ -148,10 +191,15 @@ def extract_simple_location(text: str) -> str:
     if loc:
         return loc
     # Preamble fallback: short city line between contact and sections
+    # VALIDATION_FIX_location_cities
     cities = {
-        'mumbai', 'delhi', 'bangalore', 'bengaluru', 'hyderabad', 'chennai',
+        'mumbai', 'delhi', 'new delhi', 'bangalore', 'bengaluru', 'hyderabad', 'chennai',
         'kolkata', 'pune', 'ahmedabad', 'gurgaon', 'gurugram', 'noida',
-        'faridabad', 'jaipur', 'lucknow', 'austin', 'seattle', 'san francisco',
+        'faridabad', 'jaipur', 'lucknow', 'nagpur', 'indore', 'bhopal', 'surat',
+        'vadodara', 'coimbatore', 'kochi', 'thiruvananthapuram', 'chandigarh',
+        'mysore', 'mysuru', 'visakhapatnam', 'vijayawada', 'patna', 'ranchi',
+        'bhubaneswar', 'guwahati', 'thane', 'navi mumbai', 'andheri', 'powai',
+        'austin', 'seattle', 'san francisco',
         'new york', 'london', 'toronto', 'singapore', 'dubai', 'berlin',
         'remote', 'austin, tx', 'san francisco, ca', 'seattle, wa',
     }

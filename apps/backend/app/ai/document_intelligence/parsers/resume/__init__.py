@@ -293,9 +293,11 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
     raw = section_text.strip()
     if not raw and full_text:
         m = re.search(
-            r'(?i)(?:^|\n)\s*(?:\*\*)?education(?:\*\*)?\s*:?\s*'
+            r'(?i)(?:^|\n)\s*(?:\*\*)?(?:education(?:al)?\s*(?:qualification|background|details)?s?'
+            r'|academic\s+(?:details|background|qualifications?)|academics|'
+            r'educational\s+(?:qualifications|background))(?:\*\*)?\s*:?\s*'
             r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:experience|skills|projects?|certifications?|'
-            r'languages?|awards?|declaration)\b|\Z)',
+            r'software\s+skills|languages?|awards?|declaration|personal\s+details)\b|\Z)',
             full_text,
         )
         raw = (m.group(1) if m else '').strip()
@@ -382,6 +384,19 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
                         end = ym.group(1)
 
         if degree or institution:
+            # Pipe-separated: "Mumbai University | BHARAT COLLEGE OF ENGINEERING"
+            if institution and '|' in institution and not degree:
+                left, _, right = institution.partition('|')
+                if _looks_like_degree_line(left.strip()):
+                    degree = left.strip()
+                    institution = right.strip()
+                elif _looks_like_institution_line(left.strip()) and _looks_like_institution_line(right.strip()):
+                    institution = f'{left.strip()}, {right.strip()}'
+            if degree and '|' in degree and not institution:
+                left, _, right = degree.partition('|')
+                if _INSTITUTION_CUE.search(right) or is_institution_like(right.strip()):
+                    degree = left.strip()
+                    institution = right.strip()
             education.append(
                 EducationEntry(
                     degree=degree[:200],
@@ -421,11 +436,29 @@ def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
 
 
 def parse_personal(text: str, preamble: str) -> PersonalInfo:
+    # VALIDATION_FIX_personal_name_fulltext
     src = preamble or text
     name = extract_name_from_text(src)
     if name and not is_plausible_person_name(name):
         name = ''
+    if not name and text and text != src:
+        name = extract_name_from_text(text)
+        if name and not is_plausible_person_name(name):
+            name = ''
+    # Last resort: first non-contact early line that becomes plausible after honorific strip
+    if not name:
+        for line in (src or text or '').splitlines()[:12]:
+            cand = re.sub(r'(?i)^(mr|mrs|ms|miss|dr|prof)\.?\s+', '', line.strip())
+            cand = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff]', '', cand).strip()
+            if not cand or '@' in cand or re.search(r'\d{6,}', cand):
+                continue
+            if is_plausible_person_name(cand):
+                name = cand.title() if cand.isupper() else cand
+                break
     ok, _ = validate_person_name(name) if name else (False, '')
+    # If DI validator is stricter than plausible-name check, still keep plausible names
+    if name and not ok and is_plausible_person_name(name):
+        ok = True
     summary = extract_summary_from_text(text)
     return PersonalInfo(full_name=name if ok else '', summary=summary)
 
@@ -801,7 +834,17 @@ def parse_resume_from_sections(
     exp_text = pick_section(
         sections, 'Experience', 'Work Experience', 'Professional Experience', 'Employment', 'Work History',
     )
-    edu_text = pick_section(sections, 'Education', 'Academic Background', 'Academics', 'Qualifications')
+    edu_text = pick_section(
+        sections,
+        'Education',
+        'Academic Background',
+        'Academics',
+        'Academic Details',
+        'Educational Qualifications',
+        'Educational Background',
+        'Educational Qualification',
+        'Qualifications',
+    )
     skills_text = pick_section(
         sections, 'Skills', 'Technical Skills', 'Core Skills', 'Key Skills', 'Technologies', 'Tools',
     )

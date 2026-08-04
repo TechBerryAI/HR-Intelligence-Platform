@@ -317,7 +317,7 @@ def get_cached_parsing_result(
     
     result = db_get(
         f"""
-        SELECT p.id, p.toon, p.confidence, p.model_version, p.created_at, r.id as raw_file_id
+        SELECT p.id, p.toon, p.confidence, p.model_version, p.created_at, p.full_text, r.id as raw_file_id
         FROM {table} p
         INNER JOIN raw_files r ON p.raw_file_id = r.id
         WHERE r.file_hash = ? AND r.uploader_id = ?
@@ -333,6 +333,7 @@ def get_cached_parsing_result(
             'toon': toon_loads_flex(result['toon']),
             'confidence': result['confidence'],
             'model_version': result['model_version'],
+            'raw_text': result.get('full_text') or '',
             'is_cached': True
         }
     
@@ -358,7 +359,7 @@ def get_cached_parsing_result_by_hash(
 
     result = db_get(
         f"""
-        SELECT p.id, p.toon, p.confidence, p.model_version, p.created_at, r.id as raw_file_id
+        SELECT p.id, p.toon, p.confidence, p.model_version, p.created_at, p.full_text, r.id as raw_file_id
         FROM {table} p
         INNER JOIN raw_files r ON p.raw_file_id = r.id
         WHERE r.file_hash = ?
@@ -374,6 +375,7 @@ def get_cached_parsing_result_by_hash(
             'toon': toon_loads_flex(result['toon']),
             'confidence': result['confidence'],
             'model_version': result['model_version'],
+            'raw_text': result.get('full_text') or '',
             'is_cached': True,
             'content_hash_hit': True,
         }

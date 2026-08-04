@@ -6,6 +6,12 @@
  */
 import { BASE_URL as API_URL } from './api';
 
+function validationHeaders() {
+  const token = import.meta.env.VITE_VALIDATION_TOKEN;
+  if (!token) return {};
+  return { 'X-Validation-Token': String(token) };
+}
+
 /**
  * Upload and parse resume file (authenticated).
  * @returns {Promise<Object>} Parse result with `form` Form DTO
@@ -44,6 +50,9 @@ export async function uploadAndParseResumePublic(file) {
 
   const response = await fetch(`${API_URL}/api/parse/resume/public`, {
     method: 'POST',
+    headers: {
+      ...validationHeaders(),
+    },
     body: formData,
   });
 
@@ -113,6 +122,9 @@ export async function uploadAndParseResumePublicStream(file, { onStage } = {}) {
   try {
     const response = await fetch(`${API_URL}/api/parse/resume/public/stream`, {
       method: 'POST',
+      headers: {
+        ...validationHeaders(),
+      },
       body: formData,
     });
     return await consumeParseSSE(response, { onStage });

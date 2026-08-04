@@ -10,7 +10,7 @@ import { tokenService } from '@/core/auth/tokenService.js';
  * publicMode: use unauthenticated /api/parse/resume/public (apply form).
  * Autofill uses Form DTO only — never raw TOON.
  */
-export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, currentFileName, onRemove, onOpenResume, publicMode = false }) {
+export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, onParseComplete, currentFileName, onRemove, onOpenResume, publicMode = false }) {
   const [isUploading, setIsUploading] = useState(false);
   const [parseError, setParseError] = useState('');
   const [parseSuccess, setParseSuccess] = useState('');
@@ -104,7 +104,8 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
         const formData = takeResumeFormDTO(result);
         setConfidence(result.confidence);
         setProgressPct(100);
-        
+        onParseComplete?.(result, null);
+
         if (result.is_duplicate) {
           setParseSuccess('Resume recognized! Using previously parsed data.');
         } else {
@@ -139,9 +140,11 @@ export default function ResumeUploadWithParsing({ onAutofill, onFileSelect, curr
           }
         }
       } else {
+        onParseComplete?.(result, result.error || 'Parsing failed');
         throw new Error(result.error || 'Parsing failed');
       }
     } catch (error) {
+      onParseComplete?.(null, error?.message || String(error));
       if (error.message.includes('Invalid or expired token') || error.message.includes('Access token required')) {
         console.warn('Session expired, allowing manual upload');
         if (onFileSelect) onFileSelect(file);
