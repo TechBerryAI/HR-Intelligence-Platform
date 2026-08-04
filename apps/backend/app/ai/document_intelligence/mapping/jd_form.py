@@ -257,24 +257,45 @@ def map_job_to_form(
         is_plausible_keyword,
     )
 
-    # Keywords: grounded profile keywords + mandatory/preferred + tech from source
+    # Keywords: explicit profile ∪ skills. Whole-doc tech scrape only if skills empty.
     keywords = [
         k.strip()
         for k in profile.requirements.keywords
         if k and is_plausible_keyword(str(k).strip())
     ]
+    skill_pool = [
+        s for s in (mandatory + preferred + general)
+        if s and is_plausible_keyword(s) and len(s.split()) <= 4
+    ]
     if not keywords:
-        keywords = [
-            s for s in (mandatory + preferred + general)
-            if s and is_plausible_keyword(s) and len(s.split()) <= 4
-        ][:20]
-    if raw_text:
+        keywords = skill_pool[:20]
+    else:
+        # Merge skill tokens into explicit keywords without whole-doc scrape
+        seen = {k.lower() for k in keywords}
+        for s in skill_pool:
+            if s.lower() not in seen:
+                keywords.append(s)
+                seen.add(s.lower())
+            if len(keywords) >= 20:
+                break
+    if not keywords and raw_text:
         tech = extract_tech_keywords_from_text(raw_text, max_items=15)
         src_l = raw_text.lower()
         for tok in tech:
-            if tok.lower() in src_l and tok not in keywords:
+            if tok.lower() in src_l and is_plausible_keyword(tok):
                 keywords.append(tok)
-    keywords = list(dict.fromkeys(keywords))[:25]
+    # Case-insensitive de-dupe, cap
+    deduped: list[str] = []
+    seen_kw: set[str] = set()
+    for kw in keywords:
+        key = kw.lower()
+        if key in seen_kw:
+            continue
+        seen_kw.add(key)
+        deduped.append(kw)
+        if len(deduped) >= 20:
+            break
+    keywords = deduped
 
     # Merge coverage into field traces for UI visibility
     coverage_rows = list(coverage or [])

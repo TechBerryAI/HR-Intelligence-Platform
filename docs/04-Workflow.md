@@ -124,6 +124,8 @@ Enable a candidate to discover a role and submit a complete, AI-assisted applica
 
 `ApplyJobModal.jsx`, `ResumeUploadWithParsing.jsx`, `POST /api/parse/resume/public`, `POST /api/jobs/:id/apply`.
 
+Candidates can open an **application Preview** (between Cancel and Submit) to review autofilled contact, experience, skills, education, work history, and certifications before submitting. Preview can submit from the same review sheet.
+
 ---
 
 ### Flow
@@ -141,6 +143,7 @@ sequenceDiagram
   Modal->>Parse: Parse
   Parse-->>Modal: TOON + parsedId
   Modal->>Modal: Autofill
+  C->>Modal: Preview (optional)
   C->>Modal: Submit
   Modal->>Apply: Multipart apply
   Apply-->>C: Success

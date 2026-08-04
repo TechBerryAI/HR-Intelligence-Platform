@@ -1,0 +1,11 @@
+JD
+
+Role Category: L2 Network Engineer
+
+
+• Hands-on experience with SD-WAN setup
+• Strong knowledge and hands-on experience with Palo Alto firewall
+• Good understanding of Google Cloud, AWS, or Azure platforms
+• Experience with Meraki, Extreme, and Aruba is a must
+
+Skills: SD-WAN, Palo Alto, AWS, Azure, Meraki

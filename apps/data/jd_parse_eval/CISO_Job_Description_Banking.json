@@ -57,15 +57,81 @@
       "BIA"
     ],
     "responsibilities": [
-      "Strategic Leadership & Governance: • Define and implement the Bank’s Information & Cyber Security strategy aligned with",
-      "CISO, CISSP, CISM, ISO 27001 Lead Implementer/ Auditor • CEH, CCNA/CCNP Security, ITIL • Cloud Security and Privacy cert"
+      "Strategic Leadership & Governance:",
+      "Define and implement the Bank’s Information & Cyber Security strategy aligned with business objectives, risk appetite, and regulatory expectations.",
+      "Establish strong security governance, policies, standards, and operating models across the enterprise.",
+      "Provide regular reporting to the Board, MD, and senior leadership on cyber risk posture, incidents, and strategic initiatives.",
+      "Act as the single point of accountability for information security across the Bank.",
+      "Regulatory Compliance & Risk Management:",
+      "Ensure compliance with RBI, CERT-In, SWIFT CSP, ISO 27001, PCI DSS, BCMS, DPDP Act, and other applicable regulations.",
+      "Lead enterprise cyber risk assessments, maturity assessments, and threat modeling.",
+      "Own third-party and supply-chain cyber risk management programs.",
+      "Drive audits, regulatory inspections, and supervisory engagements.",
+      "Security Architecture & Engineering:",
+      "Provide security architecture oversight for core banking systems, digital banking platforms, cloud environments, APIs, and fintech integrations."
     ],
     "qualifications": [
-      "& Experience:\n• Bachelor’s degree in Engineering, Computer Science, or related field (Master’s preferred).\n• 12–18+ years of progressive experience in Information & Cyber Security, with significant\nleadership experience in BFSI.\n\n• Proven experience as CISO / Deputy CISO / Head of Information Security in Banking,\nFinancial Services, or Payments.\n• Strong hands-on and strategic knowledge of banking technologies and digital ecosystems.\n\nCertifications (Preferred):\n• C",
-      "CISO, CISSP, CISM, ISO 27001 Lead Implementer/ Auditor\n• CEH, CCNA/CCNP Security, ITIL\n• Cloud Security and Privacy certifications preferred\n\nKey Competencies:\n• Strategic thinking and executive communication\n• Deep understanding of banking regulations and cyber threats\n• Strong risk-based decision making\n• Leadership, stakeholder management, and crisis handling\n• Ability to balance security with business enablement"
+      "& Experience:",
+      "Bachelor’s degree in Engineering, Computer Science, or related field (Master’s preferred).",
+      "12–18+ years of progressive experience in Information & Cyber Security, with significant leadership experience in BFSI.",
+      "Proven experience as CISO / Deputy CISO / Head of Information Security in Banking, Financial Services, or Payments.",
+      "Strong hands-on and strategic knowledge of banking technologies and digital ecosystems.",
+      "Certifications (Preferred):",
+      "C",
+      "CISO, CISSP, CISM, ISO 27001 Lead Implementer/ Auditor"
     ],
     "descriptionPreview": "Job Description – Chief Information Security Officer (CISO)\n(Banking & Financial Services Industry)\nPosition Title: Chief Information Security Officer (CISO)\nIndustry: Banking & Financial Services\nReports To: Managing Director / CEO / Board / CRO\nRole Purpose:\nThe Chief Information Security Officer (CISO) is a senior executive responsible for\nestablishing, executing, and overseeing the enterprise-wide information and cyber security\nstrategy for the Bank. The role ensures protection of customer d",
-    "descriptionLen": 700
+    "descriptionLen": 2481,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
   },
   "checks": {
     "title_overlap_source": 1.0,
@@ -86,8 +152,10 @@
       "ok": true
     },
     "has_description": true,
+    "coverage_missing_with_evidence": [],
+    "coverage_recovered": [],
     "source_preview": "Job Description – Chief Information Security Officer (CISO) | (Banking & Financial Services Industry) |  | Position Title: Chief Information Security Officer (CISO) | Industry: Banking & Financial Services | Reports To: Managing Director / CEO / Board / CRO | Location: Andheri, Mumbai |  | Role Purpose: | The Chief Information Security Officer (CISO) is a senior executive responsible for | establishing, executing, and overseeing the enterprise-wide information and cyber security | strategy for the Bank. The role ensures protection of customer data, digital assets, and | critical infrastructure while enabling secure b"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'Chief Information Security Officer (CISO)', 'company': '', 'location': 'Andheri, Mumbai', 'employment_type': '', 'description': 'Job Description – Chief Information Security Officer (CISO)\\n(Banking & Financial Services Industry)\\nPosition Title: Chief Information Security Officer (CISO)\\nIndustry: Banking & Financial Services\\nReports To: Managing Director / CEO / Board / CRO\\nRole Purpose:\\nThe Chief Information Security Officer (CISO) is a senior executive responsible for\\nestablishing, executing, and overseeing the enterprise-wide information and cyber security\\nstrategy for the Bank. The role ensures protection of customer data, digital assets, and\\ncritical infrastructure while enabling secure business growth and regulatory compliance.\\nThe CISO acts as the principal security advisor to the Board and executive leadership.', 'min_experience_years': 12.0, 'max_experience_years': 18.0, 'skills': ['CISO', 'CRO', 'RBI', 'CERT', 'SWIFT', 'CSP', 'ISO', 'PCI', 'DSS', 'BCMS', 'DPDP', 'IAM', 'PAM', 'SIEM', 'SOC', 'EDR', 'DLP', 'WAF', 'PKI', 'BIA'], 'mandatory_skills': ['CISO', 'CRO', 'RBI', 'CERT', 'SWIFT', 'CSP', 'ISO', 'PCI', 'DSS', 'BCMS', 'DPDP', 'IAM', 'PAM', 'SIEM', 'SOC', 'EDR', 'DLP', 'WAF', 'PKI', 'BIA'], 'preferred_skills': [], 'responsibilities': ['Strategic Leadership & Governance: • Define and implement the Bank’s Information & Cyber Security strategy aligned with', 'CISO, CISSP, CISM, ISO 27001 Lead Implementer/ Auditor • CEH, C",
+  "toon_preview": "{'type': 'job_description', 'title': 'Chief Information Security Officer (CISO)', 'company': '', 'location': 'Andheri, Mumbai', 'employment_type': '', 'description': 'Job Description – Chief Information Security Officer (CISO)\\n(Banking & Financial Services Industry)\\nPosition Title: Chief Information Security Officer (CISO)\\nIndustry: Banking & Financial Services\\nReports To: Managing Director / CEO / Board / CRO\\nRole Purpose:\\nThe Chief Information Security Officer (CISO) is a senior executive responsible for\\nestablishing, executing, and overseeing the enterprise-wide information and cyber security\\nstrategy for the Bank. The role ensures protection of customer data, digital assets, and\\ncritical infrastructure while enabling secure business growth and regulatory compliance.\\nThe CISO acts as the principal security advisor to the Board and executive leadership.\\n\\n**Key Responsibilities:**\\n• Strategic Leadership & Governance:\\n• Define and implement the Bank’s Information & Cyber Security strategy aligned with business objectives, risk appetite, and regulatory expectations.\\n• Establish strong security governance, policies, standards, and operating models across the enterprise.\\n• Provide regular reporting to the Board, MD, and senior leadership on cyber risk posture, incidents, and strategic initiatives.\\n• Act as the single point of accountability for information security across the Bank.\\n• Regulatory Compliance & Risk Management:\\n• Ensure compliance with RBI, CERT-I",
   "source_preview": "Job Description – Chief Information Security Officer (CISO)\n(Banking & Financial Services Industry)\n\nPosition Title: Chief Information Security Officer (CISO)\nIndustry: Banking & Financial Services\nReports To: Managing Director / CEO / Board / CRO\nLocation: Andheri, Mumbai\n\nRole Purpose:\nThe Chief Information Security Officer (CISO) is a senior executive responsible for\nestablishing, executing, and overseeing the enterprise-wide information and cyber security\nstrategy for the Bank. The role ensures protection of customer data, digital assets, and\ncritical infrastructure while enabling secure business growth and regulatory compliance.\nThe CISO acts as the principal security advisor to the Board and executive leadership.\n\nKey Responsibilities:\nStrategic Leadership & Governance:\n• Define and implement the Bank’s Information & Cyber Security strategy aligned with\nbusiness objectives, risk appetite, and regulatory expectations.\n• Establish strong security governance, policies, standards, and operating models across the\nenterprise.\n• Provide regular reporting to the Board, MD, and senior leadership on cyber risk posture,\nincidents, and strategic initiatives.\n• Act as the single point of accountability for information security across the Bank.\nRegulatory Compliance & Risk Management:\n• Ensure compliance with RBI, CERT-In, SWIFT CSP, ISO 27001, PCI DSS, BCMS, DPDP Act,\nand other applicable regulations.\n• Lead enterprise cyber risk assessments, maturity assessments, and threat modeling.\n• Own third-party and supply-chain cyber risk management programs.\n• Drive audits, regulatory inspections, and supervisory engagements.\nSecurity Architecture & Engineering:\n• Provide security architecture oversight for core banking systems, digital banking\nplatforms, cloud environments, APIs, and fintech integrations.\n• Review and approve security design for IT and digital transformation initiatives.\n\n• Oversee implementation and optimization of security technologies including IAM, PAM,\nSIEM/SOC, EDR, DLP, WAF, PKI, and Cloud Security controls.\nSecurity Operations & Incident Response:\n• Lead Security Operations Center (SOC), incident response, and cyber crisis management.\n• Ensure proactive threat detection, vulnerability management, penetration testing, and red\nteaming.\n• Lead response to major cyber incidents, ensuring timely containment, remediation, and\nregulatory communication.\nData Security & Privacy:\n• Define and execute enterprise-wide data security and privacy strategy.\n• E"
 }
