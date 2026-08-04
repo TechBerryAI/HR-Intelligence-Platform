@@ -1,0 +1,60 @@
+{
+  "file": "Video Editor JD.pdf",
+  "expected": {
+    "title_from_filename": "Video Editor"
+  },
+  "form": {
+    "title": "Video Editor",
+    "company": "",
+    "location": "Vikhroli, Mumbai",
+    "salary": "",
+    "experienceFrom": "",
+    "experienceTo": "",
+    "employmentType": "",
+    "mandatorySkills": [
+      "JOB"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "JOB"
+    ],
+    "responsibilities": [
+      "Edit raw video footage into polished final products that meet the creative",
+      "direction and specifications.",
+      "Add graphics",
+      "music",
+      "sound effects",
+      "and voiceovers to enhance the",
+      "overall quality of the video.",
+      "Ensure video content is optimized for different platforms (e.g.",
+      "social",
+      "media",
+      "website",
+      "YouTube"
+    ],
+    "qualifications": [],
+    "descriptionPreview": "Job Summary:\nWe are seeking a creative and detail-oriented Video Editor to join our team.\nThe ideal candidate will have a strong understanding of video production,\nincluding editing, motion graphics, and sound design. You will work closely with\nour production team to create engaging videos for various platforms, including\nsocial media, marketing, and internal communications.",
+    "descriptionLen": 377
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 1.0,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 1,
+    "skills_checked": 1,
+    "skills_count": 1,
+    "location_in_source": true,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "",
+      "parsed_to": "",
+      "source_year_mentions": [],
+      "ok": null
+    },
+    "has_description": true,
+    "source_preview": "JOB DESCRIPTION | Job Title: Video Editor | Location: Vikhroli, Mumbai | Job Summary: | We are seeking a creative and detail-oriented Video Editor to join our team. | The ideal candidate will have a strong understanding of video production, | including editing, motion graphics, and sound design. You will work closely with | our production team to create engaging videos for various platforms, including | social media, marketing, and internal communications. | Key Responsibilities: | • Edit raw video footage into polished final products that meet the creative | direction and specifications. | • Add graphics, music, sou"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'Video Editor', 'company': '', 'location': 'Vikhroli, Mumbai', 'employment_type': '', 'description': 'Job Title: Video Editor\\nLocation: Vikhroli, Mumbai\\n\\nJob Summary:\\nWe are seeking a creative and detail-oriented Video Editor to join our team.\\nThe ideal candidate will have a strong understanding of video production,\\nincluding editing, motion graphics, and sound design. You will work closely with\\nour production team to create engaging videos for various platforms, including\\nsocial media, marketing, and internal communications.', 'min_experience_years': None, 'max_experience_years': None, 'skills': ['JOB'], 'mandatory_skills': ['JOB'], 'preferred_skills': [], 'responsibilities': ['Edit raw video footage into polished final products that meet the creative', 'direction and specifications.', 'Add graphics', 'music', 'sound effects', 'and voiceovers to enhance the', 'overall quality of the video.', 'Ensure video content is optimized for different platforms (e.g.', 'social', 'media', 'website', 'YouTube', 'etc.).', 'Review and edit videos based on feedback', 'ensuring high-quality', 'standards are met.', 'Manage and organize video files and assets for easy retrieval and editing.', 'Keep up with industry trends and best practices in video editing', 'and', 'incorporate new techniques as appropriate.'], 'qualifications': [], 'keywords': [], 'benefits': [], 'salary_range': ''}",
+  "source_preview": "JOB DESCRIPTION\nJob Title: Video Editor\nLocation: Vikhroli, Mumbai\nJob Summary:\nWe are seeking a creative and detail-oriented Video Editor to join our team.\nThe ideal candidate will have a strong understanding of video production,\nincluding editing, motion graphics, and sound design. You will work closely with\nour production team to create engaging videos for various platforms, including\nsocial media, marketing, and internal communications.\nKey Responsibilities:\n• Edit raw video footage into polished final products that meet the creative\ndirection and specifications.\n• Add graphics, music, sound effects, and voiceovers to enhance the\noverall quality of the video.\n• Ensure video content is optimized for different platforms (e.g., social\nmedia, website, YouTube, etc.).\n• Review and edit videos based on feedback, ensuring high-quality\nstandards are met.\n• Manage and organize video files and assets for easy retrieval and editing.\n• Keep up with industry trends and best practices in video editing, and\nincorporate new techniques as appropriate.\n\nEducation\n• Proven experience as a video editor or similar role.\n• Proficiency in video editing software such as Adobe Premiere Pro, Final\nCut Pro, or other industry-standard tools.\n• Experience with motion graphics and animation (Adobe After Effects or\nsimilar is a plus).\n• Strong understanding of video formats, aspect ratios, and optimization\nfor different platforms."
+}

@@ -110,8 +110,10 @@ class JobCreateFormDTO(BaseModel):
     )
     keywordsList: list[str] = Field(default_factory=list, serialization_alias='_keywords')
     trace: list[FieldTrace] = Field(default_factory=list)
+    coverage: list[dict[str, Any]] = Field(default_factory=list)
 
     def to_autofill_dict(self) -> dict[str, Any]:
-        data = self.model_dump(by_alias=True, exclude={'trace'})
+        data = self.model_dump(by_alias=True, exclude={'trace', 'coverage'})
         data['trace'] = [t.model_dump() for t in self.trace]
+        data['coverage'] = list(self.coverage or [])
         return data

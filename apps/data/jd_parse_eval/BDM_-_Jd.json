@@ -1,0 +1,73 @@
+{
+  "file": "BDM - Jd.pdf",
+  "expected": {
+    "title_from_filename": "BDM"
+  },
+  "form": {
+    "title": "Business Development Manager (IT Services)",
+    "company": "",
+    "location": "Vikhroli, Mumbai",
+    "salary": "",
+    "experienceFrom": "3",
+    "experienceTo": "",
+    "employmentType": "",
+    "mandatorySkills": [
+      "DBA",
+      "RAG"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "DBA",
+      "RAG"
+    ],
+    "responsibilities": [
+      "Identify and develop new business opportunities for DBA services across",
+      "diverse industries.",
+      "Build and maintain a strong pipeline of leads through networking",
+      "cold",
+      "calling",
+      "attending industry events",
+      "and leveraging digital tools.",
+      "Understand client needs and propose tailored DBA service solutions",
+      "including managed services",
+      "consulting",
+      "and project-based offerings.",
+      "Develop proposals"
+    ],
+    "qualifications": [
+      "Negotiate contracts, pricing, and terms to close deals successfully.",
+      "Maintain and grow relationships with existing clients to ensure ongoing",
+      "satisfaction and identify upsell opportunities.",
+      "Meet or exceed monthly, quarterly, and annual sales targets.",
+      "Provide regular reporting on sales pipeline, forecasts, and market",
+      "feedback to leadership.",
+      "Stay up-to-date with industry trends, emerging technologies (cloud-",
+      "native databases, automation, security), and competitive landscape."
+    ],
+    "descriptionPreview": "We are seeking a dynamic and results-driven Business Development Manager\nto drive growth in our DBA services portfolio. You will be responsible for lead\ngeneration, client acquisition, relationship management, and sales strategy\nexecution across target markets.",
+    "descriptionLen": 261
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 0.0,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 2,
+    "skills_checked": 2,
+    "skills_count": 2,
+    "location_in_source": true,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "3",
+      "parsed_to": "",
+      "source_year_mentions": [
+        3
+      ],
+      "ok": true
+    },
+    "has_description": true,
+    "source_preview": "Job Title: Business Development Manager (IT Services) | Location: Vikhroli, Mumbai | Experience : 3+ years | Job Summary: | We are seeking a dynamic and results-driven Business Development Manager | to drive growth in our DBA services portfolio. You will be responsible for lead | generation, client acquisition, relationship management, and sales strategy | execution across target markets. | Key Responsibilities: | • Identify and develop new business opportunities for DBA services across | diverse industries. | • Build and maintain a strong pipeline of leads through networking, cold | calling, attending industry event"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'Business Development Manager (IT Services)', 'company': '', 'location': 'Vikhroli, Mumbai', 'employment_type': '', 'description': 'We are seeking a dynamic and results-driven Business Development Manager\\nto drive growth in our DBA services portfolio. You will be responsible for lead\\ngeneration, client acquisition, relationship management, and sales strategy\\nexecution across target markets.', 'min_experience_years': 3.0, 'max_experience_years': None, 'skills': ['DBA', 'RAG'], 'mandatory_skills': ['DBA', 'RAG'], 'preferred_skills': [], 'responsibilities': ['Identify and develop new business opportunities for DBA services across', 'diverse industries.', 'Build and maintain a strong pipeline of leads through networking', 'cold', 'calling', 'attending industry events', 'and leveraging digital tools.', 'Understand client needs and propose tailored DBA service solutions', 'including managed services', 'consulting', 'and project-based offerings.', 'Develop proposals', 'respond to RFPs', 'and deliver effective sales', 'presentations and demonstrations.', 'Collaborate closely with technical teams to design customized solutions', 'that align with client requirements.', 'Negotiate contracts', 'pricing', 'and terms to close deals successfully.', 'Maintain and grow relationships with existing clients to ensure ongoing', 'satisfaction and identify upsell opportunities.', 'Meet or exceed monthly', 'quarterly', 'and annual sales targets.', 'Provide reg",
+  "source_preview": "Job Title: Business Development Manager (IT Services)\nLocation: Vikhroli, Mumbai\nExperience : 3+ years\nJob Summary:\nWe are seeking a dynamic and results-driven Business Development Manager\nto drive growth in our DBA services portfolio. You will be responsible for lead\ngeneration, client acquisition, relationship management, and sales strategy\nexecution across target markets.\nKey Responsibilities:\n• Identify and develop new business opportunities for DBA services across\ndiverse industries.\n• Build and maintain a strong pipeline of leads through networking, cold\ncalling, attending industry events, and leveraging digital tools.\n• Understand client needs and propose tailored DBA service solutions,\nincluding managed services, consulting, and project-based offerings.\n• Develop proposals, respond to RFPs, and deliver effective sales\npresentations and demonstrations.\n• Collaborate closely with technical teams to design customized solutions\nthat align with client requirements.\n• Negotiate contracts, pricing, and terms to close deals successfully.\n• Maintain and grow relationships with existing clients to ensure ongoing\nsatisfaction and identify upsell opportunities.\n• Meet or exceed monthly, quarterly, and annual sales targets.\n• Provide regular reporting on sales pipeline, forecasts, and market\nfeedback to leadership.\n• Stay up-to-date with industry trends, emerging technologies (cloud-\nnative databases, automation, security), and competitive landscape."
+}

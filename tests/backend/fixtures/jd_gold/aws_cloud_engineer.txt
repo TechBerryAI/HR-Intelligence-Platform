@@ -1,0 +1,13 @@
+Job Description: Cloud Engineer (AWS) – Mumbai
+
+Role Overview
+We are seeking a Cloud Engineer with 2+ years of experience in AWS to join our team. The
+ideal candidate will have a strong understanding of AWS services and cloud infrastructure.
+
+Responsibilities:
+• Design, build, and maintain scalable and reliable AWS cloud infrastructure.
+• Manage and optimize AWS resources, including EC2 instances, S3 buckets, RDS
+
+Required Skills:
+• AWS, EC2, S3, RDS, VPC
+• Terraform, CloudFormation

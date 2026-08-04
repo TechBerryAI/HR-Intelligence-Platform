@@ -1,0 +1,49 @@
+{
+  "file": "Disaster Recovery Coordinator - JD.pdf",
+  "expected": {
+    "title_from_filename": "Disaster Recovery Coordinator"
+  },
+  "form": {
+    "title": "Disaster Recovery Coordinator",
+    "company": "",
+    "location": "Mumbai",
+    "salary": "rs",
+    "experienceFrom": "2",
+    "experienceTo": "4",
+    "employmentType": "",
+    "mandatorySkills": [
+      "Skills & Experience"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "Skills & Experience"
+    ],
+    "responsibilities": [],
+    "qualifications": [],
+    "descriptionPreview": "Disaster Recovery co-ordinator\nExperience- 2 to 4 yrs\nLocation- Mumbai\nDisaster Recovery Manager: Responsible for the overall DR program, including\nplanning, testing and implementation.",
+    "descriptionLen": 185
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 1.0,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 1,
+    "skills_checked": 1,
+    "skills_count": 1,
+    "location_in_source": true,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "2",
+      "parsed_to": "4",
+      "source_year_mentions": [
+        4
+      ],
+      "ok": true
+    },
+    "has_description": true,
+    "source_preview": "Disaster Recovery Coordinator | Disaster Recovery co-ordinator | Experience- 2 to 4 yrs | Location- Mumbai | Disaster Recovery Manager: Responsible for the overall DR program, including | planning, testing and implementation. | Skills & Experience: | * Technical Expertise: Understanding of IT infrastructure, including servers, databases, | network & virtualization | technologies like VMWare. Diagnosing and resolving hardware, software and network | issues related to Windows operating system. | * Servers & Application Onboarding: Provisioning new servers, installing & configuring | software, setting up new servers for"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'Disaster Recovery Coordinator', 'company': '', 'location': 'Mumbai', 'employment_type': '', 'description': 'Disaster Recovery Coordinator\\nDisaster Recovery co-ordinator\\nExperience- 2 to 4 yrs\\nLocation- Mumbai\\nDisaster Recovery Manager: Responsible for the overall DR program, including\\nplanning, testing and implementation.', 'min_experience_years': 2.0, 'max_experience_years': 4.0, 'skills': ['Skills & Experience'], 'mandatory_skills': ['Skills & Experience'], 'preferred_skills': [], 'responsibilities': [], 'qualifications': [], 'keywords': [], 'benefits': [], 'salary_range': 'rs'}",
+  "source_preview": "Disaster Recovery Coordinator\nDisaster Recovery co-ordinator\nExperience- 2 to 4 yrs\nLocation- Mumbai\nDisaster Recovery Manager: Responsible for the overall DR program, including\nplanning, testing and implementation.\nSkills & Experience:\n* Technical Expertise: Understanding of IT infrastructure, including servers, databases,\nnetwork & virtualization\ntechnologies like VMWare. Diagnosing and resolving hardware, software and network\nissues related to Windows operating system.\n* Servers & Application Onboarding: Provisioning new servers, installing & configuring\nsoftware, setting up new servers for applications deployments and providing ongoing\nsupport.\n* Problem solving - Ability to analyse problems, identify solutions and implement them\neffectively. Providing technical assistance on Windows-related problems, networks,\nfirewall,\netc.\n* Disaster Recovery Knowledge: In-depth knowledge of disaster recovery principles,\nstrategies and best practices. Ability to manage projects, timeline and resources\neffectively\n* Communication & collaboration: Strong communication and interpersonal skills to\nwork with diverse team and stakeholders\n* Documentation and reporting: Ability to create clear and concise documentation and\nreports"
+}

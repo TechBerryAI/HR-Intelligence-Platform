@@ -93,18 +93,21 @@ def build_resume_client_payload(body: dict[str, Any]) -> dict[str, Any]:
 def build_jd_client_payload(body: dict[str, Any]) -> dict[str, Any]:
     """Recruiter API payload for React — Form DTO only (no raw TOON)."""
     enriched = attach_form_dto(body, 'jd')
+    form = enriched.get('form') or {}
+    coverage = enriched.get('coverage') or form.get('coverage') or []
     return {
         'status': enriched.get('status'),
         'raw_file_id': enriched.get('raw_file_id'),
         'parsed_id': enriched.get('parsed_id'),
         'confidence': enriched.get('confidence'),
-        'form': enriched.get('form'),
+        'form': form,
         'is_duplicate': enriched.get('is_duplicate'),
         'model_version': enriched.get('model_version'),
         'partial': enriched.get('partial'),
         'parse_job_id': enriched.get('parse_job_id'),
         'error': enriched.get('error'),
-        'missing_fields': enriched.get('missing_fields'),
+        'missing_fields': enriched.get('missing_fields') or [],
+        'coverage': coverage,
         'engine': 'document_intelligence',
         'schema_version': '1.0.0',
     }

@@ -1,0 +1,65 @@
+{
+  "file": "JD for L2 - network Engineer_.pdf",
+  "expected": {
+    "title_from_filename": "for L2 - network Engineer"
+  },
+  "form": {
+    "title": "Role Category: L2 Network Engineer",
+    "company": "",
+    "location": "",
+    "salary": "rs",
+    "experienceFrom": "",
+    "experienceTo": "",
+    "employmentType": "",
+    "mandatorySkills": [
+      "WAN",
+      "Amazon Web Services",
+      "VPN",
+      "LAN",
+      "BGP",
+      "CCNA",
+      "WAF",
+      "WLC",
+      "LLB",
+      "AZURE"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "WAN",
+      "Amazon Web Services",
+      "VPN",
+      "LAN",
+      "BGP",
+      "CCNA",
+      "WAF",
+      "WLC",
+      "LLB",
+      "AZURE"
+    ],
+    "responsibilities": [],
+    "qualifications": [],
+    "descriptionPreview": "Hands-on experience with SD-WAN setup\nStrong knowledge and hands-on experience with Palo Alto firewall\nGood understanding of Google Cloud, AWS, or Azure platforms\nExperience with Meraki, Extreme, and Aruba is a must\nGood understanding of Zscaler VPN and Netskope cloud proxy\nCoordination with vendors for escalation\nPreparing & validation of Root Cause Analysis\nPreparation & Updating of Network diagram - LAN/WAN topology on Periodic Basis\nConfiguration & Validating the Configuration of new network",
+    "descriptionLen": 1295
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 0.75,
+    "title_present": true,
+    "skills_precision": 0.9,
+    "skills_hit": 9,
+    "skills_checked": 10,
+    "skills_count": 10,
+    "location_in_source": null,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "",
+      "parsed_to": "",
+      "source_year_mentions": [],
+      "ok": null
+    },
+    "has_description": true,
+    "source_preview": "JD |  | Role Category: L2 Network Engineer |  |  | • | Hands-on experience with SD-WAN setup |  | • | Strong knowledge and hands-on experience with Palo Alto firewall |  | • | Good understanding of Google Cloud, AWS, or Azure platforms |  | • | Experience with Meraki, Extreme, and Aruba is a must |  | • | Good understanding of Zscaler VPN and Netskope cloud proxy |  | • | Coordination with vendors for escalation |  | • | Preparing & validation of Root Cause Analysis |  | • | Preparation & Updating of Network diagram - LAN/WAN topology on Periodic Basis |  | • | Configuration & Validating the Configuration of new network devices. |  | • | Syslog analysis & Pr"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'Role Category: L2 Network Engineer', 'company': '', 'location': '', 'employment_type': '', 'description': 'Role Category: L2 Network Engineer\\nHands-on experience with SD-WAN setup\\nStrong knowledge and hands-on experience with Palo Alto firewall\\nGood understanding of Google Cloud, AWS, or Azure platforms\\nExperience with Meraki, Extreme, and Aruba is a must\\nGood understanding of Zscaler VPN and Netskope cloud proxy\\nCoordination with vendors for escalation\\nPreparing & validation of Root Cause Analysis\\nPreparation & Updating of Network diagram - LAN/WAN topology on Periodic Basis\\nConfiguration & Validating the Configuration of new network devices.\\nSyslog analysis & Preparing Action Plan for Critical Alerts to Resolve the Issues\\nGood Knowledge of Incidents Management & Change management\\nCoordination with vendors for escalation\\nPreparing & validation of Root Cause Analysis\\nReview of Network Device Hardening Mechanism on Periodic Basis\\nConfigure and troubleshooting routing protocols like BGP\\nConfiguring and troubleshooting the Cisco switches\\nAssigning severity to the Incidents logged based on the definition.\\nLogging Problem Ticket for unresolved Incidents with Technical Service Jira\\nServiceNow\\nAnalyze Security Alert messages on newly found vulnerabilities and fix.\\nInstallation of security patches & bug fixes on High Critical Devices\\nSystem health checks for all Network devices & Action plan for any issues or\\nObservations',",
+  "source_preview": "JD\n\nRole Category: L2 Network Engineer\n\n\n•\nHands-on experience with SD-WAN setup\n\n•\nStrong knowledge and hands-on experience with Palo Alto firewall\n\n•\nGood understanding of Google Cloud, AWS, or Azure platforms\n\n•\nExperience with Meraki, Extreme, and Aruba is a must\n\n•\nGood understanding of Zscaler VPN and Netskope cloud proxy\n\n•\nCoordination with vendors for escalation\n\n•\nPreparing & validation of Root Cause Analysis\n\n•\nPreparation & Updating of Network diagram - LAN/WAN topology on Periodic Basis\n\n•\nConfiguration & Validating the Configuration of new network devices.\n\n•\nSyslog analysis & Preparing Action Plan for Critical Alerts to Resolve the Issues\n\n•\nGood Knowledge of Incidents Management & Change management\n\n•\nCoordination with vendors for escalation\n\n•\nPreparing & validation of Root Cause Analysis\n\n•\nReview of Network Device Hardening Mechanism on Periodic Basis\n\n•\nConfigure and troubleshooting routing protocols like BGP\n\n•\nConfiguring and troubleshooting the Cisco switches\n\n•\nAssigning severity to the Incidents logged based on the definition.\n\n•\nLogging Problem Ticket for unresolved Incidents with Technical Service Jira\nServiceNow\n\n•\nAnalyze Security Alert messages on newly found vulnerabilities and fix.\n\n•\nInstallation of security patches & bug fixes on High Critical Devices\n\n•\nSystem health checks for all Network devices & Action plan for any issues or\nObservations\n\n\nSkills\n\n•\nCCNA Certifications and Hands on experience on Switching & Routing\n\n•\nCheckpoint, FortiGate firewall and F5 load balancers Array Load balancer Hands on\n\nExperience\n\n•\nGood Knowledge in the Products link Routers, Switch FortiGate firewall, F5 Load\nbalancer, F5 WAF WLC, LLB, Nexus etc.\n\nSoft Skills\n\n\n•\nGood Communication and Writing Skills\n\n•\nProblem Solving Skills\n\n•\nQuick learning of new Mgt Skills\n\n•\nProactive and Progressive Mind set."
+}

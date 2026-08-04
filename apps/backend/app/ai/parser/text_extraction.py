@@ -37,6 +37,11 @@ RESUME_LAYOUT_ENABLED = os.getenv('RESUME_LAYOUT_ENABLED', 'true').lower() in (
     'true',
     'yes',
 )
+JD_LAYOUT_ENABLED = os.getenv('JD_LAYOUT_ENABLED', 'true').lower() in (
+    '1',
+    'true',
+    'yes',
+)
 
 IMAGE_EXTENSIONS = frozenset({'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp'})
 
@@ -44,6 +49,63 @@ IMAGE_EXTENSIONS = frozenset({'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp'
 _INVISIBLE_CHARS_RE = __import__('re').compile(
     r'[\u200b\u200c\u200d\u2060\ufeff\u00ad\u180e]'
 )
+
+_FIELD_LABEL_RE = __import__('re').compile(
+    r'(?i)^(job\s*title|title|position|designation|role|location|work\s*location|'
+    r'experience|work\s*experience|exp\.?|salary|ctc|compensation|employment\s*type|'
+    r'job\s*type|company|department|skills?|required\s*skills?|primary\s*skills?|'
+    r'qualification|notice\s*period|reports?\s*to)\b'
+)
+
+
+def _serialize_table_row(cells: list[str]) -> str:
+    """Turn table cells into Label: Value lines for field extractors."""
+    cleaned = [(__import__('re').sub(r'\s+', ' ', (c or '').strip())) for c in cells]
+    cleaned = [c for c in cleaned if c]
+    if not cleaned:
+        return ''
+    if len(cleaned) == 1:
+        return cleaned[0]
+    label, *rest = cleaned
+    value = ' | '.join(rest)
+    if _FIELD_LABEL_RE.match(label) or label.endswith(':') or len(label.split()) <= 4:
+        label = label.rstrip(':').strip()
+        return f'{label}: {value}'
+    return ' | '.join(cleaned)
+
+
+def _dedupe_append(parts: list[str], block: str) -> None:
+    block = (block or '').strip()
+    if not block:
+        return
+    norm = __import__('re').sub(r'\s+', ' ', block.lower())
+    for existing in parts:
+        if norm and norm in __import__('re').sub(r'\s+', ' ', existing.lower()):
+            return
+    parts.append(block)
+
+
+def _extract_pdf_page_tables(page) -> str:
+    """Serialize PyMuPDF find_tables() rows as Label: Value lines."""
+    try:
+        finder = page.find_tables()
+    except Exception:
+        return ''
+    tables = getattr(finder, 'tables', None) or []
+    lines: list[str] = []
+    for table in tables:
+        try:
+            rows = table.extract() or []
+        except Exception:
+            continue
+        for row in rows:
+            if not row:
+                continue
+            cells = [str(c or '') for c in row]
+            serialized = _serialize_table_row(cells)
+            if serialized:
+                lines.append(serialized)
+    return '\n'.join(lines).strip()
 
 
 def normalize_extracted_text(text: str) -> str:
@@ -267,6 +329,7 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
         for page_num in range(page_count):
             page = doc[page_num]
             digital = (page.get_text('text') or '').strip()
+            table_text = _extract_pdf_page_tables(page)
 
             if _page_needs_ocr(page, digital):
                 if OCR_ENABLED:
@@ -282,31 +345,60 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
                             png = _render_page_png(page, dpi=full_dpi)
                             ocr_text = _ocr_image_bytes(png)
                             max_dpi_used = max(max_dpi_used, full_dpi)
+                        page_bits: list[str] = []
                         if ocr_text:
-                            text_parts.append(ocr_text)
+                            page_bits.append(ocr_text)
                             used_ocr = True
-                            continue
+                        elif digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
+                            page_bits.append(digital)
+                        if table_text:
+                            _dedupe_append(page_bits, table_text)
+                        if page_bits:
+                            text_parts.append('\n\n'.join(page_bits))
+                        continue
                     except ValueError as ocr_err:
                         logger.warning(
                             'OCR failed for PDF page %s: %s', page_num + 1, ocr_err
                         )
-                        # Do not treat thin digital junk as success when OCR was needed
+                        page_bits = []
                         if digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
-                            text_parts.append(digital)
+                            page_bits.append(digital)
+                        if table_text:
+                            _dedupe_append(page_bits, table_text)
+                        if page_bits:
+                            text_parts.append('\n\n'.join(page_bits))
                         continue
-                elif digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
-                    text_parts.append(digital)
-            elif digital:
-                text_parts.append(digital)
+                else:
+                    page_bits = []
+                    if digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
+                        page_bits.append(digital)
+                    if table_text:
+                        _dedupe_append(page_bits, table_text)
+                    if page_bits:
+                        text_parts.append('\n\n'.join(page_bits))
+            else:
+                page_bits = []
+                if digital:
+                    page_bits.append(digital)
+                if table_text:
+                    _dedupe_append(page_bits, table_text)
+                if page_bits:
+                    text_parts.append('\n\n'.join(page_bits))
 
         extracted = '\n\n'.join(text_parts).strip()
-        if RESUME_LAYOUT_ENABLED and extracted:
+        # Structure headers when resume or JD layout is enabled
+        if (RESUME_LAYOUT_ENABLED or JD_LAYOUT_ENABLED) and extracted:
             try:
-                from app.ai.parser.layout.detector import enhance_resume_text
+                from app.ai.parser.layout.detector import enhance_jd_text, enhance_resume_text, is_jd_layout_enabled
 
-                extracted = enhance_resume_text(extracted)
+                if is_jd_layout_enabled():
+                    structured = enhance_jd_text(extracted)
+                else:
+                    structured = enhance_resume_text(extracted)
+                if structured and len(structured.strip()) >= MIN_TEXT_CHARS:
+                    extracted = structured
             except Exception as exc:
-                logger.debug('enhance_resume_text skipped: %s', exc)
+                logger.debug('layout enhance skipped: %s', exc)
 
         if len(extracted) < MIN_TEXT_CHARS:
             raise ValueError(
@@ -406,7 +498,7 @@ def extract_text_from_pdf(file_data: bytes, *, dpi: int | None = None) -> str:
 
 
 def extract_text_from_docx(file_data: bytes) -> str:
-    """Extract text from DOCX file (paragraphs + tables + XML fallback)."""
+    """Extract text from DOCX (paragraphs + Label: Value tables + XML fallback)."""
     text_parts: list[str] = []
     try:
         docx_file = io.BytesIO(file_data)
@@ -418,9 +510,18 @@ def extract_text_from_docx(file_data: bytes) -> str:
 
         for table in doc.tables:
             for row in table.rows:
-                for cell in row.cells:
-                    if cell.text.strip():
-                        text_parts.append(cell.text)
+                cells = [(cell.text or '').strip() for cell in row.cells]
+                # Deduplicate merged-cell repeats common in python-docx
+                deduped: list[str] = []
+                for c in cells:
+                    if not c:
+                        continue
+                    if deduped and deduped[-1] == c:
+                        continue
+                    deduped.append(c)
+                serialized = _serialize_table_row(deduped)
+                if serialized:
+                    text_parts.append(serialized)
     except Exception as e:
         logger.warning('python-docx extraction failed, trying XML fallback: %s', e)
 

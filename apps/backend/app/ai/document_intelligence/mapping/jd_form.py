@@ -93,7 +93,12 @@ def format_jd_description(profile: JobProfile) -> str:
     )
 
 
-def map_job_to_form(profile: JobProfile) -> JobCreateFormDTO:
+def map_job_to_form(
+    profile: JobProfile,
+    *,
+    coverage: list[dict] | None = None,
+    raw_text: str = '',
+) -> JobCreateFormDTO:
     traces: list[FieldTrace] = []
 
     title_ok, title_reason = validate_nonempty(profile.basic.title, 'title')
@@ -232,9 +237,12 @@ def map_job_to_form(profile: JobProfile) -> JobCreateFormDTO:
 
     responsibilities = [r for r in profile.responsibilities.items if r.strip()]
     qualifications = [q for q in profile.requirements.qualifications if q.strip()]
-    from app.ai.parser.enrichment.jd_text_inference import is_plausible_keyword
+    from app.ai.parser.enrichment.jd_text_inference import (
+        extract_tech_keywords_from_text,
+        is_plausible_keyword,
+    )
 
-    # Keywords: only short JD skill/tech terms already on the profile (no invented extras)
+    # Keywords: grounded profile keywords + mandatory/preferred + tech from source
     keywords = [
         k.strip()
         for k in profile.requirements.keywords
@@ -245,7 +253,40 @@ def map_job_to_form(profile: JobProfile) -> JobCreateFormDTO:
             s for s in (mandatory + preferred + general)
             if s and is_plausible_keyword(s) and len(s.split()) <= 4
         ][:20]
-    keywords = list(dict.fromkeys(keywords))
+    if raw_text:
+        tech = extract_tech_keywords_from_text(raw_text, max_items=15)
+        src_l = raw_text.lower()
+        for tok in tech:
+            if tok.lower() in src_l and tok not in keywords:
+                keywords.append(tok)
+    keywords = list(dict.fromkeys(keywords))[:25]
+
+    # Merge coverage into field traces for UI visibility
+    coverage_rows = list(coverage or [])
+    cov_by_field = {c.get('field'): c for c in coverage_rows if isinstance(c, dict)}
+    for form_field, cov_key in (
+        ('title', 'title'),
+        ('location', 'location'),
+        ('experienceFrom', 'experience'),
+        ('mandatorySkills', 'skills'),
+        ('description', 'description'),
+        ('salary', 'salary'),
+        ('employmentType', 'employment_type'),
+        ('company', 'company'),
+    ):
+        c = cov_by_field.get(cov_key)
+        if not c:
+            continue
+        traces.append(
+            _trace(
+                form_field,
+                f'coverage.{cov_key}',
+                source='coverage_gate',
+                validator=str(c.get('status') or ''),
+                confidence=0.95 if c.get('status') in ('filled', 'recovered') else 0.4,
+                reason=str(c.get('detail') or c.get('status') or ''),
+            )
+        )
 
     return JobCreateFormDTO(
         title=title,
@@ -266,4 +307,5 @@ def map_job_to_form(profile: JobProfile) -> JobCreateFormDTO:
         qualificationsList=qualifications,
         keywordsList=keywords,
         trace=traces,
+        coverage=coverage_rows,
     )
