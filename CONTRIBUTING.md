@@ -82,6 +82,7 @@ Significant AI platform decisions require an ADR in `ai/docs/adr/`. See [ai/docs
 
 ## Questions
 
-- HRMS architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/ENGINEERING.md](docs/ENGINEERING.md)
+- HCIP docs: [docs/README.md](docs/README.md) · [docs/01-Product-Constitution.md](docs/01-Product-Constitution.md)
 - AI platform: [ai/README.md](ai/README.md)
 - TOON: [ai/toon/README.md](ai/toon/README.md)
+- Legacy archive: [docs/legacy/README.md](docs/legacy/README.md)

@@ -116,13 +116,15 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
         throw new Error(result.error || 'Parsing failed');
       }
     } catch (error) {
-      // Provide better error messages based on error type
       if (error.message.includes('Invalid or expired token') || error.message.includes('Access token required')) {
-        setParseError('🔒 Your session has expired. Please log in again to use AI-powered job description parsing.');
-      } else if (error.message.includes('Failed to parse job description')) {
-        setParseError('❌ Unable to parse job description. The file may be corrupted or in an unsupported format. Please try another file or fill the form manually.');
+        setParseError('Your session has expired. Please log in again to use AI-powered job description parsing.');
       } else {
-        setParseError(`❌ Parsing error: ${error.message}`);
+        const detail = (error.message || '').trim();
+        setParseError(
+          detail && !/^failed to parse job description\.?$/i.test(detail)
+            ? detail
+            : 'Unable to parse this job description. Please try another file or fill the form manually.'
+        );
       }
       console.error('JD parsing error:', error);
     } finally {
@@ -152,10 +154,10 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
             <FiZap className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-[#F5F7FA]">
+            <h3 className="text-lg font-semibold text-[var(--ei-text-primary)]">
               Quick Create from Job Description
             </h3>
-            <p className="text-sm text-[#9AA7B4]">
+            <p className="text-sm text-[var(--ei-text-secondary)]">
               Upload a JD and let AI extract all the details
             </p>
           </div>
@@ -202,13 +204,13 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
                 </motion.div>
 
                 <div className="text-center">
-                  <p className="text-base font-semibold text-[#F5F7FA] mb-1">
+                  <p className="text-base font-semibold text-[var(--ei-text-primary)] mb-1">
                     {isDragging ? 'Drop JD file here' : 'Upload Job Description'}
                   </p>
-                  <p className="text-xs text-[#9AA7B4]">
+                  <p className="text-xs text-[var(--ei-text-secondary)]">
                     PDF, DOC, DOCX, PNG, JPG, or WEBP • Max 10MB
                   </p>
-                  <p className="text-xs text-[#71808E] mt-1.5">
+                  <p className="text-xs text-[var(--ei-text-muted)] mt-1.5">
                     Drag & drop your file here or click to browse
                   </p>
                 </div>
@@ -280,7 +282,7 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
                 className="flex flex-col items-center gap-1.5 p-2"
               >
                 <feature.icon className={`w-4 h-4 ${feature.color}`} />
-                <span className="text-xs text-[#9AA7B4] text-center">{feature.text}</span>
+                <span className="text-xs text-[var(--ei-text-secondary)] text-center">{feature.text}</span>
               </motion.div>
             ))}
           </div>

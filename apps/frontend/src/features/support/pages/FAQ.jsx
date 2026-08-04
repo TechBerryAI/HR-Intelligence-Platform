@@ -48,11 +48,6 @@ const faqs = [
         answer:
           'Application status is managed by recruiters in their dashboard. After you apply, they will contact you using the email you provided on the form.',
       },
-      {
-        question: 'Can I save jobs to apply later?',
-        answer:
-          'Yes. Click the bookmark icon on a job listing to save it in this browser session, then apply when you are ready.',
-      },
     ],
   },
   {
@@ -119,7 +114,7 @@ export default function FAQ() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-4rem)] py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -138,10 +133,10 @@ export default function FAQ() {
             </div>
           </motion.div>
 
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-white to-zinc-300 bg-clip-text text-transparent mb-3">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-[var(--ei-text-primary)] to-[var(--ei-text-secondary)] bg-clip-text text-transparent mb-3">
             Frequently Asked Questions
           </h1>
-          <p className="text-zinc-400 text-lg">
+          <p className="text-[var(--ei-text-muted)] text-lg">
             Find answers to common questions about HR Intelligence
           </p>
         </motion.div>
@@ -154,7 +149,7 @@ export default function FAQ() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: categoryIndex * 0.1 }}
             >
-              <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2">
+              <h2 className="text-2xl font-bold text-[var(--ei-text-primary)] mb-4 flex items-center gap-2">
                 <span className="w-1 h-8 bg-gradient-to-b from-sky-500 to-blue-600 rounded-full" />
                 {category.category}
               </h2>
@@ -170,18 +165,18 @@ export default function FAQ() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: categoryIndex * 0.1 + questionIndex * 0.05 }}
-                      className="glass-card rounded-xl border border-white/10 overflow-hidden"
+                      className="glass-card rounded-xl border border-[var(--ei-border-primary)] overflow-hidden"
                     >
                       <button
                         onClick={() => toggleItem(categoryIndex, questionIndex)}
-                        className="w-full text-left px-6 py-4 flex items-center justify-between gap-4 hover:bg-white/5 transition-colors"
+                        className="w-full text-left px-6 py-4 flex items-center justify-between gap-4 hover:bg-[var(--ei-surface-hover)] transition-colors"
                       >
-                        <span className="text-white font-medium">{item.question}</span>
+                        <span className="text-[var(--ei-text-primary)] font-medium">{item.question}</span>
                         <motion.div
                           animate={{ rotate: isExpanded ? 180 : 0 }}
                           transition={{ duration: 0.3 }}
                         >
-                          <FiChevronDown className="w-5 h-5 text-zinc-400 flex-shrink-0" />
+                          <FiChevronDown className="w-5 h-5 text-[var(--ei-text-muted)] flex-shrink-0" />
                         </motion.div>
                       </button>
 
@@ -194,7 +189,7 @@ export default function FAQ() {
                             transition={{ duration: 0.3 }}
                             className="overflow-hidden"
                           >
-                            <div className="px-6 pb-4 pt-2 text-zinc-400 leading-relaxed border-t border-white/5">
+                            <div className="px-6 pb-4 pt-2 text-[var(--ei-text-muted)] leading-relaxed border-t border-[var(--ei-border-primary)]">
                               {item.answer}
                             </div>
                           </motion.div>
@@ -212,11 +207,11 @@ export default function FAQ() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.6 }}
-          className="mt-12 glass-card rounded-2xl p-8 border border-white/10 text-center"
+          className="mt-12 org-glass-card hover:transform-none rounded-2xl p-8 text-center"
         >
           <FiMessageCircle className="w-12 h-12 text-sky-400 mx-auto mb-4" />
-          <h3 className="text-xl font-bold text-white mb-2">Still have questions?</h3>
-          <p className="text-zinc-400 mb-6">
+          <h3 className="text-xl font-bold text-[var(--ei-text-primary)] mb-2">Still have questions?</h3>
+          <p className="text-[var(--ei-text-muted)] mb-6">
             Can&apos;t find the answer you&apos;re looking for? Our support team is here to help!
           </p>
           <PremiumButton onClick={() => navigate('/support/contact')} className="mx-auto">

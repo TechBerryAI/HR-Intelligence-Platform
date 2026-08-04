@@ -1,0 +1,13 @@
+---
+description: When editing backend/frontend, sync API and workflow docs
+globs: apps/backend/**/*.{py,sql},apps/frontend/src/**/*.{jsx,js,tsx,ts}
+alwaysApply: false
+---
+
+# Code ↔ docs coupling
+
+After meaningful edits under `apps/backend` or `apps/frontend/src`:
+
+1. Check whether `docs/04-Workflow.md`, `docs/07-API.md`, `docs/08-Database.md`, or `docs/09-Security.md` need a prose update.
+2. Run `python scripts/sync_docs_from_code.py` if routes or `schema_pg` files changed.
+3. Do not invent endpoints — only document what exists in `create_app.py` and domain route modules.

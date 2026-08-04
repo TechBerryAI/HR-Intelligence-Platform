@@ -574,6 +574,15 @@ def _run_jd(
     _emit(parse_job_id, 'knowledge', 'completed', on_stage=on_stage)
 
     toon = job_to_toon(profile)
+    # Apply JD repair (description/keywords/KR rules) then remap form
+    try:
+        from app.ai.adapter.runtime_adapter import repair_jd_toon
+        from app.ai.document_intelligence.canonical.from_toon import job_profile_from_toon
+
+        toon, _repair_actions = repair_jd_toon(toon, raw_jd_text=raw_text)
+        profile = job_profile_from_toon(toon)
+    except Exception:
+        pass
     form = map_job_to_form(profile)
 
     _emit(parse_job_id, 'validate', 'started', on_stage=on_stage)

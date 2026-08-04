@@ -1,6 +1,6 @@
 # Platform History
 
-Completed sprint freeze reports and repository migration notes. Kept for audit trail — current design lives in [ARCHITECTURE.md](ARCHITECTURE.md).
+Completed sprint freeze reports and repository migration notes. Kept for audit trail — current design lives in [../01-Product-Constitution.md](../01-Product-Constitution.md) and [../README.md](../README.md). Historical mega-doc: [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
@@ -21,7 +21,7 @@ Completed sprint freeze reports and repository migration notes. Kept for audit t
 **Document ID:** ARCH-12  
 **Status:** FROZEN — core platform foundation for all future AI modules  
 **Date:** 2026-06-29  
-**Related:** [06_DATA_MODEL.md](ARCHITECTURE.md#conceptual-data-model) · [02_DOMAIN_MODEL.md](ARCHITECTURE.md#domain-model) · `backend/schema_pg/04_domain_freeze.sql`
+**Related:** [06_DATA_MODEL.md](ARCHITECTURE.md#conceptual-data-model) · [02_DOMAIN_MODEL.md](ARCHITECTURE.md#domain-model) · [`apps/backend/schema_pg/04_domain_freeze.sql`](../../apps/backend/schema_pg/04_domain_freeze.sql)
 
 ---
 
@@ -360,7 +360,7 @@ SELECT status, enabled, COUNT(*) FROM jobs GROUP BY status, enabled;
 
 | Resource | Path |
 |----------|------|
-| DDL migration | `backend/schema_pg/04_domain_freeze.sql` |
+| DDL migration | `apps/backend/schema_pg/04_domain_freeze.sql` |
 | RBAC resolution | `backend/rbac.py` → `resolve_hr_role()` |
 | Bulk persistence | `backend/services/bulk_session_db.py` |
 | Conceptual model | [06_DATA_MODEL.md](ARCHITECTURE.md#conceptual-data-model) |
@@ -418,7 +418,7 @@ From `hr_signup`:
 - `is_head_hr` — dropped
 - `is_ceo` — dropped
 
-Migration: [`backend/schema_pg/05_remove_legacy_rbac.sql`](backend/schema_pg/05_remove_legacy_rbac.sql)
+Migration: [`apps/backend/schema_pg/05_remove_legacy_rbac.sql`](../../apps/backend/schema_pg/05_remove_legacy_rbac.sql)
 
 Trigger removed: `trg_hr_signup_role_sync` / `hr_signup_role_sync()`
 

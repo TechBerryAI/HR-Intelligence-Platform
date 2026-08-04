@@ -193,11 +193,11 @@ export default function HeadHrJobs() {
 
       {confirmDelete && !readOnly && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className="w-full max-w-sm rounded-2xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl">
-            <h3 className="text-lg font-semibold text-white">Delete Job?</h3>
-            <p className="mt-2 text-sm text-zinc-400">
+          <div className="w-full max-w-sm rounded-2xl bg-[var(--ei-bg-secondary)] border border-[var(--ei-border-primary)] p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-[var(--ei-text-primary)]">Delete Job?</h3>
+            <p className="mt-2 text-sm text-[var(--ei-text-muted)]">
               This will permanently delete the job{' '}
-              <span className="text-white font-medium">"{confirmDelete.title}"</span>. All associated applications will also be removed.
+              <span className="text-[var(--ei-text-primary)] font-medium">"{confirmDelete.title}"</span>. All associated applications will also be removed.
             </p>
             <div className="mt-5 flex gap-3 justify-end">
               <button
@@ -344,10 +344,10 @@ export default function HeadHrJobs() {
 
       {editingJob && !readOnly && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-zinc-900 border border-zinc-700 shadow-2xl overflow-hidden">
+          <div className="w-full max-w-2xl rounded-2xl bg-[var(--ei-bg-secondary)] border border-[var(--ei-border-primary)] shadow-2xl overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-700">
-              <h3 className="text-lg font-semibold text-white">Edit Job Post</h3>
-              <button type="button" onClick={closeEditJob} className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800">
+              <h3 className="text-lg font-semibold text-[var(--ei-text-primary)]">Edit Job Post</h3>
+              <button type="button" onClick={closeEditJob} className="p-2 rounded-lg text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)]">
                 <FiX className="w-5 h-5" />
               </button>
             </div>

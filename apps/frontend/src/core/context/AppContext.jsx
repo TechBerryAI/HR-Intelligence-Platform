@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import { apiRequest, setUnauthorizedHandler, setOnTokensRefreshed } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
 import { checkBackendHealth } from '@/core/api/healthCheck.js'
+import { isStaffRecruiter } from '@/core/permissions/rbac.js'
 
 // App state: jobs and auth via backend
 const AppContext = createContext(null)
@@ -50,6 +51,9 @@ export function AppProvider({ children }) {
   const [jobs, setJobs] = useState([])
   const [jobsLoading, setJobsLoading] = useState(false)
   const [jobsError, setJobsError] = useState('')
+  // Bumped after create/enable/disable/delete so public /jobs refetches
+  const [jobsBoardRevision, setJobsBoardRevision] = useState(0)
+  const bumpJobsBoard = () => setJobsBoardRevision((n) => n + 1)
 
   const defaultAuth = { isLoggedIn: false, role: null, email: '' }
 
@@ -395,13 +399,18 @@ export function AppProvider({ children }) {
     }
   }
 
-  // Fetch jobs from backend. Always send token when available so HR sees only their jobs (backend filters by posted_by).
+  // Public board: GET /api/jobs (enabled jobs). Staff dashboard: GET /api/jobs/all (company / org scope).
   const fetchJobs = async () => {
     setJobsLoading(true)
     setJobsError('')
     try {
       const authToken = token || tokenService.getToken()
-      const data = await apiRequest('/api/jobs', { method: 'GET', token: authToken })
+      const staff = Boolean(authToken) && isStaffRecruiter(auth)
+      const path = staff ? '/api/jobs/all' : '/api/jobs'
+      const data = await apiRequest(path, {
+        method: 'GET',
+        ...(staff ? { token: authToken } : {}),
+      })
       if (Array.isArray(data)) setJobs(data)
       else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)
       else setJobs([])
@@ -435,6 +444,7 @@ export function AppProvider({ children }) {
       
       const result = await apiRequest('/api/jobs', { method: 'POST', body: job, token })
       await fetchJobs()
+      bumpJobsBoard()
       return { success: true, data: result }
     } catch (err) {
       let errorMessage = 'Failed to create job'
@@ -454,9 +464,9 @@ export function AppProvider({ children }) {
 
   const setJobEnabled = async (jobId, isEnabled) => {
     if (!token) {
-      // Fallback to local update
       setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, enabled: isEnabled } : j)))
-      return
+      bumpJobsBoard()
+      return { success: true }
     }
     try {
       await apiRequest(`/api/jobs/${jobId}/enabled`, {
@@ -465,10 +475,29 @@ export function AppProvider({ children }) {
         token
       })
       setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, enabled: isEnabled } : j)))
+      bumpJobsBoard()
+      return { success: true }
     } catch (err) {
       console.error('Set job enabled error:', err)
-      // Fallback to local update
-      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, enabled: isEnabled } : j)))
+      return { success: false, error: err?.data?.error || err?.message || 'Failed to update job status' }
+    }
+  }
+
+  const deleteJob = async (jobId) => {
+    if (!token) {
+      return { success: false, error: 'You must be logged in to delete a job.' }
+    }
+    try {
+      await apiRequest(`/api/jobs/${encodeURIComponent(jobId)}`, {
+        method: 'DELETE',
+        token,
+      })
+      setJobs((prev) => prev.filter((j) => j.id !== jobId && j.jdid !== jobId))
+      bumpJobsBoard()
+      return { success: true }
+    } catch (err) {
+      console.error('Delete job error:', err)
+      return { success: false, error: err?.data?.error || err?.message || 'Failed to delete job' }
     }
   }
 
@@ -476,6 +505,7 @@ export function AppProvider({ children }) {
     if (!token) {
       // Fallback to local update
       setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...updates } : j)))
+      bumpJobsBoard()
       return
     }
     try {
@@ -486,6 +516,7 @@ export function AppProvider({ children }) {
       })
       setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...updated } : j)))
       await fetchJobs() // Refresh to get latest data
+      bumpJobsBoard()
     } catch (err) {
       console.error('Update job error:', err)
       // Fallback to local update
@@ -497,9 +528,11 @@ export function AppProvider({ children }) {
     jobs,
     jobsLoading,
     jobsError,
+    jobsBoardRevision,
     fetchJobs,
     addJob,
     setJobEnabled,
+    deleteJob,
     updateJob,
     auth,
     authLoading,
@@ -520,7 +553,7 @@ export function AppProvider({ children }) {
     fetchApplicationsForJob,
     fetchAllApplications,
     backendHealthy,
-  }), [jobs, jobsLoading, jobsError, auth, authLoading, authError, applicantSavedJobs, user, token, backendHealthy])
+  }), [jobs, jobsLoading, jobsError, jobsBoardRevision, auth, authLoading, authError, applicantSavedJobs, user, token, backendHealthy])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

@@ -1,6 +1,8 @@
 import React from 'react'
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
+import { useTheme } from '@/core/context/ThemeContext.jsx'
+import ThemeToggle from '@/shared/components/ThemeToggle.jsx'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,8 +15,19 @@ import {
 import { FiBriefcase, FiFileText, FiLogOut, FiUsers, FiHelpCircle, FiMessageCircle, FiMessageSquare, FiBook, FiShield, FiSettings } from 'react-icons/fi'
 import { isRecruiter, isHeadHr, isCeo } from '@/core/permissions/rbac.js'
 
+function isStaffAppPath(pathname) {
+  return (
+    pathname.startsWith('/jobs') ||
+    pathname.startsWith('/dashboard') ||
+    pathname.startsWith('/candidates') ||
+    pathname.startsWith('/admin') ||
+    pathname.startsWith('/settings')
+  )
+}
+
 export default function Navbar() {
   const { auth, logout, user } = useApp()
+  const { isDark } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -23,11 +36,18 @@ export default function Navbar() {
     location.pathname.startsWith('/signup') ||
     location.pathname.startsWith('/forgot-password')
 
+  const isStaffChrome = isStaffAppPath(location.pathname)
+  // Global preference drives chrome; staff/auth routes stay enterprise-styled in dark mode
+  const darkChrome = isDark
+
   const activeClass = ({ isActive }) => {
-    if (isAuthChrome) {
+    if (isAuthChrome && darkChrome) {
+      return isActive ? 'auth-nav-link auth-nav-link-active' : 'auth-nav-link'
+    }
+    if (darkChrome && (isStaffChrome || isAuthChrome)) {
       return isActive
-        ? 'auth-nav-link auth-nav-link-active'
-        : 'auth-nav-link'
+        ? 'text-[var(--ei-text-primary)] font-semibold'
+        : 'text-[var(--ei-text-secondary)] hover:text-[var(--ei-text-primary)] transition-colors'
     }
     return isActive
       ? 'text-slate-900 font-semibold'
@@ -53,9 +73,11 @@ export default function Navbar() {
     <NavLink to={path} className={activeClass}>
       <span
         className={
-          isAuthChrome
+          isAuthChrome && darkChrome
             ? 'px-3 py-2 inline-block text-[14px] font-medium'
-            : 'px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors inline-block'
+            : darkChrome && isStaffChrome
+              ? 'px-3 py-2 rounded-lg hover:bg-white/[0.06] transition-colors inline-block'
+              : 'px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors inline-block'
         }
       >
         {label}
@@ -65,23 +87,47 @@ export default function Navbar() {
 
   const showLogin = !isHrRecruiter && !isHeadHrLoggedIn && !isCeoLoggedIn
 
+  const menuContentClass = darkChrome
+    ? 'w-56 border-white/10 bg-[#121A24] text-[#E8EDF3] shadow-[0_16px_48px_rgba(0,0,0,0.45)]'
+    : 'w-56'
+
+  const menuItemClass = darkChrome
+    ? 'text-[#C5CED8] focus:bg-white/[0.06] focus:text-white'
+    : ''
+
+  const toggleClass = darkChrome
+    ? isAuthChrome
+      ? 'auth-nav-link hover:bg-white/5 hover:text-white text-[#94a2af]'
+      : 'text-[var(--ei-text-secondary)] hover:text-[var(--ei-text-primary)] hover:bg-white/[0.06]'
+    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+
+  const headerClass = (() => {
+    if (isAuthChrome && darkChrome) return 'sticky top-0 z-30 w-full auth-nav px-3 sm:px-6'
+    if (isAuthChrome && !darkChrome) {
+      return 'sticky top-0 z-30 w-full h-16 bg-white/90 backdrop-blur-xl border-b border-slate-200'
+    }
+    if (isStaffChrome && darkChrome) {
+      return 'sticky top-0 z-30 w-full h-16 border-b border-[var(--ei-border-primary)] bg-[color-mix(in_srgb,var(--ei-bg-primary)_90%,transparent)] backdrop-blur-xl'
+    }
+    if (isStaffChrome && !darkChrome) {
+      return 'sticky top-0 z-30 w-full h-16 bg-white/90 backdrop-blur-xl border-b border-slate-200 shadow-sm'
+    }
+    return darkChrome
+      ? 'sticky top-0 z-30 w-full h-16 border-b border-[var(--ei-border-primary)] bg-[var(--ei-bg-primary)]/90 backdrop-blur-xl'
+      : 'sticky top-0 z-30 w-full h-16 bg-white border-b border-slate-200 shadow-sm'
+  })()
+
   return (
-    <header
-      className={
-        isAuthChrome
-          ? 'sticky top-0 z-30 w-full auth-nav px-3 sm:px-6'
-          : 'sticky top-0 z-30 w-full h-16 bg-white border-b border-slate-200 shadow-sm'
-      }
-    >
+    <header className={headerClass}>
       <div
         className={
-          isAuthChrome
+          isAuthChrome && darkChrome
             ? 'auth-nav-inner'
             : 'max-w-7xl mx-auto px-6 h-full flex items-center justify-between gap-6'
         }
       >
         <Link to="/" className="flex items-center gap-2.5 shrink-0 group">
-          {isAuthChrome ? (
+          {darkChrome ? (
             <>
               <div className="relative h-10 w-10">
                 <div className="absolute inset-0 rounded-full bg-gradient-to-br from-sky-400/30 to-blue-600/20 blur-md opacity-80 group-hover:opacity-100 transition-opacity" />
@@ -90,10 +136,10 @@ export default function Navbar() {
                 </div>
               </div>
               <div className="leading-tight">
-                <span className="block font-display font-semibold text-[15px] sm:text-base text-[#F4F7FA] tracking-tight">
+                <span className="block font-display font-semibold text-[15px] sm:text-base text-[var(--ei-text-primary)] tracking-tight">
                   HR Intelligence
                 </span>
-                <span className="hidden sm:block text-[10px] text-[#788896] tracking-[0.18em] uppercase font-medium">
+                <span className="hidden sm:block text-[10px] text-[var(--ei-text-muted)] tracking-[0.18em] uppercase font-medium">
                   Enterprise Platform
                 </span>
               </div>
@@ -124,28 +170,39 @@ export default function Navbar() {
           {isHrRecruiter && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full">
-                  <AvatarWithInitials initials={hrInitials} size="sm" className="bg-blue-100 text-blue-600" />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`rounded-full ${darkChrome ? 'hover:bg-white/[0.06]' : ''}`}
+                >
+                  <AvatarWithInitials
+                    initials={hrInitials}
+                    size="sm"
+                    className={darkChrome ? 'bg-sky-500/20 text-sky-300 ring-1 ring-sky-400/30' : 'bg-blue-100 text-blue-600'}
+                  />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuItem onClick={() => navigate('/dashboard')}>
+              <DropdownMenuContent align="end" className={menuContentClass}>
+                <DropdownMenuItem onClick={() => navigate('/dashboard')} className={menuItemClass}>
                   <FiBriefcase className="mr-2 h-4 w-4" /> Dashboard
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/candidates')}>
+                <DropdownMenuItem onClick={() => navigate('/candidates')} className={menuItemClass}>
                   <FiUsers className="mr-2 h-4 w-4" /> Candidates
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/admin/bulk-resume-parser')}>
+                <DropdownMenuItem onClick={() => navigate('/admin/bulk-resume-parser')} className={menuItemClass}>
                   <FiFileText className="mr-2 h-4 w-4" /> Bulk Resume Parser
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/admin/feedback')}>
+                <DropdownMenuItem onClick={() => navigate('/admin/feedback')} className={menuItemClass}>
                   <FiMessageSquare className="mr-2 h-4 w-4" /> Feedback (Admin)
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => navigate('/settings')}>
+                <DropdownMenuItem onClick={() => navigate('/settings')} className={menuItemClass}>
                   <FiSettings className="mr-2 h-4 w-4" /> Settings
                 </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
+                <DropdownMenuSeparator className={darkChrome ? 'bg-white/10' : ''} />
+                <DropdownMenuItem
+                  onClick={handleLogout}
+                  className={darkChrome ? 'text-red-400 focus:text-red-300 focus:bg-red-500/10' : 'text-red-600 focus:text-red-600'}
+                >
                   <FiLogOut className="mr-2 h-4 w-4" /> Logout
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -168,24 +225,32 @@ export default function Navbar() {
             </Link>
           )}
 
+          <ThemeToggle className={toggleClass} />
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="sm"
-                className={isAuthChrome ? 'auth-nav-link hover:bg-white/5 hover:text-white' : 'text-slate-600'}
+                className={
+                  isAuthChrome && darkChrome
+                    ? 'auth-nav-link hover:bg-white/5 hover:text-white'
+                    : darkChrome
+                      ? 'text-[var(--ei-text-secondary)] hover:text-[var(--ei-text-primary)] hover:bg-white/[0.06]'
+                      : 'text-slate-600'
+                }
               >
                 <FiHelpCircle className="mr-1.5 h-4 w-4" /> <span className="hidden sm:inline">Support</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onClick={() => navigate('/support/faq')}>
+            <DropdownMenuContent align="end" className={darkChrome ? 'w-52 border-white/10 bg-[#121A24] text-[#E8EDF3]' : 'w-52'}>
+              <DropdownMenuItem onClick={() => navigate('/support/faq')} className={menuItemClass}>
                 <FiBook className="mr-2 h-4 w-4" /> FAQ
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/support/contact')}>
+              <DropdownMenuItem onClick={() => navigate('/support/contact')} className={menuItemClass}>
                 <FiMessageCircle className="mr-2 h-4 w-4" /> Contact Us
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/support/hrms-feedback')}>
+              <DropdownMenuItem onClick={() => navigate('/support/hrms-feedback')} className={menuItemClass}>
                 <FiMessageSquare className="mr-2 h-4 w-4" /> HRMS Testing Feedback
               </DropdownMenuItem>
             </DropdownMenuContent>

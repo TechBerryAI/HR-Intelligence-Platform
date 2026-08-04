@@ -72,7 +72,31 @@ def can_access_job(user, posted_by):
     if role in (ROLE_CEO, ROLE_HEAD_HR):
         return True
     if role == ROLE_RECRUITER:
-        return posted_by == get_user_id(user)
+        uid = get_user_id(user)
+        if posted_by == uid:
+            return True
+        if not posted_by:
+            return False
+        try:
+            from app.database.connection.db import db_get
+            from app.domains.recruitment.services.company_scope import companies_related
+
+            my_co = (user or {}).get('company')
+            if not my_co:
+                me = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (uid,))
+                my_co = (me or {}).get('company')
+            owner = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (posted_by,))
+            if companies_related(my_co, (owner or {}).get('company')):
+                return True
+            job = db_get(
+                'SELECT company FROM jobs WHERE posted_by = ? ORDER BY posted_on DESC',
+                (posted_by,),
+            )
+            if companies_related(my_co, (job or {}).get('company')):
+                return True
+        except Exception:
+            return False
+        return False
     return False
 
 
@@ -83,7 +107,8 @@ def can_modify_job(user, posted_by):
     if role == ROLE_HEAD_HR:
         return True
     if role == ROLE_RECRUITER:
-        return posted_by == get_user_id(user)
+        # Same-company recruiters may enable/disable/edit/delete org postings
+        return can_access_job(user, posted_by)
     return False
 
 
@@ -98,7 +123,7 @@ def can_act_on_application(user, job_posted_by):
     if role == ROLE_HEAD_HR:
         return True
     if role == ROLE_RECRUITER:
-        return job_posted_by == get_user_id(user)
+        return can_access_job(user, job_posted_by)
     return False
 
 
