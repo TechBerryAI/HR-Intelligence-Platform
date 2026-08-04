@@ -16,7 +16,8 @@
       "EXTC",
       "EEE",
       "RHCSA",
-      "RHCE"
+      "RHCE",
+      "Linux"
     ],
     "preferredSkills": [],
     "skillsList": [
@@ -24,36 +25,85 @@
       "EXTC",
       "EEE",
       "RHCSA",
-      "RHCE"
+      "RHCE",
+      "Linux"
     ],
     "responsibilities": [
-      "Perform day-to-day Linux system administration across Red Hat, Ubuntu, and CentOS",
-      "environments.",
+      "Perform day-to-day Linux system administration across Red Hat, Ubuntu, and CentOS environments.",
       "Manage installation, configuration, patching, and maintenance of Linux servers.",
-      "Monitor system performance, identify system issues, and implement solutions",
-      "proactively.",
-      "Implement and maintain Ansible playbooks for configuration management and",
-      "automation.",
+      "Monitor system performance, identify system issues, and implement solutions proactively.",
+      "Implement and maintain Ansible playbooks for configuration management and automation.",
       "Ensure system security, backup, and disaster recovery processes are followed.",
       "Perform root cause analysis and troubleshooting of hardware/software issues.",
       "Maintain detailed documentation for system configurations, procedures, and changes.",
-      "\u0000 Required Skills & Competencies:",
-      "Strong hands-on experience with Linux Administration (Red Hat, Ubuntu, CentOS)."
+      "\u0000 Required Skills & Competencies: Strong hands-on experience with Linux Administration (Red Hat, Ubuntu, CentOS).",
+      "Proficiency in Ansible for automation and configuration management.",
+      "Solid knowledge of system security practices, performance tuning, and monitoring tools."
     ],
     "qualifications": [
       "Red Hat Certification (RHCSA / RHCE)"
     ],
-    "descriptionPreview": "\u0000 Location: Navi Mumbai (Final Round – Face-to-Face in Mumbai Office)\n\u0000 Experience: 3–6 Years\n\u0000 Education Criteria:\nBE/B.Tech/MCA/M.Sc/ME/M.Tech in IT, Computer Science, Mechanical, EXTC, or EEE\n\u0000 Certification: Red Hat Certified (Mandatory)\n\u0000️ Key Responsibilities:\nPerform day-to-day Linux system administration across Red Hat, Ubuntu, and CentOS\nenvironments.\nManage installation, configuration, patching, and maintenance of Linux servers.\nMonitor system performance, identify system issues, and i",
-    "descriptionLen": 1372
+    "descriptionPreview": "\u0000 Location: Navi Mumbai (Final Round – Face-to-Face in Mumbai Office)\n\u0000 Experience: 3–6 Years\n\u0000 Education Criteria:\nBE/B.Tech/MCA/M.Sc/ME/M.Tech in IT, Computer Science, Mechanical, EXTC, or EEE\n\u0000 Certification: Red Hat Certified (Mandatory)\n\u0000️\n\n**Key Responsibilities:**\n• Perform day-to-day Linux system administration across Red Hat, Ubuntu, and CentOS environments.\n• Manage installation, configuration, patching, and maintenance of Linux servers.\n• Monitor system performance, identify system is",
+    "descriptionLen": 1151,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
   },
   "checks": {
     "title_overlap_source": 1.0,
     "title_overlap_filename": 1.0,
     "title_present": true,
     "skills_precision": 1.0,
-    "skills_hit": 5,
-    "skills_checked": 5,
-    "skills_count": 5,
+    "skills_hit": 6,
+    "skills_checked": 6,
+    "skills_count": 6,
     "location_in_source": true,
     "company_in_source": null,
     "experience": {
@@ -65,8 +115,10 @@
       "ok": true
     },
     "has_description": true,
+    "coverage_missing_with_evidence": [],
+    "coverage_recovered": [],
     "source_preview": "Linux System Administrator | Job Title: Linux System Administrator | \u0000 Location: Navi Mumbai (Final Round – Face-to-Face in Mumbai Office) | \u0000 Experience: 3–6 Years | \u0000 Education Criteria: | BE/B.Tech/MCA/M.Sc/ME/M.Tech in IT, Computer Science, Mechanical, EXTC, or EEE | \u0000 Certification: Red Hat Certified (Mandatory) | \u0000️ Key Responsibilities: | Perform day-to-day Linux system administration across Red Hat, Ubuntu, and CentOS | environments. | Manage installation, configuration, patching, and maintenance of Linux servers. | Monitor system performance, identify system issues, and implement solutions | proactively. | Imp"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'Linux System Administrator', 'company': '', 'location': 'Navi Mumbai', 'employment_type': '', 'description': 'Linux System Administrator\\n\\x00 Location: Navi Mumbai (Final Round – Face-to-Face in Mumbai Office)\\n\\x00 Experience: 3–6 Years\\n\\x00 Education Criteria:\\nBE/B.Tech/MCA/M.Sc/ME/M.Tech in IT, Computer Science, Mechanical, EXTC, or EEE\\n\\x00 Certification: Red Hat Certified (Mandatory)\\n\\x00️ Key Responsibilities:\\nPerform day-to-day Linux system administration across Red Hat, Ubuntu, and CentOS\\nenvironments.\\nManage installation, configuration, patching, and maintenance of Linux servers.\\nMonitor system performance, identify system issues, and implement solutions\\nproactively.\\nImplement and maintain Ansible playbooks for configuration management and\\nautomation.\\nEnsure system security, backup, and disaster recovery processes are followed.\\nPerform root cause analysis and troubleshooting of hardware/software issues.\\nMaintain detailed documentation for system configurations, procedures, and changes.\\n\\x00 Required Skills & Competencies:\\nStrong hands-on experience with Linux Administration (Red Hat, Ubuntu, CentOS).\\nProficiency in Ansible for automation and configuration management.\\nSolid knowledge of system security practices, performance tuning, and monitoring\\ntools.\\nExperience with user management, shell scripting, network services, and\\ntroubleshooting.\\nExcellent problem-solving skills and ability to work independently ",
+  "toon_preview": "{'type': 'job_description', 'title': 'Linux System Administrator', 'company': '', 'location': 'Navi Mumbai', 'employment_type': '', 'description': '\\x00 Location: Navi Mumbai (Final Round – Face-to-Face in Mumbai Office)\\n\\x00 Experience: 3–6 Years\\n\\x00 Education Criteria:\\nBE/B.Tech/MCA/M.Sc/ME/M.Tech in IT, Computer Science, Mechanical, EXTC, or EEE\\n\\x00 Certification: Red Hat Certified (Mandatory)\\n\\x00️\\n\\n**Key Responsibilities:**\\n• Perform day-to-day Linux system administration across Red Hat, Ubuntu, and CentOS environments.\\n• Manage installation, configuration, patching, and maintenance of Linux servers.\\n• Monitor system performance, identify system issues, and implement solutions proactively.\\n• Implement and maintain Ansible playbooks for configuration management and automation.\\n• Ensure system security, backup, and disaster recovery processes are followed.\\n• Perform root cause analysis and troubleshooting of hardware/software issues.\\n• Maintain detailed documentation for system configurations, procedures, and changes.\\n• \\x00 Required Skills & Competencies: Strong hands-on experience with Linux Administration (Red Hat, Ubuntu, CentOS).\\n• Proficiency in Ansible for automation and configuration management.\\n• Solid knowledge of system security practices, performance tuning, and monitoring tools.', 'min_experience_years': 3.0, 'max_experience_years': 6.0, 'skills': ['MCA', 'EXTC', 'EEE', 'RHCSA', 'RHCE', 'Linux'], 'mandatory_skills': ['MCA', 'EXTC', 'EEE', 'R",
   "source_preview": "Linux System Administrator\nJob Title: Linux System Administrator\n\u0000 Location: Navi Mumbai (Final Round – Face-to-Face in Mumbai Office)\n\u0000 Experience: 3–6 Years\n\u0000 Education Criteria:\nBE/B.Tech/MCA/M.Sc/ME/M.Tech in IT, Computer Science, Mechanical, EXTC, or EEE\n\u0000 Certification: Red Hat Certified (Mandatory)\n\u0000️ Key Responsibilities:\nPerform day-to-day Linux system administration across Red Hat, Ubuntu, and CentOS\nenvironments.\nManage installation, configuration, patching, and maintenance of Linux servers.\nMonitor system performance, identify system issues, and implement solutions\nproactively.\nImplement and maintain Ansible playbooks for configuration management and\nautomation.\nEnsure system security, backup, and disaster recovery processes are followed.\nPerform root cause analysis and troubleshooting of hardware/software issues.\nMaintain detailed documentation for system configurations, procedures, and changes.\n\u0000 Required Skills & Competencies:\nStrong hands-on experience with Linux Administration (Red Hat, Ubuntu, CentOS).\nProficiency in Ansible for automation and configuration management.\nSolid knowledge of system security practices, performance tuning, and monitoring\ntools.\nExperience with user management, shell scripting, network services, and\ntroubleshooting.\nExcellent problem-solving skills and ability to work independently as well as part of a\nteam.\n\u0000 Mandatory Requirements:\nRed Hat Certification (RHCSA / RHCE)"
 }

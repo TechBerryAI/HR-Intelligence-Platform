@@ -25,7 +25,57 @@
     "responsibilities": [],
     "qualifications": [],
     "descriptionPreview": "Middleware Weblogic Admin JD:\nExperience- 1 to 5 yrs\nLocation Mumbai(Looking for candidates from Mumbai Location only)\nWork from office and rotational shifts\nNotice period- Immediate to 30 days\nPrimary Technology-Weblogic, Secondary Technology-OHS, IBM Websphere will be add\nWeblogic architecture\nWeblogic 12c and 14c, installation,upgradation\nUser management\nGarbage collection cycle\nSlient and GUI Mode\nIntegration of OHS with Weblogic\nChange management\nIncident management process\nIBM Websphere",
-    "descriptionLen": 497
+    "descriptionLen": 497,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
   },
   "checks": {
     "title_overlap_source": 1.0,
@@ -46,8 +96,12 @@
       "ok": true
     },
     "has_description": true,
+    "coverage_missing_with_evidence": [
+      "location"
+    ],
+    "coverage_recovered": [],
     "source_preview": "Middleware WebLogic Administrator | Middleware Weblogic Admin JD: | Experience- 1 to 5 yrs | Location Mumbai(Looking for candidates from Mumbai Location only) | Work from office and rotational shifts | Notice period- Immediate to 30 days | JD: | Primary Technology-Weblogic, Secondary Technology-OHS, IBM Websphere will be add | on | Weblogic architecture | Weblogic 12c and 14c, installation,upgradation | User management | Garbage collection cycle | Slient and GUI Mode | Integration of OHS with Weblogic | Change management | Incident management process | IBM Websphere"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'Middleware WebLogic Administrator', 'company': '', 'location': '', 'employment_type': '', 'description': 'Middleware WebLogic Administrator\\nMiddleware Weblogic Admin JD:\\nExperience- 1 to 5 yrs\\nLocation Mumbai(Looking for candidates from Mumbai Location only)\\nWork from office and rotational shifts\\nNotice period- Immediate to 30 days\\nPrimary Technology-Weblogic, Secondary Technology-OHS, IBM Websphere will be add\\nWeblogic architecture\\nWeblogic 12c and 14c, installation,upgradation\\nUser management\\nGarbage collection cycle\\nSlient and GUI Mode\\nIntegration of OHS with Weblogic\\nChange management\\nIncident management process\\nIBM Websphere', 'min_experience_years': 1.0, 'max_experience_years': 5.0, 'skills': ['OHS', 'IBM', 'GUI'], 'mandatory_skills': ['OHS', 'IBM', 'GUI'], 'preferred_skills': [], 'responsibilities': [], 'qualifications': [], 'keywords': [], 'benefits': [], 'salary_range': ''}",
+  "toon_preview": "{'type': 'job_description', 'title': 'Middleware WebLogic Administrator', 'company': '', 'location': '', 'employment_type': '', 'description': 'Middleware Weblogic Admin JD:\\nExperience- 1 to 5 yrs\\nLocation Mumbai(Looking for candidates from Mumbai Location only)\\nWork from office and rotational shifts\\nNotice period- Immediate to 30 days\\nPrimary Technology-Weblogic, Secondary Technology-OHS, IBM Websphere will be add\\nWeblogic architecture\\nWeblogic 12c and 14c, installation,upgradation\\nUser management\\nGarbage collection cycle\\nSlient and GUI Mode\\nIntegration of OHS with Weblogic\\nChange management\\nIncident management process\\nIBM Websphere', 'min_experience_years': 1.0, 'max_experience_years': 5.0, 'skills': ['OHS', 'IBM', 'GUI'], 'mandatory_skills': ['OHS', 'IBM', 'GUI'], 'preferred_skills': [], 'responsibilities': [], 'qualifications': [], 'keywords': ['OHS', 'IBM', 'GUI'], 'benefits': [], 'salary_range': ''}",
   "source_preview": "Middleware WebLogic Administrator\nMiddleware Weblogic Admin JD:\nExperience- 1 to 5 yrs\nLocation Mumbai(Looking for candidates from Mumbai Location only)\nWork from office and rotational shifts\nNotice period- Immediate to 30 days\nJD:\nPrimary Technology-Weblogic, Secondary Technology-OHS, IBM Websphere will be add\non\nWeblogic architecture\nWeblogic 12c and 14c, installation,upgradation\nUser management\nGarbage collection cycle\nSlient and GUI Mode\nIntegration of OHS with Weblogic\nChange management\nIncident management process\nIBM Websphere"
 }

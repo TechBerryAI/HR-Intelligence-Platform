@@ -12,34 +12,88 @@
     "experienceTo": "1",
     "employmentType": "Full-Time (Onsite)",
     "mandatorySkills": [
-      "or equivalent)"
+      "Strong communication and presentation skills",
+      "Basic understanding of IT concepts and software solutions",
+      "Proficiency in MS Office and documentation"
     ],
     "preferredSkills": [],
     "skillsList": [
-      "or equivalent)"
+      "Strong communication and presentation skills",
+      "Basic understanding of IT concepts and software solutions",
+      "Proficiency in MS Office and documentation"
     ],
     "responsibilities": [],
     "qualifications": [
       "Solution Presentation",
-      "Assist in preparing and delivering product demos, presentations, and basic solution",
-      "explanations to clients.",
+      "Assist in preparing and delivering product demos, presentations, and basic solution explanations to clients.",
       "Proposal & Documentation Support",
-      "Support the creation of solution proposals, technical documents, and initial quotations in",
-      "coordination with internal teams.",
+      "Support the creation of solution proposals, technical documents, and initial quotations in coordination with internal teams.",
       "Lead Coordination & Reporting",
-      "Manage and track assigned leads through CRM, follow up with prospects, and provide"
+      "Manage and track assigned leads through CRM, follow up with prospects, and provide regular updates to the reporting manager.",
+      "Cross-Team Collaboration",
+      "Work with technical, product, and implementation teams to validate solution feasibility and support handover processes."
     ],
-    "descriptionPreview": "The Junior IT Solutions Associate will support the IT solutions and client engagement\nfunction by identifying client needs, presenting the right technology solutions, and assisting\nin proposal development. The role requires strong communication skills, curiosity about IT\nproducts, and the ability to coordinate with internal teams to deliver accurate solutions.\nThis position is ideal for freshers who want to build a career in IT solutioning, consulting,\nand client interaction.\nRoles & Responsibil",
-    "descriptionLen": 1386
+    "descriptionPreview": "The Junior IT Solutions Associate will support the IT solutions and client engagement\nfunction by identifying client needs, presenting the right technology solutions, and assisting\nin proposal development. The role requires strong communication skills, curiosity about IT\nproducts, and the ability to coordinate with internal teams to deliver accurate solutions.\nThis position is ideal for freshers who want to build a career in IT solutioning, consulting,\nand client interaction.\nRoles &",
+    "descriptionLen": 488,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
   },
   "checks": {
     "title_overlap_source": 1.0,
     "title_overlap_filename": 0.75,
     "title_present": true,
     "skills_precision": 1.0,
-    "skills_hit": 1,
-    "skills_checked": 1,
-    "skills_count": 1,
+    "skills_hit": 3,
+    "skills_checked": 3,
+    "skills_count": 3,
     "location_in_source": true,
     "company_in_source": null,
     "experience": {
@@ -51,8 +105,10 @@
       "ok": true
     },
     "has_description": true,
+    "coverage_missing_with_evidence": [],
+    "coverage_recovered": [],
     "source_preview": "Jr. IT Solutions Associate | Location: Vikhroli, Mumbai | Employment Type: Full-Time (Onsite) | Experience: Fresher – 1 year | Job Description | The Junior IT Solutions Associate will support the IT solutions and client engagement | function by identifying client needs, presenting the right technology solutions, and assisting | in proposal development. The role requires strong communication skills, curiosity about IT | products, and the ability to coordinate with internal teams to deliver accurate solutions. | This position is ideal for freshers who want to build a career in IT solutioning, consulting, | and clie"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'Jr. IT Solutions Associate', 'company': '', 'location': 'Vikhroli, Mumbai', 'employment_type': 'Full-Time (Onsite)', 'description': 'The Junior IT Solutions Associate will support the IT solutions and client engagement\\nfunction by identifying client needs, presenting the right technology solutions, and assisting\\nin proposal development. The role requires strong communication skills, curiosity about IT\\nproducts, and the ability to coordinate with internal teams to deliver accurate solutions.\\nThis position is ideal for freshers who want to build a career in IT solutioning, consulting,\\nand client interaction.\\nRoles & Responsibilities\\n1. Client Requirement Analysis\\n- Interact with potential clients to understand their technical and business needs and\\ndocument key requirements.\\n2. Solution Presentation\\n- Assist in preparing and delivering product demos, presentations, and basic solution\\nexplanations to clients.\\n3. Proposal & Documentation Support\\n- Support the creation of solution proposals, technical documents, and initial quotations in\\ncoordination with internal teams.\\n4. Lead Coordination & Reporting\\n- Manage and track assigned leads through CRM, follow up with prospects, and provide\\nregular updates to the reporting manager.\\n5. Cross-Team Collaboration\\n- Work with technical, product, and implementation teams to validate solution feasibility\\nand support handover processes.\\n6. Continuous Learning\\n- Upgrade knowledge on ",
+  "toon_preview": "{'type': 'job_description', 'title': 'Jr. IT Solutions Associate', 'company': '', 'location': 'Vikhroli, Mumbai', 'employment_type': 'Full-Time (Onsite)', 'description': 'The Junior IT Solutions Associate will support the IT solutions and client engagement\\nfunction by identifying client needs, presenting the right technology solutions, and assisting\\nin proposal development. The role requires strong communication skills, curiosity about IT\\nproducts, and the ability to coordinate with internal teams to deliver accurate solutions.\\nThis position is ideal for freshers who want to build a career in IT solutioning, consulting,\\nand client interaction.\\nRoles &', 'min_experience_years': 0.0, 'max_experience_years': 1.0, 'skills': ['Strong communication and presentation skills', 'Basic understanding of IT concepts and software solutions', 'Proficiency in MS Office and documentation'], 'mandatory_skills': ['Strong communication and presentation skills', 'Basic understanding of IT concepts and software solutions', 'Proficiency in MS Office and documentation'], 'preferred_skills': [], 'responsibilities': [], 'qualifications': ['Solution Presentation', 'Assist in preparing and delivering product demos, presentations, and basic solution explanations to clients.', 'Proposal & Documentation Support', 'Support the creation of solution proposals, technical documents, and initial quotations in coordination with internal teams.', 'Lead Coordination & Reporting', 'Manage and track assigned le",
   "source_preview": "Jr. IT Solutions Associate\nLocation: Vikhroli, Mumbai\nEmployment Type: Full-Time (Onsite)\nExperience: Fresher – 1 year\nJob Description\nThe Junior IT Solutions Associate will support the IT solutions and client engagement\nfunction by identifying client needs, presenting the right technology solutions, and assisting\nin proposal development. The role requires strong communication skills, curiosity about IT\nproducts, and the ability to coordinate with internal teams to deliver accurate solutions.\nThis position is ideal for freshers who want to build a career in IT solutioning, consulting,\nand client interaction.\nRoles & Responsibilities\n1. Client Requirement Analysis\n- Interact with potential clients to understand their technical and business needs and\ndocument key requirements.\n2. Solution Presentation\n- Assist in preparing and delivering product demos, presentations, and basic solution\nexplanations to clients.\n3. Proposal & Documentation Support\n- Support the creation of solution proposals, technical documents, and initial quotations in\ncoordination with internal teams.\n4. Lead Coordination & Reporting\n- Manage and track assigned leads through CRM, follow up with prospects, and provide\nregular updates to the reporting manager.\n5. Cross-Team Collaboration\n- Work with technical, product, and implementation teams to validate solution feasibility\nand support handover processes.\n6. Continuous Learning\n- Upgrade knowledge on company products, IT technologies, and industry trends through\nongoing training.\nRequired Skills\n- Strong communication and presentation skills\n- Basic understanding of IT concepts and software solutions\n- Proficiency in MS Office and documentation\nQualification :-\n• Bachelor’s degree in an IT-related field is required (B.Tech/B.E in Computer Science or IT,\nBCA, MCA, B.Sc IT, or equivalent)."
 }

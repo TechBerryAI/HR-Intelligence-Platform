@@ -4,7 +4,7 @@
     "title_from_filename": "– IT Sales Executive"
   },
   "form": {
-    "title": "Key Responsibilities:",
+    "title": "IT Sales Executive",
     "company": "",
     "location": "Vikhroli West, Mumbai",
     "salary": "",
@@ -23,35 +23,83 @@
       "CRM"
     ],
     "responsibilities": [
-      "Generate qualified leads through cold calling",
-      "email campaigns",
-      "LinkedIn",
-      "and other",
-      "sales channels.",
+      "Generate qualified leads through cold calling, email campaigns, LinkedIn, and other sales channels.",
       "Identify potential business clients and create new sales opportunities.",
-      "Promote IT services",
-      "software solutions",
-      "cloud",
-      "infrastructure",
-      "and technology",
-      "offerings."
+      "Promote IT services, software solutions, cloud, infrastructure, and technology offerings.",
+      "Conduct initial discussions with prospects to understand business requirements.",
+      "Schedule meetings and coordinate with the sales/technical team for further discussions.",
+      "Manage the complete sales cycle from lead generation to closure.",
+      "Maintain regular follow-ups with prospects and existing clients.",
+      "Maintain accurate records of leads, opportunities, and client interactions.",
+      "Achieve monthly and quarterly sales targets.",
+      "Build and maintain strong relationships with clients."
     ],
     "qualifications": [
       "Graduate in any discipline.",
       "2–3 years of experience in Inside Sales / IT Sales / B2B Sales.",
-      "Experience in selling IT services, software, cloud solutions, or technology products",
-      "will be preferred.",
+      "Experience in selling IT services, software, cloud solutions, or technology products will be preferred.",
       "Excellent communication, presentation, and negotiation skills.",
       "Strong ability to identify customer needs and provide suitable solutions.",
       "Good knowledge of lead generation and sales conversion processes.",
-      "Experience working with CRM tools will be an advantage."
+      "Experience working with CRM tools will be an advantage.",
+      "Target-oriented approach with strong follow-up skills."
     ],
-    "descriptionPreview": "We are looking for a motivated and experienced Inside Sales Executive with 2–3 years of\nexperience in IT Sales / B2B Sales. The candidate will be responsible for lead generation,\nclient acquisition, handling sales conversations, understanding customer requirements,\nand driving revenue growth through IT service solutions.",
-    "descriptionLen": 322
+    "descriptionPreview": "We are looking for a motivated and experienced Inside Sales Executive with 2–3 years of\nexperience in IT Sales / B2B Sales. The candidate will be responsible for lead generation,\nclient acquisition, handling sales conversations, understanding customer requirements,\nand driving revenue growth through IT service solutions.\n\n**Key Responsibilities:**\n• Generate qualified leads through cold calling, email campaigns, LinkedIn, and other sales channels.\n• Identify potential business clients and create",
+    "descriptionLen": 1104,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
   },
   "checks": {
     "title_overlap_source": 1.0,
-    "title_overlap_filename": 0.0,
+    "title_overlap_filename": 1.0,
     "title_present": true,
     "skills_precision": 1.0,
     "skills_hit": 3,
@@ -68,8 +116,10 @@
       "ok": true
     },
     "has_description": true,
+    "coverage_missing_with_evidence": [],
+    "coverage_recovered": [],
     "source_preview": "Job Description – IT Sales Executive (Inside Sales) |  | Experience: 2 – 3 Years | Location: Vikhroli West, Mumbai | Company URL: https://techberryinfotech.com/ | Job Summary: | We are looking for a motivated and experienced Inside Sales Executive with 2–3 years of | experience in IT Sales / B2B Sales. The candidate will be responsible for lead generation, | client acquisition, handling sales conversations, understanding customer requirements, | and driving revenue growth through IT service solutions. | Key Responsibilities: | • Generate qualified leads through cold calling, email campaigns, LinkedIn, and other | sal"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'Key Responsibilities:', 'company': '', 'location': 'Vikhroli West, Mumbai', 'employment_type': '', 'description': 'We are looking for a motivated and experienced Inside Sales Executive with 2–3 years of\\nexperience in IT Sales / B2B Sales. The candidate will be responsible for lead generation,\\nclient acquisition, handling sales conversations, understanding customer requirements,\\nand driving revenue growth through IT service solutions.', 'min_experience_years': 2.0, 'max_experience_years': 3.0, 'skills': ['URL', 'B2B', 'CRM'], 'mandatory_skills': ['URL', 'B2B', 'CRM'], 'preferred_skills': [], 'responsibilities': ['Generate qualified leads through cold calling', 'email campaigns', 'LinkedIn', 'and other', 'sales channels.', 'Identify potential business clients and create new sales opportunities.', 'Promote IT services', 'software solutions', 'cloud', 'infrastructure', 'and technology', 'offerings.', 'Conduct initial discussions with prospects to understand business requirements.', 'Schedule meetings and coordinate with the sales/technical team for further', 'discussions.', 'Manage the complete sales cycle from lead generation to closure.', 'Maintain regular follow-ups with prospects and existing clients.', 'Maintain accurate records of leads', 'opportunities', 'and client interactions.', 'Achieve monthly and quarterly sales targets.', 'Build and maintain strong relationships with clients.', 'Required Skills & Qualifications:', 'Graduate i",
+  "toon_preview": "{'type': 'job_description', 'title': 'IT Sales Executive', 'company': '', 'location': 'Vikhroli West, Mumbai', 'employment_type': '', 'description': 'We are looking for a motivated and experienced Inside Sales Executive with 2–3 years of\\nexperience in IT Sales / B2B Sales. The candidate will be responsible for lead generation,\\nclient acquisition, handling sales conversations, understanding customer requirements,\\nand driving revenue growth through IT service solutions.\\n\\n**Key Responsibilities:**\\n• Generate qualified leads through cold calling, email campaigns, LinkedIn, and other sales channels.\\n• Identify potential business clients and create new sales opportunities.\\n• Promote IT services, software solutions, cloud, infrastructure, and technology offerings.\\n• Conduct initial discussions with prospects to understand business requirements.\\n• Schedule meetings and coordinate with the sales/technical team for further discussions.\\n• Manage the complete sales cycle from lead generation to closure.\\n• Maintain regular follow-ups with prospects and existing clients.\\n• Maintain accurate records of leads, opportunities, and client interactions.\\n• Achieve monthly and quarterly sales targets.\\n• Build and maintain strong relationships with clients.', 'min_experience_years': 2.0, 'max_experience_years': 3.0, 'skills': ['URL', 'B2B', 'CRM'], 'mandatory_skills': ['URL', 'B2B', 'CRM'], 'preferred_skills': [], 'responsibilities': ['Generate qualified leads through cold calling, e",
   "source_preview": "Job Description – IT Sales Executive (Inside Sales)\n\nExperience: 2 – 3 Years\nLocation: Vikhroli West, Mumbai\nCompany URL: https://techberryinfotech.com/\nJob Summary:\nWe are looking for a motivated and experienced Inside Sales Executive with 2–3 years of\nexperience in IT Sales / B2B Sales. The candidate will be responsible for lead generation,\nclient acquisition, handling sales conversations, understanding customer requirements,\nand driving revenue growth through IT service solutions.\nKey Responsibilities:\n• Generate qualified leads through cold calling, email campaigns, LinkedIn, and other\nsales channels.\n• Identify potential business clients and create new sales opportunities.\n• Promote IT services, software solutions, cloud, infrastructure, and technology\nofferings.\n• Conduct initial discussions with prospects to understand business requirements.\n• Schedule meetings and coordinate with the sales/technical team for further\ndiscussions.\n• Manage the complete sales cycle from lead generation to closure.\n• Maintain regular follow-ups with prospects and existing clients.\n• Maintain accurate records of leads, opportunities, and client interactions.\n• Achieve monthly and quarterly sales targets.\n• Build and maintain strong relationships with clients.\nRequired Skills & Qualifications:\n• Graduate in any discipline.\n• 2–3 years of experience in Inside Sales / IT Sales / B2B Sales.\n• Experience in selling IT services, software, cloud solutions, or technology products\nwill be preferred.\n• Excellent communication, presentation, and negotiation skills.\n• Strong ability to identify customer needs and provide suitable solutions.\n• Good knowledge of lead generation and sales conversion processes.\n• Experience working with CRM tools will be an advantage.\n• Target-oriented approach with strong follow-up skills.\nPreferred Candidate Profile:\n• Prior experience in IT service sales or technology solution selling.\n• Ability to communicate with decision-makers and enterprise clients.\n• Self-driven, proactive, and capable of working independently."
 }

@@ -4,7 +4,7 @@
     "title_from_filename": "Linux Windows Administrator"
   },
   "form": {
-    "title": "Linux | Windows Administrator",
+    "title": "Linux Windows Administrator",
     "company": "",
     "location": "",
     "salary": "",
@@ -16,7 +16,9 @@
       "OCP",
       "IBM",
       "MDM",
-      "Kubernetes"
+      "Kubernetes",
+      "Windows",
+      "Linux"
     ],
     "preferredSkills": [],
     "skillsList": [
@@ -24,21 +26,73 @@
       "OCP",
       "IBM",
       "MDM",
-      "Kubernetes"
+      "Kubernetes",
+      "Windows",
+      "Linux"
     ],
     "responsibilities": [],
     "qualifications": [],
-    "descriptionPreview": "Managing the Linux Servers\nMonitoring the servers for utilization of resources.\nTroubleshooting issues\nWriting scripts to automate processes.\nRegular Patching/Upgrading the OS\nGenerating Daily, Weekly, Monthly, Quarterly, YoY reports of\nresource utilization\nOpenShift :\nDeploy, configure, and maintain OpenShift\nPerformance, and resource utilization.\nImplement security measures and best practices for OpenShift\ndeployments.\nTroubleshoot\nand\nresolve\nissues\nrelated\nto\nOpenShift\ninfrastructure and app",
-    "descriptionLen": 510
+    "descriptionPreview": "Linux | Windows Administrator\n\nManaging the Linux Servers\nMonitoring the servers for utilization of resources.\nTroubleshooting issues\nWriting scripts to automate processes.\nRegular Patching/Upgrading the OS\nGenerating Daily, Weekly, Monthly, Quarterly, YoY reports of\nresource utilization\nOpenShift :\nDeploy, configure, and maintain OpenShift\nPerformance, and resource utilization.\nImplement security measures and best practices for OpenShift\ndeployments.\nTroubleshoot\nresolve\nissues\nrelated\nOpenShif",
+    "descriptionLen": 534,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
   },
   "checks": {
     "title_overlap_source": 1.0,
     "title_overlap_filename": 1.0,
     "title_present": true,
     "skills_precision": 1.0,
-    "skills_hit": 5,
-    "skills_checked": 5,
-    "skills_count": 5,
+    "skills_hit": 7,
+    "skills_checked": 7,
+    "skills_count": 7,
     "location_in_source": null,
     "company_in_source": null,
     "experience": {
@@ -48,8 +102,10 @@
       "ok": null
     },
     "has_description": true,
+    "coverage_missing_with_evidence": [],
+    "coverage_recovered": [],
     "source_preview": "JOB DESCRIPTION | Linux | Windows Administrator |  | Managing the Linux Servers | Monitoring the servers for utilization of resources. | Troubleshooting issues | Writing scripts to automate processes. | Regular Patching/Upgrading the OS | Generating Daily, Weekly, Monthly, Quarterly, YoY reports of | resource utilization | OpenShift : | Deploy, configure, and maintain OpenShift | Performance, and resource utilization. | Implement security measures and best practices for OpenShift | deployments. | Troubleshoot | and | resolve | issues | related | to | OpenShift | infrastructure and applications. |  | Experience | with | OpenShift | Container | Platf"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'Linux | Windows Administrator', 'company': '', 'location': '', 'employment_type': '', 'description': 'Linux | Windows Administrator\\n\\nManaging the Linux Servers\\nMonitoring the servers for utilization of resources.\\nTroubleshooting issues\\nWriting scripts to automate processes.\\nRegular Patching/Upgrading the OS\\nGenerating Daily, Weekly, Monthly, Quarterly, YoY reports of\\nresource utilization\\nOpenShift :\\nDeploy, configure, and maintain OpenShift\\nPerformance, and resource utilization.\\nImplement security measures and best practices for OpenShift\\ndeployments.\\nTroubleshoot\\nand\\nresolve\\nissues\\nrelated\\nto\\nOpenShift\\ninfrastructure and applications.', 'min_experience_years': None, 'max_experience_years': None, 'skills': ['JOB', 'OCP', 'IBM', 'MDM', 'Kubernetes'], 'mandatory_skills': ['JOB', 'OCP', 'IBM', 'MDM', 'Kubernetes'], 'preferred_skills': [], 'responsibilities': [], 'qualifications': [], 'keywords': [], 'benefits': [], 'salary_range': ''}",
+  "toon_preview": "{'type': 'job_description', 'title': 'Linux Windows Administrator', 'company': '', 'location': '', 'employment_type': '', 'description': 'Linux | Windows Administrator\\n\\nManaging the Linux Servers\\nMonitoring the servers for utilization of resources.\\nTroubleshooting issues\\nWriting scripts to automate processes.\\nRegular Patching/Upgrading the OS\\nGenerating Daily, Weekly, Monthly, Quarterly, YoY reports of\\nresource utilization\\nOpenShift :\\nDeploy, configure, and maintain OpenShift\\nPerformance, and resource utilization.\\nImplement security measures and best practices for OpenShift\\ndeployments.\\nTroubleshoot\\nresolve\\nissues\\nrelated\\nOpenShift\\ninfrastructure and applications.', 'min_experience_years': None, 'max_experience_years': None, 'skills': ['JOB', 'OCP', 'IBM', 'MDM', 'Kubernetes', 'Windows', 'Linux'], 'mandatory_skills': ['JOB', 'OCP', 'IBM', 'MDM', 'Kubernetes', 'Windows', 'Linux'], 'preferred_skills': [], 'responsibilities': [], 'qualifications': [], 'keywords': ['OCP', 'IBM', 'MDM', 'Kubernetes', 'Windows', 'Linux'], 'benefits': [], 'salary_range': ''}",
   "source_preview": "JOB DESCRIPTION\nLinux | Windows Administrator\n\nManaging the Linux Servers\nMonitoring the servers for utilization of resources.\nTroubleshooting issues\nWriting scripts to automate processes.\nRegular Patching/Upgrading the OS\nGenerating Daily, Weekly, Monthly, Quarterly, YoY reports of\nresource utilization\nOpenShift :\nDeploy, configure, and maintain OpenShift\nPerformance, and resource utilization.\nImplement security measures and best practices for OpenShift\ndeployments.\nTroubleshoot\nand\nresolve\nissues\nrelated\nto\nOpenShift\ninfrastructure and applications.\n\nExperience\nwith\nOpenShift\nContainer\nPlatform\n(OCP)\nadministration and deployment.\nFamiliarity with OpenShift's command-line interface (oc) and web\nconsole.\nKnowledge of Kubernetes concepts and principles.\nIBM MDM Deployment and Configuration:\nDeploy and configure IBM MDM applications within OpenShift\nenvironments.\nManage MDM server instances, including configuration, updates,\nand patching.\nIntegrate MDM applications with other systems, such as\ndatabases and message queues.\nMonitor the performance and availability of MDM applications.\nDevelop and implement solutions for MDM data governance and\nquality.\nExperience with IBM MDM (InfoSphere MDM) deployment,\nconfiguration, and administration.\nUnderstanding of MDM data governance and master data\nmanagement concepts.\nExperience with MDM server configuration and integration with\nother systems."
 }

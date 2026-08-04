@@ -4,7 +4,7 @@
     "title_from_filename": "AI_Trainer Mumbai"
   },
   "form": {
-    "title": "AI Trainer – Job Description",
+    "title": "AI Trainer",
     "company": "",
     "location": "Mumbai (Vikhroli West)",
     "salary": "",
@@ -12,35 +12,73 @@
     "experienceTo": "3",
     "employmentType": "",
     "mandatorySkills": [
+      "Strong proficiency in Python for AI/ML",
+      "Python",
+      "Knowledge of Machine Learning & Deep Learning concepts",
+      "Machine Learning",
+      "Deep Learning",
+      "Working experience with Generative AI & LLMs (ChatGPT",
+      "LLM",
       "GPT",
       "Prompt Engineering",
       "basic LangChain/RAG)",
+      "RAG",
+      "LangChain",
+      "Understanding of NLP and Computer Vision fundamentals",
+      "Natural Language Processing",
+      "Computer Vision",
       "Experience with TensorFlow",
+      "TensorFlow",
       "PyTorch",
       "Scikit-learn",
       "Data handling using Pandas",
       "NumPy",
       "and basic SQL",
+      "SQL",
       "Familiarity with model evaluation",
       "deployment basics",
       "APIs",
-      "and REST services"
+      "and REST services",
+      "REST",
+      "Amazon Web Services",
+      "Google Cloud Platform",
+      "AZURE",
+      "Good communication and training skills"
     ],
     "preferredSkills": [],
     "skillsList": [
+      "Strong proficiency in Python for AI/ML",
+      "Python",
+      "Knowledge of Machine Learning & Deep Learning concepts",
+      "Machine Learning",
+      "Deep Learning",
+      "Working experience with Generative AI & LLMs (ChatGPT",
+      "LLM",
       "GPT",
       "Prompt Engineering",
       "basic LangChain/RAG)",
+      "RAG",
+      "LangChain",
+      "Understanding of NLP and Computer Vision fundamentals",
+      "Natural Language Processing",
+      "Computer Vision",
       "Experience with TensorFlow",
+      "TensorFlow",
       "PyTorch",
       "Scikit-learn",
       "Data handling using Pandas",
       "NumPy",
       "and basic SQL",
+      "SQL",
       "Familiarity with model evaluation",
       "deployment basics",
       "APIs",
-      "and REST services"
+      "and REST services",
+      "REST",
+      "Amazon Web Services",
+      "Google Cloud Platform",
+      "AZURE",
+      "Good communication and training skills"
     ],
     "responsibilities": [
       "Conduct classroom training sessions on AI, ML, and Generative AI",
@@ -50,17 +88,67 @@
       "Stay updated with latest AI and GenAI tools and trends"
     ],
     "qualifications": [],
-    "descriptionPreview": "We are looking for an AI Trainer with 2–3 years of hands-on experience to deliver practical\ntraining on Artificial Intelligence, Machine Learning, and Generative AI.",
-    "descriptionLen": 165
+    "descriptionPreview": "We are looking for an AI Trainer with 2–3 years of hands-on experience to deliver practical\ntraining on Artificial Intelligence, Machine Learning, and Generative AI.\n\n**Key Responsibilities:**\n• Conduct classroom training sessions on AI, ML, and Generative AI\n• Deliver hands-on, industry-oriented projects and exercises\n• Mentor learners and provide technical guidance\n• Prepare and update training content\n• Stay updated with latest AI and GenAI tools and trends",
+    "descriptionLen": 464,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
   },
   "checks": {
     "title_overlap_source": 1.0,
     "title_overlap_filename": 1.0,
     "title_present": true,
-    "skills_precision": 1.0,
-    "skills_hit": 13,
-    "skills_checked": 13,
-    "skills_count": 13,
+    "skills_precision": 0.96,
+    "skills_hit": 24,
+    "skills_checked": 25,
+    "skills_count": 32,
     "location_in_source": true,
     "company_in_source": null,
     "experience": {
@@ -72,8 +160,10 @@
       "ok": true
     },
     "has_description": true,
+    "coverage_missing_with_evidence": [],
+    "coverage_recovered": [],
     "source_preview": "AI Trainer – Job Description |  | Experience: 2–3 Years | Work Mode: On-site | Location: Mumbai (Vikhroli West) | Job Description | We are looking for an AI Trainer with 2–3 years of hands-on experience to deliver practical | training on Artificial Intelligence, Machine Learning, and Generative AI. | Key Responsibilities |  | • | Conduct classroom training sessions on AI, ML, and Generative AI |  | • | Deliver hands-on, industry-oriented projects and exercises |  | • | Mentor learners and provide technical guidance |  | • | Prepare and update training content |  | • | Stay updated with latest AI and GenAI tools and trends | Required Skills | "
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'AI Trainer – Job Description', 'company': '', 'location': 'Mumbai (Vikhroli West)', 'employment_type': '', 'description': 'We are looking for an AI Trainer with 2–3 years of hands-on experience to deliver practical\\ntraining on Artificial Intelligence, Machine Learning, and Generative AI.', 'min_experience_years': 2.0, 'max_experience_years': 3.0, 'skills': ['GPT', 'Prompt Engineering', 'basic LangChain/RAG)', 'Experience with TensorFlow', 'PyTorch', 'Scikit-learn', 'Data handling using Pandas', 'NumPy', 'and basic SQL', 'Familiarity with model evaluation', 'deployment basics', 'APIs', 'and REST services'], 'mandatory_skills': ['GPT', 'Prompt Engineering', 'basic LangChain/RAG)', 'Experience with TensorFlow', 'PyTorch', 'Scikit-learn', 'Data handling using Pandas', 'NumPy', 'and basic SQL', 'Familiarity with model evaluation', 'deployment basics', 'APIs', 'and REST services'], 'preferred_skills': [], 'responsibilities': ['Conduct classroom training sessions on AI, ML, and Generative AI', 'Deliver hands-on, industry-oriented projects and exercises', 'Mentor learners and provide technical guidance', 'Prepare and update training content', 'Stay updated with latest AI and GenAI tools and trends'], 'qualifications': [], 'keywords': [], 'benefits': [], 'salary_range': ''}",
+  "toon_preview": "{'type': 'job_description', 'title': 'AI Trainer', 'company': '', 'location': 'Mumbai (Vikhroli West)', 'employment_type': '', 'description': 'We are looking for an AI Trainer with 2–3 years of hands-on experience to deliver practical\\ntraining on Artificial Intelligence, Machine Learning, and Generative AI.\\n\\n**Key Responsibilities:**\\n• Conduct classroom training sessions on AI, ML, and Generative AI\\n• Deliver hands-on, industry-oriented projects and exercises\\n• Mentor learners and provide technical guidance\\n• Prepare and update training content\\n• Stay updated with latest AI and GenAI tools and trends', 'min_experience_years': 2.0, 'max_experience_years': 3.0, 'skills': ['Strong proficiency in Python for AI/ML', 'Python', 'Knowledge of Machine Learning & Deep Learning concepts', 'Machine Learning', 'Deep Learning', 'Working experience with Generative AI & LLMs (ChatGPT', 'LLM', 'GPT', 'Prompt Engineering', 'basic LangChain/RAG)', 'RAG', 'LangChain', 'Understanding of NLP and Computer Vision fundamentals', 'Natural Language Processing', 'Computer Vision', 'Experience with TensorFlow', 'TensorFlow', 'PyTorch', 'Scikit-learn', 'Data handling using Pandas', 'NumPy', 'and basic SQL', 'SQL', 'Familiarity with model evaluation', 'deployment basics', 'APIs', 'and REST services', 'REST', 'Amazon Web Services', 'Google Cloud Platform', 'AZURE', 'Good communication and training skills'], 'mandatory_skills': ['Strong proficiency in Python for AI/ML', 'Python', 'Knowledge of Machin",
   "source_preview": "AI Trainer – Job Description\n\nExperience: 2–3 Years\nWork Mode: On-site\nLocation: Mumbai (Vikhroli West)\nJob Description\nWe are looking for an AI Trainer with 2–3 years of hands-on experience to deliver practical\ntraining on Artificial Intelligence, Machine Learning, and Generative AI.\nKey Responsibilities\n\n•\nConduct classroom training sessions on AI, ML, and Generative AI\n\n•\nDeliver hands-on, industry-oriented projects and exercises\n\n•\nMentor learners and provide technical guidance\n\n•\nPrepare and update training content\n\n•\nStay updated with latest AI and GenAI tools and trends\nRequired Skills\n\n•\nStrong proficiency in Python for AI/ML\n\n•\nKnowledge of Machine Learning & Deep Learning concepts\n\n•\nWorking experience with Generative AI & LLMs (ChatGPT, GPT, Prompt Engineering,\nbasic LangChain/RAG)\n\n•\nUnderstanding of NLP and Computer Vision fundamentals\n\n•\nExperience with TensorFlow, PyTorch, Scikit-learn\n\n•\nData handling using Pandas, NumPy, and basic SQL\n\n•\nFamiliarity with model evaluation, deployment basics, APIs, and REST services\n\n•\nCloud exposure (AWS / GCP / Azure) is a plus\n\n•\nGood communication and training skills"
 }
