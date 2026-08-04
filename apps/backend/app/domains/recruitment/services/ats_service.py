@@ -10,7 +10,8 @@ REFACTORED MODEL (technical roles):
 Total = 100%
 
 Mandatory Skills Gate: If Mandatory Skills Match % < 60%, candidate is AUTO-DISQUALIFIED (Not a Match).
-Shortlisting: 75-100% Strong Match, 60-74% Potential Match, <60% or mandatory<60% Not a Match.
+Shortlisting: 75-100% Strong Match → auto-shortlist; 60-74% Potential Match → recruiter review (not auto-shortlisted);
+              <60% or mandatory<60% → Not a Match.
 """
 import os
 import json
@@ -19,7 +20,8 @@ import requests
 
 ATS_API_URL = (os.getenv('ATS_API_URL') or '').rstrip('/')
 ATS_API_KEY = os.getenv('ATS_API_KEY', '')
-ATS_THRESHOLD = int(os.getenv('ATS_THRESHOLD', '60'))
+# Auto-shortlist threshold: overall match score must be ≥ this value (Strong Match).
+ATS_THRESHOLD = int(os.getenv('ATS_THRESHOLD', '75'))
 
 # ---------------------------------------------------------------------------
 # Weights (technical roles) - total 100%
@@ -36,9 +38,10 @@ WEIGHT_SKILLS = WEIGHT_SKILLS_TOTAL
 
 # Thresholds
 MANDATORY_SKILLS_MIN_PCT = 60.0   # Below this → auto Not a Match
-VERDICT_STRONG_MIN = 75.0         # 75–100% → Strong Match
-VERDICT_POTENTIAL_MIN = 60.0      # 60–74% → Potential Match (Recruiter Review)
+VERDICT_STRONG_MIN = 75.0         # 75–100% → Strong Match (auto-shortlist)
+VERDICT_POTENTIAL_MIN = 60.0      # 60–74% → Potential Match (recruiter review, NOT auto-shortlisted)
 # Below 60% or mandatory < 60% → Not a Match
+AUTO_SHORTLIST_MIN = float(os.getenv('ATS_AUTO_SHORTLIST_MIN', str(VERDICT_STRONG_MIN)))
 
 # Cap: no category above 50% when direct evidence is missing
 MAX_SCORE_WITHOUT_EVIDENCE = 50.0
@@ -534,15 +537,25 @@ def match_candidate_to_job(candidate_id: str, job_id: str, parsed_resume: dict, 
             return False, {"error": err_msg}
 
     json_output = _internal_match(parsed_resume, parsed_jd)
+    overall = float(json_output.get("overall_match_score") or 0)
+    # Auto-shortlist only Strong Match (≥ AUTO_SHORTLIST_MIN, default 75%).
+    # Potential Match (60–74%) stays for recruiter review — not auto-shortlisted.
+    auto_shortlist = (
+        json_output["decision"] == "strong_match"
+        and overall >= AUTO_SHORTLIST_MIN
+    )
+    merged = {
+        **json_output,
+        "final_score": json_output["overall_match_score"],
+        "decision": "shortlist" if auto_shortlist else "reject",
+        "verdict": json_output["verdict"],
+        "rationale": json_output["final_reasoning"],
+        "evaluation_report": json_output["evaluation_report"],
+        "mandatory_skills_match_pct": json_output["mandatory_skills_match_pct"],
+        # Keep internal decision label for explainability / UI breakdowns
+        "match_tier": json_output["decision"],
+    }
     return True, {
-        "json_output": {
-            "final_score": json_output["overall_match_score"],
-            "decision": "shortlist" if json_output["decision"] in ("strong_match", "partial_match") else "reject",
-            "verdict": json_output["verdict"],
-            "rationale": json_output["final_reasoning"],
-            "evaluation_report": json_output["evaluation_report"],
-            "mandatory_skills_match_pct": json_output["mandatory_skills_match_pct"],
-            **json_output,
-        },
+        "json_output": merged,
         "toon_output": json_output["final_reasoning"],
     }

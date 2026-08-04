@@ -1,0 +1,13 @@
+Job Description
+
+Seeking a skilled .NET developer to join our team and contribute to the development of the software
+using .NET infrastructure. The work profile includes fine tuning, upgrading or creating applications
+from the start and providing support wherever necessary.
+
+Responsibilities
+● Participate in requirement analysis
+● Create and maintain technical documentation
+● Test and deploy the application
+● Debug production issues
+
+Skills: C#, ASP.NET, SQL Server, Azure

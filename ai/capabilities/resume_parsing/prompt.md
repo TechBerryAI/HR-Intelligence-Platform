@@ -58,3 +58,7 @@ Rules:
 - Extract ALL roles, degrees, skills present in the source
 - Do not invent employers, degrees, emails, or URLs not supported by the input
 - No markdown, no code fences, no explanation — JSON only
+
+## Input
+
+{{input}}

@@ -332,8 +332,14 @@ def run_corpus(
     import os
 
     browsers = Path(__file__).resolve().parents[3] / '.playwright-browsers'
-    if browsers.is_dir():
-        os.environ['PLAYWRIGHT_BROWSERS_PATH'] = str(browsers)
+    # Prefer an already-configured path; only force repo-local when chrome exists there.
+    if browsers.is_dir() and not os.environ.get('PLAYWRIGHT_BROWSERS_PATH'):
+        chrome_ok = any(browsers.glob('chromium-*/chrome-linux*/chrome'))
+        shell_ok = any(
+            browsers.glob('chromium_headless_shell-*/chrome-headless-shell-linux*/chrome-headless-shell')
+        )
+        if chrome_ok or shell_ok:
+            os.environ['PLAYWRIGHT_BROWSERS_PATH'] = str(browsers)
 
     from playwright.sync_api import sync_playwright
 

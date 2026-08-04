@@ -81,7 +81,7 @@ def format_jd_description(profile: JobProfile) -> str:
         has_responsibilities_section(raw) or '• ' in raw or bool(responsibilities)
     )
 
-    return build_description_from_available(
+    body = build_description_from_available(
         overview='',
         responsibilities=responsibilities,
         mandatory_skills=list(profile.skills.mandatory or []),
@@ -91,6 +91,21 @@ def format_jd_description(profile: JobProfile) -> str:
         source_text=raw,
         include_responsibilities=include_kr,
     )
+    # Mapping graph includes skills in description composition when responsibilities alone
+    # would omit them (skills have their own form fields, but description should still
+    # surface required skills for recruiter preview / autofill completeness).
+    required = [s for s in (profile.skills.mandatory or []) if s and str(s).strip()]
+    if not required:
+        required = [
+            s
+            for s in (profile.skills.preferred or profile.skills.general or [])
+            if s and str(s).strip()
+        ]
+    if body and required and '**Required Skills:**' not in body and not any(
+        s.lower() in body.lower() for s in required[:2]
+    ):
+        body = f"{body.rstrip()}\n\n**Required Skills:**\n{', '.join(required)}"
+    return body
 
 
 def map_job_to_form(
@@ -242,24 +257,45 @@ def map_job_to_form(
         is_plausible_keyword,
     )
 
-    # Keywords: grounded profile keywords + mandatory/preferred + tech from source
+    # Keywords: explicit profile ∪ skills. Whole-doc tech scrape only if skills empty.
     keywords = [
         k.strip()
         for k in profile.requirements.keywords
         if k and is_plausible_keyword(str(k).strip())
     ]
+    skill_pool = [
+        s for s in (mandatory + preferred + general)
+        if s and is_plausible_keyword(s) and len(s.split()) <= 4
+    ]
     if not keywords:
-        keywords = [
-            s for s in (mandatory + preferred + general)
-            if s and is_plausible_keyword(s) and len(s.split()) <= 4
-        ][:20]
-    if raw_text:
+        keywords = skill_pool[:20]
+    else:
+        # Merge skill tokens into explicit keywords without whole-doc scrape
+        seen = {k.lower() for k in keywords}
+        for s in skill_pool:
+            if s.lower() not in seen:
+                keywords.append(s)
+                seen.add(s.lower())
+            if len(keywords) >= 20:
+                break
+    if not keywords and raw_text:
         tech = extract_tech_keywords_from_text(raw_text, max_items=15)
         src_l = raw_text.lower()
         for tok in tech:
-            if tok.lower() in src_l and tok not in keywords:
+            if tok.lower() in src_l and is_plausible_keyword(tok):
                 keywords.append(tok)
-    keywords = list(dict.fromkeys(keywords))[:25]
+    # Case-insensitive de-dupe, cap
+    deduped: list[str] = []
+    seen_kw: set[str] = set()
+    for kw in keywords:
+        key = kw.lower()
+        if key in seen_kw:
+            continue
+        seen_kw.add(key)
+        deduped.append(kw)
+        if len(deduped) >= 20:
+            break
+    keywords = deduped
 
     # Merge coverage into field traces for UI visibility
     coverage_rows = list(coverage or [])

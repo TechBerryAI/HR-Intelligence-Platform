@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiX, FiUser, FiMail, FiPhone, FiMapPin, FiBriefcase, FiLink, FiGlobe } from 'react-icons/fi'
+import { FiX, FiUser, FiMail, FiPhone, FiMapPin, FiBriefcase, FiLink, FiGlobe, FiEye } from 'react-icons/fi'
 import ResumeUploadWithParsing from '@/shared/components/ResumeUploadWithParsing.jsx'
 import MonthYearPicker from '@/shared/components/MonthYearPicker.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
@@ -66,6 +66,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const [parseError, setParseError] = useState('')
+  const [showPreview, setShowPreview] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -74,41 +75,57 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
       setSubmitError('')
       setParseError('')
       setSubmitting(false)
+      setShowPreview(false)
     }
   }, [open, job?.id])
 
   useEffect(() => {
     if (!open) return
-    const onEsc = (e) => { if (e.key === 'Escape' && !submitting) onClose?.() }
+    const onEsc = (e) => {
+      if (e.key !== 'Escape' || submitting) return
+      if (showPreview) {
+        setShowPreview(false)
+        return
+      }
+      onClose?.()
+    }
     window.addEventListener('keydown', onEsc)
     return () => window.removeEventListener('keydown', onEsc)
-  }, [open, submitting, onClose])
+  }, [open, submitting, showPreview, onClose])
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
 
   const handleAutofill = (mapped) => {
-    // Form DTO only — 1:1 assignment. No FE interpretation / soft fallbacks.
-    setForm((prev) => ({
-      ...prev,
-      fullName: mapped.fullName ?? prev.fullName,
-      email: mapped.email ?? prev.email,
-      phone: mapped.phone ?? prev.phone,
-      linkedinUrl: mapped.linkedinUrl ?? prev.linkedinUrl,
-      portfolioUrl: mapped.portfolioUrl ?? prev.portfolioUrl,
-      githubUrl: mapped.githubUrl ?? prev.githubUrl,
-      currentLocation: mapped.currentLocation ?? prev.currentLocation,
-      preferredLocation: mapped.preferredLocation ?? prev.preferredLocation,
-      experienceLevel: mapped.experienceLevel ?? prev.experienceLevel,
-      skills: mapped.skills ?? prev.skills,
-      summary: mapped.summary ?? prev.summary,
-      education: mapped.education?.length ? mapped.education : prev.education,
-      experiences: mapped.experiences?.length ? mapped.experiences : prev.experiences,
-      certifications: mapped.certifications?.length ? mapped.certifications : prev.certifications,
-      resumeFile: mapped.resumeFile || prev.resumeFile,
-      resumeFileName: mapped.resumeFileName || prev.resumeFileName,
-      _parsedId: mapped._parsedId || prev._parsedId,
-      _publicUploaderId: mapped._publicUploaderId || prev._publicUploaderId,
-    }))
+    // Form DTO 1:1 assignment. Preferred location defaults to current only when
+    // the DTO left preferred empty (apply form requires both; not invention).
+    setForm((prev) => {
+      const currentLocation = mapped.currentLocation ?? prev.currentLocation
+      const preferredLocation =
+        (mapped.preferredLocation && String(mapped.preferredLocation).trim())
+          ? mapped.preferredLocation
+          : (currentLocation || prev.preferredLocation)
+      return {
+        ...prev,
+        fullName: mapped.fullName ?? prev.fullName,
+        email: mapped.email ?? prev.email,
+        phone: mapped.phone ?? prev.phone,
+        linkedinUrl: mapped.linkedinUrl ?? prev.linkedinUrl,
+        portfolioUrl: mapped.portfolioUrl ?? prev.portfolioUrl,
+        githubUrl: mapped.githubUrl ?? prev.githubUrl,
+        currentLocation,
+        preferredLocation,
+        experienceLevel: mapped.experienceLevel ?? prev.experienceLevel,
+        skills: mapped.skills ?? prev.skills,
+        summary: mapped.summary ?? prev.summary,
+        education: mapped.education?.length ? mapped.education : prev.education,
+        experiences: mapped.experiences?.length ? mapped.experiences : prev.experiences,
+        certifications: mapped.certifications?.length ? mapped.certifications : prev.certifications,
+        resumeFile: mapped.resumeFile || prev.resumeFile,
+        resumeFileName: mapped.resumeFileName || prev.resumeFileName,
+        _parsedId: mapped._parsedId || prev._parsedId,
+        _publicUploaderId: mapped._publicUploaderId || prev._publicUploaderId,
+      }
+    })
     setErrors((prev) => {
       const next = { ...prev }
       delete next.resume
@@ -522,6 +539,15 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                 <PremiumButton type="button" variant="secondary" onClick={() => !submitting && onClose?.()} disabled={submitting}>
                   Cancel
                 </PremiumButton>
+                <PremiumButton
+                  type="button"
+                  variant="primary"
+                  icon={FiEye}
+                  onClick={() => setShowPreview(true)}
+                  disabled={submitting}
+                >
+                  Preview
+                </PremiumButton>
                 <PremiumButton type="submit" disabled={submitting}>
                   {submitting ? 'Submitting…' : 'Submit application'}
                 </PremiumButton>
@@ -530,6 +556,245 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
           </motion.div>
         </motion.div>
       )}
+
+      {showPreview && open && job && (
+        <motion.div
+          key="apply-preview"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4"
+        >
+          <div
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+            onClick={() => setShowPreview(false)}
+          />
+          <motion.div
+            initial={{ scale: 0.96, opacity: 0, y: 10 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.96, opacity: 0, y: 10 }}
+            className="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="apply-preview-title"
+          >
+            <div className="flex-shrink-0 border-b border-slate-200 px-6 pb-4 pt-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+                  <FiEye className="h-3.5 w-3.5" />
+                  Application preview
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowPreview(false)}
+                  className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                  aria-label="Close preview"
+                >
+                  <FiX className="h-5 w-5" />
+                </button>
+              </div>
+              <h3 id="apply-preview-title" className="text-xl font-semibold tracking-tight text-slate-900">
+                {form.fullName.trim() || 'Applicant'}
+              </h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Applying for {job.title} · {job.company}
+                {job.location ? ` · ${job.location}` : ''}
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5 text-sm">
+              <PreviewSection title="Contact">
+                <PreviewRow label="Full name" value={form.fullName} />
+                <PreviewRow label="Email" value={form.email} />
+                <PreviewRow label="Phone" value={form.phone} />
+                <PreviewRow label="Current location" value={form.currentLocation} />
+                <PreviewRow label="Preferred location" value={form.preferredLocation} />
+                <PreviewRow label="LinkedIn URL" value={form.linkedinUrl} />
+                <PreviewRow label="Portfolio" value={form.portfolioUrl} />
+                <PreviewRow label="GitHub URL" value={form.githubUrl} />
+              </PreviewSection>
+
+              <PreviewSection title="Application details">
+                <PreviewRow
+                  label="Experience level"
+                  value={
+                    form.experienceLevel === 'fresher'
+                      ? 'Fresher'
+                      : form.experienceLevel === 'experienced'
+                        ? 'Experienced'
+                        : form.experienceLevel
+                  }
+                />
+                <PreviewRow
+                  label="Serving notice"
+                  value={
+                    form.servingNotice === 'yes'
+                      ? 'Yes'
+                      : form.servingNotice === 'no'
+                        ? 'No'
+                        : form.servingNotice
+                  }
+                />
+                <PreviewRow label="Serving period" value={form.noticePeriod} />
+                <PreviewRow label="Last working date" value={form.lastWorkingDay} />
+                <PreviewRow
+                  label="Resume"
+                  value={form.resumeFileName || form.resumeFile?.name || ''}
+                />
+              </PreviewSection>
+
+              <PreviewSection title="Professional summary">
+                {(form.summary || '').trim() ? (
+                  <p className="text-slate-700 whitespace-pre-wrap">{form.summary.trim()}</p>
+                ) : (
+                  <p className="text-slate-400">Not provided</p>
+                )}
+              </PreviewSection>
+
+              <PreviewSection title="Skills">
+                {(form.skills || '').trim() ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {form.skills.split(',').map((s) => s.trim()).filter(Boolean).map((skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-slate-400">Not provided</p>
+                )}
+              </PreviewSection>
+
+              <PreviewSection title="Education">
+                {(() => {
+                  const rows = (form.education || []).filter((e) =>
+                    [e.degree, e.institution, e.cgpa, e.startMonth, e.endMonth].some((v) => String(v || '').trim())
+                  )
+                  if (!rows.length) return <p className="text-slate-400">Not provided</p>
+                  return (
+                    <ul className="space-y-3">
+                      {rows.map((edu, i) => (
+                        <li key={i} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-1">
+                          <PreviewRow label="Degree" value={edu.degree} />
+                          <PreviewRow label="Institution" value={edu.institution} />
+                          <PreviewRow label="CGPA" value={edu.cgpa} />
+                          <PreviewRow label="Start" value={edu.startMonth} />
+                          <PreviewRow label="End" value={edu.endMonth} />
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                })()}
+              </PreviewSection>
+
+              <PreviewSection title="Work experience">
+                {(() => {
+                  const rows = (form.experiences || []).filter((e) =>
+                    [e.company, e.role, e.startMonth, e.endMonth, e.description].some((v) => String(v || '').trim())
+                    || e.isCurrent
+                  )
+                  if (!rows.length) return <p className="text-slate-400">Not provided</p>
+                  return (
+                    <ul className="space-y-3">
+                      {rows.map((exp, i) => (
+                        <li key={i} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-1">
+                          <PreviewRow label="Company" value={exp.company} />
+                          <PreviewRow label="Role" value={exp.role} />
+                          <PreviewRow
+                            label="Currently working"
+                            value={exp.isCurrent ? 'Yes' : (exp.company || exp.role ? 'No' : '')}
+                          />
+                          <PreviewRow label="Start" value={exp.startMonth} />
+                          <PreviewRow
+                            label="End"
+                            value={exp.isCurrent ? 'Present' : exp.endMonth}
+                          />
+                          {exp.description?.trim() ? (
+                            <div className="pt-1">
+                              <p className="text-slate-500 mb-0.5">Description</p>
+                              <p className="text-slate-700 whitespace-pre-wrap">{exp.description.trim()}</p>
+                            </div>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                })()}
+              </PreviewSection>
+
+              <PreviewSection title="Certifications">
+                {(() => {
+                  const rows = (form.certifications || []).filter((c) =>
+                    [c.name, c.issuer, c.validTill, c.validationUrl, c.status].some((v) => String(v || '').trim())
+                  )
+                  if (!rows.length) return <p className="text-slate-400">Not provided</p>
+                  return (
+                    <ul className="space-y-3">
+                      {rows.map((cert, i) => (
+                        <li key={i} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-1">
+                          <PreviewRow label="Name" value={cert.name} />
+                          <PreviewRow label="Issuer" value={cert.issuer} />
+                          <PreviewRow label="Valid till" value={cert.validTill} />
+                          <PreviewRow label="Validation URL" value={cert.validationUrl} />
+                          <PreviewRow label="Status" value={cert.status} />
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                })()}
+              </PreviewSection>
+            </div>
+
+            <div className="flex-shrink-0 border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row gap-3 sm:justify-end">
+              <PremiumButton
+                type="button"
+                variant="secondary"
+                onClick={() => setShowPreview(false)}
+                className="sm:min-w-[120px]"
+              >
+                Close
+              </PremiumButton>
+              <PremiumButton
+                type="button"
+                variant="primary"
+                disabled={submitting}
+                onClick={() => {
+                  setShowPreview(false)
+                  const formEl = document.querySelector('.apply-modal form')
+                  formEl?.requestSubmit()
+                }}
+                className="sm:min-w-[160px]"
+              >
+                {submitting ? 'Submitting…' : 'Submit application'}
+              </PremiumButton>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
     </AnimatePresence>
+  )
+}
+
+function PreviewSection({ title, children }) {
+  return (
+    <div>
+      <h4 className="mb-2 text-sm font-semibold text-slate-700">{title}</h4>
+      {children}
+    </div>
+  )
+}
+
+function PreviewRow({ label, value }) {
+  const text = (value || '').toString().trim()
+  if (!text) return null
+  return (
+    <div className="flex flex-col sm:flex-row sm:gap-3 py-0.5">
+      <span className="sm:w-40 shrink-0 text-slate-500">{label}</span>
+      <span className="text-slate-800 break-all">{text}</span>
+    </div>
   )
 }

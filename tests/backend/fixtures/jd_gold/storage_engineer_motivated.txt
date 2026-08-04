@@ -1,0 +1,12 @@
+Job Summary
+
+We are looking for a motivated Storage Engineer to join Managed Services operations team to service our Banking
+Customers.
+
+You will provide Level 2 support to our customers by responding to Incidents, working on Service Requests, Problem
+Management, Infrastructure Improvements and planning and performing NetApp Ontap upgrades.
+
+Location: Navi Mumbai
+Experience: 5+ years
+
+Skills: NetApp, SAN, NAS, Ontap, Storage Admin

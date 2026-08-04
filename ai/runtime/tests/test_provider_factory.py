@@ -27,7 +27,7 @@ def test_factory_creates_ollama_provider() -> None:
 
 def test_factory_unknown_type() -> None:
     with pytest.raises(ConfigurationError):
-        ProviderFactory.create("grok", {"type": "grok"})
+        ProviderFactory.create("not_a_real_provider", {"type": "not_a_real_provider"})
 
 
 def test_register_custom_provider_type() -> None:

@@ -50,6 +50,32 @@ def test_excellent_match_strong_verdict():
     assert result["mandatory_skills_match_pct"] >= MANDATORY_SKILLS_MIN_PCT
 
 
+def test_auto_shortlist_only_strong_match():
+    """≥75% Strong Match → shortlist; Potential Match must not auto-shortlist."""
+    from app.domains.recruitment.services.ats_service import match_candidate_to_job
+    from app.domains.recruitment.api.applications import _shortlisted_from_decision
+
+    ok, payload = match_candidate_to_job("c1", "j1", BASE_RESUME, BASE_JD)
+    assert ok
+    out = payload["json_output"]
+    assert out["overall_match_score"] >= 75
+    assert out["decision"] == "shortlist"
+    assert out["match_tier"] == "strong_match"
+    assert _shortlisted_from_decision(out["decision"]) is True
+
+    # Weaker preferred skills → often Potential tier; must not auto-shortlist
+    resume = {**BASE_RESUME, "skills": ["Python", "Django", "PostgreSQL"]}
+    jd = {**BASE_JD, "preferred_skills": ["Kubernetes", "Terraform", "GraphQL", "Kafka", "Redis"]}
+    ok2, payload2 = match_candidate_to_job("c2", "j2", resume, jd)
+    assert ok2
+    out2 = payload2["json_output"]
+    if out2.get("verdict") == "Potential Match (Recruiter Review)" or out2.get("match_tier") == "partial_match":
+        assert out2["decision"] == "reject"
+        assert _shortlisted_from_decision(out2["decision"]) is False
+    assert _shortlisted_from_decision("partial_match") is False
+    assert _shortlisted_from_decision("strong_match") is True
+
+
 def test_good_match_potential_verdict():
     resume = {**BASE_RESUME, "skills": ["Python", "Django", "PostgreSQL"]}
     jd = {**BASE_JD, "preferred_skills": ["Kubernetes", "Terraform", "GraphQL"]}

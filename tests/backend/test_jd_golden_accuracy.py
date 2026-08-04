@@ -17,6 +17,7 @@ from app.ai.parser.enrichment.jd_text_inference import (
     extract_title_from_text,
     is_plausible_job_title,
     normalize_skill_tokens,
+    normalize_title_candidate,
 )
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "jd_gold"
@@ -34,9 +35,22 @@ def test_is_plausible_rejects_section_labels_allows_jr():
     assert not is_plausible_job_title("PUBLIC")
     assert not is_plausible_job_title("Notice period-   Immediate to 45 days")
     assert not is_plausible_job_title("● Participate in requirement analysis")
+    assert not is_plausible_job_title("Key Responsibilities:")
+    assert not is_plausible_job_title("Certifications (Good to Have): ITIL, PMP / PRINCE2")
+    assert not is_plausible_job_title("● Test and deploy the application")
     assert is_plausible_job_title("Jr. IT Solutions Associate")
     assert is_plausible_job_title("Design Engineer")
     assert is_plausible_job_title("Cloud Engineer (AWS)")
+    assert is_plausible_job_title(".NET developer")
+
+
+def test_normalize_title_candidate_strips_noise():
+    assert normalize_title_candidate("Role Category: L2 Network Engineer") == "L2 Network Engineer"
+    assert normalize_title_candidate("JD: Oracle Big Data Service (BDS) Specialist").startswith("Oracle")
+    assert normalize_title_candidate("- MongoDB Database Administrator") == "MongoDB Database Administrator"
+    assert normalize_title_candidate("AI Trainer – Job Description") == "AI Trainer"
+    assert normalize_title_candidate("motivated Storage Engineer") == "Storage Engineer"
+    assert normalize_title_candidate("results-driven Marketing Lead") == "Marketing Lead"
 
 
 def test_experience_ignores_24x7_requires_years():
@@ -71,6 +85,12 @@ def test_normalize_skills_drops_sentences_and_qualifications():
         ("java_fullstack.txt", "Java Full Stack"),
         ("storage_admin.txt", "Storage Admin"),
         ("middleware_admin_24x7.txt", "Middleware Admin"),
+        ("it_sales_executive.txt", "IT Sales Executive"),
+        ("technical_delivery_manager.txt", "Technical Delivery Manager"),
+        ("dot_net_developer.txt", ".NET"),
+        ("storage_engineer_motivated.txt", "Storage Engineer"),
+        ("marketing_lead_results_driven.txt", "Marketing Lead"),
+        ("role_category_network.txt", "Network Engineer"),
     ],
 )
 def test_golden_titles(fixture, title_substr):
@@ -84,6 +104,8 @@ def test_golden_titles(fixture, title_substr):
         "public",
         "jd",
     }
+    assert not title.lower().startswith(("key responsibilities", "certifications", "motivated", "results"))
+    assert not title.strip().startswith(("●", "-", "JD:"))
 
 
 def test_golden_aws_not_role_overview():
@@ -127,6 +149,28 @@ def test_extract_title_labeled_patterns():
     )
     assert "Site Reliability Engineer" in extract_title_from_text(
         "PUBLIC\nRole – Site Reliability Engineer\nWork Experience – 5 Years +"
+    )
+    assert "IT Sales Executive" in extract_title_from_text(
+        "Job Description – IT Sales Executive (Inside Sales)\nKey Responsibilities:\n• Sell"
+    )
+    assert "Technical Delivery Manager" in extract_title_from_text(
+        "Job Description: Technical Delivery Manager (IT\nInfrastructure & Cloud)\n"
+        "Certifications (Good to Have): ITIL, PMP / PRINCE2\nRole Summary:\nWe are looking"
+    )
+    title = extract_title_from_text(
+        "Seeking a skilled .NET developer to join our team and contribute to the development\n"
+        "Responsibilities\n● Test and deploy the application\n"
+    )
+    assert ".NET" in title or "developer" in title.lower()
+    assert "test and deploy" not in title.lower()
+    assert "Storage Engineer" == extract_title_from_text(
+        "We are looking for a motivated Storage Engineer to join Managed Services operations team"
+    )
+    assert "Marketing Lead" == extract_title_from_text(
+        "We are seeking a results-driven Marketing Lead to lead the global marketing strategy"
+    )
+    assert "L2 Network Engineer" == extract_title_from_text(
+        "Role Category: L2 Network Engineer\n• Hands-on experience with SD-WAN"
     )
 
 
@@ -174,3 +218,57 @@ def test_extract_kv_fields_from_table_lines():
     assert kv.get("title") == "Platform Engineer"
     assert "Hyderabad" in (kv.get("location") or "")
     assert "2-4" in (kv.get("experience") or "")
+
+
+def test_detailed_skills_section_retains_tech_and_phrases():
+    _text, _profile, form = _parse("detailed_skills_softwrap.txt")
+    skills = form.mandatorySkills or form.skillsList or []
+    joined = " ".join(skills).lower()
+    for tok in ("kubernetes", "aws", "terraform", "prometheus", "docker", "python"):
+        assert tok in joined, f"missing {tok} in {skills!r}"
+    # Education must not dominate skills
+    assert not any("bachelor" in s.lower() for s in skills)
+    # Dense section should keep more than a handful of items
+    assert len(skills) >= 6
+
+
+def test_softwrapped_responsibility_not_one_bullet_per_line():
+    from app.ai.parser.enrichment.jd_text_inference import (
+        _split_list_items,
+        extract_responsibilities_from_text,
+    )
+
+    wrapped = (
+        "Key Responsibilities\n"
+        "• Design and operate multi-region Kubernetes clusters for customer workloads\n"
+        "  across production and staging environments\n"
+        "• Respond to incidents and drive root-cause analysis\n"
+    )
+    items = extract_responsibilities_from_text(wrapped)
+    assert len(items) == 2, f"expected 2 merged bullets, got {items!r}"
+    assert "across production" in items[0].lower()
+    assert "incidents" in items[1].lower()
+
+    soft = _split_list_items(
+        "Design and operate multi-region Kubernetes clusters for customer workloads\n"
+        "across production and staging environments"
+    )
+    assert len(soft) == 1
+    assert "across production" in soft[0].lower()
+
+
+def test_keywords_grounded_in_skills_not_whole_doc_noise():
+    text, profile, form = _parse("detailed_skills_softwrap.txt")
+    skills = {
+        s.lower()
+        for s in (form.mandatorySkills or []) + (form.preferredSkills or []) + (form.skillsList or [])
+    }
+    keywords = form.keywordsList or []
+    assert keywords, "expected keywords from skills"
+    # Keywords should be short and largely overlap skills / known tech in skills section
+    skill_blob = " ".join(skills)
+    for kw in keywords:
+        assert len(kw.split()) <= 4
+        assert kw.lower() in skill_blob or kw.lower() in text.lower()
+    # Must not invent random education/meta as keywords
+    assert not any(k.lower() in {"bachelor", "computer", "science"} for k in keywords)

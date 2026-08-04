@@ -124,6 +124,8 @@ Enable a candidate to discover a role and submit a complete, AI-assisted applica
 
 `ApplyJobModal.jsx`, `ResumeUploadWithParsing.jsx`, `POST /api/parse/resume/public`, `POST /api/jobs/:id/apply`.
 
+Candidates can open an **application Preview** (between Cancel and Submit) to review autofilled contact, experience, skills, education, work history, and certifications before submitting. Preview can submit from the same review sheet.
+
 ---
 
 ### Flow
@@ -141,6 +143,7 @@ sequenceDiagram
   Modal->>Parse: Parse
   Parse-->>Modal: TOON + parsedId
   Modal->>Modal: Autofill
+  C->>Modal: Preview (optional)
   C->>Modal: Submit
   Modal->>Apply: Multipart apply
   Apply-->>C: Success
@@ -522,8 +525,9 @@ Score candidate fit to a job using structured resume and JD intelligence and per
 ### Business rules
 
 1. Matching runs on successful public apply path.
-2. Humans may shortlist independent of score.
-3. Weights are product-defined in ATS service (skills-heavy).
+2. **Auto-shortlist** when overall match ≥ **75%** (Strong Match). Scores 60–74% (Potential Match) stay for recruiter review and are **not** auto-shortlisted. Below 60% or mandatory-skills gate failure → Not a Match.
+3. Humans may still shortlist or reject independent of score.
+4. Weights are product-defined in ATS service (skills-heavy).
 
 ---
 

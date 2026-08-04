@@ -199,6 +199,20 @@ _JOB_TITLE_NAME_BLOCKLIST = frozenset({
     'career objective', 'professional summary', 'professional', 'summary',
     'middleware administrator', 'oracle dba', 'sql dba', 'mssql dba',
     'fresher', 'experienced', 'immediate joining',
+    'designation', 'certification', 'certifications', 'skills',
+    'it team lead', 'assistant professor', 'curriculum vitae',
+})
+
+# Cities / regions often appear alone on early resume lines and get mistaken for names.
+_PLACE_NAME_BLOCKLIST = frozenset({
+    'mumbai', 'delhi', 'new delhi', 'bangalore', 'bengaluru', 'hyderabad', 'chennai',
+    'kolkata', 'pune', 'ahmedabad', 'gurgaon', 'gurugram', 'noida', 'faridabad',
+    'jaipur', 'lucknow', 'nagpur', 'indore', 'bhopal', 'surat', 'vadodara',
+    'coimbatore', 'kochi', 'chandigarh', 'mysore', 'mysuru', 'thane', 'navi mumbai',
+    'andheri', 'powai', 'bandra', 'mehdipatnam', 'ranchi', 'kota', 'tirupathi',
+    'tirupati', 'india', 'remote', 'hybrid', 'wfh', 'work from home',
+    'austin', 'seattle', 'san francisco', 'new york', 'london', 'toronto',
+    'singapore', 'dubai', 'berlin',
 })
 
 
@@ -209,6 +223,8 @@ def is_plausible_person_name(name: str | None) -> bool:
     t = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff\u00ad]', '', t).replace('\xa0', ' ').strip()
     # Honorific prefixes common on Indian resumes
     t = re.sub(r'(?i)^(mr|mrs|ms|miss|dr|prof)\.?\s+', '', t).strip()
+    # Trailing punctuation / form separators ("Career Objective-")
+    t = t.rstrip('-:–—|').strip()
     if not t or len(t) < 2 or len(t) > 80:
         return False
     # Placeholder / form labels wrongly captured as names
@@ -216,9 +232,12 @@ def is_plausible_person_name(name: str | None) -> bool:
         'name', 'full name', 'your name', 'candidate name', 'student', 'resume',
         'curriculum vitae', 'cv', 'objective', 'career objective', 'profile',
         'address', 'contact', 'email', 'phone', 'mobile', 'unknown',
+        'designation', 'certification', 'skills', 'summary',
     }:
         return False
     if t.lower() in _JOB_TITLE_NAME_BLOCKLIST:
+        return False
+    if t.lower() in _PLACE_NAME_BLOCKLIST:
         return False
     # Reject sentence / duty fragments
     if t.endswith('.'):
@@ -381,6 +400,32 @@ def name_from_email_local_part(email: str | None) -> str:
         return ''
     candidate = ' '.join(p.capitalize() for p in parts[:4])
     return candidate if is_plausible_person_name(candidate) else ''
+
+
+def name_from_resume_filename(filename: str | None) -> str:
+    """Derive a person name from resume filename when body has no header name.
+
+    Examples: 'ABHISHEK KUMAR.pdf', '01_Furqan_Khan_-_HR.pdf' → plausible names only.
+    """
+    if not filename:
+        return ''
+    base = re.sub(r'\.[A-Za-z0-9]{1,5}$', '', str(filename)).strip()
+    # Drop leading indexes / hashes
+    base = re.sub(r'^(?:#?\d+[_\-\s]+)+', '', base)
+    base = re.sub(r'[_\-]+', ' ', base)
+    base = re.sub(r'\s+', ' ', base).strip()
+    # Cut at role/keyword separators
+    base = re.split(
+        r'(?i)\s+(?:-|–|—)\s+|\s+(?:resume|cv|updated|dba|hr|network|fresher)\b',
+        base,
+        maxsplit=1,
+    )[0].strip()
+    base = re.sub(r'\(\d+\)$', '', base).strip()
+    if not base:
+        return ''
+    # Title-case ALL CAPS tokens for plausibility
+    cand = base.title() if base.isupper() else base
+    return cand[:80] if is_plausible_person_name(cand) else ''
 
 
 DATE_RANGE_PATTERN = re.compile(
@@ -561,6 +606,28 @@ def extract_name_from_text(text: str) -> str:
     """Pick a plausible person name from early resume lines, skipping section headers."""
     if not text:
         return ''
+    # Labeled biodata: "Name: Ms. Saloni V. Dhuru" / "Name\n: Ms. Saloni V. Dhuru"
+    labeled = re.search(
+        r'(?im)^(?:\*\*)?(?:full\s*)?name(?:\*\*)?\s*[:\-–—]\s*(.+?)\s*$',
+        text[:2500],
+    )
+    if not labeled:
+        labeled = re.search(
+            r'(?is)(?:^|\n)\s*(?:\*\*)?(?:full\s*)?name(?:\*\*)?\s*\n\s*[:\-–—]\s*(.+?)(?:\n|$)',
+            text[:2500],
+        )
+    if labeled:
+        cand = re.sub(r'(?i)^(mr|mrs|ms|miss|dr|prof)\.?\s+', '', labeled.group(1).strip())
+        cand = cand.rstrip('-:–—|').strip()
+        # Stop at next biodata label glued on same line
+        cand = re.split(
+            r'(?i)\s{2,}|\t|(?=designation|email|phone|mobile|address|location|dob)\b',
+            cand,
+            maxsplit=1,
+        )[0].strip()
+        if is_plausible_person_name(cand):
+            return (cand.title() if cand.isupper() else cand)[:80]
+
     # Join consecutive ALL-CAPS single-token name lines (PyPDF2 word-per-line layouts)
     early_lines: list[str] = []
     for line in text.split('\n')[:25]:
@@ -719,6 +786,8 @@ def extract_location_from_text(text: str) -> str:
             '',
             s,
         ).strip()
+        # Common OCR/biodata form: "Location: - Bandra, Mumbai"
+        s = re.sub(r'^[\-–—•·]+\s*', '', s).strip()
         # Drop trailing date ranges / job metadata
         s = re.sub(
             r'(?i)\s*[|•·]\s*(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|'
@@ -870,10 +939,14 @@ def extract_education_from_text(text: str, max_items: int = 8) -> list[dict[str,
         r'Master(?:\'?s)?(?:\s+(?:of|in)\s+[A-Za-z &\-/]+)?|'
         r'Bachelor(?:\'?s)?(?:\s+(?:of|in)\s+[A-Za-z &\-/]+)?|'
         r'Associate(?:\'?s)?(?:\s+(?:of|in|degree)\s+[A-Za-z &\-/]+)?|'
+        r'BACHELOR\s+OF\s+ENGINEERING(?:\s*[-–—]?\s*[A-Za-z &\-/]+)?|'
         r'B\.?\s?Tech|B\.?\s?E\.?(?![a-z])|B\.?\s?S\.?(?![a-z])|B\.?\s?Com|'
         r'M\.?\s?Tech|M\.?\s?S\.?(?![a-z])|M\.?\s?Com|'
-        r'M\.?\s?B\.?\s?A\.?(?![a-z])|Ph\.?\s?D\.?(?![a-z])|'
+        r'M\.?\s?B\.?\s?A\.?(?![a-z])|M\.?\s?C\.?\s?A\.?(?![a-z])|'
+        r'B\.?\s?C\.?\s?A\.?(?![a-z])|B\.?\s?B\.?\s?A\.?(?![a-z])|'
+        r'Ph\.?\s?D\.?(?![a-z])|'
         r'Diploma(?:\s+in\s+[A-Za-z &\-/]+)?|'
+        r'Pre[\s\-]?University|Higher\s+Secondary|Senior\s+Secondary|'
         r'M\.?\s?A\.?(?![a-z])|B\.?\s?A\.?(?![a-z])'
         r')\b',
     )

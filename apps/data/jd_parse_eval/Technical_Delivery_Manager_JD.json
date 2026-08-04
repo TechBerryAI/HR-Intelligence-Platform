@@ -4,7 +4,7 @@
     "title_from_filename": "Technical_Delivery_Manager"
   },
   "form": {
-    "title": "Technical Delivery Manager (IT",
+    "title": "Technical Delivery Manager (IT Infrastructure & Cloud)",
     "company": "",
     "location": "",
     "salary": "",
@@ -12,54 +12,122 @@
     "experienceTo": "10",
     "employmentType": "",
     "mandatorySkills": [
+      "Strong understanding of IT Infrastructure (Windows/Linux)",
+      "Windows",
+      "Linux",
       "Cloud (AWS/Azure/GCP)",
+      "Amazon Web Services",
+      "Google Cloud Platform",
+      "AZURE",
       "DBA",
       "(Oracle/MySQL/MongoDB)",
+      "MongoDB",
       "Middleware (WebLogic/Tomcat/JBoss)",
       "and Networking basics",
       "Good communication",
       "stakeholder management",
       "and leadership skills",
-      "Preferred Candidate Profile"
+      "Preferred Candidate Profile",
+      "Proven experience in managing delivery teams (L1/L2/L3)",
+      "Exposure to ITSM processes and SLA-based delivery models",
+      "ITSM",
+      "Strong analytical and reporting skills"
     ],
     "preferredSkills": [],
     "skillsList": [
+      "Strong understanding of IT Infrastructure (Windows/Linux)",
+      "Windows",
+      "Linux",
       "Cloud (AWS/Azure/GCP)",
+      "Amazon Web Services",
+      "Google Cloud Platform",
+      "AZURE",
       "DBA",
       "(Oracle/MySQL/MongoDB)",
+      "MongoDB",
       "Middleware (WebLogic/Tomcat/JBoss)",
       "and Networking basics",
       "Good communication",
       "stakeholder management",
       "and leadership skills",
-      "Preferred Candidate Profile"
+      "Preferred Candidate Profile",
+      "Proven experience in managing delivery teams (L1/L2/L3)",
+      "Exposure to ITSM processes and SLA-based delivery models",
+      "ITSM",
+      "Strong analytical and reporting skills"
     ],
     "responsibilities": [
-      "Manage complete technical project delivery and ensure adherence to scope",
-      "timelines",
-      "and",
-      "quality.",
-      "Coordinate with teams handling Infrastructure",
-      "DBA",
-      "Middleware",
-      "Cloud",
-      "and Application Support.",
-      "Handle resource planning",
-      "task allocation",
-      "and team performance tracking."
+      "Manage complete technical project delivery and ensure adherence to scope, timelines, and quality.",
+      "Coordinate with teams handling Infrastructure, DBA, Middleware, Cloud, and Application Support.",
+      "Handle resource planning, task allocation, and team performance tracking.",
+      "Monitor project risks, escalations, SLA compliance, and issue resolution.",
+      "Engage with clients/stakeholders for requirement gathering, reporting, and delivery updates.",
+      "Ensure smooth execution of support and implementation activities across multiple technologies.",
+      "Prepare project documentation, MIS reports, and delivery dashboards.",
+      "Drive process improvements and implement IT service delivery best practices."
     ],
     "qualifications": [],
-    "descriptionPreview": "We are looking for a Technical Delivery Manager with strong understanding of IT Infrastructure,\nCloud, Database, Middleware, and OS Administration to manage end-to-end project delivery,\nensure operational excellence, and drive customer satisfaction.",
-    "descriptionLen": 249
+    "descriptionPreview": "We are looking for a Technical Delivery Manager with strong understanding of IT Infrastructure,\nCloud, Database, Middleware, and OS Administration to manage end-to-end project delivery,\nensure operational excellence, and drive customer satisfaction.\n\n**Key Responsibilities:**\n• Manage complete technical project delivery and ensure adherence to scope, timelines, and quality.\n• Coordinate with teams handling Infrastructure, DBA, Middleware, Cloud, and Application Support.\n• Handle resource plannin",
+    "descriptionLen": 968,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
   },
   "checks": {
     "title_overlap_source": 1.0,
-    "title_overlap_filename": 0.75,
+    "title_overlap_filename": 0.5,
     "title_present": true,
-    "skills_precision": 1.0,
-    "skills_hit": 9,
-    "skills_checked": 9,
-    "skills_count": 9,
+    "skills_precision": 0.95,
+    "skills_hit": 19,
+    "skills_checked": 20,
+    "skills_count": 20,
     "location_in_source": null,
     "company_in_source": null,
     "experience": {
@@ -71,8 +139,10 @@
       "ok": true
     },
     "has_description": true,
+    "coverage_missing_with_evidence": [],
+    "coverage_recovered": [],
     "source_preview": "Job Description: Technical Delivery Manager (IT | Infrastructure & Cloud) | Experience: 5 to 10 Years | Qualification: BE/BTech/MCA/BSc-IT (PG/MBA preferred but not mandatory) | Certifications (Good to Have): ITIL, PMP / PRINCE2 | Role Summary: | We are looking for a Technical Delivery Manager with strong understanding of IT Infrastructure, | Cloud, Database, Middleware, and OS Administration to manage end-to-end project delivery, | ensure operational excellence, and drive customer satisfaction. | Key Responsibilities: | • Manage complete technical project delivery and ensure adherence to scope, timelines, and | qu"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'Technical Delivery Manager (IT', 'company': '', 'location': '', 'employment_type': '', 'description': 'We are looking for a Technical Delivery Manager with strong understanding of IT Infrastructure,\\nCloud, Database, Middleware, and OS Administration to manage end-to-end project delivery,\\nensure operational excellence, and drive customer satisfaction.', 'min_experience_years': 5.0, 'max_experience_years': 10.0, 'skills': ['Cloud (AWS/Azure/GCP)', 'DBA', '(Oracle/MySQL/MongoDB)', 'Middleware (WebLogic/Tomcat/JBoss)', 'and Networking basics', 'Good communication', 'stakeholder management', 'and leadership skills', 'Preferred Candidate Profile'], 'mandatory_skills': ['Cloud (AWS/Azure/GCP)', 'DBA', '(Oracle/MySQL/MongoDB)', 'Middleware (WebLogic/Tomcat/JBoss)', 'and Networking basics', 'Good communication', 'stakeholder management', 'and leadership skills', 'Preferred Candidate Profile'], 'preferred_skills': [], 'responsibilities': ['Manage complete technical project delivery and ensure adherence to scope', 'timelines', 'and', 'quality.', 'Coordinate with teams handling Infrastructure', 'DBA', 'Middleware', 'Cloud', 'and Application Support.', 'Handle resource planning', 'task allocation', 'and team performance tracking.', 'Monitor project risks', 'escalations', 'SLA compliance', 'and issue resolution.', 'Engage with clients/stakeholders for requirement gathering', 'reporting', 'and delivery updates.', 'Ensure smooth execution of support an",
+  "toon_preview": "{'type': 'job_description', 'title': 'Technical Delivery Manager (IT Infrastructure & Cloud)', 'company': '', 'location': '', 'employment_type': '', 'description': 'We are looking for a Technical Delivery Manager with strong understanding of IT Infrastructure,\\nCloud, Database, Middleware, and OS Administration to manage end-to-end project delivery,\\nensure operational excellence, and drive customer satisfaction.\\n\\n**Key Responsibilities:**\\n• Manage complete technical project delivery and ensure adherence to scope, timelines, and quality.\\n• Coordinate with teams handling Infrastructure, DBA, Middleware, Cloud, and Application Support.\\n• Handle resource planning, task allocation, and team performance tracking.\\n• Monitor project risks, escalations, SLA compliance, and issue resolution.\\n• Engage with clients/stakeholders for requirement gathering, reporting, and delivery updates.\\n• Ensure smooth execution of support and implementation activities across multiple technologies.\\n• Prepare project documentation, MIS reports, and delivery dashboards.\\n• Drive process improvements and implement IT service delivery best practices.', 'min_experience_years': 5.0, 'max_experience_years': 10.0, 'skills': ['Strong understanding of IT Infrastructure (Windows/Linux)', 'Windows', 'Linux', 'Cloud (AWS/Azure/GCP)', 'Amazon Web Services', 'Google Cloud Platform', 'AZURE', 'DBA', '(Oracle/MySQL/MongoDB)', 'MongoDB', 'Middleware (WebLogic/Tomcat/JBoss)', 'and Networking basics', 'Good commun",
   "source_preview": "Job Description: Technical Delivery Manager (IT\nInfrastructure & Cloud)\nExperience: 5 to 10 Years\nQualification: BE/BTech/MCA/BSc-IT (PG/MBA preferred but not mandatory)\nCertifications (Good to Have): ITIL, PMP / PRINCE2\nRole Summary:\nWe are looking for a Technical Delivery Manager with strong understanding of IT Infrastructure,\nCloud, Database, Middleware, and OS Administration to manage end-to-end project delivery,\nensure operational excellence, and drive customer satisfaction.\nKey Responsibilities:\n• Manage complete technical project delivery and ensure adherence to scope, timelines, and\nquality.\n• Coordinate with teams handling Infrastructure, DBA, Middleware, Cloud, and Application Support.\n• Handle resource planning, task allocation, and team performance tracking.\n• Monitor project risks, escalations, SLA compliance, and issue resolution.\n• Engage with clients/stakeholders for requirement gathering, reporting, and delivery updates.\n• Ensure smooth execution of support and implementation activities across multiple technologies.\n• Prepare project documentation, MIS reports, and delivery dashboards.\n• Drive process improvements and implement IT service delivery best practices.\nRequired Skills:\n• Strong understanding of IT Infrastructure (Windows/Linux), Cloud (AWS/Azure/GCP), DBA\n(Oracle/MySQL/MongoDB), Middleware (WebLogic/Tomcat/JBoss), and Networking basics.\n• Experience managing IT service delivery / technical operations / support projects.\n• Good communication, stakeholder management, and leadership skills.\n• Ability to manage multiple projects and handle escalations effectively.\nPreferred Candidate Profile:\n• Proven experience in managing delivery teams (L1/L2/L3).\n• Exposure to ITSM processes and SLA-based delivery models.\n• Strong analytical and reporting skills."
 }
