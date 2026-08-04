@@ -31,11 +31,14 @@ def allow_options_no_auth(f):
 @head_hr_bp.get('/stats')
 @require_analytics_read
 def get_stats():
-    total_admins = db_get(
-        "SELECT COUNT(*) AS cnt FROM hr_signup WHERE COALESCE(role, 'RECRUITER') != 'CEO'",
+    # Match Admins page: every hr_signup row (including CEO / Head HR / recruiters).
+    total_admins = db_get('SELECT COUNT(*) AS cnt FROM hr_signup', ())
+    # Match jobs "Candidates" meaning: people who actually applied (not orphan signup rows
+    # left by parse harness / abandoned apply drafts).
+    total_candidates = db_get(
+        'SELECT COUNT(DISTINCT candidate_id) AS cnt FROM applications WHERE candidate_id IS NOT NULL',
         (),
     )
-    total_candidates = db_get('SELECT COUNT(*) AS cnt FROM candidate_signup', ())
     total_jobs = db_get('SELECT COUNT(*) AS cnt FROM jobs', ())
     total_applications = db_get('SELECT COUNT(*) AS cnt FROM applications', ())
     active_jobs = db_get('SELECT COUNT(*) AS cnt FROM jobs WHERE enabled = true', ())
@@ -130,13 +133,22 @@ def delete_admin(hrid):
 @head_hr_bp.get('/candidates')
 @require_analytics_read
 def list_candidates():
+    """Applicants who have applied to at least one job (matches Overview Candidates metric)."""
     rows = db_all(
         '''SELECT cs.cid, cs.name, cs.email, cs.created_at,
                   cp.full_name, cp.phone, cp.experience_level,
-                  cp.current_location, cp.completed
+                  cp.current_location, cp.completed,
+                  COUNT(a.id)::int AS application_count,
+                  MAX(a.applied_at) AS last_applied_at,
+                  STRING_AGG(DISTINCT j.title, ', ') AS jobs_applied
            FROM candidate_signup cs
+           INNER JOIN applications a ON a.candidate_id = cs.cid
            LEFT JOIN candidate_profiles cp ON cp.candidate_id = cs.cid
-           ORDER BY cs.created_at DESC''',
+           LEFT JOIN jobs j ON j.jdid = a.job_id
+           GROUP BY cs.cid, cs.name, cs.email, cs.created_at,
+                    cp.full_name, cp.phone, cp.experience_level,
+                    cp.current_location, cp.completed
+           ORDER BY MAX(a.applied_at) DESC NULLS LAST''',
         (),
     )
     return jsonify({'candidates': rows})

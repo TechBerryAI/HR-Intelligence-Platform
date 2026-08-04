@@ -4,12 +4,13 @@ import { useApp } from '@/core/context/AppContext.jsx'
 import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
 import ThemeToggle from '@/shared/components/ThemeToggle.jsx'
 import {
-  FiGrid, FiUsers, FiBriefcase, FiLogOut, FiMenu, FiX, FiShield, FiSettings, FiBarChart2, FiLayers,
+  FiGrid, FiUsers, FiUser, FiBriefcase, FiLogOut, FiMenu, FiX, FiShield, FiSettings, FiBarChart2, FiLayers,
 } from 'react-icons/fi'
 
 const headHrNav = [
   { label: 'Overview', path: '/head-hr', icon: FiGrid, end: true },
   { label: 'Admins', path: '/head-hr/admins', icon: FiUsers },
+  { label: 'Candidates', path: '/head-hr/candidates', icon: FiUser },
   { label: 'Jobs', path: '/head-hr/jobs', icon: FiBriefcase },
   { label: 'Bulk Parsing', path: '/head-hr/bulk-parsing', icon: FiLayers },
   { label: 'Settings', path: '/head-hr/settings', icon: FiSettings },
@@ -17,6 +18,7 @@ const headHrNav = [
 
 const ceoNav = [
   { label: 'Overview', path: '/ceo', icon: FiGrid, end: true },
+  { label: 'Candidates', path: '/ceo/candidates', icon: FiUser },
   { label: 'Jobs', path: '/ceo/jobs', icon: FiBriefcase },
 ]
 

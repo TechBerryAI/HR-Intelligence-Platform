@@ -452,8 +452,49 @@ async function setupFrontend() {
   log('Frontend setup complete');
 }
 
+/** Kill any leftover process still bound to a port (prevents stale Flask serving old code). */
+function freePort(port) {
+  try {
+    if (process.platform === 'win32') {
+      const out = nodeExecSync(`netstat -ano | findstr :${port}`, { encoding: 'utf8' });
+      const pids = new Set();
+      for (const line of out.split(/\r?\n/)) {
+        if (!/LISTENING/i.test(line)) continue;
+        const parts = line.trim().split(/\s+/);
+        const pid = parts[parts.length - 1];
+        if (pid && /^\d+$/.test(pid) && pid !== '0') pids.add(pid);
+      }
+      for (const pid of pids) {
+        try {
+          nodeExecSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
+          log(`Freed port ${port} (killed PID ${pid})`);
+        } catch {
+          /* already gone */
+        }
+      }
+    } else {
+      try {
+        const out = nodeExecSync(`lsof -ti :${port}`, { encoding: 'utf8' }).trim();
+        for (const pid of out.split(/\s+/).filter(Boolean)) {
+          try {
+            process.kill(Number(pid), 'SIGTERM');
+            log(`Freed port ${port} (killed PID ${pid})`);
+          } catch {
+            /* already gone */
+          }
+        }
+      } catch {
+        /* nothing listening */
+      }
+    }
+  } catch {
+    /* nothing listening / netstat empty */
+  }
+}
+
 function startBackend() {
   logStep(6, 7, 'Starting backend (Flask)');
+  freePort(BACKEND_PORT);
   const envMap = readEnvFile(BACKEND_ENV);
   const ollamaHost = (envMap.OLLAMA_HOST || envMap.OLLAMA_BASE_URL || DEFAULT_OLLAMA_HOST).trim();
   const ollamaModel = (envMap.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL).trim();
@@ -465,6 +506,7 @@ function startBackend() {
     OLLAMA_HOST: ollamaHost,
     OLLAMA_BASE_URL: ollamaHost,
     OLLAMA_MODEL: ollamaModel,
+    FLASK_USE_RELOADER: 'false',
   };
   backendProcess = spawn(VENV_PYTHON, ['wsgi.py'], {
     cwd: BACKEND_DIR,

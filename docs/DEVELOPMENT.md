@@ -44,6 +44,8 @@ node start-vm.js
 
 Opens http://localhost:5173 (frontend) and http://localhost:3000 (backend).
 
+`start.js` frees port **3000** before launching Flask (avoids a stale backend keeping old API code). After backend Python changes, restart with Ctrl+C then `node start.js` — Flask does not hot-reload by default (`FLASK_USE_RELOADER=false`).
+
 Optional `start-vm.js` knobs (env or `apps/backend/.env`):
 
 | Key | Purpose |
