@@ -48,11 +48,15 @@ def _needs_jd_semantic(profile_dict: dict[str, Any]) -> bool:
     # Run residual LLM when title is weak OR skills are missing/polluted
     if not is_plausible_job_title(title):
         return True
-    if skills_look_polluted(skill_pool):
+    if skills_look_polluted(skill_pool) or (preferred and skills_look_polluted(preferred)):
         return True
-    if preferred and skills_look_polluted(preferred):
+    if not skills_look_skill_like(skill_pool):
         return True
-    return not skills_look_skill_like(skill_pool)
+    desc = str(basic.get('description') or '').strip()
+    resp = list((profile_dict.get('responsibilities') or {}).get('items') or [])
+    if len(desc) < 40 and not resp:
+        return True
+    return False
 
 
 def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
@@ -217,7 +221,8 @@ def enrich_jd_semantic(profile, *, unresolved_text: str, force: bool = False):
 
     if not isinstance(profile, JobProfile):
         return profile
-    if not semantic_ai_enabled() and not force:
+    # force only bypasses the “needs residual” gate — never runs when AI is disabled
+    if not semantic_ai_enabled():
         return profile
     if not force and not _needs_jd_semantic(profile.model_dump()):
         return profile

@@ -130,15 +130,16 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     setExperienceFrom(parsedData.experienceFrom || '')
     setExperienceTo(parsedData.experienceTo || '')
     setDescription(parsedData.description || '')
-    const kw = parsedData.keywords
-      || (Array.isArray(parsedData._keywords) ? parsedData._keywords.join(', ') : '')
-      || ''
-    setKeywords(kw)
-    setMandatorySkills(
-      Array.isArray(parsedData.mandatorySkills)
-        ? parsedData.mandatorySkills.join(', ')
-        : (parsedData._mandatorySkills || []).join(', ') || '',
-    )
+    const mand = Array.isArray(parsedData.mandatorySkills)
+      ? parsedData.mandatorySkills
+      : (parsedData._mandatorySkills || [])
+    const mandStr = Array.isArray(mand) ? mand.filter(Boolean).join(', ') : ''
+    setMandatorySkills(mandStr)
+    // Keywords from overall JD (backend) — independent of mandatory skills
+    const kwFromForm = parsedData.keywords
+      || (Array.isArray(parsedData._keywords) ? parsedData._keywords.filter(Boolean).join(', ') : '')
+      || (Array.isArray(parsedData.keywordsList) ? parsedData.keywordsList.filter(Boolean).join(', ') : '')
+    setKeywords(typeof kwFromForm === 'string' ? kwFromForm : '')
     setPreferredSkills(
       Array.isArray(parsedData.preferredSkills)
         ? parsedData.preferredSkills.join(', ')
@@ -151,11 +152,25 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     // Keep HR account company as posting company; retain parsed company for display note
     setCompany(user?.company || parsedData.company || '')
     setError('')
-    setSuccess(
-      parsedData.company && user?.company && parsedData.company !== user.company
-        ? `Job description parsed! Using your HR company (${user.company}). Parsed employer: ${parsedData.company}.`
-        : 'Job description parsed! Please review the fields below.',
-    )
+    const gaps = Array.isArray(parsedData._missingFields) ? parsedData._missingFields : []
+    if (gaps.length > 0) {
+      const labels = {
+        title: 'Title',
+        location: 'Location',
+        experience: 'Experience',
+        skills: 'Skills',
+        description: 'Description',
+      }
+      setSuccess(
+        `Parsed — please review incomplete fields: ${gaps.map((g) => labels[g] || g).join(', ')}.`,
+      )
+    } else if (parsedData.company && user?.company && parsedData.company !== user.company) {
+      setSuccess(
+        `Job description parsed! Using your HR company (${user.company}). Parsed employer: ${parsedData.company}.`,
+      )
+    } else {
+      setSuccess('Job description parsed! Please review the fields below.')
+    }
     setTimeout(() => setSuccess(''), 5000)
   }
 
@@ -355,6 +370,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
               value={mandatorySkills}
               onChange={(e) => setMandatorySkills(e.target.value)}
               placeholder="Python, SQL, Docker (comma-separated)"
+              helperText="Filled only from the JD skills section"
             />
             <PremiumInput
               label="Preferred Skills"
@@ -382,8 +398,8 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
               label="Keywords"
               value={keywords}
               onChange={(e) => setKeywords(e.target.value)}
-              placeholder="Python, RAG, GenAI (comma-separated)"
-              helperText="Auto-filled from the job description — only JD-related terms"
+              placeholder="AWS, Kubernetes, Terraform (comma-separated)"
+              helperText="Derived from the overall JD — not a copy of Required Skills"
             />
 
             <div className="pt-4 flex flex-wrap items-center gap-3">

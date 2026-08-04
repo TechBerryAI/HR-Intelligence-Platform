@@ -29,6 +29,7 @@ from app.ai.parser.enrichment.jd_text_inference import (
     extract_skills_from_text,
     extract_tech_keywords_from_text,
     extract_title_from_text,
+    extract_jd_keywords_from_text,
     is_non_title_label,
     is_plausible_job_title,
     normalize_skill_tokens,
@@ -269,6 +270,13 @@ def parse_jd_from_sections(
     if title and not is_plausible_job_title(title):
         title = ''
 
+    keywords = extract_jd_keywords_from_text(
+        full_text,
+        max_items=20,
+        preferred_skills=preferred,
+        mandatory_skills=mandatory,
+    )
+
     return JobProfile(
         basic=JobBasicInfo(
             title=title,
@@ -280,7 +288,7 @@ def parse_jd_from_sections(
             min_experience_years=min_y,
             max_experience_years=max_y,
             qualifications=results['req'],
-            keywords=[],
+            keywords=keywords,
         ),
         responsibilities=JobResponsibilities(items=results['resp']),
         skills=JobSkills(mandatory=mandatory, preferred=preferred, general=general),

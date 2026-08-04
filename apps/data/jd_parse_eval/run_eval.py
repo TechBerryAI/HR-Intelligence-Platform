@@ -198,6 +198,7 @@ def main():
             cov = compact.get("coverage") or []
             missing_ev = [c for c in cov if isinstance(c, dict) and c.get("status") == "missing_with_evidence"]
             recovered = [c for c in cov if isinstance(c, dict) and c.get("status") == "recovered"]
+            from app.ai.parser.enrichment.jd_text_inference import skills_look_skill_like
 
             item["checks"] = {
                 "title_overlap_source": round(t_overlap, 3),
@@ -207,6 +208,7 @@ def main():
                 "skills_hit": sk_hit,
                 "skills_checked": sk_n,
                 "skills_count": len(all_skills),
+                "skills_look_skill_like": skills_look_skill_like(all_skills),
                 "location_in_source": loc_ok,
                 "company_in_source": company_ok,
                 "experience": exp,
@@ -306,6 +308,47 @@ def main():
                     "file": r["file"],
                     "issue": "low_skills_precision",
                     "detail": f"{c.get('skills_hit')}/{c.get('skills_checked')}",
+                }
+            )
+        # Reject garbage / letter-bullet skill tokens
+        skills_list = list(form.get("mandatorySkills") or []) + list(form.get("skillsList") or [])
+        garbage = [
+            s
+            for s in skills_list
+            if isinstance(s, str)
+            and (
+                s.strip().lower() in {"job", "jd", "role", "skills", "education"}
+                or re.match(r"^[oO]\s+", s.strip())
+            )
+        ]
+        if garbage:
+            issues.append(
+                {
+                    "file": r["file"],
+                    "issue": "garbage_skills",
+                    "detail": garbage[:8],
+                }
+            )
+        if not c.get("skills_look_skill_like", True) and c.get("skills_count", 0) > 0:
+            issues.append(
+                {
+                    "file": r["file"],
+                    "issue": "skills_not_skill_like",
+                    "detail": skills_list[:8],
+                }
+            )
+        # Core coverage gaps are hard failures for acceptance
+        core_missing = [
+            f
+            for f in (c.get("coverage_missing_with_evidence") or [])
+            if f in {"title", "location", "experience", "skills", "description"}
+        ]
+        if core_missing:
+            issues.append(
+                {
+                    "file": r["file"],
+                    "issue": "core_coverage_missing_with_evidence",
+                    "detail": core_missing,
                 }
             )
         if c.get("location_in_source") is False:
