@@ -105,11 +105,11 @@ python scripts/database/test_db_connection.py
 
 | File | Purpose |
 |------|---------|
-| `backend/.env` | Database, JWT, mail, LLM keys |
-| `frontend/.env` | Vite API URL (optional) |
-| `ai/.env` | AI runtime overrides (optional) |
+| `apps/backend/.env` | App, Postgres, JWT, mail, Ollama, ATS, parsing |
+| `apps/frontend/.env` | Vite API URL / public origin (optional) |
+| `ai/.env` | AI workspace overrides (optional) |
 
-Never commit `.env` files. Use `.env.example` as reference.
+Copy from the matching `.env.example`, then fill secrets. Never commit `.env` files.
 
 ## Where to put new code
 

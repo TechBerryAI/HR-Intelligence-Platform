@@ -14,12 +14,11 @@ class EnvValidator:
     # Required for database (PostgreSQL)
     DB_REQUIRED = "Set DATABASE_URL or POSTGRES_USER and POSTGRES_PASSWORD"
 
-    # Optional but recommended
+    # Optional but recommended for local OTP / notifications
     RECOMMENDED_VARS = {
         'MAIL_USERNAME': 'Gmail address for OTP sending',
         'MAIL_PASSWORD': 'Gmail App Password (not regular password)',
-        'HRMS_API_KEY_1': 'X.AI/Grok API key for LLM; multi-key rotation uses HRMS_API_KEY_1..N',
-        'XAI_API_KEY': 'X.AI API key (alternative/supplement to HRMS_API_KEY_1..N)',
+        'JWT_SECRET': 'JWT signing secret (change from placeholder in production)',
     }
 
     DEFAULTED_VARS = {
