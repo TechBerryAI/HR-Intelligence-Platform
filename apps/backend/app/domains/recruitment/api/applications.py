@@ -17,6 +17,7 @@ from app.ai.parser.enrichment.jd_text_inference import (
     extract_responsibilities_from_text,
     extract_skills_from_text,
 )
+from app.core.timing import timing
 
 applications_bp = Blueprint('applications', __name__)
 
@@ -62,6 +63,7 @@ def _extract_ats_result(ats_result: dict) -> tuple:
     return final_score, shortlisted, rationale, ats_analysis_toon, status
 
 
+@timing
 def _persist_application_atomic(
     candidate_id: str,
     job_id: str,

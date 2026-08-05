@@ -11,6 +11,8 @@ import os
 import re
 from typing import Any, Optional
 
+from app.core.timing import timing
+
 logger = logging.getLogger(__name__)
 
 _ENABLED = os.getenv('DOCUMENT_INTELLIGENCE_SEMANTIC_AI', 'true').lower() in ('1', 'true', 'yes')
@@ -88,6 +90,7 @@ def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
         return None
 
 
+@timing
 def enrich_resume_semantic(
     profile,
     *,
@@ -215,6 +218,7 @@ def enrich_resume_semantic(
         return profile
 
 
+@timing
 def enrich_jd_semantic(profile, *, unresolved_text: str, force: bool = False):
     from app.ai.document_intelligence.canonical.from_toon import job_profile_from_toon
     from app.ai.document_intelligence.models.job import JobProfile

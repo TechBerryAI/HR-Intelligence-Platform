@@ -18,6 +18,8 @@ import json
 import re
 import requests
 
+from app.core.timing import timing
+
 ATS_API_URL = (os.getenv('ATS_API_URL') or '').rstrip('/')
 ATS_API_KEY = os.getenv('ATS_API_KEY', '')
 # Auto-shortlist threshold: overall match score must be ≥ this value (Strong Match).
@@ -718,6 +720,7 @@ def _build_deterministic_narrative(
     return " ".join(parts)
 
 
+@timing
 def _optional_llm_narrative(evidence: dict) -> str:
     """Best-effort 2–4 sentence narrative from scored evidence; empty on failure."""
     if os.getenv("ATS_NARRATIVE_LLM", "1").strip().lower() in ("0", "false", "no", "off"):
@@ -986,6 +989,7 @@ def _build_recruiter_report(
     }
 
 
+@timing
 def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
     """
     Evaluate candidate (TOON resume) vs job (TOON JD). Deterministic, no inflation.
@@ -1195,6 +1199,7 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
     }
 
 
+@timing
 def match_candidate_to_job(candidate_id: str, job_id: str, parsed_resume: dict, parsed_jd: dict, apply_id: str = None):
     """
     Call HR-ATS-API /api/match when configured; otherwise run internal weighted matcher.

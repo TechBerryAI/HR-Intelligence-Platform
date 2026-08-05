@@ -7,6 +7,7 @@ import uuid
 from typing import Dict, Any, Optional, Tuple
 
 from app.ai.toon.runtime import toon_dumps, toon_loads_flex
+from app.core.timing import timing
 from datetime import datetime
 
 UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', './uploads')
@@ -167,6 +168,7 @@ def validate_toon_format_bulk(
     return True, error_msg or 'Partial validation', 'partial'
 
 
+@timing
 def store_raw_file(
     uploader_id: str,
     uploader_role: str,

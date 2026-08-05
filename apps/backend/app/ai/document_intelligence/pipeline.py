@@ -28,6 +28,7 @@ from app.ai.parser.engine.hardware import apply_hardware_env, detect_hardware_pr
 from app.ai.parser.engine.progress import complete_parse_job, create_parse_job, emit_stage
 from app.ai.parser.engine.sections import unresolved_semantic_text
 from app.ai.parser.engine.types import StageCallback, StageEvent
+from app.core.timing import timing
 from app.domains.recruitment.services.parsing_storage import (
     collect_toon_validation_issues,
     compute_file_hash,
@@ -130,6 +131,7 @@ def _emit(
             pass
 
 
+@timing
 def run_document_intelligence(
     doc_type: str,
     file_data: bytes,
@@ -337,6 +339,7 @@ def _cache_hit_response(
     return body, 200
 
 
+@timing
 def _run_resume(
     file_data: bytes,
     filename: str,
@@ -533,6 +536,7 @@ def _run_resume(
     }, 200
 
 
+@timing
 def _run_jd(
     file_data: bytes,
     filename: str,
