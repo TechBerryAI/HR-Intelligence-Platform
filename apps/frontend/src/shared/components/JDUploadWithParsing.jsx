@@ -250,25 +250,33 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: -10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="border border-[rgba(54,214,160,0.3)] bg-[rgba(54,214,160,0.1)] px-4 py-3 rounded-xl"
+              className="border px-4 py-3 rounded-xl"
+              style={{
+                borderColor: 'var(--ei-tone-success-border)',
+                background: 'var(--ei-tone-success-bg)',
+              }}
             >
               <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-8 h-8 bg-[#36D6A0] rounded-full flex items-center justify-center">
-                  <FiCheck className="w-4 h-4 text-[#0B1118]" />
+                <div
+                  className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                  style={{ background: 'var(--ei-tone-success)' }}
+                >
+                  <FiCheck className="w-4 h-4 text-white" />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-[#9AE6C8]">{parseSuccess}</p>
+                  <p className="text-sm font-semibold" style={{ color: 'var(--ei-tone-success)' }}>{parseSuccess}</p>
                   {confidence !== null && (
                     <div className="mt-2 flex items-center gap-2">
-                      <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--ei-border-primary)' }}>
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: `${confidence * 100}%` }}
                           transition={{ duration: 1, ease: 'easeOut' }}
-                          className="h-full bg-gradient-to-r from-[#36D6A0] to-emerald-400 rounded-full"
+                          className="h-full rounded-full"
+                          style={{ background: 'var(--ei-tone-success)' }}
                         />
                       </div>
-                      <span className="text-xs font-medium text-[#9AE6C8] min-w-[45px] text-right">
+                      <span className="text-xs font-medium min-w-[45px] text-right" style={{ color: 'var(--ei-tone-success)' }}>
                         {(confidence * 100).toFixed(0)}%
                       </span>
                     </div>
@@ -297,9 +305,9 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
           {/* Feature highlights */}
           <div className="grid grid-cols-3 gap-3 pt-2">
             {[
-              { icon: FiZap, text: 'Instant Extraction', color: 'text-[#00A6FF]' },
-              { icon: FiCheck, text: 'High Accuracy', color: 'text-[#36D6A0]' },
-              { icon: FiFile, text: 'Multiple Formats', color: 'text-[#A78BFA]' },
+              { icon: FiZap, text: 'Instant Extraction', color: 'text-[var(--ei-accent-blue)]' },
+              { icon: FiCheck, text: 'High Accuracy', color: 'text-[var(--ei-tone-success)]' },
+              { icon: FiFile, text: 'Multiple Formats', color: 'text-[var(--ei-accent-purple)]' },
             ].map((feature, index) => (
               <motion.div
                 key={index}

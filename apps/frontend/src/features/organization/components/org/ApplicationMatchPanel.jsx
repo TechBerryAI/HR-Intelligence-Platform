@@ -48,7 +48,7 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
 
   if (!application) {
     return (
-      <div className="rounded-[16px] bg-white/[0.025] border border-white/[0.08] p-6 text-sm text-[#8796A5]">
+      <div className="rounded-[16px] bg-[var(--ei-surface-hover)] border border-[var(--ei-border-primary)] p-6 text-sm text-[var(--ei-text-muted)]">
         No application record found for this job.
       </div>
     )
@@ -117,9 +117,9 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
         <div className="org-error-banner">{reportError}</div>
       )}
 
-      <section className="rounded-[16px] bg-white/[0.025] border border-white/[0.08] px-5 py-[18px]">
+      <section className="rounded-[16px] bg-[var(--ei-surface-hover)] border border-[var(--ei-border-primary)] px-5 py-[18px]">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#738394]">
+          <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ei-text-muted)]">
             Application Overview
           </h3>
           <button
@@ -138,31 +138,31 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <p className="text-[12px] text-[#738394] mb-1">Status</p>
-            <p className="text-[14px] sm:text-[15px] font-semibold text-[#F2F5F8]">
+            <p className="text-[12px] text-[var(--ei-text-muted)] mb-1">Status</p>
+            <p className="text-[14px] sm:text-[15px] font-semibold text-[var(--ei-text-primary)]">
               <StatusDot status={application.status} shortlisted={application.shortlisted} />
             </p>
           </div>
           <div>
-            <p className="text-[12px] text-[#738394] mb-1">Applied</p>
-            <p className="text-[14px] sm:text-[15px] font-medium text-[#F2F5F8]">{formatDate(application.applied_at)}</p>
+            <p className="text-[12px] text-[var(--ei-text-muted)] mb-1">Applied</p>
+            <p className="text-[14px] sm:text-[15px] font-medium text-[var(--ei-text-primary)]">{formatDate(application.applied_at)}</p>
           </div>
           <div>
-            <p className="text-[12px] text-[#738394] mb-1">Recruiter</p>
-            <p className="text-[14px] sm:text-[15px] font-medium text-[#F2F5F8] truncate">{application.hr_name || '—'}</p>
+            <p className="text-[12px] text-[var(--ei-text-muted)] mb-1">Recruiter</p>
+            <p className="text-[14px] sm:text-[15px] font-medium text-[var(--ei-text-primary)] truncate">{application.hr_name || '—'}</p>
           </div>
           <div>
-            <p className="text-[12px] text-[#738394] mb-1">Match score</p>
-            <p className="text-[14px] sm:text-[15px] font-medium text-[#A0ABB6] tabular-nums">
+            <p className="text-[12px] text-[var(--ei-text-muted)] mb-1">Match score</p>
+            <p className="text-[14px] sm:text-[15px] font-semibold text-[var(--ei-text-primary)] tabular-nums">
               {score != null ? `${score}%` : '—'}
             </p>
           </div>
         </div>
       </section>
 
-      <section className="rounded-[20px] border border-white/[0.08] overflow-hidden bg-[rgba(16,23,30,0.82)] shadow-[0_18px_45px_rgba(0,0,0,0.20)]">
+      <section className="rounded-[20px] border border-[var(--ei-border-primary)] overflow-hidden bg-[var(--ei-surface-glass)] shadow-[0_8px_28px_rgba(15,23,42,0.06)] text-[var(--ei-text-primary)]">
         <div className="px-5 sm:px-6 pt-5 pb-1">
-          <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#83909C]">
+          <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ei-text-muted)]">
             Match Analysis
           </h3>
         </div>
@@ -178,32 +178,42 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
 
         <div className="p-5 sm:p-6 space-y-6">
           <div
-            className={`rounded-[14px] px-4 py-3.5 border-l-[3px] ${
+            className="rounded-[14px] px-4 py-3.5 border border-l-[3px]"
+            style={
               isNegativeVerdict
-                ? 'bg-[rgba(255,82,105,0.035)] border border-[rgba(255,82,105,0.12)] border-l-[rgba(255,82,105,0.65)]'
-                : 'bg-[rgba(55,214,160,0.04)] border border-[rgba(55,214,160,0.12)] border-l-[rgba(55,214,160,0.55)]'
-            }`}
+                ? {
+                    background: 'var(--ei-tone-danger-bg)',
+                    borderColor: 'var(--ei-tone-danger-border)',
+                    borderLeftColor: 'var(--ei-tone-danger)',
+                  }
+                : {
+                    background: 'var(--ei-tone-success-bg)',
+                    borderColor: 'var(--ei-tone-success-border)',
+                    borderLeftColor: 'var(--ei-tone-success)',
+                  }
+            }
           >
             <div className="flex items-start gap-3">
               <div
-                className={`mt-0.5 flex-shrink-0 w-8 h-8 rounded-[10px] grid place-items-center ${
+                className="mt-0.5 flex-shrink-0 w-8 h-8 rounded-[10px] grid place-items-center"
+                style={
                   isNegativeVerdict
-                    ? 'bg-[rgba(255,82,105,0.12)] text-[#FF758A]'
-                    : 'bg-[rgba(55,214,160,0.12)] text-[#67DFB4]'
-                }`}
+                    ? { background: 'var(--ei-tone-danger-bg)', color: 'var(--ei-tone-danger)' }
+                    : { background: 'var(--ei-tone-success-bg)', color: 'var(--ei-tone-success)' }
+                }
               >
                 {isNegativeVerdict ? <FiAlertTriangle className="w-4 h-4" /> : <FiZap className="w-4 h-4" />}
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#83909C]">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ei-text-muted)]">
                   Why this verdict
                 </p>
-                <p className="mt-1.5 text-sm font-medium text-[#F2F5F8] leading-relaxed">{reason}</p>
+                <p className="mt-1.5 text-sm font-medium text-[var(--ei-text-primary)] leading-relaxed">{reason}</p>
                 {recon?.note && (
-                  <p className="mt-2 text-xs text-[#8796A5] leading-relaxed">{recon.note}</p>
+                  <p className="mt-2 text-xs text-[var(--ei-text-muted)] leading-relaxed">{recon.note}</p>
                 )}
                 {displayMandatoryPct != null && Number(displayMandatoryPct) < 60 && (
-                  <p className="mt-1.5 text-xs text-[#8796A5]">
+                  <p className="mt-1.5 text-xs text-[var(--ei-text-muted)]">
                     Required threshold: 60% · Current mandatory skills match: {Number(displayMandatoryPct)}%
                     {missingMandatory.length > 0 ? ` · Missing: ${missingMandatory.join(', ')}` : ''}
                   </p>
@@ -215,10 +225,10 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
           {hasMatchDetails && (
             <div>
               <div className="mb-3">
-                <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#83909C]">
+                <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ei-text-muted)]">
                   Score breakdown
                 </h3>
-                <p className="mt-1 text-xs text-[#738394]">
+                <p className="mt-1 text-xs text-[var(--ei-text-muted)]">
                   How well the candidate fits each area of the role
                   {displayMandatoryPct != null
                     ? ` · Mandatory skills: ${Number(displayMandatoryPct)}% matched`
@@ -278,13 +288,10 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
 
           {hasMatchDetails && (
             <div
-              className="rounded-[14px] p-4 border border-[rgba(103,128,255,0.13)]"
-              style={{
-                background: 'linear-gradient(135deg, rgba(105,80,255,0.07), rgba(0,166,255,0.04))',
-              }}
+              className="rounded-[14px] p-4 border border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]"
             >
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#83909C] flex items-center gap-2 mb-3">
-                <FiZap className="w-3.5 h-3.5 text-[#00A6FF]" />
+              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ei-text-muted)] flex items-center gap-2 mb-3">
+                <FiZap className="w-3.5 h-3.5 text-[var(--ei-accent-blue)]" />
                 Match Insight
               </p>
               <CollapsibleSection label="Detailed Analysis" variant="enterprise" defaultOpen>

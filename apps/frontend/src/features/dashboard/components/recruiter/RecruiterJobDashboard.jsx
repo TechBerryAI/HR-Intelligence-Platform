@@ -279,12 +279,28 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                 animate={{ opacity: 1, scale: 1 }}
                 className={`border px-5 py-4 rounded-xl flex items-center gap-3 ${
                   embedded
-                    ? 'border-[rgba(54,214,160,0.3)] bg-[rgba(54,214,160,0.1)]'
+                    ? ''
                     : 'border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10'
                 }`}
+                style={
+                  embedded
+                    ? {
+                        borderColor: 'var(--ei-tone-success-border)',
+                        background: 'var(--ei-tone-success-bg)',
+                      }
+                    : undefined
+                }
               >
-                <FiCheck className={`w-5 h-5 flex-shrink-0 ${embedded ? 'text-[#36D6A0]' : 'text-emerald-600 dark:text-emerald-400'}`} />
-                <span className={`text-sm font-medium ${embedded ? 'text-[#9AE6C8]' : 'text-emerald-700 dark:text-emerald-300'}`}>{success}</span>
+                <FiCheck
+                  className={`w-5 h-5 flex-shrink-0 ${embedded ? '' : 'text-emerald-600 dark:text-emerald-400'}`}
+                  style={embedded ? { color: 'var(--ei-tone-success)' } : undefined}
+                />
+                <span
+                  className={`text-sm font-medium ${embedded ? '' : 'text-emerald-700 dark:text-emerald-300'}`}
+                  style={embedded ? { color: 'var(--ei-tone-success)' } : undefined}
+                >
+                  {success}
+                </span>
               </motion.div>
             )}
             {error && (
@@ -293,12 +309,28 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                 animate={{ opacity: 1, scale: 1 }}
                 className={`border px-5 py-4 rounded-xl flex items-center gap-3 ${
                   embedded
-                    ? 'border-[rgba(255,102,133,0.3)] bg-[rgba(255,102,133,0.1)]'
+                    ? ''
                     : 'border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10'
                 }`}
+                style={
+                  embedded
+                    ? {
+                        borderColor: 'var(--ei-tone-danger-border)',
+                        background: 'var(--ei-tone-danger-bg)',
+                      }
+                    : undefined
+                }
               >
-                <FiAlertCircle className={`w-5 h-5 flex-shrink-0 ${embedded ? 'text-[#FF6685]' : 'text-red-600 dark:text-red-400'}`} />
-                <span className={`text-sm font-medium ${embedded ? 'text-[#FF8FA3]' : 'text-red-700 dark:text-red-300'}`}>{error}</span>
+                <FiAlertCircle
+                  className={`w-5 h-5 flex-shrink-0 ${embedded ? '' : 'text-red-600 dark:text-red-400'}`}
+                  style={embedded ? { color: 'var(--ei-tone-danger)' } : undefined}
+                />
+                <span
+                  className={`text-sm font-medium ${embedded ? '' : 'text-red-700 dark:text-red-300'}`}
+                  style={embedded ? { color: 'var(--ei-tone-danger)' } : undefined}
+                >
+                  {error}
+                </span>
               </motion.div>
             )}
 

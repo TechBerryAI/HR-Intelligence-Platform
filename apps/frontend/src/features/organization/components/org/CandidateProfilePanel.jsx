@@ -13,9 +13,10 @@ export default function CandidateProfilePanel({ candidate, cid }) {
   const [resumeLoading, setResumeLoading] = useState(false)
   if (!candidate) return null
 
-  const sectionClass = 'rounded-[14px] bg-white/[0.03] border border-white/[0.08] p-4'
-  const labelClass = 'text-xs font-semibold text-[#83909C] uppercase tracking-[0.08em]'
-  const valueClass = 'text-sm text-[#DCE3EA] mt-0.5'
+  const sectionClass = 'rounded-[14px] bg-[var(--ei-surface-hover)] border border-[var(--ei-border-primary)] p-4'
+  const labelClass = 'text-xs font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]'
+  const valueClass = 'text-sm font-medium text-[var(--ei-text-primary)] mt-0.5'
+  const metaClass = 'text-[var(--ei-text-muted)] text-xs'
   const candidateId = cid || candidate.candidate_id || candidate.cid
 
   const handleViewResume = async () => {
@@ -47,12 +48,14 @@ export default function CandidateProfilePanel({ candidate, cid }) {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#00A6FF]/30 to-[#7957FF]/25 border border-white/[0.08] flex items-center justify-center">
-            <FiUser className="w-6 h-6 text-[#A0ABB6]" />
+          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#00A6FF]/20 to-[#7957FF]/15 border border-[var(--ei-border-primary)] flex items-center justify-center">
+            <FiUser className="w-6 h-6 text-[var(--ei-text-secondary)]" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-[#F5F7FA]">{candidate.fullName || candidate.email || 'Candidate'}</h2>
-            <p className="text-sm text-[#738394] font-mono">{candidateId}</p>
+            <h2 className="text-lg font-bold text-[var(--ei-text-primary)]">
+              {candidate.fullName || candidate.email || 'Candidate'}
+            </h2>
+            <p className="text-sm text-[var(--ei-text-muted)] font-mono">{candidateId}</p>
           </div>
         </div>
         {candidate.hasResume && (
@@ -69,25 +72,25 @@ export default function CandidateProfilePanel({ candidate, cid }) {
       </div>
 
       {!candidate.hasResume && (
-        <p className="text-sm text-[#8796A5]">This candidate has not uploaded a resume.</p>
+        <p className="text-sm text-[var(--ei-text-muted)]">This candidate has not uploaded a resume.</p>
       )}
 
       <div className={sectionClass}>
         <h3 className={labelClass}>Contact</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
           <div>
-            <p className="text-[#738394] text-xs flex items-center gap-1.5"><FiMail className="w-3.5 h-3.5" /> Email</p>
+            <p className={`${metaClass} flex items-center gap-1.5`}><FiMail className="w-3.5 h-3.5" /> Email</p>
             <p className={valueClass}>{candidate.email || '—'}</p>
           </div>
           <div>
-            <p className="text-[#738394] text-xs flex items-center gap-1.5"><FiPhone className="w-3.5 h-3.5" /> Phone</p>
+            <p className={`${metaClass} flex items-center gap-1.5`}><FiPhone className="w-3.5 h-3.5" /> Phone</p>
             <p className={valueClass}>{candidate.phone || '—'}</p>
           </div>
           <div className="sm:col-span-2">
-            <p className="text-[#738394] text-xs flex items-center gap-1.5"><FiMapPin className="w-3.5 h-3.5" /> Location</p>
+            <p className={`${metaClass} flex items-center gap-1.5`}><FiMapPin className="w-3.5 h-3.5" /> Location</p>
             <p className={valueClass}>{currentLoc}</p>
             {preferredLoc !== '—' && preferredLoc !== currentLoc && (
-              <p className="text-[#738394] text-xs mt-1">Preferred: {preferredLoc}</p>
+              <p className={`${metaClass} mt-1`}>Preferred: {preferredLoc}</p>
             )}
           </div>
         </div>
@@ -97,11 +100,11 @@ export default function CandidateProfilePanel({ candidate, cid }) {
         <h3 className={labelClass}>Professional</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
           <div>
-            <p className="text-[#738394] text-xs">Experience level</p>
+            <p className={metaClass}>Experience level</p>
             <p className={valueClass}>{candidate.experienceLevel || '—'}</p>
           </div>
           <div>
-            <p className="text-[#738394] text-xs">Notice period</p>
+            <p className={metaClass}>Notice period</p>
             <p className={valueClass}>{candidate.noticePeriod || candidate.servingNotice || '—'}</p>
           </div>
         </div>
@@ -112,9 +115,9 @@ export default function CandidateProfilePanel({ candidate, cid }) {
           <h3 className={`${labelClass} flex items-center gap-2`}><FiBriefcase className="w-4 h-4" /> Experience</h3>
           <ul className="mt-3 space-y-3">
             {candidate.experiences.map((exp, i) => (
-              <li key={i} className="text-sm text-[#A0ABB6] pl-2 border-l-2 border-white/[0.1]">
-                <span className="font-medium text-[#F2F5F8]">{exp.role || '—'}</span>
-                {exp.company && <span className="text-[#738394]"> at {exp.company}</span>}
+              <li key={i} className="text-sm text-[var(--ei-text-secondary)] pl-2 border-l-2 border-[var(--ei-border-primary)]">
+                <span className="font-medium text-[var(--ei-text-primary)]">{exp.role || '—'}</span>
+                {exp.company && <span className="text-[var(--ei-text-muted)]"> at {exp.company}</span>}
               </li>
             ))}
           </ul>
@@ -126,9 +129,9 @@ export default function CandidateProfilePanel({ candidate, cid }) {
           <h3 className={`${labelClass} flex items-center gap-2`}><FiBook className="w-4 h-4" /> Education</h3>
           <ul className="mt-3 space-y-3">
             {candidate.education.map((edu, i) => (
-              <li key={i} className="text-sm text-[#A0ABB6] pl-2 border-l-2 border-white/[0.1]">
-                <span className="font-medium text-[#F2F5F8]">{edu.degree || '—'}</span>
-                {edu.institution && <span className="text-[#738394]">, {edu.institution}</span>}
+              <li key={i} className="text-sm text-[var(--ei-text-secondary)] pl-2 border-l-2 border-[var(--ei-border-primary)]">
+                <span className="font-medium text-[var(--ei-text-primary)]">{edu.degree || '—'}</span>
+                {edu.institution && <span className="text-[var(--ei-text-muted)]">, {edu.institution}</span>}
               </li>
             ))}
           </ul>
@@ -140,8 +143,8 @@ export default function CandidateProfilePanel({ candidate, cid }) {
           <h3 className={`${labelClass} flex items-center gap-2`}><FiAward className="w-4 h-4" /> Certifications</h3>
           <ul className="mt-3 space-y-2">
             {candidate.certifications.map((cert, i) => (
-              <li key={i} className="text-sm text-[#A0ABB6]">
-                <span className="font-medium text-[#F2F5F8]">{cert.certification || '—'}</span>
+              <li key={i} className="text-sm text-[var(--ei-text-secondary)]">
+                <span className="font-medium text-[var(--ei-text-primary)]">{cert.certification || '—'}</span>
               </li>
             ))}
           </ul>
@@ -149,7 +152,7 @@ export default function CandidateProfilePanel({ candidate, cid }) {
       )}
 
       {candidate.joinedAt && (
-        <p className="text-sm text-[#738394]">Joined {formatDate(candidate.joinedAt)}</p>
+        <p className="text-sm text-[var(--ei-text-muted)]">Joined {formatDate(candidate.joinedAt)}</p>
       )}
     </div>
   )
