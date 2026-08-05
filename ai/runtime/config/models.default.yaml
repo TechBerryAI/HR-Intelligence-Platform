@@ -3,35 +3,35 @@ aliases:
     default_provider: ollama
     description: Resume parsing model alias.
     models:
-      ollama: ${OLLAMA_MODEL:qwen2.5:7b-instruct}
+      ollama: ${OLLAMA_MODEL:qwen2.5:14b-instruct}
       grok: grok-4-fast-reasoning
 
   jd-parser:
     default_provider: ollama
     description: Job description parsing model alias.
     models:
-      ollama: ${OLLAMA_MODEL:qwen2.5:7b-instruct}
+      ollama: ${OLLAMA_MODEL:qwen2.5:14b-instruct}
 
   matching-engine:
     default_provider: ollama
     description: Candidate matching model alias.
     models:
-      ollama: qwen2.5:7b-instruct
+      ollama: ${OLLAMA_MODEL:qwen2.5:14b-instruct}
 
   summarizer:
     default_provider: ollama
     description: Resume summarization model alias.
     models:
-      ollama: qwen2.5:7b-instruct
+      ollama: ${OLLAMA_MODEL:qwen2.5:14b-instruct}
 
   interview-generator:
     default_provider: ollama
     description: Interview question generation model alias.
     models:
-      ollama: qwen2.5:7b-instruct
+      ollama: ${OLLAMA_MODEL:qwen2.5:14b-instruct}
 
   hr-chat:
     default_provider: ollama
     description: HR chat assistant model alias.
     models:
-      ollama: qwen2.5:7b-instruct
+      ollama: ${OLLAMA_MODEL:qwen2.5:14b-instruct}

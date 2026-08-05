@@ -1,0 +1,117 @@
+{
+  "file": "AI Generalist (Fresher) - JD.pdf",
+  "expected": {
+    "title_from_filename": "AI Generalist (Fresher)"
+  },
+  "form": {
+    "title": "AI Generalist (Fresher)",
+    "company": "",
+    "location": "Mumbai",
+    "salary": "",
+    "experienceFrom": "0",
+    "experienceTo": "",
+    "employmentType": "Full-Time | On-site",
+    "mandatorySkills": [
+      "Basic understanding of Python",
+      "Python",
+      "data handling",
+      "or AI concepts"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "Basic understanding of Python",
+      "Python",
+      "data handling",
+      "or AI concepts"
+    ],
+    "responsibilities": [
+      "be part of a growing startup team experimenting with data, automation, and AI-driven solutions across various business areas.",
+      "Key Responsibilities: Learn and apply fundamentals of AI, Machine Learning, and Data Processing.",
+      "Assist in building simple AI models, data pipelines, and automation workflows.",
+      "Research and explore AI tools, frameworks, and APIs for implementation.",
+      "Support proof-of-concept (PoC) development and documentation.",
+      "Collaborate with mentors and teammates to test and deploy new ideas.",
+      "Desired Skills: Basic understanding of Python, data handling, or AI concepts.",
+      "Curiosity to learn new technologies and solve problems creatively.",
+      "Good logical thinking and teamwork skills.",
+      "No prior experience required – just a willingness to learn and grow.",
+      "Who Can Apply: Fresh graduates or final-year students from Computer Science, IT, Engineering, or related backgrounds who are passionate about AI and innovation."
+    ],
+    "qualifications": [],
+    "descriptionPreview": "We are looking for enthusiastic freshers who are eager to explore, learn, and\nimplement Artificial Intelligence (AI) concepts in real-world projects. As an AI\nGeneralist,\n\n**Key Responsibilities:**\n• be part of a growing startup team experimenting with data, automation, and AI-driven solutions across various business areas.\n• Key Responsibilities: Learn and apply fundamentals of AI, Machine Learning, and Data Processing.\n• Assist in building simple AI models, data pipelines, and automation workf",
+    "descriptionLen": 1142,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 1.0,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 4,
+    "skills_checked": 4,
+    "skills_count": 4,
+    "location_in_source": true,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "0",
+      "parsed_to": "",
+      "source_year_mentions": [],
+      "ok": null
+    },
+    "has_description": true,
+    "coverage_missing_with_evidence": [],
+    "coverage_recovered": [],
+    "source_preview": "AI Generalist (Fresher) | Job Title: AI Generalist (Fresher) | Location: Mumbai | Employment Type: Full-Time | On-site | About the Role: | We are looking for enthusiastic freshers who are eager to explore, learn, and | implement Artificial Intelligence (AI) concepts in real-world projects. As an AI | Generalist, you will be part of a growing startup team experimenting with data, | automation, and AI-driven solutions across various business areas. | Key Responsibilities: | Learn and apply fundamentals of AI, Machine Learning, and Data Processing. | Assist in building simple AI models, data pipelines, and automation "
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'AI Generalist (Fresher)', 'company': '', 'location': 'Mumbai', 'employment_type': 'Full-Time | On-site', 'description': 'We are looking for enthusiastic freshers who are eager to explore, learn, and\\nimplement Artificial Intelligence (AI) concepts in real-world projects. As an AI\\nGeneralist,\\n\\n**Key Responsibilities:**\\n• be part of a growing startup team experimenting with data, automation, and AI-driven solutions across various business areas.\\n• Key Responsibilities: Learn and apply fundamentals of AI, Machine Learning, and Data Processing.\\n• Assist in building simple AI models, data pipelines, and automation workflows.\\n• Research and explore AI tools, frameworks, and APIs for implementation.\\n• Support proof-of-concept (PoC) development and documentation.\\n• Collaborate with mentors and teammates to test and deploy new ideas.\\n• Desired Skills: Basic understanding of Python, data handling, or AI concepts.\\n• Curiosity to learn new technologies and solve problems creatively.\\n• Good logical thinking and teamwork skills.\\n• No prior experience required – just a willingness to learn and grow.\\n• Who Can Apply: Fresh graduates or final-year students from Computer Science, IT, Engineering, or related backgrounds who are passionate about AI and innovation.', 'min_experience_years': 0.0, 'max_experience_years': None, 'skills': ['Basic understanding of Python', 'Python', 'data handling', 'or AI concepts'], 'mandatory_skills': ['Basic unde",
+  "source_preview": "AI Generalist (Fresher)\nJob Title: AI Generalist (Fresher)\nLocation: Mumbai\nEmployment Type: Full-Time | On-site\nAbout the Role:\nWe are looking for enthusiastic freshers who are eager to explore, learn, and\nimplement Artificial Intelligence (AI) concepts in real-world projects. As an AI\nGeneralist, you will be part of a growing startup team experimenting with data,\nautomation, and AI-driven solutions across various business areas.\nKey Responsibilities:\nLearn and apply fundamentals of AI, Machine Learning, and Data Processing.\nAssist in building simple AI models, data pipelines, and automation workflows.\nResearch and explore AI tools, frameworks, and APIs for implementation.\nSupport proof-of-concept (PoC) development and documentation.\nCollaborate with mentors and teammates to test and deploy new ideas.\nDesired Skills:\nBasic understanding of Python, data handling, or AI concepts.\nCuriosity to learn new technologies and solve problems creatively.\nGood logical thinking and teamwork skills.\nNo prior experience required – just a willingness to learn and grow.\nWho Can Apply:\nFresh graduates or final-year students from Computer Science, IT, Engineering, or\nrelated backgrounds who are passionate about AI and innovation."
+}

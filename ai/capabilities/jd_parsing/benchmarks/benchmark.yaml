@@ -7,7 +7,7 @@ benchmark:
     - schema_validation_pass_rate >= 0.95
     - required_fields_present_rate >= 0.98
   latency_target_ms: 6000
-  accuracy_target: 0.88
+  accuracy_target: 0.99
   future_metrics:
     - field_level_f1
     - calibration_error

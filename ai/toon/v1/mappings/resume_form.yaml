@@ -1,0 +1,62 @@
+# Form Mapping Contract — CandidateProfile → Application Form DTO
+# Version: 2.0.0
+# Executed by: app.ai.document_intelligence.mapping.resume_form
+# Frontend MUST consume Form DTO only — never map TOON.
+
+version: "2.0.0"
+document_type: resume
+mapper: document_intelligence.mapping.resume_form.v1
+engine: document_intelligence
+
+mappings:
+  - canonical: personal.full_name
+    form: fullName
+  - canonical: contact.email
+    form: email
+    validator: validate_email
+  - canonical: contact.phone
+    form: phone
+    validator: validate_phone
+  - canonical: contact.linkedin
+    form: linkedinUrl
+    validator: validate_url
+  - canonical: contact.portfolio
+    form: portfolioUrl
+    validator: validate_url
+  - canonical: contact.github
+    form: githubUrl
+    validator: validate_url
+  - canonical: contact.location
+    form: currentLocation
+  - canonical: contact.preferred_location
+    form: preferredLocation
+    note: No fallback to currentLocation
+  - canonical: total_experience_years|experience[]
+    form: experienceLevel
+    transform: fresher_or_experienced
+  - canonical: skills[].canonical
+    form: skills
+    transform: join_comma
+  - canonical: personal.summary
+    form: summary
+  - canonical: education[]
+    form: education[]
+    fields:
+      degree: degree+field
+      institution: institution
+      gpa: cgpa
+      start: startMonth
+      end: endMonth
+  - canonical: experience[]
+    form: experiences[]
+    fields:
+      company: company
+      role: role
+      start: startMonth
+      end: endMonth
+      is_current: isCurrent
+      description: description
+  - canonical: certificates[]
+    form: certifications[]
+
+# Not mapped (user-input only): servingNotice, noticePeriod, lastWorkingDay

@@ -1,7 +1,16 @@
 {
   "knowledge_base": "degrees",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "schema_ref": "./schema.yaml",
-  "updated_at": "2026-06-25",
-  "aliases": []
+  "updated_at": "2026-08-03",
+  "aliases": [
+    {"alias": "b.tech", "canonical": "Bachelor of Technology", "id": "degree.btech"},
+    {"alias": "btech", "canonical": "Bachelor of Technology", "id": "degree.btech"},
+    {"alias": "b.e", "canonical": "Bachelor of Engineering", "id": "degree.be"},
+    {"alias": "be", "canonical": "Bachelor of Engineering", "id": "degree.be"},
+    {"alias": "m.tech", "canonical": "Master of Technology", "id": "degree.mtech"},
+    {"alias": "mba", "canonical": "Master of Business Administration", "id": "degree.mba"},
+    {"alias": "bsc", "canonical": "Bachelor of Science", "id": "degree.bsc"},
+    {"alias": "msc", "canonical": "Master of Science", "id": "degree.msc"}
+  ]
 }

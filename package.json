@@ -3,10 +3,12 @@
   "private": true,
   "version": "0.0.1",
   "license": "UNLICENSED",
-  "main": "electron/main.js",
+  "main": "apps/desktop/main.js",
   "scripts": {
     "electron": "electron .",
-    "electron:dev": "electron ."
+    "electron:dev": "electron .",
+    "start": "node start.js",
+    "start:vm": "node start-vm.js"
   },
   "devDependencies": {
     "electron": "^28.0.0"

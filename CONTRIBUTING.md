@@ -4,12 +4,12 @@ Thank you for contributing. This repository contains two coordinated systems:
 
 | System | Path | Documentation |
 |--------|------|---------------|
-| HRMS application | `frontend/`, `backend/`, `electron/` | [docs/](docs/) |
+| HRMS application | `apps/frontend/`, `apps/backend/`, `apps/desktop/` | [docs/](docs/) |
 | AI platform | `ai/` | [ai/README.md](ai/README.md) |
 
 ## Before you start
 
-1. Read [docs/DOCUMENTATION_MAP.md](docs/DOCUMENTATION_MAP.md) — single entry point for all documentation
+1. Read [docs/README.md](docs/README.md) — single entry point for all documentation
 2. Read [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — local setup and workflows
 3. Identify which system you are changing — do not mix concerns across boundaries
 
@@ -17,9 +17,9 @@ Thank you for contributing. This repository contains two coordinated systems:
 
 | Owner | Responsibility |
 |-------|----------------|
-| `frontend/` | Presentation only |
-| `backend/` | Business logic, APIs, TOON runtime (`toon.py`) |
-| `electron/` | Desktop integration only (dialogs, IPC, FS) |
+| `apps/frontend/` | Presentation only |
+| `apps/backend/` | Business logic, APIs, TOON runtime (`app/ai/toon/`) |
+| `apps/desktop/` | Desktop integration only (dialogs, IPC, FS) |
 | `ai/` | All AI intelligence (runtime, providers, capabilities, dataset, TOON) |
 
 **Do not** place AI-specific code outside `ai/`. **Do not** place business logic in Electron.
@@ -46,8 +46,8 @@ Thank you for contributing. This repository contains two coordinated systems:
 | Component | Command |
 |-----------|---------|
 | AI platform | `cd ai && pytest` |
-| Frontend build | `cd frontend && npm run build` |
-| Backend | Manual / integration via `node start.js` |
+| Frontend build | `cd apps/frontend && npm run build` |
+| Backend unit tests | `pytest tests/backend/` |
 | Database | `node scripts/db-preflight.js` |
 
 Component tests are colocated. See [tests/README.md](tests/README.md).
@@ -56,7 +56,7 @@ Component tests are colocated. See [tests/README.md](tests/README.md).
 
 When adding or changing a major component:
 
-- Update the directory README (see [documentation standard](docs/DOCUMENTATION_MAP.md#documentation-standard))
+- Update the directory README (see [documentation standard](docs/README.md#documentation-standard))
 - Fix cross-references if paths change
 - Do not duplicate content — link to the canonical source
 
@@ -82,6 +82,7 @@ Significant AI platform decisions require an ADR in `ai/docs/adr/`. See [ai/docs
 
 ## Questions
 
-- HRMS architecture: [docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md)
+- HCIP docs: [docs/README.md](docs/README.md) · [docs/01-Product-Constitution.md](docs/01-Product-Constitution.md)
 - AI platform: [ai/README.md](ai/README.md)
 - TOON: [ai/toon/README.md](ai/toon/README.md)
+- Legacy archive: [docs/legacy/README.md](docs/legacy/README.md)

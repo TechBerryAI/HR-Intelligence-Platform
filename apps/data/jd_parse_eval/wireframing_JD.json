@@ -1,0 +1,118 @@
+{
+  "file": "wireframing JD.pdf",
+  "expected": {
+    "title_from_filename": "wireframing"
+  },
+  "form": {
+    "title": "Wireframing and Figma Design",
+    "company": "",
+    "location": "",
+    "salary": "rs",
+    "experienceFrom": "2",
+    "experienceTo": "",
+    "employmentType": "",
+    "mandatorySkills": [
+      "o Proficiency in Figma and other design tools",
+      "o Excellent communication and collaboration skills",
+      "o Problem-solving and critical thinking abilities"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "o Proficiency in Figma and other design tools",
+      "o Excellent communication and collaboration skills",
+      "o Problem-solving and critical thinking abilities"
+    ],
+    "responsibilities": [
+      "Wireframing: o Create low-fidelity and high-fidelity wireframes to visualize the structure and layout of digital products.",
+      "o Collaborate with UX researchers and designers to understand user needs and preferences.",
+      "o Iterate on wireframes based on feedback and testing.",
+      "Figma Design: o Design visually appealing and user-friendly interfaces in Figma.",
+      "o Ensure consistency with brand guidelines and design standards.",
+      "o Create interactive prototypes for testing and validation.",
+      "Collaboration: o Work closely with developers, product managers, and other team members to ensure seamless integration of design into development.",
+      "o Participate in design reviews and provide constructive feedback.",
+      "Stay Updated: o Keep up-to-date with the latest design trends, tools, and best practices.",
+      "Education"
+    ],
+    "qualifications": [],
+    "descriptionPreview": "We are seeking a skilled Wireframing and Figma Designer to join our team and help us create\nintuitive and visually appealing user interfaces. The ideal candidate is a creative problem-\nsolver with a strong understanding of user experience (UX) principles and a proficiency in\nFigma.\n\n**Responsibilities:**\n• Wireframing: o Create low-fidelity and high-fidelity wireframes to visualize the structure and layout of digital products.\n• o Collaborate with UX researchers and designers to understand user ",
+    "descriptionLen": 1113,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 0.333,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 3,
+    "skills_checked": 3,
+    "skills_count": 3,
+    "location_in_source": null,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "2",
+      "parsed_to": "",
+      "source_year_mentions": [
+        2
+      ],
+      "ok": true
+    },
+    "has_description": true,
+    "coverage_missing_with_evidence": [
+      "location"
+    ],
+    "coverage_recovered": [],
+    "source_preview": "Job Description: Wireframing and Figma Design - Mumbai |  | Role Overview | We are seeking a skilled Wireframing and Figma Designer to join our team and help us create | intuitive and visually appealing user interfaces. The ideal candidate is a creative problem- | solver with a strong understanding of user experience (UX) principles and a proficiency in | Figma. |  | Responsibilities |  | • | Wireframing: | o Create low-fidelity and high-fidelity wireframes to visualize the structure and | layout of digital products. | o Collaborate with UX researchers and designers to understand user needs and | preferences. | o Iterate on "
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'Wireframing and Figma Design', 'company': '', 'location': '', 'employment_type': '', 'description': 'We are seeking a skilled Wireframing and Figma Designer to join our team and help us create\\nintuitive and visually appealing user interfaces. The ideal candidate is a creative problem-\\nsolver with a strong understanding of user experience (UX) principles and a proficiency in\\nFigma.\\n\\n**Responsibilities:**\\n• Wireframing: o Create low-fidelity and high-fidelity wireframes to visualize the structure and layout of digital products.\\n• o Collaborate with UX researchers and designers to understand user needs and preferences.\\n• o Iterate on wireframes based on feedback and testing.\\n• Figma Design: o Design visually appealing and user-friendly interfaces in Figma.\\n• o Ensure consistency with brand guidelines and design standards.\\n• o Create interactive prototypes for testing and validation.\\n• Collaboration: o Work closely with developers, product managers, and other team members to ensure seamless integration of design into development.\\n• o Participate in design reviews and provide constructive feedback.\\n• Stay Updated: o Keep up-to-date with the latest design trends, tools, and best practices.\\n• Education', 'min_experience_years': 2.0, 'max_experience_years': None, 'skills': ['o Proficiency in Figma and other design tools', 'o Excellent communication and collaboration skills', 'o Problem-solving and critical thinking abilities'], 'ma",
+  "source_preview": "Job Description: Wireframing and Figma Design - Mumbai\n\nRole Overview\nWe are seeking a skilled Wireframing and Figma Designer to join our team and help us create\nintuitive and visually appealing user interfaces. The ideal candidate is a creative problem-\nsolver with a strong understanding of user experience (UX) principles and a proficiency in\nFigma.\n\nResponsibilities\n\n•\nWireframing:\no Create low-fidelity and high-fidelity wireframes to visualize the structure and\nlayout of digital products.\no Collaborate with UX researchers and designers to understand user needs and\npreferences.\no Iterate on wireframes based on feedback and testing.\n\n•\nFigma Design:\no Design visually appealing and user-friendly interfaces in Figma.\no Ensure consistency with brand guidelines and design standards.\no Create interactive prototypes for testing and validation.\n\n•\nCollaboration:\no Work closely with developers, product managers, and other team members to\nensure seamless integration of design into development.\no Participate in design reviews and provide constructive feedback.\n\n•\nStay Updated:\no Keep up-to-date with the latest design trends, tools, and best practices.\n\n\nEducation\n\n•\nExperience: 2+ years of experience in wireframing and UI design.\n\n•\n\nSkills\no Proficiency in Figma and other design tools.\no Strong understanding of UX principles and best practices.\no Ability to create visually appealing and user-friendly designs.\no Excellent communication and collaboration skills.\no Problem-solving and critical thinking abilities.\n\n•\nPortfolio: A portfolio demonstrating previous wireframing and design work.\n\nBonus Points\n\n•\nExperience with prototyping tools like InVision or Proto.io.\n\n•\nKnowledge of front-end development (HTML, CSS, JavaScript).\n\n•\nExperience working in an agile development environment."
+}

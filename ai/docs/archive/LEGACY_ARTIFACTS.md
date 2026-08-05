@@ -1,44 +1,43 @@
 # Archive — Legacy Artifacts
 
-Documentation of retired paths and compatibility notes. **Architecture is frozen** — this file records history, not active redirects.
+Documentation of retired paths and compatibility notes.
 
 ## Purpose
 
-When paths were consolidated during repository modernization, some references remained in git history or external docs. This file explains what was removed and where to look now.
+When paths were consolidated during repository modernization and the Document
+Intelligence Engine migration, some references remained in git history or
+external docs. This file explains what was removed and where to look now.
 
 ## Retired paths (do not recreate)
 
 | Retired path | Replaced by | Notes |
 |--------------|-------------|-------|
 | `shared/types/` | `ai/toon/v1/types/toon.ts` | TOON owns TypeScript contracts |
-| `ai/dataset/factory/` | `ai/dataset/factory/` | Dataset platform consolidation |
-| `ai/dataset/lake/` | `ai/dataset/lake/` | Data lake under dataset owner |
-| `ai/dataset/extraction/` | `ai/dataset/extraction/` | Renamed for clarity |
-| `ai/dataset/proposals/` | `ai/dataset/proposals/` | Proposal Generator package |
-| `ai/runtime/providers/` | `ai/providers/` | Top-level provider system |
-| `ai/dataset/` | `ai/dataset/extraction/` + `ai/dataset/factory/` | Never implemented as standalone |
-| `ai/runtime/ + ai/providers/` | `ai/runtime/` + `ai/providers/` | Scaffold removed |
-| `ai/docs/archive/` | `ai/docs/archive/` | This file |
+| Frontend `mapResumeTOONToForm` / `mapJDTOONToForm` | `app.ai.document_intelligence.mapping` + Form DTOs | FE must not map TOON |
+| `app/ai/parser/enrichment/resume_inference.py` | `repair_resume_toon` in runtime_adapter | Deleted |
+| `call_parsing_api` in parsing_storage | Document Intelligence Engine | Deleted dead path |
 | `runtime/prompts/definitions/` | `ai/capabilities/*/prompt.md` | Removed — use capabilities |
 | `runtime/schemas/definitions/` | `ai/capabilities/*/schema.json` | Removed — use capabilities |
-| `ai/toon/v1/` | `ai/toon/v1/` | Redirect file removed |
 
-## Retained but unused code
+## Retained but unused / deprecate
 
 | Path | Justification |
 |------|---------------|
-| `backend/models/candidate_auth.py` | SQLAlchemy model for schema parity; routes use raw SQL (see `docs/BACKEND_DOCUMENTATION.md`) |
-| `ai/toon/v1/types/toon.ts` | TypeScript contracts; not yet imported by frontend |
+| `backend/models/candidate_auth.py` | SQLAlchemy model for schema parity; routes use raw SQL (see `docs/07-API.md` / `docs/legacy/ENGINEERING.md`) |
+| `ai/schemas/` + `ai/contracts/` | Spec overlap with TOON v1 + canonical models; deprecate |
+| Root shims `apps/backend/{toon,llm_service,...}.py` | Compat for older tests; prefer `app.*` |
+| `ai/toon/v1/types/toon.ts` | TypeScript contracts; Form DTOs are FE autofill contract |
 
-## Active production paths (never delete)
+## Active production paths
 
-- `backend/toon.py` — TOON wire runtime
-- `backend/llm_service.py` — HRMS parsing prompts
-- `ai/capabilities/` — Capability library
+- `apps/backend/app/ai/document_intelligence/` — Form DTOs, canonical models, explicit mappers
+- `apps/backend/app/ai/parser/engine/` — Extraction / deterministic / knowledge stages
+- `ai/capabilities/` — Semantic AI capability library
 - `ai/runtime/` — AI runtime
-- `ai/providers/` — LLM providers
-- `ai/toon/v1/` — TOON ontology (canonical)
+- `ai/toon/v1/` — TOON ontology (persistence wire)
+- `docs/document_intelligence/` — Engine architecture & acceptance
 
 ## Migration reference
 
-See [capabilities/MIGRATION.md](../capabilities/MIGRATION.md) for capability-based runtime migration.
+See [docs/document_intelligence/](../../../docs/document_intelligence/) and
+[capabilities/MIGRATION.md](../capabilities/MIGRATION.md).

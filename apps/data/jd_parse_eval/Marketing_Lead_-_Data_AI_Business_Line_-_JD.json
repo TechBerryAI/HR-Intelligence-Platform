@@ -1,0 +1,130 @@
+{
+  "file": "Marketing Lead - Data & AI Business Line - JD.pdf",
+  "expected": {
+    "title_from_filename": "Marketing Lead - Data & AI Business Line"
+  },
+  "form": {
+    "title": "Marketing Lead",
+    "company": "",
+    "location": "India (Mumbai, Pune, Chennai, Bangalore)",
+    "salary": "rs",
+    "experienceFrom": "15",
+    "experienceTo": "",
+    "employmentType": "Full-Time",
+    "mandatorySkills": [
+      "B2B",
+      "ABM",
+      "ROI",
+      "Amazon Web Services",
+      "CRM",
+      "MBA",
+      "Machine Learning",
+      "RAG"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "B2B",
+      "ABM",
+      "ROI",
+      "Amazon Web Services",
+      "CRM",
+      "MBA",
+      "Machine Learning",
+      "RAG"
+    ],
+    "responsibilities": [
+      "Define and execute the global marketing strategy for the Data & AI business line aligned with Atos goals.",
+      "Collaborate with product, sales, and delivery teams to shape go-to-market plans and messaging.",
+      "Own brand positioning, competitive differentiation, and value proposition for Data & AI services. Demand Generation & Campaigns",
+      "Develop integrated marketing campaigns across digital, events, ABM, and partner channels.",
+      "Drive pipeline growth through targeted lead generation and nurturing programs.",
+      "Monitor campaign performance and optimize for ROI. Content & Thought Leadership",
+      "Oversee creation of high-impact content including whitepapers, blogs, webinars, and case studies.",
+      "Position the company as a thought leader in AI, machine learning, data engineering, and analytics.",
+      "Manage analyst relations and PR for the business line. Sales Enablement",
+      "Equip sales teams with tools, collateral, and training to effectively sell Data & AI solutions.",
+      "Develop customer success stories and reference programs. Partner & Ecosystem",
+      "Marketing"
+    ],
+    "qualifications": [],
+    "descriptionPreview": "We are seeking a results-driven Marketing Lead to lead the global marketing strategy\nfor our Data & AI business line. This role will be responsible for positioning our\nofferings, driving demand generation, enabling sales, and building thought leadership\nacross key markets. The ideal candidate will have deep experience in B2B technology\nmarketing, a strong understanding of the Data & AI landscape, and a proven ability to\ntranslate complex solutions into compelling narratives.\n\n**Key Responsibilit",
+    "descriptionLen": 2171,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 1.0,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 8,
+    "skills_checked": 8,
+    "skills_count": 8,
+    "location_in_source": true,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "15",
+      "parsed_to": "",
+      "source_year_mentions": [
+        5,
+        10,
+        15
+      ],
+      "ok": true
+    },
+    "has_description": true,
+    "coverage_missing_with_evidence": [],
+    "coverage_recovered": [],
+    "source_preview": "Marketing Lead - Data & AI Business Line | Marketing Lead – Data & AI Business Line | Location: India (Mumbai, Pune, Chennai, Bangalore) | Type: Full-Time | Min: 15+ yrs | Role Overview | We are seeking a results-driven Marketing Lead to lead the global marketing strategy | for our Data & AI business line. This role will be responsible for positioning our | offerings, driving demand generation, enabling sales, and building thought leadership | across key markets. The ideal candidate will have deep experience in B2B technology | marketing, a strong understanding of the Data & AI landscape, and a proven ability to | "
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'Marketing Lead', 'company': '', 'location': 'India (Mumbai, Pune, Chennai, Bangalore)', 'employment_type': 'Full-Time', 'description': 'We are seeking a results-driven Marketing Lead to lead the global marketing strategy\\nfor our Data & AI business line. This role will be responsible for positioning our\\nofferings, driving demand generation, enabling sales, and building thought leadership\\nacross key markets. The ideal candidate will have deep experience in B2B technology\\nmarketing, a strong understanding of the Data & AI landscape, and a proven ability to\\ntranslate complex solutions into compelling narratives.\\n\\n**Key Responsibilities:**\\n• Define and execute the global marketing strategy for the Data & AI business line aligned with Atos goals.\\n• Collaborate with product, sales, and delivery teams to shape go-to-market plans and messaging.\\n• Own brand positioning, competitive differentiation, and value proposition for Data & AI services. Demand Generation & Campaigns\\n• Develop integrated marketing campaigns across digital, events, ABM, and partner channels.\\n• Drive pipeline growth through targeted lead generation and nurturing programs.\\n• Monitor campaign performance and optimize for ROI. Content & Thought Leadership\\n• Oversee creation of high-impact content including whitepapers, blogs, webinars, and case studies.\\n• Position the company as a thought leader in AI, machine learning, data engineering, and analytics.\\n• Manage ana",
+  "source_preview": "Marketing Lead - Data & AI Business Line\nMarketing Lead – Data & AI Business Line\nLocation: India (Mumbai, Pune, Chennai, Bangalore)\nType: Full-Time\nMin: 15+ yrs\nRole Overview\nWe are seeking a results-driven Marketing Lead to lead the global marketing strategy\nfor our Data & AI business line. This role will be responsible for positioning our\nofferings, driving demand generation, enabling sales, and building thought leadership\nacross key markets. The ideal candidate will have deep experience in B2B technology\nmarketing, a strong understanding of the Data & AI landscape, and a proven ability to\ntranslate complex solutions into compelling narratives.\nKey Responsibilities\n· Define and execute the global marketing strategy for the Data & AI business line\naligned with Atos goals.\n· Collaborate with product, sales, and delivery teams to shape go-to-market plans and\nmessaging.\n· Own brand positioning, competitive differentiation, and value proposition for Data &\nAI services. Demand Generation & Campaigns\n· Develop integrated marketing campaigns across digital, events, ABM, and partner\nchannels.\n· Drive pipeline growth through targeted lead generation and nurturing programs.\n· Monitor campaign performance and optimize for ROI. Content & Thought Leadership\n· Oversee creation of high-impact content including whitepapers, blogs, webinars, and\ncase studies.\n· Position the company as a thought leader in AI, machine learning, data engineering,\nand analytics.\n· Manage analyst relations and PR for the business line. Sales Enablement\n· Equip sales teams with tools, collateral, and training to effectively sell Data & AI\nsolutions.\n· Develop customer success stories and reference programs. Partner & Ecosystem\nMarketing\n· Collaborate with strategic partners (e.g., Microsoft, AWS, Google, Databricks) on joint\nmarketing initiatives.\n· Leverage partner programs and co-marketing opportunities to expand reach.\n\nEducation\n· 10+ years of experience in B2B marketing, with at least 5 years in Data & AI or\n\nenterprise technology.\n· Proven track record in leading global marketing teams and delivering measurable\nresults.\n· Strong understanding of AI/ML, data platforms, cloud ecosystems, and IT services.\n· Excellent storytelling, communication, and stakeholder management skills.\n· Experience with marketing automation, CRM, and analytics tools.\nPreferred Attributes\n· MBA or Master’s degree in Marketing, Business, or related field.\n· Experience working in a global IT services or consulting f"
+}

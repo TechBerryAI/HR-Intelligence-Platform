@@ -1,0 +1,134 @@
+{
+  "file": "MSSQL DBA - JD.pdf",
+  "expected": {
+    "title_from_filename": "MSSQL DBA"
+  },
+  "form": {
+    "title": "MSSQL DBA – L2",
+    "company": "",
+    "location": "",
+    "salary": "",
+    "experienceFrom": "4",
+    "experienceTo": "",
+    "employmentType": "",
+    "mandatorySkills": [
+      "MSSQL",
+      "DBA",
+      "SQL",
+      "DAG",
+      "SSAS",
+      "SSIS",
+      "SSRS",
+      "Amazon Web Services",
+      "MCSE",
+      "MCSA",
+      "AZURE",
+      "Windows",
+      "Linux"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "MSSQL",
+      "DBA",
+      "SQL",
+      "DAG",
+      "SSAS",
+      "SSIS",
+      "SSRS",
+      "Amazon Web Services",
+      "MCSE",
+      "MCSA",
+      "AZURE",
+      "Windows",
+      "Linux"
+    ],
+    "responsibilities": [],
+    "qualifications": [
+      "exposure at least one Cloud Exposure (Azure / AWS)",
+      "Hands on experience with clustering platforms for large scale environment.",
+      "Troubleshoot application sluggishness and poor performance (including execution plans understanding)",
+      "MCSE/MCSA certificates preferred",
+      "Working knowledge of Linux and Windows Server infrastructures",
+      "Understanding of Migration and upgrade of various SQL server versions in place + other environment.",
+      "Excellent written and verbal communication",
+      "Download and install SQL Server service packs and updates."
+    ],
+    "descriptionPreview": "Skill and qualification\n4+ years MS SQL Server Administration experience required\nStrong experience in High Availability (HA) and Disaster Recovery (DR) options for SQL Server (installation and\ntroubleshoot)\nExperience with backups, restores and recovery models\nExperience with troubleshoot large scale Always ON and Distributed Always On (DAG) environments.\nShould be able to handle 24 x 7 rotational support including night shifts.\nAdvanced knowledge of SSAS, SSIS, and SSRS",
+    "descriptionLen": 476,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 0.667,
+    "title_present": true,
+    "skills_precision": 0.923,
+    "skills_hit": 12,
+    "skills_checked": 13,
+    "skills_count": 13,
+    "location_in_source": null,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "4",
+      "parsed_to": "",
+      "source_year_mentions": [
+        4
+      ],
+      "ok": true
+    },
+    "has_description": true,
+    "coverage_missing_with_evidence": [],
+    "coverage_recovered": [],
+    "source_preview": "MSSQL DBA – L2 |  | Skill and qualification |  | · | 4+ years MS SQL Server Administration experience required | · | Strong experience in High Availability (HA) and Disaster Recovery (DR) options for SQL Server (installation and | troubleshoot) | · | Experience with backups, restores and recovery models | · | Experience with troubleshoot large scale Always ON and Distributed Always On (DAG) environments. | · | Should be able to handle 24 x 7 rotational support including night shifts. | · | Advanced knowledge of SSAS, SSIS, and SSRS | · | Must have exposure at least one Cloud Exposure (Azure / AWS) | · | Hands on experience with clus"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'MSSQL DBA – L2', 'company': '', 'location': '', 'employment_type': '', 'description': 'Skill and qualification\\n4+ years MS SQL Server Administration experience required\\nStrong experience in High Availability (HA) and Disaster Recovery (DR) options for SQL Server (installation and\\ntroubleshoot)\\nExperience with backups, restores and recovery models\\nExperience with troubleshoot large scale Always ON and Distributed Always On (DAG) environments.\\nShould be able to handle 24 x 7 rotational support including night shifts.\\nAdvanced knowledge of SSAS, SSIS, and SSRS', 'min_experience_years': 4.0, 'max_experience_years': None, 'skills': ['MSSQL', 'DBA', 'SQL', 'DAG', 'SSAS', 'SSIS', 'SSRS', 'Amazon Web Services', 'MCSE', 'MCSA', 'AZURE', 'Windows', 'Linux'], 'mandatory_skills': ['MSSQL', 'DBA', 'SQL', 'DAG', 'SSAS', 'SSIS', 'SSRS', 'Amazon Web Services', 'MCSE', 'MCSA', 'AZURE', 'Windows', 'Linux'], 'preferred_skills': [], 'responsibilities': [], 'qualifications': ['exposure at least one Cloud Exposure (Azure / AWS)', 'Hands on experience with clustering platforms for large scale environment.', 'Troubleshoot application sluggishness and poor performance (including execution plans understanding)', 'MCSE/MCSA certificates preferred', 'Working knowledge of Linux and Windows Server infrastructures', 'Understanding of Migration and upgrade of various SQL server versions in place + other environment.', 'Excellent written and verbal communication',",
+  "source_preview": "MSSQL DBA – L2\n\nSkill and qualification\n\n·\n4+ years MS SQL Server Administration experience required\n·\nStrong experience in High Availability (HA) and Disaster Recovery (DR) options for SQL Server (installation and\ntroubleshoot)\n·\nExperience with backups, restores and recovery models\n·\nExperience with troubleshoot large scale Always ON and Distributed Always On (DAG) environments.\n·\nShould be able to handle 24 x 7 rotational support including night shifts.\n·\nAdvanced knowledge of SSAS, SSIS, and SSRS\n·\nMust have exposure at least one Cloud Exposure (Azure / AWS)\n·\nHands on experience with clustering platforms for large scale environment.\n·\nTroubleshoot application sluggishness and poor performance (including execution plans understanding)\n·\nMCSE/MCSA certificates preferred\n·\nWorking knowledge of Linux and Windows Server infrastructures\n·\nUnderstanding of Migration and upgrade of various SQL server versions in place + other environment.\n·\nExcellent written and verbal communication\n·\nDownload and install SQL Server service packs and updates."
+}

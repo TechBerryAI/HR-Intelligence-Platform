@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend dependencies
+        run: |
+          pip install -r apps/backend/requirements.txt
+          pip install pytest
+      - name: Run unit tests
+        run: |
+          pytest tests/backend/ \
+            --ignore=tests/backend/test_jd_ollama_smoke.py \
+            --ignore=tests/backend/test_resume_ollama_smoke.py \
+            --ignore=tests/backend/test_platform_smoke.py \
+            -q
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build frontend
+        working-directory: apps/frontend
+        run: |
+          npm ci
+          npm run build
+
+  ai-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install AI dependencies
+        working-directory: ai
+        run: pip install -r requirements.txt
+      - name: Run AI platform tests
+        working-directory: ai
+        run: pytest -q

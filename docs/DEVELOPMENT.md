@@ -6,17 +6,19 @@ Local setup, workflows, and navigation for engineers new to the repository.
 
 ```
 HR Job Portal
-├── frontend/     React SPA (Vite) — what users see
-├── backend/      Flask API — business logic + PostgreSQL
-├── electron/     Desktop shell — native folder dialogs only
-├── ai/           AI platform — runtime, capabilities, dataset, TOON
-├── docs/         HRMS documentation
-├── scripts/      Dev utilities (db-preflight, DB tests)
-├── tests/        Test index (tests live with their owners)
-└── tools/        CLI entry-point index
+├── apps/
+│   ├── frontend/   React SPA (Vite) — what users see
+│   ├── backend/    Flask API — business logic + PostgreSQL
+│   └── desktop/    Electron shell — native folder dialogs only
+├── ai/             AI platform — runtime, capabilities, dataset, TOON
+├── docs/           HRMS documentation
+├── scripts/        Dev utilities (db-preflight, DB tests)
+├── tests/          Test index (tests live with their owners)
+├── packages/       Cross-app shims
+└── infrastructure/ Docker + CI templates
 ```
 
-**Start here:** [DOCUMENTATION_MAP.md](DOCUMENTATION_MAP.md)
+**Start here:** [README.md](README.md)
 
 ## Prerequisites
 
@@ -29,13 +31,30 @@ HR Job Portal
 ## Quick start (HRMS)
 
 ```bash
-cp backend/.env.example backend/.env
-# Edit backend/.env — set DATABASE_URL or POSTGRES_*
+cp apps/backend/.env.example apps/backend/.env
+# Edit apps/backend/.env — set DATABASE_URL or POSTGRES_*
 
+# Local stack (backend + frontend; DB must already be reachable)
 node start.js
+
+# Full VM stack: wait/start DB (Hyper-V or Docker) + backend + frontend + Ollama
+node start-vm.js
+# or: npm run start:vm
 ```
 
 Opens http://localhost:5173 (frontend) and http://localhost:3000 (backend).
+
+`start.js` frees port **3000** before launching Flask (avoids a stale backend keeping old API code). After backend Python changes, restart with Ctrl+C then `node start.js` — Flask does not hot-reload by default (`FLASK_USE_RELOADER=false`).
+
+Optional `start-vm.js` knobs (env or `apps/backend/.env`):
+
+| Key | Purpose |
+|-----|---------|
+| `HCIP_VM_NAME` | Hyper-V VM name to `Start-VM` when DB is down |
+| `HCIP_VM_PROVIDER` | `auto` (default), `hyperv`, or `docker` |
+| `HCIP_START_DOCKER_DB` | Force `docker compose` Postgres |
+| `HCIP_SKIP_OLLAMA` | Skip Ollama serve/pull |
+| `HCIP_OPEN_BROWSER` | Set `false` to skip opening the browser |
 
 ## Quick start (AI platform)
 
@@ -52,19 +71,19 @@ pytest
 ### Run frontend only
 
 ```bash
-cd frontend && npm install && npm run dev
+cd apps/frontend && npm install && npm run dev
 ```
 
 ### Run backend only
 
 ```bash
-cd backend && source venv/bin/activate && python app.py
+cd apps/backend && source venv/bin/activate && python wsgi.py
 ```
 
 ### Run Electron (bulk parser)
 
 ```bash
-# Terminal 1: cd frontend && npm run dev
+# Terminal 1: cd apps/frontend && npm run dev
 # Terminal 2: npm run electron   (from repo root)
 ```
 
@@ -86,17 +105,18 @@ python scripts/database/test_db_connection.py
 
 | File | Purpose |
 |------|---------|
-| `backend/.env` | Database, JWT, mail, LLM keys |
-| `frontend/.env` | Vite API URL (optional) |
-| `ai/.env` | AI runtime overrides (optional) |
+| `apps/backend/.env` | App, Postgres, JWT, mail, Ollama, ATS, parsing |
+| `apps/frontend/.env` | Vite API URL / public origin (optional) |
+| `ai/.env` | AI workspace overrides (optional) |
 
-Never commit `.env` files. Use `.env.example` as reference.
+Copy from the matching `.env.example`, then fill secrets. Never commit `.env` files.
 
 ## Where to put new code
 
 | I am building… | Put it in… |
 |----------------|------------|
 | A new HR page or component | `frontend/src/` |
+| Theme / Dark-Light behavior | `frontend/src/core/theme/themeConfig.js` (+ CSS tokens in `src/styles/index.css`) — do not fork theme logic |
 | A new API endpoint | `backend/` (blueprint) |
 | A native desktop feature | `electron/` (IPC only) |
 | A new AI task | `ai/capabilities/<name>/` |
@@ -104,6 +124,20 @@ Never commit `.env` files. Use `.env.example` as reference.
 | A dataset pipeline stage | `ai/dataset/` |
 | TOON field or mapping | `ai/toon/v1/` |
 | HR domain contract | `ai/contracts/` |
+
+### UI theme (centralized)
+
+Anyone on this branch shares one theme system:
+
+| Piece | Location |
+|-------|----------|
+| Config (storage key, defaults, dark-only routes, surface mapping) | `apps/frontend/src/core/theme/themeConfig.js` |
+| React state | `ThemeProvider` / `useTheme()` — mounted in `main.jsx` |
+| Toggle UI | `ThemeToggle`: Navbar chrome control (icon + Light/Dark); Head HR Overview between Home and Refresh (`org-btn-ghost`); mobile org header |
+| Colors | `--ei-*` in `apps/frontend/src/styles/index.css` |
+| FOUC bootstrap | `apps/frontend/public/theme-init.js` (key must match `THEME_STORAGE_KEY`) |
+
+Landing `/` stays dark-only. Prefer `var(--ei-text-primary)` etc. over hard-coded zinc/hex.
 
 ## Testing strategy
 
@@ -123,7 +157,11 @@ Run all AI tests: `cd ai && pytest`
 
 | Topic | Document |
 |-------|----------|
-| Full HRMS architecture | [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) |
+| Docs index | [README.md](README.md) |
+| Keep docs in sync after code changes | Run `python scripts/sync_docs_from_code.py` · see [README.md § Keeping docs up to date](README.md#keeping-docs-up-to-date-automatic--required) |
+| Product & system architecture | [03-System-Architecture.md](03-System-Architecture.md) · [01-Product-Constitution.md](01-Product-Constitution.md) |
+| APIs & security | [07-API.md](07-API.md) · [09-Security.md](09-Security.md) |
+| Legacy deep narrative (optional) | [legacy/README.md](legacy/README.md) |
 | AI platform overview | [ai/README.md](../ai/README.md) |
 | TOON ontology | [ai/toon/README.md](../ai/toon/README.md) |
 | Data pipeline | [ai/docs/DATA_PIPELINE.md](../ai/docs/DATA_PIPELINE.md) |

@@ -1,0 +1,14 @@
+Storage Admin - L2 - Mumbai
+
+Job Summary
+We are looking for a Storage Admin L2 to manage enterprise storage platforms in Navi Mumbai.
+
+Location: Navi Mumbai
+Experience: 2-5 years
+
+Responsibilities:
+• Administer SAN/NAS storage arrays
+• Perform L2 incident and change management
+
+Required Skills:
+NetApp, EMC, SAN, NAS, Brocade

@@ -12,8 +12,8 @@ const { spawn, spawnSync, execSync: nodeExecSync } = require('child_process');
 const http = require('http');
 
 const ROOT = path.resolve(__dirname);
-const BACKEND_DIR = path.join(ROOT, 'backend');
-const FRONTEND_DIR = path.join(ROOT, 'frontend');
+const BACKEND_DIR = path.join(ROOT, 'apps', 'backend');
+const FRONTEND_DIR = path.join(ROOT, 'apps', 'frontend');
 const BACKEND_ENV = path.join(BACKEND_DIR, '.env');
 const BACKEND_ENV_EXAMPLE = path.join(BACKEND_DIR, '.env.example');
 const VENV_PYTHON = path.join(
@@ -23,9 +23,12 @@ const VENV_PYTHON = path.join(
 const BACKEND_PORT = 3000;
 const FRONTEND_PORT = 5173;
 const BROWSER_URL = `http://localhost:${FRONTEND_PORT}`;
+const DEFAULT_OLLAMA_HOST = 'http://127.0.0.1:11434';
+const DEFAULT_OLLAMA_MODEL = 'qwen2.5:14b-instruct';
 
 let backendProcess = null;
 let frontendProcess = null;
+let ollamaProcess = null;
 
 function timestamp() {
   return new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -48,8 +51,24 @@ function runCmd(cmd, args, cwd = ROOT, env = process.env, useShell = false) {
   });
 }
 
+const CRITICAL_SOURCE_FILES = [
+  path.join(FRONTEND_DIR, 'src', 'shared', 'lib', 'utils.js'),
+  path.join(FRONTEND_DIR, 'src', 'shared', 'lib', 'jobDescription.js'),
+  path.join(BACKEND_DIR, 'app', 'domains', 'identity', 'sessions', 'service.py'),
+];
+
+function checkCriticalSource() {
+  const missing = CRITICAL_SOURCE_FILES.filter((p) => !fs.existsSync(p));
+  if (missing.length === 0) return;
+  log('Critical source files missing (repo may be incomplete or .gitignore is too broad):', 'err');
+  for (const p of missing) {
+    log(`  - ${path.relative(ROOT, p)}`, 'err');
+  }
+  process.exit(1);
+}
+
 function checkEnv() {
-  logStep(1, 6, 'Checking environment');
+  logStep(1, 7, 'Checking environment');
   try {
     const nodeVer = nodeExecSync('node --version', { encoding: 'utf8' }).trim();
     log(`Node: ${nodeVer}`);
@@ -60,34 +79,180 @@ function checkEnv() {
   try {
     const pyVer = nodeExecSync('python --version', { encoding: 'utf8' }).trim();
     log(`Python: ${pyVer}`);
+    const m = /Python\s+(\d+)\.(\d+)/i.exec(pyVer);
+    if (m) {
+      const major = Number(m[1]);
+      const minor = Number(m[2]);
+      if (major < 3 || (major === 3 && minor < 10)) {
+        log(
+          `Python ${major}.${minor} is below the supported range (3.10–3.12). ` +
+            'Type hints like str | None will crash the backend. Install Python 3.10+ ' +
+            'and recreate apps/backend/venv, or continue only if all modules use ' +
+            '`from __future__ import annotations`.',
+          'warn'
+        );
+      }
+    }
   } catch (e) {
     try {
       const py3Ver = nodeExecSync('python3 --version', { encoding: 'utf8' }).trim();
       log(`Python: ${py3Ver}`);
+      const m = /Python\s+(\d+)\.(\d+)/i.exec(py3Ver);
+      if (m) {
+        const major = Number(m[1]);
+        const minor = Number(m[2]);
+        if (major < 3 || (major === 3 && minor < 10)) {
+          log(
+            `Python ${major}.${minor} is below the supported range (3.10–3.12). ` +
+              'Prefer Python 3.10+ for the backend venv on the VM.',
+            'warn'
+          );
+        }
+      }
     } catch (e2) {
       log('Python 3.8+ required for backend.', 'err');
       process.exit(1);
     }
   }
+  checkCriticalSource();
   log('Environment check OK');
 }
 
+function readEnvFile(filePath) {
+  const out = {};
+  if (!fs.existsSync(filePath)) return out;
+  const text = fs.readFileSync(filePath, 'utf8');
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
+function upsertEnvKeys(filePath, updates) {
+  let content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
+  for (const [key, value] of Object.entries(updates)) {
+    const re = new RegExp(`^${key}=.*$`, 'm');
+    if (re.test(content)) {
+      content = content.replace(re, `${key}=${value}`);
+    } else {
+      if (content && !content.endsWith('\n')) content += '\n';
+      content += `${key}=${value}\n`;
+    }
+  }
+  fs.writeFileSync(filePath, content, 'utf8');
+}
+
 function setupEnv() {
-  logStep(2, 6, 'Checking backend/.env');
+  logStep(2, 7, 'Checking apps/backend/.env');
   if (!fs.existsSync(BACKEND_ENV)) {
     if (!fs.existsSync(BACKEND_ENV_EXAMPLE)) {
-      log('backend/.env.example not found', 'err');
+      log('apps/backend/.env.example not found', 'err');
       process.exit(1);
     }
     fs.copyFileSync(BACKEND_ENV_EXAMPLE, BACKEND_ENV);
-    log('Created backend/.env from template. Configure POSTGRES_* or DATABASE_URL in backend/.env');
+    log('Created apps/backend/.env from template. Configure POSTGRES_* or DATABASE_URL in apps/backend/.env');
   } else {
-    log('backend/.env exists');
+    log('apps/backend/.env exists');
+  }
+
+  // Runtime YAML reads OLLAMA_HOST; accept legacy OLLAMA_BASE_URL and normalize.
+  const envMap = readEnvFile(BACKEND_ENV);
+  const host =
+    (envMap.OLLAMA_HOST || '').trim() ||
+    (envMap.OLLAMA_BASE_URL || '').trim() ||
+    DEFAULT_OLLAMA_HOST;
+  const model = (envMap.OLLAMA_MODEL || '').trim() || DEFAULT_OLLAMA_MODEL;
+  const updates = {};
+  if ((envMap.OLLAMA_HOST || '').trim() !== host) updates.OLLAMA_HOST = host;
+  if (!(envMap.OLLAMA_MODEL || '').trim()) updates.OLLAMA_MODEL = model;
+  if (!(envMap.OLLAMA_BASE_URL || '').trim()) updates.OLLAMA_BASE_URL = host;
+  if (Object.keys(updates).length) {
+    upsertEnvKeys(BACKEND_ENV, updates);
+    log(`Normalized Ollama env: host=${host}, model=${model}`);
+  } else {
+    log(`Ollama config: host=${host}, model=${model}`);
+  }
+
+  setupFrontendEnv(envMap);
+}
+
+/**
+ * Keep apps/frontend/.env VM/LAN-compatible with backend FRONTEND_URL.
+ * Empty VITE_API_URL → same-origin /api via Vite proxy (works on LAN IPs).
+ */
+function setupFrontendEnv(backendEnvMap = null) {
+  const FRONTEND_ENV = path.join(FRONTEND_DIR, '.env');
+  const FRONTEND_ENV_EXAMPLE = path.join(FRONTEND_DIR, '.env.example');
+  const be = backendEnvMap || readEnvFile(BACKEND_ENV);
+
+  if (!fs.existsSync(FRONTEND_ENV)) {
+    if (fs.existsSync(FRONTEND_ENV_EXAMPLE)) {
+      fs.copyFileSync(FRONTEND_ENV_EXAMPLE, FRONTEND_ENV);
+      log('Created apps/frontend/.env from .env.example');
+    } else {
+      fs.writeFileSync(
+        FRONTEND_ENV,
+        [
+          '# Auto-created by start.js / start-vm.js',
+          'VITE_API_URL=',
+          'VITE_API_TIMEOUT_MS=30000',
+          '',
+        ].join('\n'),
+        'utf8'
+      );
+      log('Created apps/frontend/.env');
+    }
+  }
+
+  const fe = readEnvFile(FRONTEND_ENV);
+  const updates = {};
+
+  // localhost absolute API breaks LAN (UI on 192.168.x.x → API hits client's localhost)
+  const apiUrl = (fe.VITE_API_URL || '').trim();
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(apiUrl)) {
+    updates.VITE_API_URL = '';
+    log(
+      'Cleared VITE_API_URL localhost — using same-origin /api (VM/LAN safe via Vite proxy)',
+      'warn'
+    );
+  } else if (!('VITE_API_URL' in fe)) {
+    updates.VITE_API_URL = '';
+  }
+
+  if (!(fe.VITE_API_TIMEOUT_MS || '').trim()) {
+    updates.VITE_API_TIMEOUT_MS = '30000';
+  }
+
+  const publicOrigin = (be.FRONTEND_URL || '').trim();
+  if (publicOrigin && (fe.VITE_PUBLIC_ORIGIN || '').trim() !== publicOrigin) {
+    updates.VITE_PUBLIC_ORIGIN = publicOrigin;
+    log(`Synced VITE_PUBLIC_ORIGIN ← backend FRONTEND_URL (${publicOrigin})`);
+  }
+
+  if (Object.keys(updates).length) {
+    upsertEnvKeys(FRONTEND_ENV, updates);
+  } else {
+    log(
+      `Frontend .env OK (VITE_API_URL=${apiUrl ? apiUrl : '(same-origin)'}, ` +
+        `VITE_PUBLIC_ORIGIN=${(fe.VITE_PUBLIC_ORIGIN || publicOrigin || '').trim() || 'unset'})`
+    );
   }
 }
 
 async function setupBackend() {
-  logStep(3, 6, 'Setting up backend (venv + pip)');
+  logStep(3, 7, 'Setting up backend (venv + pip)');
   const venvDir = path.join(BACKEND_DIR, 'venv');
   if (!fs.existsSync(venvDir)) {
     log('Creating backend virtual environment...');
@@ -98,28 +263,252 @@ async function setupBackend() {
   }
   log('Upgrading pip...');
   await runCmd(VENV_PYTHON, ['-m', 'pip', 'install', '--upgrade', 'pip', '-q'], BACKEND_DIR);
-  log('Installing backend dependencies from requirements.txt...');
+  log('Installing backend dependencies from requirements.txt (includes OCR: pymupdf, Pillow; RapidOCR on Python <3.13)...');
   await runCmd(VENV_PYTHON, ['-m', 'pip', 'install', '-r', 'requirements.txt', '-q'], BACKEND_DIR);
+  log('Verifying OCR packages import...');
+  const verifyCore = spawnSync(
+    VENV_PYTHON,
+    ['-c', "import fitz, PIL; print('OCR core packages OK (pymupdf, Pillow)')"],
+    { cwd: BACKEND_DIR, encoding: 'utf8' }
+  );
+  if (verifyCore.status !== 0) {
+    log('OCR core package verification failed. Re-run pip install -r requirements.txt', 'err');
+    if (verifyCore.stderr) process.stderr.write(verifyCore.stderr);
+    process.exit(1);
+  }
+  if (verifyCore.stdout) process.stdout.write(verifyCore.stdout.trim() + '\n');
+
+  const verifyRapid = spawnSync(
+    VENV_PYTHON,
+    ['-c', "import rapidocr_onnxruntime; print('RapidOCR OK')"],
+    { cwd: BACKEND_DIR, encoding: 'utf8' }
+  );
+  if (verifyRapid.status === 0) {
+    if (verifyRapid.stdout) process.stdout.write(verifyRapid.stdout.trim() + '\n');
+  } else {
+    const pyVer = spawnSync(VENV_PYTHON, ['-c', 'import sys; print("%d.%d" % sys.version_info[:2])'], {
+      cwd: BACKEND_DIR,
+      encoding: 'utf8',
+    });
+    const version = (pyVer.stdout || '').trim() || 'unknown';
+    log(
+      `RapidOCR not available on this Python (${version}). ` +
+        'Scanned-image OCR needs Python 3.12 (recommended) or system Tesseract. Continuing setup...',
+      'warn'
+    );
+  }
   log('Backend setup complete');
 }
 
+function httpGetJson(url, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    try {
+      const u = new URL(url);
+      const lib = u.protocol === 'https:' ? require('https') : http;
+      const req = lib.request(
+        {
+          hostname: u.hostname,
+          port: u.port || (u.protocol === 'https:' ? 443 : 80),
+          path: `${u.pathname || '/'}${u.search || ''}`,
+          method: 'GET',
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (chunk) => {
+            body += chunk;
+          });
+          res.on('end', () => {
+            if (res.statusCode !== 200) {
+              resolve(null);
+              return;
+            }
+            try {
+              resolve(JSON.parse(body));
+            } catch {
+              resolve(null);
+            }
+          });
+        }
+      );
+      req.setTimeout(timeoutMs, () => {
+        req.destroy();
+        resolve(null);
+      });
+      req.on('error', () => resolve(null));
+      req.end();
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+function commandExists(cmd) {
+  try {
+    if (process.platform === 'win32') {
+      nodeExecSync(`where ${cmd}`, { stdio: 'ignore' });
+    } else {
+      nodeExecSync(`command -v ${cmd}`, { stdio: 'ignore', shell: true });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForOllama(host, maxWaitMs = 45000) {
+  const step = 1500;
+  let elapsed = 0;
+  while (elapsed < maxWaitMs) {
+    const tags = await httpGetJson(`${host.replace(/\/$/, '')}/api/tags`);
+    if (tags && Array.isArray(tags.models)) return tags;
+    await new Promise((r) => setTimeout(r, step));
+    elapsed += step;
+  }
+  return null;
+}
+
+function modelIsPresent(tags, modelName) {
+  const wanted = String(modelName || '').toLowerCase().trim();
+  if (!wanted) return false;
+  const models = (tags && tags.models) || [];
+  return models.some((m) => {
+    const name = String((m && (m.name || m.model)) || '').toLowerCase().trim();
+    if (!name) return false;
+    // Exact tag match only (e.g. qwen2.5:14b-instruct). Fuzzy base matches
+    // falsely skip pull when a different size/tag of the same family exists.
+    if (name === wanted) return true;
+    // Bare base name (no tag) may appear as name:latest in Ollama tags.
+    if (!wanted.includes(':') && (name === `${wanted}:latest` || name === wanted)) return true;
+    return false;
+  });
+}
+
+async function setupOllama() {
+  logStep(4, 7, 'Setting up Ollama (serve + model pull)');
+  const envMap = readEnvFile(BACKEND_ENV);
+  const host = (envMap.OLLAMA_HOST || envMap.OLLAMA_BASE_URL || DEFAULT_OLLAMA_HOST).replace(/\/$/, '');
+  const model = envMap.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL;
+  log(`Using Ollama model: ${model}`);
+  log(`Using Ollama host: ${host}`);
+
+    if (!commandExists('ollama')) {
+    log(
+      'Ollama CLI not found. Install from https://ollama.com/download then re-run start.js. ' +
+        'Parsing requires Ollama (Grok cloud fallback is disabled).',
+      'warn'
+    );
+    return { host, model, ready: false };
+  }
+
+  let tags = await httpGetJson(`${host}/api/tags`);
+  if (!tags) {
+    log('Ollama not responding — starting `ollama serve` in background...');
+    ollamaProcess = spawn('ollama', ['serve'], {
+      cwd: ROOT,
+      stdio: 'ignore',
+      shell: process.platform === 'win32',
+      detached: true,
+      env: process.env,
+    });
+    ollamaProcess.unref();
+    tags = await waitForOllama(host);
+  }
+
+  if (!tags) {
+    log(
+      `Ollama did not become ready at ${host}. Parsing may fail until Ollama is running.`,
+      'warn'
+    );
+    return { host, model, ready: false };
+  }
+  log('Ollama API is reachable');
+
+  if (!modelIsPresent(tags, model)) {
+    log(`Pulling Ollama model ${model} (this can take several minutes on first run)...`);
+    try {
+      await runCmd('ollama', ['pull', model], ROOT, process.env, process.platform === 'win32');
+      log(`Model ${model} pulled successfully`);
+    } catch (err) {
+      log(`Failed to pull model ${model}: ${err.message || err}`, 'err');
+      return { host, model, ready: false };
+    }
+  } else {
+    log(`Model already available: ${model}`);
+  }
+
+  // Re-check after pull
+  tags = await httpGetJson(`${host}/api/tags`);
+  const ready = modelIsPresent(tags, model);
+  if (ready) log('Ollama setup complete');
+  else log(`Model ${model} still not listed after pull`, 'warn');
+  return { host, model, ready };
+}
+
 async function setupFrontend() {
-  logStep(4, 6, 'Setting up frontend (npm)');
+  logStep(5, 7, 'Setting up frontend (npm)');
   // Always run npm install so dependencies stay in sync. On Windows, shell: true is required to run npm (avoids spawn EINVAL).
   log('Installing frontend dependencies from package.json...');
   await runCmd('npm', ['install'], FRONTEND_DIR, process.env, process.platform === 'win32');
   log('Frontend setup complete');
 }
 
+/** Kill any leftover process still bound to a port (prevents stale Flask serving old code). */
+function freePort(port) {
+  try {
+    if (process.platform === 'win32') {
+      const out = nodeExecSync(`netstat -ano | findstr :${port}`, { encoding: 'utf8' });
+      const pids = new Set();
+      for (const line of out.split(/\r?\n/)) {
+        if (!/LISTENING/i.test(line)) continue;
+        const parts = line.trim().split(/\s+/);
+        const pid = parts[parts.length - 1];
+        if (pid && /^\d+$/.test(pid) && pid !== '0') pids.add(pid);
+      }
+      for (const pid of pids) {
+        try {
+          nodeExecSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
+          log(`Freed port ${port} (killed PID ${pid})`);
+        } catch {
+          /* already gone */
+        }
+      }
+    } else {
+      try {
+        const out = nodeExecSync(`lsof -ti :${port}`, { encoding: 'utf8' }).trim();
+        for (const pid of out.split(/\s+/).filter(Boolean)) {
+          try {
+            process.kill(Number(pid), 'SIGTERM');
+            log(`Freed port ${port} (killed PID ${pid})`);
+          } catch {
+            /* already gone */
+          }
+        }
+      } catch {
+        /* nothing listening */
+      }
+    }
+  } catch {
+    /* nothing listening / netstat empty */
+  }
+}
+
 function startBackend() {
-  logStep(5, 6, 'Starting backend (Flask)');
+  logStep(6, 7, 'Starting backend (Flask)');
+  freePort(BACKEND_PORT);
+  const envMap = readEnvFile(BACKEND_ENV);
+  const ollamaHost = (envMap.OLLAMA_HOST || envMap.OLLAMA_BASE_URL || DEFAULT_OLLAMA_HOST).trim();
+  const ollamaModel = (envMap.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL).trim();
   const env = {
     ...process.env,
     PYTHONIOENCODING: 'utf-8',
     PYTHONPATH: path.join(ROOT, 'ai'),
     AI_RUNTIME_CONFIG: path.join(ROOT, 'ai', 'runtime', 'config', 'runtime.production.yaml'),
+    OLLAMA_HOST: ollamaHost,
+    OLLAMA_BASE_URL: ollamaHost,
+    OLLAMA_MODEL: ollamaModel,
+    FLASK_USE_RELOADER: 'false',
   };
-  backendProcess = spawn(VENV_PYTHON, ['app.py'], {
+  backendProcess = spawn(VENV_PYTHON, ['wsgi.py'], {
     cwd: BACKEND_DIR,
     stdio: 'inherit',
     shell: false,
@@ -135,7 +524,7 @@ function startBackend() {
 }
 
 function startFrontend() {
-  logStep(6, 6, 'Starting frontend (Vite)');
+  logStep(7, 7, 'Starting frontend (Vite)');
   // On Windows use shell with single command string to avoid spawn deprecation (args + shell).
   const useShell = process.platform === 'win32';
   const cmd = useShell ? 'npm run dev' : 'npm';
@@ -213,6 +602,7 @@ function onExit() {
     frontendProcess.kill('SIGTERM');
     frontendProcess = null;
   }
+  // Do not kill ollamaProcess — it may be a system-wide daemon started detached.
   log('Goodbye.');
   process.exit(0);
 }
@@ -224,7 +614,9 @@ async function main() {
 
   checkEnv();
   setupEnv();
+  await setupBackend();
 
+  // After venv/deps so preflight can use psycopg (no local PostgreSQL client needed)
   const preflight = spawnSync('node', [path.join(ROOT, 'scripts', 'db-preflight.js')], {
     encoding: 'utf8',
     stdio: ['inherit', 'pipe', 'inherit'],
@@ -232,7 +624,7 @@ async function main() {
   if (preflight.stdout) process.stdout.write(preflight.stdout);
   if (preflight.status !== 0) process.exit(1);
 
-  await setupBackend();
+  const ollama = await setupOllama();
   await setupFrontend();
 
   process.on('SIGINT', onExit);
@@ -247,10 +639,39 @@ async function main() {
   console.log('\n--- Ready ---');
   console.log('Backend:  http://localhost:' + BACKEND_PORT);
   console.log('Frontend: ' + BROWSER_URL);
+  console.log('Ollama:   ' + ollama.host + '  model=' + ollama.model + (ollama.ready ? ' (ready)' : ' (not ready — check install/pull)'));
   console.log('Press Ctrl+C to stop.\n');
 }
 
-main().catch((err) => {
-  log(err.message || err, 'err');
-  process.exit(1);
-});
+module.exports = {
+  main,
+  ROOT,
+  BACKEND_DIR,
+  FRONTEND_DIR,
+  BACKEND_ENV,
+  readEnvFile,
+  upsertEnvKeys,
+  log,
+  logStep,
+  checkEnv,
+  setupEnv,
+  setupFrontendEnv,
+  setupBackend,
+  setupOllama,
+  setupFrontend,
+  startBackend,
+  startFrontend,
+  waitForReady,
+  openBrowser,
+  onExit,
+  BACKEND_PORT,
+  FRONTEND_PORT,
+  BROWSER_URL,
+};
+
+if (require.main === module) {
+  main().catch((err) => {
+    log(err.message || err, 'err');
+    process.exit(1);
+  });
+}

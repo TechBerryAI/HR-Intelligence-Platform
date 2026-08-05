@@ -42,8 +42,7 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
 - **Frontend:** Single-page app; single AppContext for auth, jobs, applicant state; role-based route guards (Recruiter, Candidate, Head of HR, CEO).
 - **Backend:** Monolithic Flask app; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, head-hr. Connection-pooled PostgreSQL; raw SQL via `db_run`/`db_get`/`db_all`.
 
-Detailed architecture, API catalog, data flows, and security notes: **[docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md)**.  
-Documentation index: **[docs/DOCUMENTATION_MAP.md](docs/DOCUMENTATION_MAP.md)**.
+Detailed docs: **[docs/README.md](docs/README.md)** (HCIP `01`–`10`). Setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**. Legacy archive: **[docs/legacy/](docs/legacy/README.md)**.
 
 ---
 
@@ -69,32 +68,40 @@ From repository root:
 
 ```bash
 # 1. Copy backend env (or start.js will create from .env.example)
-cp backend/.env.example backend/.env
+cp apps/backend/.env.example apps/backend/.env
 
-# 2. Edit backend/.env: set POSTGRES_* or DATABASE_URL
+# 2. Edit apps/backend/.env: set POSTGRES_* or DATABASE_URL
 
 # 3. Run app (installs deps, starts backend + frontend, opens browser)
 node start.js
 ```
 
-`start.js` creates backend venv, runs pip install, npm install in frontend, starts Flask (port 3000) and Vite (port 5173), waits for both to be ready, then opens http://localhost:5173. Use **Ctrl+C** to stop.
+`start.js` creates the backend venv, runs pip install, npm install in the frontend, starts Flask (port 3000) and Vite (port 5173), waits for both to be ready, then opens http://localhost:5173. Use **Ctrl+C** to stop.
+
+Canonical app locations (no root-level duplicates):
+
+| App | Path |
+|-----|------|
+| Backend (Flask) | `apps/backend/` |
+| Frontend (React/Vite) | `apps/frontend/` |
+| Desktop (Electron) | `apps/desktop/` |
 
 ### Manual Run
 
 **Backend:**
 
 ```bash
-cd backend
+cd apps/backend
 python -m venv venv
 # Windows: .\venv\Scripts\Activate  |  macOS/Linux: source venv/bin/activate
 pip install -r requirements.txt
-python app.py
+python wsgi.py
 ```
 
 **Frontend:**
 
 ```bash
-cd frontend
+cd apps/frontend
 npm install
 npm run dev
 ```
@@ -102,19 +109,21 @@ npm run dev
 - **Frontend:** http://localhost:5173  
 - **Backend / Health:** http://localhost:3000, http://localhost:3000/health  
 
-Database and tables are created automatically on first backend run from `backend/schema_pg/*.sql`.
+Database and tables are created automatically on first backend run from `apps/backend/schema_pg/*.sql`.
 
 ---
 
 ## Environment Variables
 
-### Backend (`backend/.env`)
+### Backend (`apps/backend/.env`)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Yes* | PostgreSQL connection |
 | `DATABASE_URL` | Yes* | Alternative: full URL (e.g. `postgresql://user:pass@host:5432/JobPortal`) |
 | `PORT` | No | Server port (default `3000`) |
+| `FRONTEND_URL` / `FRONTEND_URLS` | Prod | Public SPA origin(s) for CORS when not same-origin proxied |
+| `GUNICORN_BIND` | No | Default `127.0.0.1:3000` (correct behind reverse proxy) |
 | `JWT_SECRET` | Yes | Secret for JWT signing (change in production) |
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | For OTP | SMTP (e.g. Gmail App Password); set `MAIL_SUPPRESS_SEND=true` to disable |
 | `XAI_MODEL`, `HRMS_API_KEY_1`… | For parsing | LLM (e.g. Grok) for resume/JD parsing |
@@ -123,13 +132,23 @@ Database and tables are created automatically on first backend run from `backend
 
 \* Either POSTGRES_* or DATABASE_URL.
 
-### Frontend (`frontend/.env`)
+### Frontend (`apps/frontend/.env`)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VITE_API_URL` | `http://localhost:3000` | Backend API base URL |
+| `VITE_API_URL` | _(empty)_ | API base URL. **Leave empty** for same-origin (recommended). Vite proxies `/api` and `/health` to Flask in dev; set an absolute URL only for split-origin setups |
 | `VITE_API_TIMEOUT_MS` | `30000` | Request timeout (ms) |
-| `VITE_PARSING_API_URL` | — | Optional separate parsing service URL |
+
+Copy from [`apps/frontend/.env.example`](apps/frontend/.env.example).
+
+#### Multi-device (LAN) development
+
+1. Leave `VITE_API_URL` empty.
+2. Start backend + frontend (`node start.js` or manual).
+3. On another device on the same network, open `http://<host-lan-ip>:5173` (Vite listens on `0.0.0.0`).
+4. The browser calls `/api` and `/health` on that same host; Vite proxies to Flask on `127.0.0.1:3000`. No per-device IP in env.
+
+With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-proxied) API CORS.
 
 ---
 
@@ -161,8 +180,11 @@ Database and tables are created automatically on first backend run from `backend
 ├── tools/                # CLI entry-point index
 ├── ai/                   # AI platform (runtime, providers, capabilities, dataset, toon)
 └── docs/
-    ├── DOCUMENTATION_MAP.md          # Documentation index
-    └── TECHNICAL_DOCUMENTATION.md   # Full HRMS technical reference
+    ├── README.md            # Documentation index
+    ├── DEVELOPMENT.md       # Local setup
+    ├── ARCHITECTURE.md      # Product & system architecture
+    ├── ENGINEERING.md       # APIs, backend, frontend
+    └── HISTORY.md           # Sprint freeze / migration history
 ```
 
 ---
@@ -179,7 +201,7 @@ Database and tables are created automatically on first backend run from `backend
 | Admin | `/api/admin` | `POST /bulk-parse/upload`, `GET /bulk-parse/progress/:id`, `GET /job-matches` |
 | Head of HR | `/api/head-hr` | `GET /stats`, `GET /admins`, `GET /candidates`, `GET /jobs`, `GET /applications` |
 
-Full endpoint list, request/response shapes, and auth requirements: **[docs/TECHNICAL_DOCUMENTATION.md#6-api-documentation](docs/TECHNICAL_DOCUMENTATION.md#6-api-documentation)**.
+Full endpoint list: **[docs/07-API.md](docs/07-API.md)**.
 
 ---
 
@@ -198,8 +220,13 @@ Full endpoint list, request/response shapes, and auth requirements: **[docs/TECH
 
 ## Deployment
 
-- **Frontend:** Build with `npm run build`; serve `frontend/dist` as a static SPA (configure fallback to `index.html` for client-side routing). Set `VITE_API_URL` to your backend URL.
-- **Backend:** Run with Gunicorn (see `backend/gunicorn.conf.py`) or equivalent. Set `FRONTEND_URL`/`FRONTEND_URLS` for CORS. Use a strong `JWT_SECRET` and, in production, consider HttpOnly cookies for tokens (see technical doc).
+Same-origin (recommended): serve the SPA and proxy API on one public origin.
+
+1. **Frontend build:** Leave `VITE_API_URL` empty, then `cd apps/frontend && npm run build`. Serve `apps/frontend/dist` as a static SPA (fallback to `index.html` for client routes).
+2. **Reverse proxy:** Forward `/api` and `/health` to gunicorn (`127.0.0.1:3000` by default). Serve static assets from `dist/`.
+3. **Backend:** Run with Gunicorn (`apps/backend/gunicorn.conf.py`). Set `FRONTEND_URL` to the public origin, `FLASK_DEBUG=false`, and a strong `JWT_SECRET`. Keep `GUNICORN_BIND=127.0.0.1:3000` behind the proxy.
+
+Split-origin is supported by setting an absolute `VITE_API_URL` at build time and listing that frontend origin in `FRONTEND_URLS`, but same-origin avoids device-specific and CORS issues.
 
 ---
 
@@ -219,9 +246,10 @@ Electron opens a window that loads the app and uses OS folder dialogs.
 - **Env validation failed:** Run `cd backend && python env_validator.py`; fix `DATABASE_URL` or `POSTGRES_*` in `backend/.env`.
 - **Database connection failed:** Ensure PostgreSQL is running and credentials are correct. Test: `psql -h localhost -U postgres -d JobPortal -c "SELECT 1"`.
 - **Port in use:** Stop process on 3000 (backend) or 5173 (frontend). On Windows: `Get-NetTCPConnection -LocalPort 3000 | Select-Object -ExpandProperty OwningProcess | Stop-Process -Force`.
-- **Email not sending:** Set `MAIL_SUPPRESS_SEND=true` in `backend/.env` for testing.
+- **Email not sending:** Set `MAIL_SUPPRESS_SEND=true` in `apps/backend/.env` for testing.
+- **Other device cannot reach API:** Leave `VITE_API_URL` empty and open the Vite URL (`http://<host-ip>:5173`), not a hardcoded `localhost` API URL. Ensure firewall allows port 5173.
 
-More troubleshooting: [docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md).
+More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [docs/07-API.md](docs/07-API.md).
 
 ---
 
@@ -232,7 +260,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for branch workflow, architecture boundar
 Quick summary:
 
 1. Create a feature branch from `main`.
-2. Follow existing patterns (see [docs/TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md) for architecture and patterns).
+2. Follow existing patterns (see [docs/README.md](docs/README.md), [docs/03-System-Architecture.md](docs/03-System-Architecture.md), and [docs/07-API.md](docs/07-API.md)).
 3. Ensure backend and frontend run cleanly; add tests where applicable.
 4. Open a pull request with a clear description and reference to any issue.
 

@@ -50,13 +50,12 @@ def test_capability_has_prompt_template() -> None:
     assert "{{input}}" in package.prompt_text
     template = (CAPABILITY_DIR / "prompt.template.md").read_text(encoding="utf-8")
     assert "## Role" in template
-    assert "## Extraction Rules" in template
-    assert "## Output Requirements" in template
+    assert "{{input}}" in template
 
 
 def test_capability_schema_has_id() -> None:
     package = load_capability(CAPABILITY_DIR)
-    assert package.schema_doc.get("$id") == "resume_v1"
+    assert package.schema_doc.get("$id") == "resume_milestone_v1"
 
 
 def test_capability_runtime_config() -> None:
@@ -70,10 +69,9 @@ def test_capability_validation_rules() -> None:
     package = load_capability(CAPABILITY_DIR)
     rules = package.validation_rules
     assert rules.get("schema_validate") is True
-    assert "cross_field" in rules
-    assert "confidence" in rules
-    assert "arrays" in rules
+    assert "required_fields" in rules
     assert "nested_required" in rules
+    assert "person" in (rules.get("nested_required") or {})
 
 
 def test_capability_asset_files_exist() -> None:
@@ -124,12 +122,10 @@ def test_schema_supports_extended_sections() -> None:
 
 
 def test_schema_skill_polymorphism() -> None:
+    """Milestone schema uses string skill items (autofill-aligned)."""
     package = load_capability(CAPABILITY_DIR)
     payload = _minimal_valid_resume()
-    payload["skills"] = [
-        "Python",
-        {"name": "AWS", "category": "cloud", "proficiency": "advanced"},
-    ]
+    payload["skills"] = ["Python", "AWS", "SQL"]
     jsonschema.Draft202012Validator(package.schema_doc).validate(payload)
 
 
@@ -214,8 +210,9 @@ def test_capability_yaml_references_assets() -> None:
 
 
 def test_schema_json_is_valid_json() -> None:
-    schema = json.loads((CAPABILITY_DIR / "schema.json").read_text(encoding="utf-8"))
+    schema = json.loads((CAPABILITY_DIR / "schema.milestone.json").read_text(encoding="utf-8"))
     assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
-    assert "awards" in schema["properties"]
-    assert "publications" in schema["properties"]
-    assert "source_tracking" in schema["properties"]
+    assert schema["$id"] == "resume_milestone_v1"
+    assert "skills" in schema["properties"]
+    assert "experience" in schema["properties"]
+    assert "education" in schema["properties"]

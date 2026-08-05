@@ -1,0 +1,29 @@
+Cloud Platform Engineer
+
+Location: Remote
+Experience: 3-5 years
+
+About the role
+We are looking for an engineer to own cloud platform reliability and delivery.
+
+Key Responsibilities
+• Design and operate multi-region Kubernetes clusters for customer workloads
+  across production and staging environments
+• Respond to incidents and drive root-cause analysis with clear follow-ups
+• Collaborate with application teams on CI/CD and observability standards
+
+Required Skills
+• Hands-on experience with Kubernetes and Helm
+• Strong knowledge of AWS (EC2, EKS, VPC, IAM)
+• Terraform for infrastructure as code
+• Prometheus and Grafana for monitoring
+• Python or Go for automation tooling
+• Experience with Palo Alto or equivalent network security appliances
+• Docker container fundamentals
+• Git and GitHub Actions
+
+Preferred Skills
+• ArgoCD, Istio
+
+Qualifications
+• Bachelor degree in Computer Science or equivalent

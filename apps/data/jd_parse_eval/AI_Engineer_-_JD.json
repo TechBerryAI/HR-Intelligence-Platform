@@ -1,0 +1,120 @@
+{
+  "file": "AI Engineer - JD.pdf",
+  "expected": {
+    "title_from_filename": "AI Engineer"
+  },
+  "form": {
+    "title": "AI Engineer",
+    "company": "",
+    "location": "Remote support",
+    "salary": "",
+    "experienceFrom": "",
+    "experienceTo": "",
+    "employmentType": "Remote",
+    "mandatorySkills": [
+      "RAG",
+      "Data Pipeline",
+      "Data Pipelines",
+      "PyTorch",
+      "TensorFlow",
+      "Python",
+      "GenAI",
+      "LLM"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "RAG",
+      "Data Pipeline",
+      "Data Pipelines",
+      "PyTorch",
+      "TensorFlow",
+      "Python",
+      "GenAI",
+      "LLM"
+    ],
+    "responsibilities": [
+      "Demonstrate advanced programming expertise, particularly in Python, with deep proficiency in AI-centric libraries such as TensorFlow and PyTorch.",
+      "Architect and implement Retrieval-Augmented Generation (RAG) pipelines to enhance model performance using external knowledge sources.",
+      "Design, develop, and deploy AI agents capable of autonomous decision-making and task execution using LLMs and multi-modal models.",
+      "Implement and manipulate complex algorithms essential for developing and optimizing generative AI models.",
+      "Manage data pipelines involving data pre-processing, augmentation, and synthetic data generation to enhance model training and performance.",
+      "Ensure robust data handling practices including cleaning, labeling, and structuring datasets for generative AI workflows."
+    ],
+    "qualifications": [],
+    "descriptionPreview": "We are seeking a highly skilled and innovative AI Engineer to join our team and lead\nthe development of intelligent AI agents and RAG-based applications, with hands-on\nexperience in building scalable, production-grade GenAI systems.\n\n**Key Responsibilities:**\n• Demonstrate advanced programming expertise, particularly in Python, with deep proficiency in AI-centric libraries such as TensorFlow and PyTorch.\n• Architect and implement Retrieval-Augmented Generation (RAG) pipelines to enhance model pe",
+    "descriptionLen": 1049,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "filled",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 1.0,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 8,
+    "skills_checked": 8,
+    "skills_count": 8,
+    "location_in_source": true,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "",
+      "parsed_to": "",
+      "source_year_mentions": [],
+      "ok": null
+    },
+    "has_description": true,
+    "coverage_missing_with_evidence": [],
+    "coverage_recovered": [],
+    "source_preview": "AI Engineer | Role:: AI Engineer | Location :: Remote support | JD | We are seeking a highly skilled and innovative AI Engineer to join our team and lead | the development of intelligent AI agents and RAG-based applications. , with hands-on | experience in building scalable, production-grade GenAI systems. | Key Responsibilities: | • Demonstrate advanced programming expertise, particularly in Python, with deep | proficiency in AI-centric libraries such as TensorFlow and PyTorch. | • Architect and implement Retrieval-Augmented Generation (RAG) pipelines to | enhance model performance using external knowledge sources"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'AI Engineer', 'company': '', 'location': 'Remote support', 'employment_type': 'Remote', 'description': 'We are seeking a highly skilled and innovative AI Engineer to join our team and lead\\nthe development of intelligent AI agents and RAG-based applications, with hands-on\\nexperience in building scalable, production-grade GenAI systems.\\n\\n**Key Responsibilities:**\\n• Demonstrate advanced programming expertise, particularly in Python, with deep proficiency in AI-centric libraries such as TensorFlow and PyTorch.\\n• Architect and implement Retrieval-Augmented Generation (RAG) pipelines to enhance model performance using external knowledge sources.\\n• Design, develop, and deploy AI agents capable of autonomous decision-making and task execution using LLMs and multi-modal models.\\n• Implement and manipulate complex algorithms essential for developing and optimizing generative AI models.\\n• Manage data pipelines involving data pre-processing, augmentation, and synthetic data generation to enhance model training and performance.\\n• Ensure robust data handling practices including cleaning, labeling, and structuring datasets for generative AI workflows.', 'min_experience_years': None, 'max_experience_years': None, 'skills': ['RAG', 'Data Pipeline', 'Data Pipelines', 'PyTorch', 'TensorFlow', 'Python', 'GenAI', 'LLM'], 'mandatory_skills': ['RAG', 'Data Pipeline', 'Data Pipelines', 'PyTorch', 'TensorFlow', 'Python', 'GenAI', 'LLM'], 'preferred_skill",
+  "source_preview": "AI Engineer\nRole:: AI Engineer\nLocation :: Remote support\nJD\nWe are seeking a highly skilled and innovative AI Engineer to join our team and lead\nthe development of intelligent AI agents and RAG-based applications. , with hands-on\nexperience in building scalable, production-grade GenAI systems.\nKey Responsibilities:\n• Demonstrate advanced programming expertise, particularly in Python, with deep\nproficiency in AI-centric libraries such as TensorFlow and PyTorch.\n• Architect and implement Retrieval-Augmented Generation (RAG) pipelines to\nenhance model performance using external knowledge sources.\n• Design, develop, and deploy AI agents capable of autonomous decision-making and\ntask execution using LLMs and multi-modal models.\n• Implement and manipulate complex algorithms essential for developing and\noptimizing generative AI models.\n• Manage data pipelines involving data pre-processing, augmentation, and synthetic\ndata generation to enhance model training and performance.\n• Ensure robust data handling practices including cleaning, labeling, and structuring\ndatasets for generative AI workflows."
+}

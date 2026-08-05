@@ -1,0 +1,5 @@
+Looking for a hands-on Platform Reliability Associate to join our Navi Mumbai team.
+Candidate should have 2 to 4 years of experience with Kubernetes and Linux.
+Strong Terraform and Prometheus knowledge preferred.
+Full-time role. Remote hybrid possible from Mumbai.
+You will automate infrastructure, reduce toil, and improve SLOs.

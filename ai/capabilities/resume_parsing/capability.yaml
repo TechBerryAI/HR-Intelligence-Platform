@@ -42,6 +42,5 @@ capability:
     - extraction
     - hrparser-v1
   description: >
-    Parse unstructured resume text into structured resume_v1 output aligned with
-    the canonical HRMS Resume contract. Production assets complete; final extraction
-    prompt to be authored from prompt.template.md.
+    Parse unstructured resume text into structured resume output aligned with
+    the HRMS Resume contract, including OCR-sourced text from scanned PDFs and images.

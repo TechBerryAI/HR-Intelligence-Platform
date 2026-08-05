@@ -1,0 +1,137 @@
+{
+  "file": "JD- SME(Multi Cloud) (1).pdf",
+  "expected": {
+    "title_from_filename": "SME(Multi Cloud)"
+  },
+  "form": {
+    "title": "SME(Subject Matter Expert) – Multi Cloud Environment",
+    "company": "",
+    "location": "",
+    "salary": "",
+    "experienceFrom": "",
+    "experienceTo": "",
+    "employmentType": "",
+    "mandatorySkills": [
+      "SME",
+      "Amazon Web Services",
+      "OCI",
+      "EC2",
+      "ECS",
+      "EKS",
+      "OKE",
+      "AKS",
+      "EBS",
+      "RDS",
+      "SQL",
+      "CDN",
+      "VPC",
+      "VCN",
+      "ARM",
+      "IAM",
+      "WAF",
+      "CIDR",
+      "VPN",
+      "ALB"
+    ],
+    "preferredSkills": [],
+    "skillsList": [
+      "SME",
+      "Amazon Web Services",
+      "OCI",
+      "EC2",
+      "ECS",
+      "EKS",
+      "OKE",
+      "AKS",
+      "EBS",
+      "RDS",
+      "SQL",
+      "CDN",
+      "VPC",
+      "VCN",
+      "ARM",
+      "IAM",
+      "WAF",
+      "CIDR",
+      "VPN",
+      "ALB"
+    ],
+    "responsibilities": [],
+    "qualifications": [],
+    "descriptionPreview": "Below is the list of capabilities of multi-cloud\nCapability\nAzure\nCompute\nEC2, Lambda, ECS,\nOCI Compute Instances,\nFunctions, OKE\nAzure Functions, AKS\nStorage\nS3, EBS, Glacier\nOCI Object Storage, Block\nVolumes, Archive Storage\nBlob Storage, Disk\nStorage\nDatabase\nRDS, DynamoDB,\nRedshift\nAutonomous Database,\nExadata, NoSQL Database\nSQL Database, Cosmos\nNetworking\n& CDN\nVPC, Direct Connect,\nCloudFront\nOCI Virtual Cloud Network\n(VCN), FastConnect, Edge\nServices\nVNet, ExpressRoute,\nAzure\nAI/ML Ops\nSa",
+    "descriptionLen": 2447,
+    "coverage": [
+      {
+        "field": "title",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "skills",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "description",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "salary",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "employment_type",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "company",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
+  },
+  "checks": {
+    "title_overlap_source": 1.0,
+    "title_overlap_filename": 0.429,
+    "title_present": true,
+    "skills_precision": 1.0,
+    "skills_hit": 20,
+    "skills_checked": 20,
+    "skills_count": 20,
+    "location_in_source": null,
+    "company_in_source": null,
+    "experience": {
+      "parsed_from": "",
+      "parsed_to": "",
+      "source_year_mentions": [],
+      "ok": null
+    },
+    "has_description": true,
+    "coverage_missing_with_evidence": [],
+    "coverage_recovered": [],
+    "source_preview": "SME(Subject Matter Expert) – Multi Cloud Environment |  | Below is the list of capabilities of multi-cloud |  | Capability | AWS | OCI | Azure | Compute | EC2, Lambda, ECS, | EKS | OCI Compute Instances, | Functions, OKE | Azure Functions, AKS | Storage | S3, EBS, Glacier | OCI Object Storage, Block | Volumes, Archive Storage | Blob Storage, Disk | Storage | Database | RDS, DynamoDB, | Redshift | Autonomous Database, | Exadata, NoSQL Database | SQL Database, Cosmos | DB | Networking | & CDN | VPC, Direct Connect, | CloudFront | OCI Virtual Cloud Network | (VCN), FastConnect, Edge | Services | VNet, ExpressRoute, | Azure | CDN | AI/ML Ops | SageMaker MLOps, | SageMaker | P"
+  },
+  "toon_preview": "{'type': 'job_description', 'title': 'SME(Subject Matter Expert) – Multi Cloud Environment', 'company': '', 'location': '', 'employment_type': '', 'description': 'Below is the list of capabilities of multi-cloud\\nCapability\\nAzure\\nCompute\\nEC2, Lambda, ECS,\\nOCI Compute Instances,\\nFunctions, OKE\\nAzure Functions, AKS\\nStorage\\nS3, EBS, Glacier\\nOCI Object Storage, Block\\nVolumes, Archive Storage\\nBlob Storage, Disk\\nStorage\\nDatabase\\nRDS, DynamoDB,\\nRedshift\\nAutonomous Database,\\nExadata, NoSQL Database\\nSQL Database, Cosmos\\nNetworking\\n& CDN\\nVPC, Direct Connect,\\nCloudFront\\nOCI Virtual Cloud Network\\n(VCN), FastConnect, Edge\\nServices\\nVNet, ExpressRoute,\\nAzure\\nAI/ML Ops\\nSageMaker MLOps,\\nSageMaker\\nPipelines\\nOCI Data Science, Data\\nFlow, AI Services\\nAzure Machine Learning,\\nMLOps\\nDevOps &\\nManagement\\nCodePipeline,\\nCloudFormation,\\nCloudWatch\\nResource Manager,\\nDevOps, Monitoring,\\nLogging\\nAzure DevOps, ARM,\\nMonitor\\nCloudFormation,\\nTerraform\\nResource Manager,\\nTerraform\\nARM Templates,\\nTerraform\\nServerless\\nLambda, Fargate\\nResource Manager,\\nTerraform\\nAzure Functions, App\\nService\\nSecurity &\\nCompliance\\nIAM, GuardDuty,\\nShield, Macie\\nIAM, Cloud Guard, Web\\nApplication Firewall (WAF),\\nVault\\nAzure AD, Security\\nCenter, Key Vault\\nCapability: AWS | OCI | Azure\\nCompute: EC2, Lambda, ECS, EKS | OCI Compute Instances, Functions, OKE | Azure Functions, AKS\\nStorage: S3, EBS, Glacier | OCI Object Storage, Block Volumes, Archive Storage | Blob Storage, ",
+  "source_preview": "SME(Subject Matter Expert) – Multi Cloud Environment\n\nBelow is the list of capabilities of multi-cloud\n\nCapability\nAWS\nOCI\nAzure\nCompute\nEC2, Lambda, ECS,\nEKS\nOCI Compute Instances,\nFunctions, OKE\nAzure Functions, AKS\nStorage\nS3, EBS, Glacier\nOCI Object Storage, Block\nVolumes, Archive Storage\nBlob Storage, Disk\nStorage\nDatabase\nRDS, DynamoDB,\nRedshift\nAutonomous Database,\nExadata, NoSQL Database\nSQL Database, Cosmos\nDB\nNetworking\n& CDN\nVPC, Direct Connect,\nCloudFront\nOCI Virtual Cloud Network\n(VCN), FastConnect, Edge\nServices\nVNet, ExpressRoute,\nAzure\nCDN\nAI/ML Ops\nSageMaker MLOps,\nSageMaker\nPipelines\nOCI Data Science, Data\nFlow, AI Services\nAzure Machine Learning,\nMLOps\nDevOps &\nManagement\nCodePipeline,\nCloudFormation,\nCloudWatch\nResource Manager,\nDevOps, Monitoring,\nLogging\nAzure DevOps, ARM,\nMonitor\nIaC\nCloudFormation,\nTerraform\nResource Manager,\nTerraform\nARM Templates,\nTerraform\nServerless\nLambda, Fargate\nResource Manager,\nTerraform\nAzure Functions, App\nService\nSecurity &\nCompliance\nIAM, GuardDuty,\nShield, Macie\nIAM, Cloud Guard, Web\nApplication Firewall (WAF),\nVault\nAzure AD, Security\nCenter, Key Vault\n\nCapability: AWS | OCI | Azure\nCompute: EC2, Lambda, ECS, EKS | OCI Compute Instances, Functions, OKE | Azure Functions, AKS\nStorage: S3, EBS, Glacier | OCI Object Storage, Block Volumes, Archive Storage | Blob Storage, Disk Storage\nDatabase: RDS, DynamoDB, Redshift | Autonomous Database, Exadata, NoSQL Database | SQL Database, Cosmos DB\nNetworking: VPC, Direct Connect, CloudFront | OCI Virtual Cloud Network (VCN), FastConnect, Edge Services | VNet, ExpressRoute, Azure CDN\n& CDN\nAI/ML Ops: SageMaker MLOps, SageMaker Pipelines | OCI Data Science, Data Flow, AI Services | Azure Machine Learning, MLOps\nDevOps &: CodePipeline, CloudFormation, CloudWatch | Resource Manager, DevOps, Monitoring, Logging | Azure DevOps, ARM, Monitor\nManagement\nIaC: CloudFormation, Terraform | Resource Manager, Terraform | ARM Templates, Terraform\nServerless: Lambda, Fargate | Resource Manager, Terraform | Azure Functions, App Service\nSecurity &: IAM, GuardDuty, Shield, Macie | IAM, Cloud Guard, Web Application Firewall (WAF), Vault | Azure AD, Security Center, Key Vault\nCompliance\n\nScope of work\n\nSection\nAzure\nAWS\nOCI\nNetwork\nProvisioning\n- Create and manage\nVirtual Network (VN,\nSubnets, CIDR, Routing,\nGateways, Peering)\n- VPN (Site-to-site,\nPoint-to-site)\n- ExpressRoute\nDeployment - Azure Load\nBalancer\n- VPC, Subnets, CIDR\nBlock, Routing, and Peering\n- Site-to-Site VPN & Dire"
+}

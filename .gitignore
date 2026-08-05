@@ -32,8 +32,9 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+# Python packaging dirs at repo root only (do not ignore apps/*/src/**/lib/)
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -166,11 +167,11 @@ $RECYCLE.BIN/
 logs/
 *.log.*
 
-# Coverage Reports
+# Coverage Reports (tooling output only — not app packages named coverage/)
 htmlcov/
 .coverage
 .coverage.*
-coverage/
+/coverage/
 *.cover
 nosetests.xml
 coverage.xml
@@ -262,18 +263,67 @@ site/
 # Project Specific
 # ==============================================================================
 
-# Uploaded files (if any runtime uploads)
+# Uploaded files (runtime — never commit candidate PII)
 uploads/
+**/uploads/
+!**/uploads/.gitkeep
 media/
 
 # Backend runtime uploads (resumes, feedback screenshots)
 backend/uploads/
+apps/backend/uploads/
 
 # AI workspace — full rules in ai/.gitignore
 # Catch-all for large ML binaries if placed outside ai/models/
 *.gguf
 *.safetensors
+*.bin
+*.pt
+*.onnx
 
-# Session data
-sessions/
+# Runtime session data only (do not ignore app.domains.identity.sessions)
+/sessions/
+data/sessions/
 *.session
+
+# Bulk parse staging + Excel exports (local runtime)
+# Worker writes under apps/data/ (Path parents[3] from bulk_parser.py), not apps/backend/data/
+apps/data/bulk_uploads/
+apps/data/bulk_exports/
+apps/backend/data/bulk_uploads/
+apps/backend/data/bulk_exports/
+
+# Local resume / JD corpora (large PII — keep on disk, never push)
+/Resumes/
+/resumes/
+/JDs/
+/JD/
+/jds/
+/JobDescriptions/
+
+# --------------------------------------------------------------------------
+# Production / E2E validation harness output (Playwright + parse dumps)
+# Covers: validation-report, validation-report-bounded*, -smoke*, -final*, etc.
+# --------------------------------------------------------------------------
+/validation-report*/
+**/validation-report*/
+validation-report*.log
+**/validation-report*.log
+**/checkpoint.jsonl
+**/failures.csv
+**/parsed-json/
+**/grouped-failures/
+**/summary.html
+
+# Playwright / browser automation caches & HTML reports
+.playwright-browsers/
+**/playwright-report/
+**/test-results/
+**/blob-report/
+**/test-output/
+
+# Local eval / accuracy scratch (keep intentional fixtures under apps/data/jd_parse_eval/ if tracked)
+*.accuracy-report.json
+*.field-accuracy*.json
+/tmp-*/
+/scratch/

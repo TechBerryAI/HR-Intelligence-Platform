@@ -67,6 +67,7 @@ def test_language_string_and_object(schema: dict) -> None:
 
 
 def test_confidence_bounds(schema: dict) -> None:
+    """Milestone schema allows optional confidence without strict bounds."""
     base = {
         "type": "resume",
         "person": {"name": "A", "email": "a@b.com", "phone": "1"},
@@ -76,11 +77,11 @@ def test_confidence_bounds(schema: dict) -> None:
     }
     jsonschema.Draft202012Validator(schema).validate({**base, "confidence": 0.0})
     jsonschema.Draft202012Validator(schema).validate({**base, "confidence": 1.0})
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.Draft202012Validator(schema).validate({**base, "confidence": 1.5})
+    # additionalProperties: true — out-of-range confidence is not schema-rejected
+    jsonschema.Draft202012Validator(schema).validate({**base, "confidence": 1.5})
 
 
-def test_rejects_additional_root_properties(schema: dict) -> None:
+def test_allows_additional_root_properties(schema: dict) -> None:
     payload = {
         "type": "resume",
         "person": {"name": "A", "email": "a@b.com", "phone": "1"},
@@ -89,21 +90,32 @@ def test_rejects_additional_root_properties(schema: dict) -> None:
         "education": [],
         "unknown_field": "x",
     }
-    with pytest.raises(jsonschema.ValidationError):
-        jsonschema.Draft202012Validator(schema).validate(payload)
+    jsonschema.Draft202012Validator(schema).validate(payload)
 
 
-def test_location_structured_object(schema: dict) -> None:
+def test_location_is_string(schema: dict) -> None:
     payload = {
         "type": "resume",
         "person": {
             "name": "A",
             "email": "a@b.com",
             "phone": "1",
-            "location": {"raw": "Pune, India", "city": "Pune", "country": "IN"},
+            "location": "Pune, India",
         },
         "skills": [],
         "experience": [],
         "education": [],
     }
     jsonschema.Draft202012Validator(schema).validate(payload)
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.Draft202012Validator(schema).validate(
+            {
+                **payload,
+                "person": {
+                    "name": "A",
+                    "email": "a@b.com",
+                    "phone": "1",
+                    "location": {"raw": "Pune, India", "city": "Pune", "country": "IN"},
+                },
+            }
+        )
