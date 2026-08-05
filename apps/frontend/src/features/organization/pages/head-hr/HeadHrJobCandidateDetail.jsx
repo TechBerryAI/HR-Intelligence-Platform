@@ -97,25 +97,25 @@ export default function HeadHrJobCandidateDetail() {
         <button
           type="button"
           onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(jdid)}`)}
-          className="group inline-flex items-center gap-2 text-sm text-[#8FA1B3] hover:text-white mb-6 transition-colors duration-[180ms]"
+          className="group inline-flex items-center gap-2 text-sm text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] mb-6 transition-colors duration-[180ms]"
         >
           <FiArrowLeft className="w-4 h-4 transition-transform duration-[180ms] group-hover:-translate-x-0.5" />
           Back to {jobTitle}
         </button>
 
         <header className="mb-6">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ei-text-muted)] mb-2">
             Candidate Evaluation
           </p>
-          <h1 className="font-display text-[28px] sm:text-[30px] font-bold text-[#F5F7FA] tracking-tight leading-tight">
+          <h1 className="font-display text-[28px] sm:text-[30px] font-bold text-[var(--ei-text-primary)] tracking-tight leading-tight">
             {candidateName}
           </h1>
-          <p className="mt-1.5 text-sm text-[#8E9BA8]">
+          <p className="mt-1.5 text-sm text-[var(--ei-text-secondary)]">
             Application for {jobTitle}
           </p>
         </header>
 
-        <div className="flex gap-6 mb-6 border-b border-white/[0.08]">
+        <div className="flex gap-6 mb-6 border-b border-[var(--ei-border-primary)]">
           {[
             { id: 'profile', label: 'Profile & Resume' },
             { id: 'application', label: 'Application & Match' },
@@ -126,8 +126,8 @@ export default function HeadHrJobCandidateDetail() {
               onClick={() => setTab(id)}
               className={`relative px-1 py-3 text-sm font-medium transition-colors duration-[180ms] ${
                 tab === id
-                  ? 'text-white'
-                  : 'text-[#77899B] hover:text-[#DCE3EA]'
+                  ? 'text-[var(--ei-text-primary)]'
+                  : 'text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)]'
               }`}
             >
               {label}

@@ -17,7 +17,7 @@ function ScoreRing({ score, size = 100, isMatch }) {
           cy={size / 2}
           r={r}
           fill="none"
-          stroke="rgba(255,255,255,0.08)"
+          stroke="var(--ei-border-primary)"
           strokeWidth={stroke}
         />
         <circle
@@ -34,8 +34,8 @@ function ScoreRing({ score, size = 100, isMatch }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[22px] font-bold tabular-nums text-[#F7FAFC] leading-none">{pct}%</span>
-        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8796A5] mt-1">Match</span>
+        <span className="text-[22px] font-bold tabular-nums text-[var(--ei-text-primary)] leading-none">{pct}%</span>
+        <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ei-text-muted)] mt-1">Match</span>
       </div>
     </div>
   )
@@ -51,26 +51,35 @@ export default function MatchHeader({ score, candidateName, candidateEmail, verd
 
   if (enterprise) {
     return (
-      <div className="px-5 sm:px-6 py-5 sm:py-6 border-b border-white/[0.08] bg-[rgba(16,23,30,0.5)]">
+      <div className="px-5 sm:px-6 py-5 sm:py-6 border-b border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]">
         <div className="flex flex-col sm:flex-row sm:items-center gap-5">
           <ScoreRing score={score} isMatch={!!isMatch} size={104} />
 
           <div className="min-w-0 flex-1">
-            <h2 className="text-[20px] sm:text-[22px] font-bold text-[#F5F7FA] tracking-tight truncate" id="match-modal-title">
+            <h2 className="text-[20px] sm:text-[22px] font-bold text-[var(--ei-text-primary)] tracking-tight truncate" id="match-modal-title">
               {candidateName || 'Candidate'}
             </h2>
             {candidateEmail && (
-              <p className="text-[13px] sm:text-sm text-[#8796A5] truncate mt-1">{candidateEmail}</p>
+              <p className="text-[13px] sm:text-sm text-[var(--ei-text-muted)] truncate mt-1">{candidateEmail}</p>
             )}
-            <p className="text-xs text-[#738394] mt-2">Overall candidate-job compatibility</p>
+            <p className="text-xs text-[var(--ei-text-muted)] mt-2">Overall candidate-job compatibility</p>
           </div>
 
           <div
-            className={`flex-shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-full text-xs font-semibold uppercase tracking-wide border ${
+            className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-full text-xs font-semibold uppercase tracking-wide border"
+            style={
               isMatch
-                ? 'bg-[rgba(55,214,160,0.08)] border-[rgba(55,214,160,0.28)] text-[#67DFB4]'
-                : 'bg-[rgba(255,82,105,0.08)] border-[rgba(255,82,105,0.28)] text-[#FF758A]'
-            }`}
+                ? {
+                    background: 'var(--ei-tone-success-bg)',
+                    borderColor: 'var(--ei-tone-success-border)',
+                    color: 'var(--ei-tone-success)',
+                  }
+                : {
+                    background: 'var(--ei-tone-danger-bg)',
+                    borderColor: 'var(--ei-tone-danger-border)',
+                    color: 'var(--ei-tone-danger)',
+                  }
+            }
             aria-label={`Verdict: ${verdictLabel}`}
           >
             {isMatch ? <FiCheck className="w-3.5 h-3.5" /> : <FiSlash className="w-3.5 h-3.5" />}
@@ -81,7 +90,7 @@ export default function MatchHeader({ score, candidateName, candidateEmail, verd
             <button
               type="button"
               onClick={onClose}
-              className="flex-shrink-0 self-start sm:self-center p-2 rounded-[10px] text-[#8796A5] hover:text-white hover:bg-white/[0.05] transition-all duration-[180ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#3AA9FF]/40"
+              className="flex-shrink-0 self-start sm:self-center p-2 rounded-[10px] text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)] transition-all duration-[180ms] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ei-border-focus)]/40"
               aria-label="Close modal"
             >
               <FiX className="w-5 h-5" />

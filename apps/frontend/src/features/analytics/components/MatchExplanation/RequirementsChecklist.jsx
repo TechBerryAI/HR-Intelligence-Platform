@@ -18,22 +18,35 @@ export default function RequirementsChecklist({
 
   const enterprise = theme === 'enterprise'
   const labelClass = enterprise
-    ? 'text-[11px] font-semibold uppercase tracking-[0.1em] text-[#83909C]'
+    ? 'text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ei-text-muted)]'
     : 'text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400'
-  const bodyClass = enterprise ? 'text-[#C5CED8]' : 'text-slate-700 dark:text-slate-300'
-  const mutedClass = enterprise ? 'text-[#8796A5]' : 'text-slate-500 dark:text-slate-400'
-  const titleClass = enterprise ? 'text-[#F2F5F8]' : 'text-slate-900 dark:text-white'
+  const bodyClass = enterprise ? 'text-[var(--ei-text-secondary)]' : 'text-slate-700 dark:text-slate-300'
+  const mutedClass = enterprise ? 'text-[var(--ei-text-muted)]' : 'text-slate-500 dark:text-slate-400'
+  const titleClass = enterprise ? 'text-[var(--ei-text-primary)]' : 'text-slate-900 dark:text-white'
   const panelBg = enterprise
-    ? 'border-white/[0.08] bg-gradient-to-br from-white/[0.04] to-white/[0.015]'
+    ? 'border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]'
     : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40'
-  const rowBorder = enterprise ? 'border-white/[0.06]' : 'border-slate-100 dark:border-slate-800'
+  const rowBorder = enterprise ? 'border-[var(--ei-border-primary)]' : 'border-slate-100 dark:border-slate-800'
 
   const resultTone = (matched) => {
     if (enterprise) {
       return matched
-        ? 'bg-[rgba(55,214,160,0.12)] text-[#67DFB4] border-[rgba(55,214,160,0.22)]'
-        : 'bg-[rgba(255,93,115,0.12)] text-[#FF788B] border-[rgba(255,93,115,0.22)]'
+        ? {
+            background: 'var(--ei-tone-success-bg)',
+            borderColor: 'var(--ei-tone-success-border)',
+            color: 'var(--ei-tone-success)',
+          }
+        : {
+            background: 'var(--ei-tone-danger-bg)',
+            borderColor: 'var(--ei-tone-danger-border)',
+            color: 'var(--ei-tone-danger)',
+          }
     }
+    return undefined
+  }
+
+  const resultClass = (matched) => {
+    if (enterprise) return 'border'
     return matched
       ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
       : 'bg-red-50 text-red-700 border-red-200'
@@ -45,18 +58,24 @@ export default function RequirementsChecklist({
     const missing = rows.length - matched
     return (
       <div className={`rounded-[14px] border overflow-hidden ${panelBg}`}>
-        <div className={`px-4 py-3 border-b ${enterprise ? 'border-white/[0.08]' : 'border-slate-200 dark:border-slate-700'}`}>
+        <div className={`px-4 py-3 border-b ${enterprise ? 'border-[var(--ei-border-primary)]' : 'border-slate-200 dark:border-slate-700'}`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className={`text-sm font-semibold ${titleClass}`}>{title}</p>
               {subtitle && <p className={`mt-0.5 text-xs ${mutedClass}`}>{subtitle}</p>}
             </div>
             <div className="flex flex-wrap gap-1.5">
-              <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${resultTone(true)}`}>
+              <span
+                className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${resultClass(true)}`}
+                style={resultTone(true)}
+              >
                 {matched} matched
               </span>
               {missing > 0 && (
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${resultTone(false)}`}>
+                <span
+                  className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border ${resultClass(false)}`}
+                  style={resultTone(false)}
+                >
                   {missing} missing
                 </span>
               )}
@@ -80,7 +99,10 @@ export default function RequirementsChecklist({
                     <td className={`px-4 py-2.5 font-medium ${titleClass}`}>{r.skill}</td>
                     <td className="px-4 py-2.5">{ok ? r.skill : '—'}</td>
                     <td className="px-4 py-2.5">
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-[0.05em] border ${resultTone(ok)}`}>
+                      <span
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-[0.05em] border ${resultClass(ok)}`}
+                        style={resultTone(ok)}
+                      >
                         <span aria-hidden>{ok ? '✓' : '✕'}</span>
                         {ok ? 'Matched' : 'Not matched'}
                       </span>

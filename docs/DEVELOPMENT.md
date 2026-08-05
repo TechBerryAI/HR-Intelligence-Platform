@@ -137,7 +137,7 @@ Anyone on this branch shares one theme system:
 | Colors | `--ei-*` in `apps/frontend/src/styles/index.css` |
 | FOUC bootstrap | `apps/frontend/public/theme-init.js` (key must match `THEME_STORAGE_KEY`) |
 
-Landing `/` stays dark-only. Prefer `var(--ei-text-primary)` etc. over hard-coded zinc/hex.
+Landing `/` stays dark-only. Prefer `var(--ei-text-primary)` etc. over hard-coded zinc/hex. Head HR Match Analysis (and related `MatchExplanation` enterprise panels) use `--ei-*` / `--ei-tone-*` so they follow Light/Dark with the rest of the org shell.
 
 ## Testing strategy
 

@@ -9,10 +9,22 @@ export default function ChipGroup({ title, items, variant = 'strength', id, them
   const isStrength = variant === 'strength'
   const enterprise = theme === 'enterprise'
 
-  const chipClass = enterprise
+  const chipStyle = enterprise
     ? isStrength
-      ? 'bg-[rgba(55,214,160,0.08)] border border-[rgba(55,214,160,0.18)] text-[#67DFB4]'
-      : 'bg-[rgba(255,93,115,0.07)] border border-[rgba(255,93,115,0.18)] text-[#FF788B]'
+      ? {
+          background: 'var(--ei-tone-success-bg)',
+          borderColor: 'var(--ei-tone-success-border)',
+          color: 'var(--ei-tone-success)',
+        }
+      : {
+          background: 'var(--ei-tone-danger-bg)',
+          borderColor: 'var(--ei-tone-danger-border)',
+          color: 'var(--ei-tone-danger)',
+        }
+    : undefined
+
+  const chipClass = enterprise
+    ? 'border'
     : isStrength
       ? 'bg-emerald-50 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/40'
       : 'bg-red-50 dark:bg-red-500/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-500/40'
@@ -21,7 +33,7 @@ export default function ChipGroup({ title, items, variant = 'strength', id, them
     <div>
       <h3
         className={`text-xs font-semibold uppercase tracking-[0.08em] mb-2 ${
-          enterprise ? 'text-[#83909C]' : 'text-slate-500 dark:text-slate-400'
+          enterprise ? 'text-[var(--ei-text-muted)]' : 'text-slate-500 dark:text-slate-400'
         }`}
         id={id}
       >
@@ -30,7 +42,7 @@ export default function ChipGroup({ title, items, variant = 'strength', id, them
       <ul className="flex flex-wrap gap-2 list-none p-0 m-0" aria-labelledby={id}>
         {items.map((item, i) => (
           <li key={i}>
-            <span className={`inline-block px-3 py-1.5 rounded-full text-sm font-medium ${chipClass}`}>
+            <span className={`inline-block px-3 py-1.5 rounded-full text-sm font-medium ${chipClass}`} style={chipStyle}>
               {item}
             </span>
           </li>

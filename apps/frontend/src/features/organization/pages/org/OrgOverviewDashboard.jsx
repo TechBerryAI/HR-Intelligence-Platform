@@ -558,7 +558,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
               <button
                 type="button"
                 onClick={() => go('jobs')}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-[#55B9FF] hover:text-white transition-colors"
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-[#0284c7] hover:text-[#0369a1] dark:text-[#55B9FF] dark:hover:text-white transition-colors"
               >
                 View all jobs
                 <FiArrowRight className="w-4 h-4" />
@@ -568,7 +568,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
             {loading ? (
               <div className="space-y-2">
                 {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="h-12 rounded-xl bg-white/[0.04] animate-pulse" />
+                  <div key={i} className="h-12 rounded-xl bg-[var(--ei-surface-hover)] animate-pulse" />
                 ))}
               </div>
             ) : recentJobs.length === 0 ? (
@@ -577,7 +577,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
               <div className="overflow-x-auto -mx-1">
                 <table className="w-full min-w-[720px] text-left">
                   <thead>
-                    <tr className="border-b border-[var(--ei-border-primary)] text-[11px] uppercase tracking-[0.08em] text-[#738394]">
+                    <tr className="border-b border-[var(--ei-border-primary)] text-[11px] uppercase tracking-[0.08em] text-[var(--ei-text-muted)]">
                       <th className="pb-3 pr-4 font-semibold">Job</th>
                       <th className="pb-3 pr-4 font-semibold">Status</th>
                       <th className="pb-3 pr-4 font-semibold">Candidates</th>
@@ -593,10 +593,10 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                       return (
                         <tr
                           key={jdid}
-                          className="border-b border-white/[0.05] last:border-0 hover:bg-white/[0.03] transition-colors"
+                          className="border-b border-[var(--ei-border-primary)] last:border-0 hover:bg-[var(--ei-surface-hover)] transition-colors"
                         >
                           <td
-                            className="py-3.5 pr-4 text-sm font-medium text-[#F2F5F8] cursor-pointer"
+                            className="py-3.5 pr-4 text-sm font-semibold text-[var(--ei-text-primary)] cursor-pointer"
                             onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(jdid)}`)}
                           >
                             {job.title || '—'}
@@ -605,8 +605,8 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                             <span
                               className={`inline-flex items-center justify-center min-w-[4.25rem] rounded-full px-2.5 py-0.5 text-xs font-medium ${
                                 active
-                                  ? 'bg-[rgba(54,214,160,0.12)] text-[#67DFB4]'
-                                  : 'bg-white/[0.06] text-[var(--ei-text-secondary)]'
+                                  ? 'bg-emerald-500/15 text-emerald-700 dark:bg-[rgba(54,214,160,0.12)] dark:text-[#67DFB4]'
+                                  : 'bg-[var(--ei-surface-hover)] text-[var(--ei-text-secondary)]'
                               }`}
                             >
                               {active ? 'Active' : 'Draft'}
@@ -633,7 +633,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                                   />
                                   <span
                                     className={`relative inline-block w-11 h-6 shrink-0 rounded-full transition-colors ${
-                                      active ? 'bg-emerald-500' : 'bg-white/20'
+                                      active ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-white/20'
                                     } ${togglingJobId === jdid ? 'opacity-60' : ''}`}
                                     aria-hidden
                                   >
@@ -647,7 +647,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                                 <button
                                   type="button"
                                   onClick={() => openEditJob(job)}
-                                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--ei-border-primary)] bg-white/[0.05] px-3 py-1.5 text-xs font-medium text-[var(--ei-text-primary)] hover:bg-white/[0.09] transition-colors"
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)] px-3 py-1.5 text-xs font-medium text-[var(--ei-text-primary)] hover:bg-[var(--ei-border-primary)] transition-colors"
                                 >
                                   <FiEdit2 className="w-3.5 h-3.5" />
                                   Edit
@@ -676,19 +676,19 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                 className="relative w-full max-w-2xl rounded-2xl overflow-hidden border border-[var(--ei-border-primary)] org-glass-panel"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--ei-border-primary)] bg-white/[0.03]">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]">
                   <h3 className="text-xl font-semibold text-[var(--ei-text-primary)]">Edit Job Post</h3>
                   <button
                     type="button"
                     onClick={closeEditJob}
-                    className="p-2 rounded-xl text-[var(--ei-text-secondary)] hover:text-white hover:bg-white/[0.05] transition-colors"
+                    className="p-2 rounded-xl text-[var(--ei-text-secondary)] hover:text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)] transition-colors"
                   >
                     <FiX className="w-5 h-5" />
                   </button>
                 </div>
                 <form onSubmit={handleEditSubmit} className="px-6 py-6 space-y-5 max-h-[70vh] overflow-y-auto">
                   {editError && (
-                    <p className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                    <p className="text-sm text-red-600 dark:text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
                       {editError}
                     </p>
                   )}
@@ -715,7 +715,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                       placeholder="₹15-25 LPA"
                     />
                     <div>
-                      <label className="block text-sm font-semibold text-[#C5D0DA] mb-2">
+                      <label className="block text-sm font-semibold text-[var(--ei-text-label)] mb-2">
                         Experience Range (years)
                       </label>
                       <div className="grid grid-cols-2 gap-3">
@@ -739,7 +739,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-[#C5D0DA] mb-2">Description</label>
+                    <label className="block text-sm font-semibold text-[var(--ei-text-label)] mb-2">Description</label>
                     <textarea
                       className="premium-input min-h-[120px] resize-y"
                       value={editDescription}
@@ -762,13 +762,13 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <section className="org-glass-panel p-5 sm:p-6">
-              <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-4">
+              <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ei-text-muted)] mb-4">
                 Recent Activity
               </h2>
               {loading ? (
                 <div className="space-y-3">
                   {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="h-8 rounded-lg bg-white/[0.04] animate-pulse" />
+                    <div key={i} className="h-8 rounded-lg bg-[var(--ei-surface-hover)] animate-pulse" />
                   ))}
                 </div>
               ) : recentActivity.length === 0 ? (
@@ -776,9 +776,9 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
               ) : (
                 <ul className="space-y-3">
                   {recentActivity.map((item) => (
-                    <li key={item.id} className="flex items-start gap-3 text-sm text-[#C5D0DA]">
+                    <li key={item.id} className="flex items-start gap-3 text-sm text-[var(--ei-text-secondary)]">
                       <span className="mt-2 h-1.5 w-1.5 rounded-full bg-[#00A6FF] flex-shrink-0" aria-hidden />
-                      <span className="min-w-0 leading-relaxed">{item.text}</span>
+                      <span className="min-w-0 leading-relaxed text-[var(--ei-text-primary)]">{item.text}</span>
                     </li>
                   ))}
                 </ul>
@@ -786,18 +786,18 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
             </section>
 
             <aside className="org-glass-panel p-5 sm:p-6">
-              <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-4">
+              <h2 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ei-text-muted)] mb-4">
                 Organization Snapshot
               </h2>
               <div className="space-y-2.5">
                 {loading
                   ? Array.from({ length: 4 }).map((_, i) => (
-                      <div key={i} className="h-10 rounded-xl bg-white/[0.04] animate-pulse" />
+                      <div key={i} className="h-10 rounded-xl bg-[var(--ei-surface-hover)] animate-pulse" />
                     ))
                   : snapshotItems.map(({ label, value }) => (
                       <div
                         key={label}
-                        className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.025] px-3.5 py-2.5"
+                        className="flex items-center justify-between rounded-xl border border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)] px-3.5 py-2.5"
                       >
                         <span className="text-sm text-[var(--ei-text-secondary)]">{label}</span>
                         <span className="text-sm font-semibold tabular-nums text-[var(--ei-text-primary)]">{value ?? '—'}</span>
