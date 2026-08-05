@@ -55,6 +55,7 @@ _Auto-generated on 2026-08-05 by `scripts/sync_docs_from_code.py`. Do not hand-e
 | `apps/backend/schema_pg/09_interview_ai_scheduling.sql` | Interview scheduling + AI interviewer support (extends interviews scaffold) |
 | `apps/backend/schema_pg/10_jobs_keywords.sql` | Add keywords column to jobs for JD-derived search/match terms |
 | `apps/backend/schema_pg/11_integrations.sql` | Job-board Integration Framework (provider-agnostic, company-scoped) |
+| `apps/backend/schema_pg/12_external_applications.sql` | External applications synced from custom HTTP job-board adapters |
 <!-- END:GENERATED-SCHEMA-FILES -->
 
 ---
@@ -72,6 +73,8 @@ _Auto-generated on 2026-08-05 by `scripts/sync_docs_from_code.py`. Do not hand-e
 
 ### Integrations (job boards)
 `integration_provider`, `external_jobs`, `sync_logs`, `provider_events`, `webhook_events`, `oauth_tokens` — see `11_integrations.sql`. Scoped by `company_key` (normalized company name). Credentials stored encrypted.
+
+`external_applications` — see `12_external_applications.sql`. Durable sync payload from custom HTTP adapters (`company_key`, `provider`, `external_job_id`, `external_application_id`, `payload` JSONB, `mapped_status`, `last_synced_at`). Not yet mapped into HCIP `applications`.
 
 ### Parsing & bulk
 `raw_files`, `parsed_resumes`, `parsed_jds`, `bulk_parse_sessions`, `bulk_parse_files`

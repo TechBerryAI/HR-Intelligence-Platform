@@ -1,22 +1,27 @@
-import React, { useCallback, useEffect, useState } from 'react'
-import { FiCheck, FiAlertCircle, FiLink, FiRefreshCw, FiSave } from 'react-icons/fi'
-import { Linkedin, Briefcase, Globe } from 'lucide-react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  FiCheck,
+  FiAlertCircle,
+  FiLink,
+  FiRefreshCw,
+  FiSave,
+  FiPlus,
+  FiX,
+  FiTrash2,
+} from 'react-icons/fi'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import { isHeadHr } from '@/core/permissions/rbac.js'
 import { useApp } from '@/core/context/AppContext.jsx'
+import ProviderBrandIcon from '@/features/integrations/components/ProviderBrandIcon.jsx'
 import {
   fetchIntegrationProviders,
   saveProviderConfig,
+  createProviderConfig,
   testProviderConnection,
   connectProvider,
+  deleteProviderConfig,
 } from '@/features/settings/services/integrationsApi.js'
-
-const ICONS = {
-  linkedin: Linkedin,
-  naukri: Briefcase,
-  indeed: Globe,
-}
 
 function Toggle({ checked, onChange, disabled, enterprise, label }) {
   return (
@@ -56,9 +61,17 @@ function Toggle({ checked, onChange, disabled, enterprise, label }) {
   )
 }
 
-function ProviderCard({ item, enterprise, canEdit, onSaved }) {
+function hasLocalCredentials(clientId, clientSecret, accessToken, cfg) {
+  const idOk = (clientId || '').trim().length > 0
+  const secretOk = (clientSecret || '').trim().length > 0 || !!cfg.clientSecretConfigured
+  const tokenOk = (accessToken || '').trim().length > 0 || !!cfg.accessTokenConfigured
+  return (idOk && secretOk) || tokenOk
+}
+
+function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
   const cfg = item.config || {}
-  const Icon = ICONS[item.id] || Globe
+  const settings = cfg.settings || {}
+  const endpoints = settings.endpoints || {}
   const [enabled, setEnabled] = useState(!!cfg.enabled)
   const [autoPublish, setAutoPublish] = useState(!!cfg.autoPublish)
   const [autoSync, setAutoSync] = useState(!!cfg.autoSync)
@@ -66,6 +79,12 @@ function ProviderCard({ item, enterprise, canEdit, onSaved }) {
   const [clientSecret, setClientSecret] = useState('')
   const [accessToken, setAccessToken] = useState('')
   const [refreshToken, setRefreshToken] = useState('')
+  const [baseUrl, setBaseUrl] = useState(settings.baseUrl || '')
+  const [epTest, setEpTest] = useState(endpoints.test || 'GET /health')
+  const [epPublish, setEpPublish] = useState(endpoints.publish || 'POST /jobs')
+  const [epUpdate, setEpUpdate] = useState(endpoints.update || 'PUT /jobs/{externalJobId}')
+  const [epClose, setEpClose] = useState(endpoints.close || 'POST /jobs/{externalJobId}/close')
+  const [epApps, setEpApps] = useState(endpoints.applications || 'GET /jobs/{externalJobId}/applications')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState({ type: '', text: '' })
 
@@ -77,29 +96,67 @@ function ProviderCard({ item, enterprise, canEdit, onSaved }) {
     setClientSecret('')
     setAccessToken('')
     setRefreshToken('')
-  }, [cfg.enabled, cfg.autoPublish, cfg.autoSync, cfg.clientId, item.id])
+    setBaseUrl(settings.baseUrl || '')
+    setEpTest(endpoints.test || 'GET /health')
+    setEpPublish(endpoints.publish || 'POST /jobs')
+    setEpUpdate(endpoints.update || 'PUT /jobs/{externalJobId}')
+    setEpClose(endpoints.close || 'POST /jobs/{externalJobId}/close')
+    setEpApps(endpoints.applications || 'GET /jobs/{externalJobId}/applications')
+  }, [item.id, cfg.enabled, cfg.autoPublish, cfg.autoSync, cfg.clientId, settings.baseUrl])
 
-  const statusLabel = cfg.status === 'connected' ? 'Connected' : 'Disconnected'
   const statusOk = cfg.status === 'connected'
+
+  const buildBody = () => {
+    const body = {
+      enabled,
+      autoPublish,
+      autoSync,
+      clientId,
+      status: enabled ? 'connected' : 'disconnected',
+    }
+    if (clientSecret.trim()) body.clientSecret = clientSecret.trim()
+    if (accessToken.trim()) body.accessToken = accessToken.trim()
+    if (refreshToken.trim()) body.refreshToken = refreshToken.trim()
+    if (showHttpFields) {
+      body.settings = {
+        adapter: 'http',
+        displayName: item.name,
+        baseUrl: baseUrl.trim(),
+        authHeader: 'Bearer',
+        endpoints: {
+          test: epTest.trim(),
+          publish: epPublish.trim(),
+          update: epUpdate.trim(),
+          close: epClose.trim(),
+          applications: epApps.trim(),
+        },
+      }
+      body.baseUrl = baseUrl.trim()
+    }
+    return body
+  }
 
   const handleSave = async () => {
     setBusy(true)
     setMsg({ type: '', text: '' })
+    if (enabled && !hasLocalCredentials(clientId, clientSecret, accessToken, cfg)) {
+      setMsg({
+        type: 'error',
+        text: 'Enter Client ID and Client Secret (or Access Token) before connecting.',
+      })
+      setBusy(false)
+      return
+    }
+    if (showHttpFields && !baseUrl.trim()) {
+      setMsg({ type: 'error', text: 'API Base URL is required.' })
+      setBusy(false)
+      return
+    }
     try {
-      const body = {
-        enabled,
-        autoPublish,
-        autoSync,
-        clientId,
-        status: enabled ? 'connected' : cfg.status || 'disconnected',
-      }
-      if (clientSecret.trim()) body.clientSecret = clientSecret.trim()
-      if (accessToken.trim()) body.accessToken = accessToken.trim()
-      if (refreshToken.trim()) body.refreshToken = refreshToken.trim()
+      const body = buildBody()
+      if (!enabled) body.status = 'disconnected'
       await saveProviderConfig(item.id, body)
-      if (enabled) {
-        await connectProvider(item.id, body).catch(() => null)
-      }
+      if (enabled) await connectProvider(item.id, body).catch(() => null)
       setMsg({ type: 'success', text: 'Configuration saved.' })
       setClientSecret('')
       setAccessToken('')
@@ -116,14 +173,30 @@ function ProviderCard({ item, enterprise, canEdit, onSaved }) {
     setBusy(true)
     setMsg({ type: '', text: '' })
     try {
+      await saveProviderConfig(item.id, buildBody())
       const res = await testProviderConnection(item.id)
       const ok = res?.result?.success
       setMsg({
         type: ok ? 'success' : 'error',
-        text: res?.result?.message || res?.result?.error || (ok ? 'Connection OK' : 'Test failed'),
+        text: res?.result?.message || res?.result?.error || (ok ? 'Connection verified' : 'Connection failed'),
       })
+      if (ok) onSaved?.()
     } catch (e) {
       setMsg({ type: 'error', text: e.message || 'Test failed' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!canEdit || item.builtin) return
+    if (!window.confirm(`Remove ${item.name} integration for this company?`)) return
+    setBusy(true)
+    try {
+      await deleteProviderConfig(item.id)
+      onSaved?.()
+    } catch (e) {
+      setMsg({ type: 'error', text: e.message || 'Delete failed' })
     } finally {
       setBusy(false)
     }
@@ -142,11 +215,11 @@ function ProviderCard({ item, enterprise, canEdit, onSaved }) {
           <div
             className={
               enterprise
-                ? 'h-11 w-11 rounded-xl bg-[var(--ei-surface-hover)] flex items-center justify-center text-[#00A6FF] ring-1 ring-[var(--ei-border-primary)]'
-                : 'h-11 w-11 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-primary'
+                ? 'h-11 w-11 rounded-xl bg-[var(--ei-surface-hover)] flex items-center justify-center ring-1 ring-[var(--ei-border-primary)] overflow-hidden'
+                : 'h-11 w-11 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center overflow-hidden'
             }
           >
-            <Icon className="w-5 h-5" />
+            <ProviderBrandIcon provider={item.id} className="w-6 h-6" />
           </div>
           <div>
             <h3
@@ -157,6 +230,9 @@ function ProviderCard({ item, enterprise, canEdit, onSaved }) {
               }
             >
               {item.name}
+              {!item.builtin && (
+                <span className="ml-2 text-xs font-normal text-[var(--ei-text-muted)]">Custom</span>
+              )}
             </h3>
             <p
               className={`text-xs mt-0.5 flex items-center gap-1 ${
@@ -170,20 +246,24 @@ function ProviderCard({ item, enterprise, canEdit, onSaved }) {
               }`}
             >
               <FiLink className="w-3 h-3" />
-              {statusLabel}
+              {statusOk ? 'Connected' : 'Disconnected'}
             </p>
           </div>
         </div>
+        {canEdit && !item.builtin && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="text-[#FF7B8E] hover:opacity-80 p-1"
+            title="Remove platform"
+          >
+            <FiTrash2 className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-4">
-        <Toggle
-          checked={enabled}
-          onChange={setEnabled}
-          disabled={!canEdit}
-          enterprise={enterprise}
-          label="Enabled"
-        />
+        <Toggle checked={enabled} onChange={setEnabled} disabled={!canEdit} enterprise={enterprise} label="Enabled" />
         <Toggle
           checked={autoPublish}
           onChange={setAutoPublish}
@@ -199,6 +279,53 @@ function ProviderCard({ item, enterprise, canEdit, onSaved }) {
           label="Auto Sync"
         />
       </div>
+
+      {showHttpFields && (
+        <div className="grid gap-3">
+          <PremiumInput
+            label="API Base URL"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            disabled={!canEdit}
+            placeholder="https://api.example.com"
+          />
+          <PremiumInput
+            label="Test endpoint"
+            value={epTest}
+            onChange={(e) => setEpTest(e.target.value)}
+            disabled={!canEdit}
+            placeholder="GET /health"
+          />
+          <PremiumInput
+            label="Publish endpoint"
+            value={epPublish}
+            onChange={(e) => setEpPublish(e.target.value)}
+            disabled={!canEdit}
+            placeholder="POST /jobs"
+          />
+          <PremiumInput
+            label="Update endpoint"
+            value={epUpdate}
+            onChange={(e) => setEpUpdate(e.target.value)}
+            disabled={!canEdit}
+            placeholder="PUT /jobs/{externalJobId}"
+          />
+          <PremiumInput
+            label="Close endpoint"
+            value={epClose}
+            onChange={(e) => setEpClose(e.target.value)}
+            disabled={!canEdit}
+            placeholder="POST /jobs/{externalJobId}/close"
+          />
+          <PremiumInput
+            label="Applications sync endpoint"
+            value={epApps}
+            onChange={(e) => setEpApps(e.target.value)}
+            disabled={!canEdit}
+            placeholder="GET /jobs/{externalJobId}/applications"
+          />
+        </div>
+      )}
 
       <div className="grid gap-3">
         <PremiumInput
@@ -253,23 +380,21 @@ function ProviderCard({ item, enterprise, canEdit, onSaved }) {
 
       <div className="flex flex-wrap gap-2">
         {canEdit && (
-          <>
-            {enterprise ? (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={handleSave}
-                className="org-btn-primary disabled:opacity-50 inline-flex items-center gap-2"
-              >
-                <FiSave className="w-4 h-4" />
-                {busy ? 'Saving…' : 'Save'}
-              </button>
-            ) : (
-              <PremiumButton type="button" variant="primary" loading={busy} onClick={handleSave}>
-                Save
-              </PremiumButton>
-            )}
-          </>
+          enterprise ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleSave}
+              className="org-btn-primary disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              <FiSave className="w-4 h-4" />
+              {busy ? 'Saving…' : 'Save'}
+            </button>
+          ) : (
+            <PremiumButton type="button" variant="primary" loading={busy} onClick={handleSave}>
+              Save
+            </PremiumButton>
+          )
         )}
         <button
           type="button"
@@ -278,42 +403,161 @@ function ProviderCard({ item, enterprise, canEdit, onSaved }) {
           className={
             enterprise
               ? 'org-btn-ghost disabled:opacity-50 inline-flex items-center gap-2'
-              : 'inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm disabled:opacity-50'
+              : 'inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-sm disabled:opacity-50'
           }
         >
           <FiRefreshCw className="w-4 h-4" />
           Test Connection
-        </button>
-        <button
-          type="button"
-          disabled
-          title="OAuth will be available when provider APIs are connected"
-          className={
-            enterprise
-              ? 'org-btn-ghost opacity-40 cursor-not-allowed inline-flex items-center gap-2'
-              : 'inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 text-sm opacity-40 cursor-not-allowed'
-          }
-        >
-          Connect with OAuth
         </button>
       </div>
     </div>
   )
 }
 
+function AddPlatformForm({ enterprise, onCancel, onCreated }) {
+  const [name, setName] = useState('')
+  const [slug, setSlug] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
+  const [epTest, setEpTest] = useState('GET /health')
+  const [epPublish, setEpPublish] = useState('POST /jobs')
+  const [epUpdate, setEpUpdate] = useState('PUT /jobs/{externalJobId}')
+  const [epClose, setEpClose] = useState('POST /jobs/{externalJobId}/close')
+  const [epApps, setEpApps] = useState('GET /jobs/{externalJobId}/applications')
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
+  const [accessToken, setAccessToken] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    setError('')
+    if (!name.trim()) {
+      setError('Platform name is required')
+      return
+    }
+    if (!baseUrl.trim()) {
+      setError('API Base URL is required')
+      return
+    }
+    if (!(accessToken.trim() || (clientId.trim() && clientSecret.trim()))) {
+      setError('Provide Access Token or Client ID + Client Secret')
+      return
+    }
+    setBusy(true)
+    try {
+      const body = {
+        name: name.trim(),
+        displayName: name.trim(),
+        custom: true,
+        enabled: true,
+        status: 'connected',
+        clientId: clientId.trim(),
+        baseUrl: baseUrl.trim(),
+        settings: {
+          adapter: 'http',
+          displayName: name.trim(),
+          baseUrl: baseUrl.trim(),
+          authHeader: 'Bearer',
+          endpoints: {
+            test: epTest.trim(),
+            publish: epPublish.trim(),
+            update: epUpdate.trim(),
+            close: epClose.trim(),
+            applications: epApps.trim(),
+          },
+        },
+      }
+      if (slug.trim()) body.provider = slug.trim().toLowerCase()
+      if (clientSecret.trim()) body.clientSecret = clientSecret.trim()
+      if (accessToken.trim()) body.accessToken = accessToken.trim()
+      await createProviderConfig(body)
+      onCreated?.()
+    } catch (err) {
+      setError(err.message || 'Failed to add platform')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form
+      onSubmit={handleCreate}
+      className={
+        enterprise
+          ? 'org-glass-panel p-5 space-y-3'
+          : 'rounded-2xl border border-slate-200 p-5 space-y-3 bg-white'
+      }
+    >
+      <div className="flex items-center justify-between">
+        <h3 className={enterprise ? 'font-semibold text-[var(--ei-text-primary)]' : 'font-semibold'}>
+          Add platform
+        </h3>
+        <button type="button" onClick={onCancel} className="p-1 text-[var(--ei-text-muted)]">
+          <FiX className="w-4 h-4" />
+        </button>
+      </div>
+      <p className={enterprise ? 'text-sm text-[var(--ei-text-secondary)]' : 'text-sm text-slate-500'}>
+        Connect Indeed, Glassdoor, Hirist, Monster, or any board with an HTTP API.
+      </p>
+      <PremiumInput label="Platform name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Glassdoor" />
+      <PremiumInput
+        label="Slug (optional)"
+        value={slug}
+        onChange={(e) => setSlug(e.target.value)}
+        placeholder="glassdoor"
+      />
+      <PremiumInput
+        label="API Base URL"
+        value={baseUrl}
+        onChange={(e) => setBaseUrl(e.target.value)}
+        placeholder="https://api.example.com"
+      />
+      <PremiumInput label="Test endpoint" value={epTest} onChange={(e) => setEpTest(e.target.value)} />
+      <PremiumInput label="Publish endpoint" value={epPublish} onChange={(e) => setEpPublish(e.target.value)} />
+      <PremiumInput label="Update endpoint" value={epUpdate} onChange={(e) => setEpUpdate(e.target.value)} />
+      <PremiumInput label="Close endpoint" value={epClose} onChange={(e) => setEpClose(e.target.value)} />
+      <PremiumInput label="Applications endpoint" value={epApps} onChange={(e) => setEpApps(e.target.value)} />
+      <PremiumInput label="Client ID" value={clientId} onChange={(e) => setClientId(e.target.value)} />
+      <PremiumInput
+        label="Client Secret"
+        type="password"
+        value={clientSecret}
+        onChange={(e) => setClientSecret(e.target.value)}
+      />
+      <PremiumInput
+        label="Access Token"
+        type="password"
+        value={accessToken}
+        onChange={(e) => setAccessToken(e.target.value)}
+      />
+      {error && <p className="text-sm text-[#FF7B8E]">{error}</p>}
+      <div className="flex gap-2">
+        <button type="submit" disabled={busy} className="org-btn-primary disabled:opacity-50">
+          {busy ? 'Adding…' : 'Add platform'}
+        </button>
+        <button type="button" onClick={onCancel} className="org-btn-ghost">
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
+
 export default function IntegrationsSettingsPanel({ enterprise = false }) {
   const { auth } = useApp()
   const canEdit = isHeadHr(auth)
-  const [providers, setProviders] = useState([])
+  const [catalog, setCatalog] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showAdd, setShowAdd] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const res = await fetchIntegrationProviders()
-      setProviders(res?.providers || [])
+      setCatalog(res?.providers || [])
     } catch (e) {
       setError(e.message || 'Failed to load integrations')
     } finally {
@@ -325,32 +569,88 @@ export default function IntegrationsSettingsPanel({ enterprise = false }) {
     load()
   }, [load])
 
+  const builtins = useMemo(() => (catalog || []).filter((p) => p.builtin !== false && (p.id === 'linkedin' || p.id === 'naukri' || p.builtin)), [catalog])
+  const customs = useMemo(() => (catalog || []).filter((p) => p.builtin === false), [catalog])
+
+  // Ensure LinkedIn/Naukri always appear even if API omits empty configs
+  const builtinCards = useMemo(() => {
+    const byId = Object.fromEntries(builtins.map((p) => [p.id, p]))
+    return ['linkedin', 'naukri'].map((id) => {
+      if (byId[id]) return byId[id]
+      return {
+        id,
+        name: id === 'linkedin' ? 'LinkedIn' : 'Naukri',
+        builtin: true,
+        configured: false,
+        config: {},
+      }
+    })
+  }, [builtins])
+
   return (
     <div className="space-y-4">
-      <p
-        className={
-          enterprise
-            ? 'text-sm text-[var(--ei-text-secondary)]'
-            : 'text-sm text-slate-500 dark:text-slate-400'
-        }
-      >
-        Configure job-board providers for your company. Credentials are encrypted at rest.
-        {!canEdit && ' Only Head HR can edit provider settings.'}
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p
+          className={
+            enterprise
+              ? 'text-sm text-[var(--ei-text-secondary)]'
+              : 'text-sm text-slate-500 dark:text-slate-400'
+          }
+        >
+          LinkedIn and Naukri are built-in. Add any other job board with its API Base URL and endpoints.
+          {!canEdit && ' Only Head HR can edit provider settings.'}
+        </p>
+        {canEdit && !showAdd && (
+          <button
+            type="button"
+            onClick={() => setShowAdd(true)}
+            className={
+              enterprise
+                ? 'org-btn-ghost inline-flex items-center gap-2 text-sm'
+                : 'inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-200 text-sm'
+            }
+          >
+            <FiPlus className="w-4 h-4" />
+            Add platform
+          </button>
+        )}
+      </div>
+
+      {showAdd && canEdit && (
+        <AddPlatformForm
+          enterprise={enterprise}
+          onCancel={() => setShowAdd(false)}
+          onCreated={() => {
+            setShowAdd(false)
+            load()
+          }}
+        />
+      )}
+
       {loading && (
         <p className={enterprise ? 'text-[var(--ei-text-muted)]' : 'text-slate-500'}>Loading…</p>
       )}
-      {error && (
-        <p className={enterprise ? 'text-[#FF7B8E]' : 'text-red-600'}>{error}</p>
-      )}
+      {error && <p className={enterprise ? 'text-[#FF7B8E]' : 'text-red-600'}>{error}</p>}
+
       <div className="grid gap-4">
-        {providers.map((p) => (
+        {builtinCards.map((p) => (
+          <ProviderCard
+            key={p.id}
+            item={{ ...p, builtin: true }}
+            enterprise={enterprise}
+            canEdit={canEdit}
+            onSaved={load}
+            showHttpFields={false}
+          />
+        ))}
+        {customs.map((p) => (
           <ProviderCard
             key={p.id}
             item={p}
             enterprise={enterprise}
             canEdit={canEdit}
             onSaved={load}
+            showHttpFields
           />
         ))}
       </div>

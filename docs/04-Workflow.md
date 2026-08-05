@@ -201,7 +201,7 @@ Allow recruiters to publish jobs, attract applicants, and act on match intellige
 
 ### Current implementation
 
-`/dashboard`, `/candidates`, `/integrations`, `/admin/bulk-resume-parser`, `/admin/feedback`, `/api/jobs/*`, `/api/integrations/*`, parse JD endpoints. Staff UI uses the shared `org-shell` theme (Dark/Light toggle in the navbar; preference stored as `hcip-theme`). Settings → Integrations configures provider credentials (Head HR). External Publishing strip on dashboards shows published/pending/failed counts (mock providers).
+`/dashboard`, `/candidates`, `/integrations`, `/admin/bulk-resume-parser`, `/admin/feedback`, `/api/jobs/*`, `/api/integrations/*`, parse JD endpoints. Staff UI uses the shared `org-shell` theme (Dark/Light toggle in the navbar; preference stored as `hcip-theme`). Settings → Integrations always shows LinkedIn + Naukri; Head HR uses **Add platform** for any other board (HTTP Base URL + endpoints + credentials). Custom platforms are listed from the company config API. External Publishing strip on dashboards shows published/pending/failed counts.
 
 ---
 
@@ -217,7 +217,7 @@ flowchart LR
   R --> S[Shortlist / reject]
   D --> B[Bulk parse]
   J --> I[Integration queue]
-  I --> X[External providers mock]
+  I --> X[External providers]
 ```
 
 ---
@@ -227,7 +227,7 @@ flowchart LR
 - Hiring manager collaboration
 - Structured interview kits
 - Pipeline analytics
-- Live LinkedIn / Naukri / Indeed OAuth + publish APIs
+- Live LinkedIn / Naukri OAuth + official publish APIs; ATS mapping from `external_applications`
 
 ---
 

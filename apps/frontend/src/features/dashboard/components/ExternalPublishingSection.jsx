@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FiRefreshCw, FiExternalLink } from 'react-icons/fi'
 import { fetchIntegrationStatus } from '@/features/settings/services/integrationsApi.js'
+import ProviderBrandIcon from '@/features/integrations/components/ProviderBrandIcon.jsx'
 
 /**
  * Compact External Publishing status strip for recruiter / org dashboards.
@@ -36,7 +37,7 @@ export default function ExternalPublishingSection({ className = '', detailsTo = 
         <div>
           <h3 className="text-lg font-semibold text-[var(--ei-text-primary)]">External Publishing</h3>
           <p className="text-sm text-[var(--ei-text-secondary)] mt-0.5">
-            Distribution status across job boards (mock providers until live APIs are connected).
+            Distribution status across connected job boards for your company.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -68,9 +69,12 @@ export default function ExternalPublishingSection({ className = '', detailsTo = 
             className="rounded-xl bg-[var(--ei-surface-hover)] ring-1 ring-[var(--ei-border-primary)] p-4"
           >
             <div className="flex items-center justify-between gap-2 mb-3">
-              <p className="font-medium text-[var(--ei-text-primary)]">{p.name}</p>
+              <div className="flex items-center gap-2 min-w-0">
+                <ProviderBrandIcon provider={p.provider} className="w-5 h-5 shrink-0" />
+                <p className="font-medium text-[var(--ei-text-primary)] truncate">{p.name}</p>
+              </div>
               <span
-                className={`text-xs px-2 py-0.5 rounded-full ${
+                className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
                   p.enabled
                     ? 'bg-[rgba(54,214,160,0.15)] text-[#36D6A0]'
                     : 'bg-[var(--ei-surface)] text-[var(--ei-text-muted)]'

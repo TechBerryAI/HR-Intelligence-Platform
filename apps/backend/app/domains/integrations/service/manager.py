@@ -271,8 +271,45 @@ class IntegrationManagerService:
             id=None, company_key=company_key, company=None, provider=provider_name
         )
         start = time.perf_counter()
+        imported = 0
         try:
-            result = provider.sync_applications(config)
+            # Sync per published external job when HTTP adapter exposes detailed sync
+            from app.domains.integrations.provider.generic import GenericHttpProvider
+
+            if isinstance(provider, GenericHttpProvider):
+                externals = repo.list_external_jobs(company_key)
+                externals = [e for e in externals if e.get('provider') == provider_name and e.get('external_job_id')]
+                if not externals:
+                    result, apps = provider.sync_applications_detailed(config)
+                    imported = self._persist_applications(
+                        company_key, provider_name, apps, job_id=None, external_job_id=None
+                    )
+                    result.imported_count = imported
+                else:
+                    errors = []
+                    for ext in externals:
+                        result_one, apps = provider.sync_applications_detailed(
+                            config, external_job_id=ext.get('external_job_id')
+                        )
+                        if not result_one.success:
+                            errors.append(result_one.error or 'sync failed')
+                            continue
+                        imported += self._persist_applications(
+                            company_key,
+                            provider_name,
+                            apps,
+                            job_id=ext.get('job_id'),
+                            external_job_id=ext.get('external_job_id'),
+                        )
+                    result = SyncResult(
+                        success=len(errors) == 0,
+                        provider=provider_name,
+                        imported_count=imported,
+                        message=f'Sync completed — {imported} application(s)',
+                        error='; '.join(errors) if errors else None,
+                    )
+            else:
+                result = provider.sync_applications(config)
         except Exception as exc:
             result = SyncResult(success=False, provider=provider_name, error=str(exc))
         ms = int((time.perf_counter() - start) * 1000)
@@ -286,6 +323,34 @@ class IntegrationManagerService:
             error_message=result.error,
         )
         return result
+
+    def _persist_applications(
+        self,
+        company_key: str,
+        provider_name: str,
+        apps: list,
+        *,
+        job_id: str | None,
+        external_job_id: str | None,
+    ) -> int:
+        count = 0
+        for app in apps or []:
+            app_id = app.get('externalApplicationId')
+            if not app_id:
+                continue
+            repo.upsert_external_application(
+                company_key,
+                provider_name,
+                str(app_id),
+                job_id=job_id,
+                external_job_id=external_job_id,
+                candidate_email=app.get('candidateEmail'),
+                candidate_name=app.get('candidateName'),
+                mapped_status=app.get('status'),
+                payload=app.get('raw') or app,
+            )
+            count += 1
+        return count
 
     def _persist_external(
         self,

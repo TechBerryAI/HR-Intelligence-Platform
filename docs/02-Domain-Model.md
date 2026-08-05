@@ -221,7 +221,7 @@ Own the hiring funnel: jobs, applications, parsing inputs, and match outcomes.
 | Webhook Event | `webhook_events` | Scaffold for inbound provider webhooks |
 | OAuth Token | `oauth_tokens` | Scaffold for future OAuth |
 
-HCIP is the **system of record**. External boards (LinkedIn, Naukri, Indeed, …) are distribution channels only. Provider plugins live under `domains/integrations/` — the Job module never imports provider-specific logic.
+HCIP is the **system of record**. External boards (LinkedIn, Naukri, and company-defined HTTP platforms) are distribution channels only. Provider plugins live under `domains/integrations/` — the Job module never imports provider-specific logic.
 
 ---
 
@@ -251,7 +251,7 @@ Statuses used in product language include: Applied, Screening, Matched, Shortlis
 - Requires prior `POST /api/parse/resume/public` (`parsedId`)
 - ATS via `ats_service.match_candidate_to_job`
 - Head HR job-centric navigation
-- Job lifecycle events (`JobCreated` / `JobUpdated` / `JobClosed`) enqueue external publish via the Integration Framework (mock providers today)
+- Job lifecycle events (`JobCreated` / `JobUpdated` / `JobClosed`) enqueue external publish via the Integration Framework (credentials-gated adapters)
 
 ---
 
@@ -259,7 +259,7 @@ Statuses used in product language include: Applied, Screening, Matched, Shortlis
 
 - First-class interview & offer workflows wired to APIs
 - Requisition approvals (Hiring Manager)
-- Live LinkedIn / Naukri / Indeed APIs (replace mock `JobProvider` implementations only)
+- Live LinkedIn / Naukri official APIs (replace staging builtins); ATS ingest from `external_applications`
 - Multi-stage pipelines configurable per org
 
 ---

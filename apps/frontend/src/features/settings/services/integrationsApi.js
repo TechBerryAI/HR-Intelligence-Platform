@@ -29,6 +29,32 @@ export async function createProviderConfig(body) {
   })
 }
 
+export async function deleteProviderConfig(providerOrId) {
+  return apiRequest(`/api/integrations/provider/${providerOrId}`, {
+    method: 'DELETE',
+    token: token(),
+  })
+}
+
+export async function syncProvider(provider) {
+  return apiRequest(`/api/integrations/provider/${provider}/sync`, {
+    method: 'POST',
+    token: token(),
+  })
+}
+
+export async function fetchExternalApplications(params = {}) {
+  const q = new URLSearchParams()
+  if (params.provider) q.set('provider', params.provider)
+  if (params.jobId) q.set('jobId', params.jobId)
+  if (params.limit) q.set('limit', String(params.limit))
+  const qs = q.toString()
+  return apiRequest(`/api/integrations/applications${qs ? `?${qs}` : ''}`, {
+    method: 'GET',
+    token: token(),
+  })
+}
+
 export async function connectProvider(provider, body = {}) {
   return apiRequest(`/api/integrations/provider/${provider}/connect`, {
     method: 'POST',

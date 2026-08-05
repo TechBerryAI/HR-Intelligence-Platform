@@ -1,5 +1,5 @@
 -- Job-board Integration Framework (provider-agnostic, company-scoped)
--- Current: mock providers (LinkedIn / Naukri / Indeed). Schema stable for real APIs later.
+-- Current: credentials + staging publish IDs. Schema stable for live provider APIs later.
 
 CREATE TABLE IF NOT EXISTS integration_provider (
     id              SERIAL PRIMARY KEY,

@@ -1,12 +1,13 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
 import { useTheme } from '@/core/context/ThemeContext.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import IntegrationsSettingsPanel from '@/features/settings/components/IntegrationsSettingsPanel.jsx'
+import ErrorBoundary from '@/shared/components/ErrorBoundary.jsx'
 import { motion } from 'framer-motion'
-import { FiShield, FiLock, FiCheck, FiAlertCircle, FiX, FiGrid } from 'react-icons/fi'
-import { Settings as SettingsIcon } from 'lucide-react'
+import { FiShield, FiLock, FiCheck, FiAlertCircle, FiX, FiGrid, FiSettings } from 'react-icons/fi'
 import { PASSWORD_RULES, isPasswordStrong } from '@/shared/utils/passwordValidation.js'
 
 /**
@@ -16,7 +17,10 @@ import { PASSWORD_RULES, isPasswordStrong } from '@/shared/utils/passwordValidat
 export default function Settings({ theme }) {
   const { changePasswordHr } = useApp()
   const { surfaceTheme } = useTheme()
-  const [tab, setTab] = useState('security')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = (searchParams.get('tab') || '').toLowerCase()
+  const initialTab = tabParam === 'integrations' ? 'integrations' : 'security'
+  const [tab, setTab] = useState(initialTab)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -25,6 +29,20 @@ export default function Settings({ theme }) {
 
   const enterprise = (theme || surfaceTheme) === 'enterprise'
   const changePassword = changePasswordHr
+
+  useEffect(() => {
+    const next = tabParam === 'integrations' ? 'integrations' : 'security'
+    setTab(next)
+  }, [tabParam])
+
+  const selectTab = (id) => {
+    setTab(id)
+    if (id === 'integrations') {
+      setSearchParams({ tab: 'integrations' }, { replace: true })
+    } else {
+      setSearchParams({}, { replace: true })
+    }
+  }
 
   const newPasswordValid = isPasswordStrong(newPassword)
   const confirmMatches = newPassword && newPassword === confirmPassword
@@ -63,7 +81,7 @@ export default function Settings({ theme }) {
     return (
       <button
         type="button"
-        onClick={() => setTab(id)}
+        onClick={() => selectTab(id)}
         className={
           enterprise
             ? `inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition ${
@@ -94,7 +112,7 @@ export default function Settings({ theme }) {
         {enterprise ? (
           <>
             <h1 className="org-page-title flex items-center gap-3">
-              <SettingsIcon size={32} className="org-page-icon" />
+              <FiSettings size={32} className="org-page-icon" />
               Settings
             </h1>
             <p className="org-page-subtitle">Manage security and external job-board integrations.</p>
@@ -102,7 +120,7 @@ export default function Settings({ theme }) {
         ) : (
           <>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-              <SettingsIcon className="w-7 h-7 text-primary" />
+              <FiSettings className="w-7 h-7 text-primary" />
               Settings
             </h1>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -299,7 +317,9 @@ export default function Settings({ theme }) {
               Integrations
             </h2>
           </div>
-          <IntegrationsSettingsPanel enterprise={enterprise} />
+          <ErrorBoundary>
+            <IntegrationsSettingsPanel enterprise={enterprise} />
+          </ErrorBoundary>
         </motion.section>
       )}
     </div>

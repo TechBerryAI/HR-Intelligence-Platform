@@ -5,7 +5,7 @@ import IntegrationsDashboard from '@/features/dashboard/pages/IntegrationsDashbo
 export default function HeadHrIntegrations() {
   return (
     <HeadHrLayout>
-      <IntegrationsDashboard />
+      <IntegrationsDashboard embedded />
     </HeadHrLayout>
   )
 }

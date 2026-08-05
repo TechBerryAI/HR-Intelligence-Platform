@@ -1,7 +1,7 @@
 """Dashboard / status aggregates for integrations UI."""
 from __future__ import annotations
 
-from app.domains.integrations.config import PROVIDER_CATALOG
+from app.domains.integrations.config import PROVIDER_CATALOG, is_builtin
 from app.domains.integrations import repository as repo
 from app.domains.integrations.service.serializers import serialize_log_row
 from app.domains.integrations.worker.queue import get_queue
@@ -17,16 +17,56 @@ def build_status(company_key: str) -> dict:
         by_provider[p][st] = int(row.get('count') or 0)
 
     providers = []
+    seen = set()
     for meta in PROVIDER_CATALOG:
         pid = meta['id']
+        seen.add(pid)
         stats = by_provider.get(pid, {})
         cfg = repo.get_provider_row(company_key, pid)
         providers.append({
             'provider': pid,
             'name': meta['name'],
+            'builtin': True,
             'status': (cfg or {}).get('status') or 'disconnected',
             'enabled': bool((cfg or {}).get('enabled')),
             'autoPublish': bool((cfg or {}).get('auto_publish')),
+            'published': stats.get('published', 0),
+            'pending': stats.get('pending', 0),
+            'failed': stats.get('failed', 0) + stats.get('dead', 0),
+            'closed': stats.get('closed', 0),
+        })
+
+    for row in repo.list_providers(company_key):
+        pid = row.get('provider')
+        if not pid or pid in seen:
+            continue
+        seen.add(pid)
+        settings = repo.row_to_settings(row)
+        stats = by_provider.get(pid, {})
+        providers.append({
+            'provider': pid,
+            'name': settings.get('displayName') or pid.replace('_', ' ').title(),
+            'builtin': False,
+            'status': row.get('status') or 'disconnected',
+            'enabled': bool(row.get('enabled')),
+            'autoPublish': bool(row.get('auto_publish')),
+            'published': stats.get('published', 0),
+            'pending': stats.get('pending', 0),
+            'failed': stats.get('failed', 0) + stats.get('dead', 0),
+            'closed': stats.get('closed', 0),
+        })
+
+    # Include providers that have external_jobs but no config row yet
+    for pid, stats in by_provider.items():
+        if pid in seen:
+            continue
+        providers.append({
+            'provider': pid,
+            'name': pid.replace('_', ' ').title(),
+            'builtin': is_builtin(pid),
+            'status': 'disconnected',
+            'enabled': False,
+            'autoPublish': False,
             'published': stats.get('published', 0),
             'pending': stats.get('pending', 0),
             'failed': stats.get('failed', 0) + stats.get('dead', 0),

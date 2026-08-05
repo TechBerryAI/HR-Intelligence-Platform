@@ -1,12 +1,18 @@
-"""JobProvider factory — register new providers here only."""
+"""JobProvider factory — builtins + dynamic HTTP providers."""
 from __future__ import annotations
 
+from app.domains.integrations.config import PROVIDER_CATALOG, is_builtin
 from app.domains.integrations.provider.base import JobProvider
-from app.domains.integrations.provider.indeed import IndeedProvider
+from app.domains.integrations.provider.generic import GenericHttpProvider
 from app.domains.integrations.provider.linkedin import LinkedInProvider
 from app.domains.integrations.provider.naukri import NaukriProvider
 
 _REGISTRY: dict[str, JobProvider] = {}
+
+_SPECIFIC = {
+    'linkedin': LinkedInProvider,
+    'naukri': NaukriProvider,
+}
 
 
 def register_provider(provider: JobProvider) -> None:
@@ -17,7 +23,15 @@ def register_provider(provider: JobProvider) -> None:
 
 
 def get_provider(provider_type: str) -> JobProvider | None:
-    return _REGISTRY.get((provider_type or '').strip().lower())
+    key = (provider_type or '').strip().lower()
+    if not key:
+        return None
+    if key in _REGISTRY:
+        return _REGISTRY[key]
+    # Dynamic custom HTTP adapter (not pre-registered)
+    if not is_builtin(key):
+        return GenericHttpProvider(provider_type=key)
+    return None
 
 
 def list_registered_providers() -> list[str]:
@@ -25,9 +39,12 @@ def list_registered_providers() -> list[str]:
 
 
 def ensure_default_providers() -> None:
-    """Idempotent registration of built-in mock providers."""
+    """Register fixed LinkedIn / Naukri adapters only."""
     if _REGISTRY:
         return
-    register_provider(LinkedInProvider())
-    register_provider(NaukriProvider())
-    register_provider(IndeedProvider())
+    for meta in PROVIDER_CATALOG:
+        pid = meta['id']
+        adapter = meta.get('adapter') or pid
+        cls = _SPECIFIC.get(adapter)
+        if cls:
+            register_provider(cls())

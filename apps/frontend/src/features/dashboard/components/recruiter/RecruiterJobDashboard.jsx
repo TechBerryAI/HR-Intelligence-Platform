@@ -9,6 +9,7 @@ import { Card } from '@/shared/components/ui/index.js'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiTrash2, FiEye, FiShare2 } from 'react-icons/fi'
 import { publishJobToProviders } from '@/features/settings/services/integrationsApi.js'
+import ProviderBrandIcon from '@/features/integrations/components/ProviderBrandIcon.jsx'
 
 const formatDisplayDate = (dateString) => {
   if (!dateString) return ''
@@ -575,26 +576,28 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                         <button
                           type="button"
                           onClick={() => handlePublishExternal(job, ['linkedin'])}
-                          className={`inline-flex items-center px-2 py-1.5 rounded-lg text-xs font-medium border ${
+                          className={`inline-flex items-center justify-center px-2 py-1.5 rounded-lg border ${
                             embedded
                               ? 'text-[var(--ei-text-secondary)] border-[var(--ei-border-primary)] hover:bg-white/[0.05]'
                               : 'text-slate-600 border-slate-200 dark:border-slate-600'
                           }`}
                           title="Publish to LinkedIn"
+                          aria-label="Publish to LinkedIn"
                         >
-                          LI
+                          <ProviderBrandIcon provider="linkedin" className="w-4 h-4" />
                         </button>
                         <button
                           type="button"
                           onClick={() => handlePublishExternal(job, ['naukri'])}
-                          className={`inline-flex items-center px-2 py-1.5 rounded-lg text-xs font-medium border ${
+                          className={`inline-flex items-center justify-center px-2 py-1.5 rounded-lg border ${
                             embedded
                               ? 'text-[var(--ei-text-secondary)] border-[var(--ei-border-primary)] hover:bg-white/[0.05]'
                               : 'text-slate-600 border-slate-200 dark:border-slate-600'
                           }`}
                           title="Publish to Naukri"
+                          aria-label="Publish to Naukri"
                         >
-                          NK
+                          <ProviderBrandIcon provider="naukri" className="w-4 h-4" />
                         </button>
                         <button
                           type="button"

@@ -456,3 +456,119 @@ def insert_webhook_event(
         (company_key, provider, event_type, _json_dumps(payload), _json_dumps(headers_json)),
     )
     return result.get('lastID')
+
+
+# ---------------------------------------------------------------------------
+# external_applications
+# ---------------------------------------------------------------------------
+
+def upsert_external_application(
+    company_key: str,
+    provider: str,
+    external_application_id: str,
+    *,
+    job_id: str | None = None,
+    external_job_id: str | None = None,
+    candidate_email: str | None = None,
+    candidate_name: str | None = None,
+    mapped_status: str | None = None,
+    payload: Any = None,
+) -> None:
+    existing = db_get(
+        '''
+        SELECT id FROM external_applications
+        WHERE company_key = ? AND provider = ? AND external_application_id = ?
+        ''',
+        (company_key, provider, external_application_id),
+    )
+    if existing:
+        db_run(
+            '''
+            UPDATE external_applications SET
+                job_id = COALESCE(?, job_id),
+                external_job_id = COALESCE(?, external_job_id),
+                candidate_email = COALESCE(?, candidate_email),
+                candidate_name = COALESCE(?, candidate_name),
+                mapped_status = COALESCE(?, mapped_status),
+                payload = COALESCE(?::jsonb, payload),
+                last_synced_at = NOW(),
+                updated_at = NOW()
+            WHERE id = ?
+            ''',
+            (
+                job_id,
+                external_job_id,
+                candidate_email,
+                candidate_name,
+                mapped_status,
+                _json_dumps(payload),
+                existing['id'],
+            ),
+        )
+        return
+    db_run(
+        '''
+        INSERT INTO external_applications (
+            company_key, provider, job_id, external_job_id, external_application_id,
+            candidate_email, candidate_name, mapped_status, payload
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+        ''',
+        (
+            company_key,
+            provider,
+            job_id,
+            external_job_id,
+            external_application_id,
+            candidate_email,
+            candidate_name,
+            mapped_status,
+            _json_dumps(payload),
+        ),
+    )
+
+
+def list_external_applications(
+    company_key: str,
+    *,
+    provider: str | None = None,
+    job_id: str | None = None,
+    limit: int = 100,
+) -> list[dict]:
+    limit = max(1, min(int(limit or 100), 500))
+    if provider and job_id:
+        return db_all(
+            '''
+            SELECT * FROM external_applications
+            WHERE company_key = ? AND provider = ? AND job_id = ?
+            ORDER BY last_synced_at DESC LIMIT ?
+            ''',
+            (company_key, provider, job_id, limit),
+        )
+    if provider:
+        return db_all(
+            '''
+            SELECT * FROM external_applications
+            WHERE company_key = ? AND provider = ?
+            ORDER BY last_synced_at DESC LIMIT ?
+            ''',
+            (company_key, provider, limit),
+        )
+    return db_all(
+        '''
+        SELECT * FROM external_applications
+        WHERE company_key = ?
+        ORDER BY last_synced_at DESC LIMIT ?
+        ''',
+        (company_key, limit),
+    )
+
+
+def list_auto_sync_http_providers() -> list[dict]:
+    """All company providers with auto_sync enabled (filter adapter in service)."""
+    return db_all(
+        '''
+        SELECT * FROM integration_provider
+        WHERE enabled = TRUE AND auto_sync = TRUE
+        ORDER BY company_key, provider
+        '''
+    )
