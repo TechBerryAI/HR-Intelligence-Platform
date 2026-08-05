@@ -1,15 +1,39 @@
-import React, { useMemo, useEffect, useState } from 'react'
+import React, { useMemo, useEffect, useState, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
 import FilterBar from '@/shared/components/FilterBar.jsx'
 import JobCard from '@/shared/components/JobCard.jsx'
 import ApplyJobModal from '@/features/jobs/components/ApplyJobModal.jsx'
 import AnimatedContainer from '@/shared/components/AnimatedContainer.jsx'
-import { motion } from 'framer-motion'
-import { FiAlertCircle, FiRefreshCw, FiCheck, FiBriefcase } from 'react-icons/fi'
+import { motion, AnimatePresence } from 'framer-motion'
+import { FiAlertCircle, FiRefreshCw, FiCheck, FiBriefcase, FiChevronDown } from 'react-icons/fi'
 import { isStaffRecruiter } from '@/core/permissions/rbac.js'
 import { apiRequest } from '@/core/api/api.js'
 import { useTheme } from '@/core/context/ThemeContext.jsx'
+
+const SORT_OPTIONS = [
+  { value: 'relevance', label: 'Relevance' },
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+]
+
+function postedTime(job) {
+  const raw = job.postedOn || job.posted_on || job.created_at || 0
+  const t = new Date(raw).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
+function relevanceScore(job, keywords) {
+  if (!keywords) return 0
+  const title = String(job.title || '').toLowerCase()
+  const company = String(job.company || '').toLowerCase()
+  const desc = String(job.description || '').toLowerCase()
+  let score = 0
+  if (title.includes(keywords)) score += 3
+  if (company.includes(keywords)) score += 2
+  if (desc.includes(keywords)) score += 1
+  return score
+}
 
 export default function Jobs() {
   const { auth, jobsBoardRevision } = useApp()
@@ -27,6 +51,9 @@ export default function Jobs() {
   const [applyError, setApplyError] = useState('')
   const [applySuccess, setApplySuccess] = useState('')
   const [applyJob, setApplyJob] = useState(null)
+  const [sortBy, setSortBy] = useState('relevance')
+  const [sortOpen, setSortOpen] = useState(false)
+  const sortRef = useRef(null)
 
   const fetchPublicJobs = async () => {
     setJobsLoading(true)
@@ -43,12 +70,10 @@ export default function Jobs() {
     }
   }
 
-  // Refetch on mount, navigation, and after staff enable/disable/delete
   useEffect(() => {
     fetchPublicJobs()
   }, [location.key, jobsBoardRevision])
 
-  // Refetch when returning to the tab (portal stays in sync)
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') fetchPublicJobs()
@@ -56,6 +81,22 @@ export default function Jobs() {
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [])
+
+  useEffect(() => {
+    if (!sortOpen) return
+    const onDoc = (e) => {
+      if (sortRef.current && !sortRef.current.contains(e.target)) setSortOpen(false)
+    }
+    const onEsc = (e) => {
+      if (e.key === 'Escape') setSortOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onEsc)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onEsc)
+    }
+  }, [sortOpen])
 
   const filtered = useMemo(() => {
     const kw = query.keywords.toLowerCase()
@@ -70,6 +111,25 @@ export default function Jobs() {
         return inKw && inLoc
       })
   }, [jobs, query.keywords, query.location])
+
+  const sorted = useMemo(() => {
+    const list = [...filtered]
+    const kw = query.keywords.toLowerCase()
+    switch (sortBy) {
+      case 'newest':
+        return list.sort((a, b) => postedTime(b) - postedTime(a))
+      case 'oldest':
+        return list.sort((a, b) => postedTime(a) - postedTime(b))
+      case 'relevance':
+      default:
+        if (!kw) return list
+        return list.sort(
+          (a, b) => relevanceScore(b, kw) - relevanceScore(a, kw) || postedTime(b) - postedTime(a),
+        )
+    }
+  }, [filtered, sortBy, query.keywords])
+
+  const sortLabel = SORT_OPTIONS.find((o) => o.value === sortBy)?.label || 'Relevance'
 
   const handleSearch = ({ keywords, location: loc }) => {
     const sp = new URLSearchParams()
@@ -90,23 +150,13 @@ export default function Jobs() {
     <div className="min-h-[calc(100vh-4rem)]">
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
         <AnimatedContainer animation="slideDown">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ei-text-muted)]">
-                Open roles
-              </p>
-              <h2 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--ei-text-primary)] sm:text-[2rem]">
-                Latest jobs
-              </h2>
-              <p className="mt-1.5 text-sm text-[var(--ei-text-secondary)]">
-                Browse openings and apply in one step — no account required.
-              </p>
-            </div>
-            {filtered.length > 0 && (
-              <p className="text-sm font-medium text-[var(--ei-text-secondary)]">
-                {filtered.length} {filtered.length === 1 ? 'role' : 'roles'}
-              </p>
-            )}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ei-text-muted)]">
+              Open roles
+            </p>
+            <h2 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--ei-text-primary)] sm:text-[2rem]">
+              Latest Jobs
+            </h2>
           </div>
         </AnimatedContainer>
 
@@ -172,7 +222,63 @@ export default function Jobs() {
           </motion.div>
         )}
 
-        <div className="mt-7">
+        {!jobsLoading && filtered.length > 0 && (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-medium text-[var(--ei-text-primary)]">
+              {filtered.length === 1
+                ? '1 role'
+                : `1 – ${filtered.length} of ${filtered.length} roles`}
+            </p>
+            <div className="relative" ref={sortRef}>
+              <button
+                type="button"
+                onClick={() => setSortOpen((o) => !o)}
+                aria-haspopup="listbox"
+                aria-expanded={sortOpen}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--ei-border-primary)] bg-[var(--ei-surface-glass-soft)] px-3 py-2 text-sm transition-colors hover:border-[var(--ei-border-hover)] hover:bg-[var(--ei-surface-hover)]"
+              >
+                <span className="text-[var(--ei-text-muted)]">Sort by:</span>
+                <span className="font-medium text-[var(--ei-text-primary)]">{sortLabel}</span>
+                <FiChevronDown
+                  className={`h-4 w-4 text-[var(--ei-text-muted)] transition-transform ${sortOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+              <AnimatePresence>
+                {sortOpen && (
+                  <motion.ul
+                    role="listbox"
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 z-20 mt-1.5 min-w-[11.5rem] overflow-hidden rounded-xl border border-[var(--ei-border-primary)] bg-[color-mix(in_srgb,var(--ei-bg-primary)_92%,#121A24)] py-1 shadow-[0_12px_40px_rgba(0,0,0,0.35)] backdrop-blur-xl"
+                  >
+                    {SORT_OPTIONS.map((opt) => (
+                      <li key={opt.value} role="option" aria-selected={sortBy === opt.value}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSortBy(opt.value)
+                            setSortOpen(false)
+                          }}
+                          className={`w-full px-3.5 py-2 text-left text-sm transition-colors ${
+                            sortBy === opt.value
+                              ? 'bg-[rgba(0,166,255,0.12)] font-medium text-[var(--ei-text-primary)]'
+                              : 'text-[var(--ei-text-secondary)] hover:bg-white/[0.06] hover:text-[var(--ei-text-primary)]'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      </li>
+                    ))}
+                  </motion.ul>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        )}
+
+        <div className={filtered.length > 0 && !jobsLoading ? 'mt-4' : 'mt-7'}>
           {jobsLoading && !filtered.length ? (
             <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.03]">
               {[0, 1, 2].map((i) => (
@@ -195,7 +301,7 @@ export default function Jobs() {
             </div>
           ) : (
             <div className="overflow-hidden rounded-2xl border border-[var(--ei-border-primary)] bg-[var(--ei-surface-glass-soft)] shadow-[0_12px_40px_rgba(0,0,0,0.12)]">
-              {filtered.map((job) => (
+              {sorted.map((job) => (
                 <JobCard
                   key={job.id}
                   theme={surfaceTheme}
