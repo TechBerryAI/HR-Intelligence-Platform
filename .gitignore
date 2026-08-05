@@ -167,11 +167,11 @@ $RECYCLE.BIN/
 logs/
 *.log.*
 
-# Coverage Reports
+# Coverage Reports (tooling output only — not app packages named coverage/)
 htmlcov/
 .coverage
 .coverage.*
-coverage/
+/coverage/
 *.cover
 nosetests.xml
 coverage.xml
