@@ -31,6 +31,7 @@ from app.domains.recruitment.api.applications import (
 from app.domains.recruitment.services.job_delete import cascade_delete_job
 from app.domains.recruitment.services.ats_service import match_candidate_to_job, sync_application_match_score
 from app.domains.recruitment.services.company_scope import companies_related
+from app.domains.integrations.events import emit_job_closed, emit_job_created, emit_job_updated
 
 jobs_bp = Blueprint('jobs', __name__)
 
@@ -792,7 +793,9 @@ def create_job():
         
         print("Job created successfully!")
         print("=" * 50)
-        
+
+        emit_job_created(job, request.user)
+
         return jsonify(_serialize_job(job)), 201
     except Exception as e:
         import traceback
@@ -903,6 +906,8 @@ def update_job(job_id: str):
             (new_jdid, title, location, salary, experience, description, keywords, job_id)
         )
         updated = db_get('SELECT * FROM jobs WHERE jdid = ?', (new_jdid,))
+        if updated:
+            emit_job_updated(updated, request.user)
         return jsonify(_serialize_job(updated))
     except Exception:
         return jsonify({'error': 'Internal server error'}), 500
@@ -920,6 +925,8 @@ def toggle_job(job_id: str):
             return jsonify({'error': 'Job not found or you do not have permission to update this job'}), 403
         _enabled = (True, False) if BACKEND == 'postgresql' else (1, 0)
         db_run('UPDATE jobs SET enabled = ? WHERE jdid = ?', (_enabled[0] if enabled else _enabled[1], job_id))
+        if not enabled:
+            emit_job_closed(job, job_id=job_id, user=request.user)
         return jsonify({'message': 'Job status updated', 'enabled': enabled})
     except Exception:
         return jsonify({'error': 'Internal server error'}), 500
@@ -933,6 +940,7 @@ def delete_job(job_id: str):
         job = _get_job_for_user(job_id, request.user, require_write=True)
         if not job:
             return jsonify({'error': 'Job not found or you do not have permission to delete this job'}), 403
+        emit_job_closed(job, job_id=job_id, user=request.user)
         # Cascade applications/matches first — FK is NO ACTION on jobs
         cascade_delete_job(job_id)
         return jsonify({'message': 'Job deleted successfully'})

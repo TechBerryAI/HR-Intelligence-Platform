@@ -7,7 +7,8 @@ import AnimatedContainer from '@/shared/components/AnimatedContainer.jsx'
 import JobDescriptionView from '@/shared/components/JobDescriptionView.jsx'
 import { Card } from '@/shared/components/ui/index.js'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiTrash2, FiEye } from 'react-icons/fi'
+import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiTrash2, FiEye, FiShare2 } from 'react-icons/fi'
+import { publishJobToProviders } from '@/features/settings/services/integrationsApi.js'
 
 const formatDisplayDate = (dateString) => {
   if (!dateString) return ''
@@ -37,6 +38,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [togglingJobId, setTogglingJobId] = useState(null)
+  const [publishingJobId, setPublishingJobId] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [deleting, setDeleting] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
@@ -105,6 +107,26 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     } finally {
       setDeleting(null)
       setConfirmDelete(null)
+    }
+  }
+
+  const handlePublishExternal = async (job, providers) => {
+    const jobId = job.id || job.jdid
+    if (!jobId) return
+    setPublishingJobId(jobId)
+    setError('')
+    try {
+      await publishJobToProviders(jobId, providers)
+      setSuccess(
+        providers?.length === 1
+          ? `Queued publish to ${providers[0]}`
+          : 'Queued publish to enabled providers'
+      )
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (e) {
+      setError(e.message || 'Failed to queue publish')
+    } finally {
+      setPublishingJobId(null)
     }
   }
 
@@ -539,6 +561,41 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                         >
                           Edit
                         </PremiumButton>
+                        <PremiumButton
+                          variant="secondary"
+                          size="sm"
+                          icon={FiShare2}
+                          disabled={publishingJobId === (job.id || job.jdid)}
+                          onClick={() => handlePublishExternal(job)}
+                          className={embedded ? '!bg-white/[0.05] !border-[var(--ei-border-primary)] !text-[var(--ei-text-primary)] hover:!bg-white/[0.09]' : ''}
+                          title="Publish to all enabled providers"
+                        >
+                          {publishingJobId === (job.id || job.jdid) ? '…' : 'Publish'}
+                        </PremiumButton>
+                        <button
+                          type="button"
+                          onClick={() => handlePublishExternal(job, ['linkedin'])}
+                          className={`inline-flex items-center px-2 py-1.5 rounded-lg text-xs font-medium border ${
+                            embedded
+                              ? 'text-[var(--ei-text-secondary)] border-[var(--ei-border-primary)] hover:bg-white/[0.05]'
+                              : 'text-slate-600 border-slate-200 dark:border-slate-600'
+                          }`}
+                          title="Publish to LinkedIn"
+                        >
+                          LI
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePublishExternal(job, ['naukri'])}
+                          className={`inline-flex items-center px-2 py-1.5 rounded-lg text-xs font-medium border ${
+                            embedded
+                              ? 'text-[var(--ei-text-secondary)] border-[var(--ei-border-primary)] hover:bg-white/[0.05]'
+                              : 'text-slate-600 border-slate-200 dark:border-slate-600'
+                          }`}
+                          title="Publish to Naukri"
+                        >
+                          NK
+                        </button>
                         <button
                           type="button"
                           onClick={() => setConfirmDelete(job)}

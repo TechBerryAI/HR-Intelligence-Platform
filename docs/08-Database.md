@@ -41,7 +41,7 @@ PostgreSQL (psycopg-oriented helpers in the Flask app).
 Refresh the file list with `python scripts/sync_docs_from_code.py`.
 
 <!-- BEGIN:GENERATED-SCHEMA-FILES -->
-_Auto-generated on 2026-08-03 by `scripts/sync_docs_from_code.py`. Do not hand-edit this block._
+_Auto-generated on 2026-08-05 by `scripts/sync_docs_from_code.py`. Do not hand-edit this block._
 
 | File | Purpose (from filename / header) |
 |------|-----------------------------------|
@@ -53,6 +53,8 @@ _Auto-generated on 2026-08-03 by `scripts/sync_docs_from_code.py`. Do not hand-e
 | `apps/backend/schema_pg/07_seed_ceo_account.sql` | Seed CEO executive account (read-only analytics). Edit DECLARE block before deploy. |
 | `apps/backend/schema_pg/08_public_apply_purge_candidate_auth.sql` | ----------------------------------------------------------------------------- |
 | `apps/backend/schema_pg/09_interview_ai_scheduling.sql` | Interview scheduling + AI interviewer support (extends interviews scaffold) |
+| `apps/backend/schema_pg/10_jobs_keywords.sql` | Add keywords column to jobs for JD-derived search/match terms |
+| `apps/backend/schema_pg/11_integrations.sql` | Job-board Integration Framework (provider-agnostic, company-scoped) |
 <!-- END:GENERATED-SCHEMA-FILES -->
 
 ---
@@ -67,6 +69,9 @@ _Auto-generated on 2026-08-03 by `scripts/sync_docs_from_code.py`. Do not hand-e
 
 ### Recruitment
 `jobs`, `applications`, `matches`
+
+### Integrations (job boards)
+`integration_provider`, `external_jobs`, `sync_logs`, `provider_events`, `webhook_events`, `oauth_tokens` — see `11_integrations.sql`. Scoped by `company_key` (normalized company name). Credentials stored encrypted.
 
 ### Parsing & bulk
 `raw_files`, `parsed_resumes`, `parsed_jds`, `bulk_parse_sessions`, `bulk_parse_files`

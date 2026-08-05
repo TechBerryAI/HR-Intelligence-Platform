@@ -7,6 +7,7 @@ import { tokenService } from '@/core/auth/tokenService.js'
 import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiArrowRight, FiEdit2, FiX } from 'react-icons/fi'
 import { LayoutDashboard, Home, RefreshCw } from 'lucide-react'
 import RecruiterJobDashboard from '@/features/dashboard/components/recruiter/RecruiterJobDashboard.jsx'
+import ExternalPublishingSection from '@/features/dashboard/components/ExternalPublishingSection.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import ThemeToggle from '@/shared/components/ThemeToggle.jsx'
@@ -543,6 +544,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
 
       {showJobPosting && (
         <div className="space-y-7">
+          <ExternalPublishingSection detailsTo="/head-hr/integrations" />
           <div id="job-posting-section" className="scroll-mt-6">
             <RecruiterJobDashboard embedded hideJobList onJobChange={() => load(true)} />
           </div>

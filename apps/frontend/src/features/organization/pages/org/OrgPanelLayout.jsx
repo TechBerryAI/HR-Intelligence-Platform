@@ -13,6 +13,7 @@ const headHrNav = [
   { label: 'Candidates', path: '/head-hr/candidates', icon: FiUser },
   { label: 'Jobs', path: '/head-hr/jobs', icon: FiBriefcase },
   { label: 'Bulk Parsing', path: '/head-hr/bulk-parsing', icon: FiLayers },
+  { label: 'Integrations', path: '/head-hr/integrations', icon: FiBarChart2 },
   { label: 'Settings', path: '/head-hr/settings', icon: FiSettings },
 ]
 

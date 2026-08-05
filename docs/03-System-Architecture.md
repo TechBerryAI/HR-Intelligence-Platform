@@ -95,6 +95,7 @@ flowchart TB
 | feedback | `/api/feedback` |
 | admin | `/api/admin` |
 | head_hr | `/api/head-hr` |
+| integrations | `/api/integrations` |
 
 ---
 
@@ -108,9 +109,11 @@ flowchart LR
   administration[administration]
   employee[employee]
   support[support]
+  integrations[integrations]
   identity --> recruitment
   candidate --> recruitment
   administration --> recruitment
+  recruitment -->|lifecycle events| integrations
 ```
 
 ---
@@ -124,6 +127,10 @@ flowchart LR
 | Email | `app/integrations/email/` |
 | LLM | `app/integrations/openai/llm_service.py` |
 | ATS | `app/domains/recruitment/services/ats_service.py` |
+| Job-board integrations | `app/domains/integrations/` (provider plugins, queue, REST `/api/integrations`) |
+
+**Current (placeholder):** LinkedIn / Naukri / Indeed mock providers publish fake external IDs (`LI-…`, `NK-…`, `ID-…`).  
+**Future:** Replace provider classes with official APIs + OAuth; controllers, schema, and job workflow stay unchanged.
 
 ---
 

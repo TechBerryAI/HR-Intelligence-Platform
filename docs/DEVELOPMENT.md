@@ -105,11 +105,18 @@ python scripts/database/test_db_connection.py
 
 | File | Purpose |
 |------|---------|
-| `apps/backend/.env` | App, Postgres, JWT, mail, Ollama, ATS, parsing |
+| `apps/backend/.env` | App, Postgres, JWT, mail, Ollama, ATS, parsing, integration secrets |
 | `apps/frontend/.env` | Vite API URL / public origin (optional) |
 | `ai/.env` | AI workspace overrides (optional) |
 
 Copy from the matching `.env.example`, then fill secrets. Never commit `.env` files.
+
+Optional integration vars (see `apps/backend/.env.example`):
+
+- `INTEGRATION_SECRETS_KEY` — Fernet key (or any secret string) for encrypting job-board credentials
+- `INTEGRATION_MAX_RETRIES` — default `3`
+- `INTEGRATION_RETRY_BASE_SECONDS` — default `1.0`
+- `INTEGRATION_WORKER_MAX_WORKERS` — default `4`
 
 ## Where to put new code
 
@@ -118,6 +125,7 @@ Copy from the matching `.env.example`, then fill secrets. Never commit `.env` fi
 | A new HR page or component | `frontend/src/` |
 | Theme / Dark-Light behavior | `frontend/src/core/theme/themeConfig.js` (+ CSS tokens in `src/styles/index.css`) — do not fork theme logic |
 | A new API endpoint | `backend/` (blueprint) |
+| Job-board / ATS distribution provider | `backend/app/domains/integrations/` (provider + mapper + factory register) |
 | A native desktop feature | `electron/` (IPC only) |
 | A new AI task | `ai/capabilities/<name>/` |
 | A new LLM provider | `ai/providers/` |

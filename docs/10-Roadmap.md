@@ -62,9 +62,16 @@ gantt
 - Recruiter / Head HR / CEO portals
 - Bulk resume parsing
 - JWT staff auth
+- Provider-agnostic Integration Framework (mock LinkedIn / Naukri / Indeed; company-scoped config + async publish queue)
 
 ---
 
+### Integration roadmap note
+
+| Horizon | Work |
+|---------|------|
+| **Current** | Framework + mock providers + Settings / Dashboard UI |
+| **Future** | Official LinkedIn / Naukri / Indeed (and others) APIs — swap `JobProvider` implementations only |
 ### Exit criteria examples
 
 | Phase | Exit criterion |

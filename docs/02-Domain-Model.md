@@ -210,6 +210,19 @@ Own the hiring funnel: jobs, applications, parsing inputs, and match outcomes.
 | Offer | `offers` | Scaffold |
 | Saved Job | `saved_jobs` | Schema may exist; **Jobs UI bookmark/save removed** — not a current product surface |
 
+### Integration entities (current — provider-agnostic)
+
+| Entity | Storage | Notes |
+|--------|---------|-------|
+| Integration Provider | `integration_provider` | Per-company job-board config (`company_key`, credentials encrypted, auto_publish / auto_sync) |
+| External Job | `external_jobs` | Maps internal `job_id` → provider `external_job_id` + sync status |
+| Sync Log | `sync_logs` | Audit of provider calls |
+| Provider Event | `provider_events` | Durable domain events (JobCreated, etc.) |
+| Webhook Event | `webhook_events` | Scaffold for inbound provider webhooks |
+| OAuth Token | `oauth_tokens` | Scaffold for future OAuth |
+
+HCIP is the **system of record**. External boards (LinkedIn, Naukri, Indeed, …) are distribution channels only. Provider plugins live under `domains/integrations/` — the Job module never imports provider-specific logic.
+
 ---
 
 ### Lifecycle
@@ -238,6 +251,7 @@ Statuses used in product language include: Applied, Screening, Matched, Shortlis
 - Requires prior `POST /api/parse/resume/public` (`parsedId`)
 - ATS via `ats_service.match_candidate_to_job`
 - Head HR job-centric navigation
+- Job lifecycle events (`JobCreated` / `JobUpdated` / `JobClosed`) enqueue external publish via the Integration Framework (mock providers today)
 
 ---
 
@@ -245,6 +259,7 @@ Statuses used in product language include: Applied, Screening, Matched, Shortlis
 
 - First-class interview & offer workflows wired to APIs
 - Requisition approvals (Hiring Manager)
+- Live LinkedIn / Naukri / Indeed APIs (replace mock `JobProvider` implementations only)
 - Multi-stage pipelines configurable per org
 
 ---
