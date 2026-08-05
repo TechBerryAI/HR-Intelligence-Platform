@@ -90,7 +90,7 @@ flowchart TB
 
 ### Purpose
 
-Enable a candidate to discover a role and submit a complete, AI-assisted application without creating a staff account. Landing **Get Started** opens `/jobs` (not login). Public `/jobs` always lists **enabled** openings (even if a recruiter is logged in). Staff dashboards use `/api/jobs/all` for **company/org** postings.
+Enable a candidate to discover a role and submit a complete, AI-assisted application without creating a staff account. Landing **Get Started** opens `/jobs` (not login). Public `/jobs` always lists **enabled** openings (even if a recruiter is logged in). Staff dashboards use `/api/jobs/all` for **company/org** postings. The board supports client-side **Sort by** (Relevance, Newest/Oldest) above the job list.
 
 ---
 
