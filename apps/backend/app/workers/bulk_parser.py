@@ -323,53 +323,138 @@ def _build_excel_bytes(rows: list[dict]) -> bytes:
     return buf.getvalue()
 
 
-def _process_one_file(args: tuple[str, Path]) -> tuple[str, dict | None, bool, str, str]:
+def _bulk_timing_begin(filename: str, job_id: str | None = None):
+    """Start a Developer Mode session for one bulk file (worker thread). Returns (ctx, wall_start) or (None, None)."""
+    try:
+        from app.core.developer_mode import is_developer_mode_enabled
+        from app.core.request_context import start_request_context
+        from app.core.timing_collector import timing_collector
+
+        if not is_developer_mode_enabled():
+            return None, None
+        path = f"/api/admin/bulk-parse/{filename}"
+        ctx = start_request_context(path=path, method="WORKER")
+        if job_id:
+            ctx.job_id = str(job_id)
+        timing_collector.begin_session(
+            request_id=ctx.request_id,
+            started_at=ctx.started_at_iso,
+            path=ctx.path,
+            method=ctx.method,
+            user_id=ctx.user_id,
+            job_id=str(job_id) if job_id else None,
+        )
+        return ctx, time.perf_counter()
+    except Exception:
+        return None, None
+
+
+def _bulk_timing_end(ctx, wall_start: float | None, *, failed: bool = False) -> None:
+    try:
+        if ctx is None:
+            return
+        from app.core.request_context import set_timing_context
+        from app.core.timing_collector import timing_collector
+
+        if failed:
+            timing_collector.mark_error(ctx.request_id)
+        wall_ms = None
+        if wall_start is not None:
+            wall_ms = (time.perf_counter() - wall_start) * 1000.0
+        timing_collector.end_session(ctx.request_id, wall_duration_ms=wall_ms)
+        set_timing_context(None)
+    except Exception:
+        pass
+
+
+def _bulk_stage(stage: str, outcome: str, duration_ms: float = 0.0) -> None:
+    try:
+        from app.core.timing_collector import record_pipeline_stage
+
+        record_pipeline_stage(
+            stage,
+            outcome,
+            duration_ms=duration_ms,
+            module="app.workers.bulk_parser",
+        )
+    except Exception:
+        pass
+
+
+def _process_one_file(args: tuple) -> tuple[str, dict | None, bool, str, str]:
     """
     Process a single staged file: extract → deterministic rules → LLM if needed.
     Returns (filename, row or None, failed: bool, message, code).
     Codes: insufficient_text | unsupported_format | llm | validation | empty_fields | exception | ok | partial
     """
+    # args may be (filename, path) or (filename, path, job_id)
+    if len(args) >= 3:
+        filename, path, job_id = args[0], args[1], args[2]
+    else:
+        filename, path = args[0], args[1]
+        job_id = None
+
+    ctx, wall_start = _bulk_timing_begin(filename, job_id=job_id)
+    failed = True
+    try:
+        result = _process_one_file_inner(filename, path)
+        failed = bool(result[2])
+        return result
+    finally:
+        _bulk_timing_end(ctx, wall_start, failed=failed)
+
+
+def _process_one_file_inner(filename: str, path: Path) -> tuple[str, dict | None, bool, str, str]:
     from app.ai.parser.text_extraction import extract_text
     from app.domains.recruitment.services.parsing_storage import validate_toon_format_bulk
 
-    filename, path = args
     try:
+        # Bulk text path: no parse-cache / layout / separate raw-store step
+        _bulk_stage("cache", "skipped")
+        _bulk_stage("persist_raw", "skipped")
+        _bulk_stage("layout", "skipped")
+
         data = path.read_bytes()
         last_extract_err = None
-        raw_text = ''
+        raw_text = ""
+        t_text = time.perf_counter()
         try:
-            raw_text = extract_text(data, filename) or ''
+            raw_text = extract_text(data, filename) or ""
         except Exception as extract_err:
-            raw_text = ''
+            raw_text = ""
             last_extract_err = str(extract_err)[:200]
 
-        if len(raw_text.strip()) < BULK_MIN_TEXT_CHARS and filename.lower().endswith('.pdf'):
+        if len(raw_text.strip()) < BULK_MIN_TEXT_CHARS and filename.lower().endswith(".pdf"):
             try:
-                raw_text = extract_text(data, filename, dpi=BULK_OCR_RETRY_DPI) or ''
+                raw_text = extract_text(data, filename, dpi=BULK_OCR_RETRY_DPI) or ""
                 last_extract_err = None
             except Exception as retry_err:
                 last_extract_err = str(retry_err)[:200]
 
+        text_ms = (time.perf_counter() - t_text) * 1000.0
         if not raw_text or len(raw_text.strip()) < BULK_MIN_TEXT_CHARS:
-            detail = last_extract_err or 'insufficient text after OCR'
-            low = (detail or '').lower()
-            if 'legacy .doc' in low or (
-                filename.lower().endswith('.doc') and 'not supported' in low
+            _bulk_stage("text", "failed", text_ms)
+            detail = last_extract_err or "insufficient text after OCR"
+            low = (detail or "").lower()
+            if "legacy .doc" in low or (
+                filename.lower().endswith(".doc") and "not supported" in low
             ):
                 return (
                     filename,
                     None,
                     True,
-                    f'Skipped (unsupported format): {filename} - {detail}',
-                    'unsupported_format',
+                    f"Skipped (unsupported format): {filename} - {detail}",
+                    "unsupported_format",
                 )
             return (
                 filename,
                 None,
                 True,
-                f'Skipped (insufficient text): {filename} - {detail}',
-                'insufficient_text',
+                f"Skipped (insufficient text): {filename} - {detail}",
+                "insufficient_text",
             )
+
+        _bulk_stage("text", "completed", text_ms)
 
         # --- Intelligence Engine text path (shared with single-file parse) ---
         if BULK_SKIP_LLM_WHEN_DETERMINISTIC:
@@ -386,33 +471,45 @@ def _process_one_file(args: tuple[str, Path]) -> tuple[str, dict | None, bool, s
                     det_toon if isinstance(det_toon, dict) else {}
                 )
                 if passes and isinstance(det_toon, dict):
-                    accept, notes, parse_status = validate_toon_format_bulk(det_toon, 'resume')
+                    t_val = time.perf_counter()
+                    accept, notes, parse_status = validate_toon_format_bulk(det_toon, "resume")
+                    _bulk_stage(
+                        "validate",
+                        "completed" if accept else "failed",
+                        (time.perf_counter() - t_val) * 1000.0,
+                    )
                     if accept:
+                        t_persist = time.perf_counter()
                         row = _flatten_toon(det_toon, filename)
-                        note_bits = [f'source=engine:{source}', f'conf={conf:.2f}']
+                        note_bits = [f"source=engine:{source}", f"conf={conf:.2f}"]
                         note_bits.extend(eng_notes[:4])
                         if missing:
-                            note_bits.append('weak=' + ','.join(missing[:6]))
+                            note_bits.append("weak=" + ",".join(missing[:6]))
                         if notes:
                             note_bits.append(notes)
-                        row['ParseStatus'] = 'ok' if parse_status == 'ok' else parse_status
-                        row['ParseNotes'] = '; '.join(note_bits)[:2000]
+                        row["ParseStatus"] = "ok" if parse_status == "ok" else parse_status
+                        row["ParseNotes"] = "; ".join(note_bits)[:2000]
+                        _bulk_stage(
+                            "persist",
+                            "completed",
+                            (time.perf_counter() - t_persist) * 1000.0,
+                        )
                         if (
-                            row.get('Name')
-                            or row.get('Email')
-                            or row.get('Phone')
-                            or row.get('Skills')
-                            or row.get('Experience')
+                            row.get("Name")
+                            or row.get("Email")
+                            or row.get("Phone")
+                            or row.get("Skills")
+                            or row.get("Experience")
                         ):
                             return (
                                 filename,
                                 row,
                                 False,
-                                f'Processing: {filename} (engine:{source})',
-                                parse_status if parse_status in ('ok', 'partial') else 'ok',
+                                f"Processing: {filename} (engine:{source})",
+                                parse_status if parse_status in ("ok", "partial") else "ok",
                             )
             except Exception as det_err:
-                print(f'[local_bulk_parser] engine det path failed for {filename}: {det_err}')
+                print(f"[local_bulk_parser] engine det path failed for {filename}: {det_err}")
 
         # --- Slow path: engine with LLM (section-scoped + knowledge) ---
         toon = None
@@ -427,69 +524,81 @@ def _process_one_file(args: tuple[str, Path]) -> tuple[str, dict | None, bool, s
                     skip_llm_when_deterministic=False,
                 )
                 if not isinstance(toon, dict):
-                    last_err = 'Engine returned non-object'
+                    last_err = "Engine returned non-object"
                     toon = None
                     if attempt < BULK_LLM_ATTEMPTS - 1:
-                        time.sleep(min(30, 2 ** attempt))
+                        time.sleep(min(30, 2**attempt))
                     continue
-                accept, notes, parse_status = validate_toon_format_bulk(toon, 'resume')
+                t_val = time.perf_counter()
+                accept, notes, parse_status = validate_toon_format_bulk(toon, "resume")
+                _bulk_stage(
+                    "validate",
+                    "completed" if accept else "failed",
+                    (time.perf_counter() - t_val) * 1000.0,
+                )
                 if accept:
+                    t_persist = time.perf_counter()
                     row = _flatten_toon(toon, filename)
-                    note_bits = [f'source=engine:{source}', f'status={parse_status}']
+                    note_bits = [f"source=engine:{source}", f"status={parse_status}"]
                     note_bits.extend(eng_notes[:4])
                     if notes:
                         note_bits.append(notes)
-                    row['ParseStatus'] = parse_status
-                    row['ParseNotes'] = '; '.join(note_bits)[:2000]
+                    row["ParseStatus"] = parse_status
+                    row["ParseNotes"] = "; ".join(note_bits)[:2000]
+                    _bulk_stage(
+                        "persist",
+                        "completed",
+                        (time.perf_counter() - t_persist) * 1000.0,
+                    )
                     if not (
-                        row.get('Name')
-                        or row.get('Email')
-                        or row.get('Phone')
-                        or row.get('Skills')
-                        or row.get('Experience')
+                        row.get("Name")
+                        or row.get("Email")
+                        or row.get("Phone")
+                        or row.get("Skills")
+                        or row.get("Experience")
                     ):
-                        last_err = 'empty fields after flatten'
+                        last_err = "empty fields after flatten"
                         toon = None
                         continue
                     return (
                         filename,
                         row,
                         False,
-                        f'Processing: {filename} (engine:{source})',
-                        parse_status if parse_status in ('ok', 'partial') else 'ok',
+                        f"Processing: {filename} (engine:{source})",
+                        parse_status if parse_status in ("ok", "partial") else "ok",
                     )
-                last_err = notes or 'validation failed'
+                last_err = notes or "validation failed"
                 toon = None
             except Exception as e:
                 last_err = str(e)[:200]
                 toon = None
                 if _is_retryable_llm_error(last_err) and attempt < BULK_LLM_ATTEMPTS - 1:
-                    time.sleep(min(45, 2 ** attempt + 1))
+                    time.sleep(min(45, 2**attempt + 1))
                     continue
 
-        if last_err and 'empty fields' in (last_err or ''):
+        if last_err and "empty fields" in (last_err or ""):
             return (
                 filename,
                 None,
                 True,
-                f'Failed (empty fields): {filename}',
-                'empty_fields',
+                f"Failed (empty fields): {filename}",
+                "empty_fields",
             )
-        code = 'validation' if last_err and 'validation' in (last_err or '').lower() else 'llm'
+        code = "validation" if last_err and "validation" in (last_err or "").lower() else "llm"
         if last_err and any(
-            x in (last_err or '').lower()
-            for x in ('person.', 'missing', 'must not', 'insufficient fields')
+            x in (last_err or "").lower()
+            for x in ("person.", "missing", "must not", "insufficient fields")
         ):
-            code = 'validation'
+            code = "validation"
         return (
             filename,
             None,
             True,
-            f'Failed (parse/validate): {filename} - {last_err}',
+            f"Failed (parse/validate): {filename} - {last_err}",
             code,
         )
     except Exception as e:
-        return (filename, None, True, f'Failed: {filename} - {str(e)[:100]}', 'exception')
+        return (filename, None, True, f"Failed: {filename} - {str(e)[:100]}", "exception")
 
 
 def _load_staged_files(job_id: str) -> list[tuple[str, Path]]:
@@ -525,7 +634,10 @@ def _worker(job_id: str, started_at: float, append: bool = False) -> None:
     max_workers = min(BULK_PARSE_MAX_WORKERS, max(1, total))
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_file = {executor.submit(_process_one_file, item): item[0] for item in files_list}
+        future_to_file = {
+            executor.submit(_process_one_file, (item[0], item[1], job_id)): item[0]
+            for item in files_list
+        }
         for future in as_completed(future_to_file):
             with _local_jobs_lock:
                 j = _local_jobs.get(job_id)

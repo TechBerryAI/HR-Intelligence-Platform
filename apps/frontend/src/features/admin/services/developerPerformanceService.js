@@ -26,6 +26,14 @@ export async function fetchPerformanceRecent(params = {}) {
   return apiRequest(`/api/admin/developer/performance/recent${suffix}`)
 }
 
+export async function clearPerformanceRecent() {
+  return apiRequest('/api/admin/developer/performance/clear', {
+    method: 'POST',
+    body: {},
+    skipRetry: true,
+  })
+}
+
 export async function fetchPerformanceRequest(requestId) {
   return apiRequest(`/api/admin/developer/performance/request/${encodeURIComponent(requestId)}`)
 }

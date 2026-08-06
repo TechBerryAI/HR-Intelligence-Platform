@@ -85,22 +85,30 @@ def performance_recent():
     except (TypeError, ValueError):
         limit = 50
     filters = _filter_kwargs_from_request()
-    sessions = timing_collector.list_recent(limit=limit, **filters)
+    sessions = timing_collector.list_recent_summaries(limit=limit, **filters)
     return jsonify(
         {
-            "sessions": [s.to_summary() for s in sessions],
+            "sessions": sessions,
             "count": len(sessions),
         }
     )
 
 
-@developer_bp.route("/performance/request/<request_id>", methods=["GET"])
+@developer_bp.route("/performance/clear", methods=["POST", "DELETE"])
+@require_developer_admin
+def performance_clear():
+    """Wipe in-memory recent parse timing sessions (Developer Mode buffer)."""
+    removed = timing_collector.clear()
+    return jsonify({"ok": True, "cleared": True, "removed": removed})
+
+
+@developer_bp.route("/performance/request/<path:request_id>", methods=["GET"])
 @require_developer_admin
 def performance_request(request_id: str):
-    session = timing_collector.get_session(request_id)
-    if session is None:
+    detail = timing_collector.get_session_or_bulk(request_id)
+    if detail is None:
         return jsonify({"error": "Request not found"}), 404
-    return jsonify(session.to_detail())
+    return jsonify(detail)
 
 
 @developer_bp.route("/performance/stats", methods=["GET"])
