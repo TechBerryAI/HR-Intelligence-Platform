@@ -1,10 +1,9 @@
 import React, { useState } from 'react'
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
-import AuthPageLayout from '@/layouts/AuthPageLayout.jsx'
 import PasswordInput from '@/shared/components/PasswordInput.jsx'
 import { PASSWORD_RULES, isPasswordStrong } from '@/shared/utils/passwordValidation.js'
-import { FiCheck, FiLock, FiX } from 'react-icons/fi'
+import { FiCheck, FiX } from 'react-icons/fi'
 
 export default function ForgotPasswordReset() {
   const { variant } = useParams()
@@ -25,7 +24,7 @@ export default function ForgotPasswordReset() {
   }
 
   const newPasswordValid = isPasswordStrong(newPassword)
-  const confirmMatches = Boolean(newPassword && newPassword === confirmPassword)
+  const confirmMatches = newPassword && newPassword === confirmPassword
   const canSubmit = email && otp && newPasswordValid && confirmMatches && !loading
 
   const handleSubmit = async (event) => {
@@ -48,7 +47,7 @@ export default function ForgotPasswordReset() {
     const res = await resetHrPassword({ email, otp, newPassword, confirmPassword })
     setLoading(false)
     if (res.ok) {
-      setStatus('Password updated. Redirecting to login…')
+      setStatus('Password updated successfully. Redirecting to login...')
       setTimeout(() => navigate('/login/admin'), 1200)
     } else {
       setError(res.message || 'Failed to reset password')
@@ -56,98 +55,91 @@ export default function ForgotPasswordReset() {
   }
 
   return (
-    <AuthPageLayout
-      title="Set new password"
-      subtitle="Choose a strong password you have not used before."
-    >
-      <div className="auth-glass-card">
+    <section className="relative min-h-[calc(100vh-180px)] flex items-center justify-center px-4 py-10 overflow-hidden">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
+        <div className="absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
         <div
-          className="mb-5 flex h-12 w-12 items-center justify-center rounded-[14px] border border-[rgba(67,158,255,0.2)]"
-          style={{
-            background: 'linear-gradient(135deg, rgba(0,166,255,0.18), rgba(92,72,255,0.18))',
-          }}
-        >
-          <FiLock className="h-6 w-6 text-[#0284c7] dark:text-[#55B9FF]" aria-hidden="true" />
-        </div>
-        <h2 className="text-xl font-semibold text-[var(--ei-text-primary)]">Create new password</h2>
-        <p className="mt-1 text-sm text-[var(--ei-text-secondary)]">
-          After saving, sign in with your new password.
-        </p>
+          className="absolute inset-0 opacity-[0.07]"
+          style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)', backgroundSize: '24px 24px' }}
+        />
+      </div>
 
-        {(!email || !otp) ? (
-          <p className="mt-6 text-sm text-[#FF7B8E]">
-            We could not detect your verified OTP. Please{' '}
-            <Link to="/forgot-password/admin" className="underline text-[var(--ei-text-primary)]">
-              restart password reset
-            </Link>
-            .
-          </p>
-        ) : (
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-            {error && (
-              <div className="rounded-xl border border-[rgba(255,90,110,0.55)] bg-[rgba(255,102,133,0.1)] px-4 py-3 text-sm text-[#FF7B8E]">
-                {error}
-              </div>
+      <div className="w-full max-w-xl relative">
+        <div className="rounded-2xl bg-gradient-to-br from-zinc-900/90 via-zinc-900/70 to-zinc-900/50 p-[1px] shadow-2xl">
+          <div className="rounded-2xl bg-zinc-950/70 backdrop-blur-md p-6 sm:p-8">
+            <h2 className="text-2xl font-semibold text-white">Set New Admin Password</h2>
+            <p className="mt-1 text-sm text-zinc-400">Choose a strong password you have not used before.</p>
+
+            {(!email || !otp) && (
+              <p className="mt-6 text-sm text-red-400">
+                We could not detect your verified OTP. Please{' '}
+                <Link to="/forgot-password/admin" className="text-white font-medium underline">
+                  restart the reset process
+                </Link>
+                .
+              </p>
             )}
-            {status && (
-              <div className="rounded-xl border border-[rgba(54,214,160,0.4)] bg-[rgba(54,214,160,0.1)] px-4 py-3 text-sm text-[#36D6A0]">
-                {status}
-              </div>
+
+            {email && otp && (
+              <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+                <p className="text-xs text-zinc-400">New password must meet all of the following:</p>
+                <ul className="space-y-1.5">
+                  {PASSWORD_RULES.map(({ id, label, test }) => {
+                    const pass = test(newPassword)
+                    return (
+                      <li key={id} className="flex items-center gap-2 text-xs">
+                        {pass ? <FiCheck className="w-3.5 h-3.5 text-green-400 flex-shrink-0" /> : <FiX className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />}
+                        <span className={pass ? 'text-zinc-300' : 'text-zinc-500'}>{label}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-400">New Password</label>
+                  <PasswordInput
+                    className="mt-1 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-white focus:outline-none"
+                    placeholder="Meet all requirements above"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    minLength={8}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-400">Confirm Password</label>
+                  <PasswordInput
+                    className="mt-1 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-white focus:outline-none"
+                    placeholder="Confirm new password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    minLength={8}
+                    required
+                  />
+                </div>
+
+                {error && <p className="text-sm text-red-400">{error}</p>}
+                {status && <p className="text-sm text-emerald-400">{status}</p>}
+
+                <button
+                  type="submit"
+                  className="w-full rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-100 disabled:opacity-60"
+                  disabled={!canSubmit}
+                >
+                  {loading ? 'Updating...' : 'Reset Password'}
+                </button>
+              </form>
             )}
-            <p className="text-xs text-[var(--ei-text-muted)]">New password must meet all of the following:</p>
-            <ul className="space-y-1.5">
-              {PASSWORD_RULES.map(({ id, label, test }) => {
-                const pass = test(newPassword)
-                return (
-                  <li key={id} className="flex items-center gap-2 text-xs">
-                    {pass ? (
-                      <FiCheck className="h-3.5 w-3.5 flex-shrink-0 text-green-400" />
-                    ) : (
-                      <FiX className="h-3.5 w-3.5 flex-shrink-0 text-[var(--ei-text-muted)]" />
-                    )}
-                    <span className={pass ? 'text-[var(--ei-text-secondary)]' : 'text-[var(--ei-text-muted)]'}>
-                      {label}
-                    </span>
-                  </li>
-                )
-              })}
-            </ul>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--ei-text-label)]">New password</label>
-              <PasswordInput
-                className="input-premium"
-                placeholder="Meet all requirements above"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                minLength={8}
-                required
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--ei-text-label)]">Confirm password</label>
-              <PasswordInput
-                className="input-premium"
-                placeholder="Confirm new password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                minLength={8}
-                required
-              />
-            </div>
-            <button type="submit" className="auth-cta" disabled={!canSubmit}>
-              {loading ? 'Updating…' : 'Reset password'}
-            </button>
-            <p className="text-center text-sm text-[var(--ei-text-secondary)]">
-              <Link
-                to={`/forgot-password/admin/verify?email=${encodeURIComponent(email || '')}`}
-                className="text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)]"
-              >
-                ← Back to OTP verification
+
+            <p className="mt-4 text-sm text-zinc-400">
+              Need to change something?{' '}
+              <Link to={`/forgot-password/admin/verify?email=${encodeURIComponent(email || '')}`} className="text-white font-medium hover:underline">
+                Back to OTP verification
               </Link>
             </p>
-          </form>
-        )}
+          </div>
+        </div>
       </div>
-    </AuthPageLayout>
+    </section>
   )
 }

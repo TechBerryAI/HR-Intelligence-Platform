@@ -3,16 +3,13 @@ dist
 .DS_Store
 *.log
 
-# Environment secrets (keep .env.example tracked)
-.env
-.env.local
-.env.*.local
-.env.development.local
-.env.test.local
-.env.production.local
+# Environment files
+.env*
 
 # Platform folders
 .vercel
 .netlify
 .firebase
 .cache
+
+

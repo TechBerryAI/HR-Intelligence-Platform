@@ -23,7 +23,7 @@ external docs. This file explains what was removed and where to look now.
 
 | Path | Justification |
 |------|---------------|
-| `backend/models/candidate_auth.py` | SQLAlchemy model for schema parity; routes use raw SQL (see `docs/ENGINEERING.md`) |
+| `backend/models/candidate_auth.py` | SQLAlchemy model for schema parity; routes use raw SQL (see `docs/07-API.md` / `docs/legacy/ENGINEERING.md`) |
 | `ai/schemas/` + `ai/contracts/` | Spec overlap with TOON v1 + canonical models; deprecate |
 | Root shims `apps/backend/{toon,llm_service,...}.py` | Compat for older tests; prefer `app.*` |
 | `ai/toon/v1/types/toon.ts` | TypeScript contracts; Form DTOs are FE autofill contract |

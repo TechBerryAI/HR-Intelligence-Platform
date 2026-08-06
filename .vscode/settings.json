@@ -1,8 +1,5 @@
 {
   "workbench.editorAssociations": {
     "*.md": "vscode.markdown.preview.editor"
-  },
-  "typescript.tsdk": "apps/frontend/node_modules/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
-  "js/ts.implicitProjectConfig.checkJs": false
+  }
 }

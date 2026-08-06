@@ -249,7 +249,7 @@ function StepRow({ step, maxMs, isLast }) {
         <span
           className={`z-[1] flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${
             step.status === 'completed'
-              ? 'bg-[var(--ei-btn-primary-from)] text-[var(--ei-btn-primary-text)] shadow-[0_0_0_3px_var(--ei-btn-primary-shadow)]'
+              ? 'bg-[#00A6FF] text-white shadow-[0_0_0_3px_rgba(0,166,255,0.2)]'
               : step.status === 'failed'
                 ? 'bg-rose-500 text-white'
                 : isIdle
@@ -262,7 +262,7 @@ function StepRow({ step, maxMs, isLast }) {
         {!isLast ? (
           <span
             className={`w-px flex-1 min-h-[0.5rem] ${
-              step.status === 'completed' ? 'bg-[var(--ei-btn-primary-from)]/35' : 'bg-[var(--ei-border-primary)]'
+              step.status === 'completed' ? 'bg-[#00A6FF]/35' : 'bg-[var(--ei-border-primary)]'
             }`}
             aria-hidden
           />
@@ -272,7 +272,7 @@ function StepRow({ step, maxMs, isLast }) {
       <div
         className={`flex-1 min-w-0 mb-2 rounded-lg px-3 py-2.5 transition ${
           showTime
-            ? 'bg-[var(--ei-surface-hover)] ring-1 ring-[var(--ei-border-primary)]'
+            ? 'bg-[rgba(0,166,255,0.06)] ring-1 ring-[rgba(0,166,255,0.22)]'
             : step.status === 'failed'
               ? 'bg-[rgba(255,90,110,0.08)] ring-1 ring-[rgba(255,90,110,0.25)]'
               : 'bg-transparent'
@@ -310,7 +310,7 @@ function StepRow({ step, maxMs, isLast }) {
         {showTime ? (
           <div className="mt-2 h-1 rounded-full bg-[var(--ei-bg-primary)]/80 overflow-hidden">
             <div
-              className="h-full rounded-full bg-[var(--ei-btn-primary-from)]"
+              className="h-full rounded-full bg-gradient-to-r from-[#00A6FF] to-[#276DFF]"
               style={{ width: `${Math.max(pct, 4)}%` }}
             />
           </div>
@@ -833,7 +833,7 @@ function DashboardBody() {
             type="button"
             onClick={load}
             disabled={loading || clearing}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--ei-btn-primary-from)] text-[var(--ei-btn-primary-text)] text-sm font-semibold hover:brightness-105 shadow-[0_8px_20px_var(--ei-btn-primary-shadow)] disabled:opacity-60"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#00A6FF] text-white text-sm font-semibold hover:bg-[#0090e0] shadow-[0_8px_24px_rgba(0,166,255,0.25)] disabled:opacity-60"
           >
             <FiRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh

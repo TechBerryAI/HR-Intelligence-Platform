@@ -159,21 +159,21 @@ export default function HRMSTestingFeedback() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] py-10 px-4 sm:px-6">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-slate-50 py-10">
+      <div className="max-w-2xl mx-auto px-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
           className="text-center mb-8"
         >
-          <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-br from-blue-600/20 to-cyan-500/10 border border-[var(--ei-border-primary)] flex items-center justify-center">
-            <FiMessageSquare className="w-8 h-8 text-[#3AA9FF]" />
+          <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-blue-100 flex items-center justify-center">
+            <FiMessageSquare className="w-8 h-8 text-blue-600" />
           </div>
-          <h1 className="text-3xl sm:text-4xl font-bold text-[var(--ei-text-primary)] mb-2">
+          <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">
             HRMS Testing Feedback
           </h1>
-          <p className="text-[var(--ei-text-muted)] text-sm sm:text-base">
+          <p className="text-slate-500 text-sm sm:text-base">
             Report bugs, suggest features, or share general feedback to help improve HRMS.
           </p>
         </motion.div>
@@ -182,7 +182,7 @@ export default function HRMSTestingFeedback() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.1 }}
-          className="org-glass-card hover:transform-none rounded-2xl p-6 sm:p-8"
+          className="rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm"
         >
           <AnimatePresence mode="wait">
             {submitted ? (
@@ -251,7 +251,7 @@ export default function HRMSTestingFeedback() {
                   required
                 >
                   {FEEDBACK_TYPES.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
+                    <option key={opt.value} value={opt.value} style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>
                       {opt.label}
                     </option>
                   ))}
@@ -264,7 +264,7 @@ export default function HRMSTestingFeedback() {
                   onChange={(e) => updateField('module', e.target.value)}
                 >
                   {MODULES.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
+                    <option key={opt.value} value={opt.value} style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>
                       {opt.label}
                     </option>
                   ))}
@@ -292,7 +292,7 @@ export default function HRMSTestingFeedback() {
                     error={errors.severity}
                   >
                     {SEVERITIES.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
+                      <option key={opt.value} value={opt.value} style={{ color: '#f3f4f6', backgroundColor: '#18181b' }}>
                         {opt.label}
                       </option>
                     ))}
@@ -300,7 +300,7 @@ export default function HRMSTestingFeedback() {
                 )}
 
                 <div>
-                  <label className="block text-sm font-semibold text-[var(--ei-text-secondary)] mb-1.5 org-field-label">
+                  <label className="block text-sm font-medium text-[var(--ei-text-secondary)] mb-1.5">
                     <FiImage className="inline w-4 h-4 mr-1.5 text-[var(--ei-text-muted)]" />
                     Screenshot (optional)
                   </label>
@@ -308,7 +308,7 @@ export default function HRMSTestingFeedback() {
                     type="file"
                     accept=".png,.jpg,.jpeg,.gif,.webp,image/png,image/jpeg,image/gif,image/webp"
                     onChange={onScreenshotChange}
-                    className="block w-full text-sm text-[var(--ei-text-muted)] file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-[var(--ei-surface-hover)] file:text-[var(--ei-text-primary)] file:cursor-pointer hover:file:opacity-90"
+                    className="block w-full text-sm text-[var(--ei-text-muted)] file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-[var(--ei-surface-hover)] file:text-[var(--ei-text-primary)] file:cursor-pointer hover:file:bg-[var(--ei-surface-hover)]"
                   />
                   {screenshotFile && (
                     <p className="mt-1 text-xs text-[var(--ei-text-muted)]">{screenshotFile.name}</p>

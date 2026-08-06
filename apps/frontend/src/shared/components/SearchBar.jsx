@@ -69,8 +69,8 @@ export default function SearchBar({ onSearch, large = false, defaultQuery = {}, 
           whileTap={{ scale: 0.98 }}
           className={`sm:ml-2 m-2 sm:m-0 sm:mr-2 sm:my-2 font-semibold px-6 py-3 rounded-xl transition-all ${
             enterprise
-              ? 'bg-[var(--ei-btn-primary-from)] text-[var(--ei-btn-primary-text)] shadow-[0_8px_20px_var(--ei-btn-primary-shadow)] hover:brightness-105'
-              : 'bg-primary text-white shadow-md hover:opacity-90'
+              ? 'bg-gradient-to-r from-[#00A6FF] to-[#276DFF] text-white shadow-[0_8px_24px_rgba(0,166,255,0.25)] hover:opacity-95'
+              : 'bg-primary dark:bg-accent-blue text-white shadow-md hover:opacity-90'
           }`}
         >
           Search

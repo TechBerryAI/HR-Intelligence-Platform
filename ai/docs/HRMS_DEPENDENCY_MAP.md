@@ -261,9 +261,9 @@ Defined in: `backend/.env.example`
 |------|------|
 | `backend/services/candidate_notification_service.py` | ATS spec notifications (SHORTLISTED, etc.) |
 | `frontend/src/utils/parsingApi.js` | Normalizes LLM output quirks for UI |
-| `docs/README.md` · `docs/user-manual/` | Docs index and screenshot manuals |
-| `docs/ARCHITECTURE.md` | Architecture archive |
-| `docs/ENGINEERING.md` | API/module narrative archive |
+| `docs/README.md` + `01`–`10` | Current HCIP documentation |
+| `docs/legacy/ARCHITECTURE.md` | Legacy architecture archive |
+| `docs/legacy/ENGINEERING.md` | Legacy API/module narrative |
 
 ---
 

@@ -1,11 +1,11 @@
-# Agent notes
+# Agent notes (HCIP)
 
 ## Documentation
 
-- End-user manuals: `docs/user-manual/` (Word/PDF with live screenshots).
-- Local setup: `docs/DEVELOPMENT.md`.
-- Docs index: `docs/README.md`.
-- Prefer live code over `docs/ARCHITECTURE.md` / `docs/ENGINEERING.md` when they disagree.
+- Product SoT: `docs/01-Product-Constitution.md` and `docs/01`–`10`.
+- When changing APIs, schema, workflows, RBAC, or UI behavior, update matching docs (see `.cursor/rules/documentation-sync.mdc`).
+- After route or `schema_pg` changes, run: `python scripts/sync_docs_from_code.py`
+- Do not treat `docs/legacy/` as current product truth.
 
 ## Code
 
