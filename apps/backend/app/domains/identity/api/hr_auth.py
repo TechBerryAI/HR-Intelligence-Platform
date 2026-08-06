@@ -18,6 +18,18 @@ from app.domains.identity.models.hr_auth import HRAuth
 from app.domains.identity.sessions.service import record_login_attempt
 from app.core.auth import build_jwt_payload, JWT_SECRET, validate_password_strength
 from app.api.middleware.auth import authenticate_token
+
+# Password-reset OTP is limited to Techberry Infotech staff emails.
+ALLOWED_PASSWORD_RESET_DOMAIN = (
+    os.getenv('ALLOWED_PASSWORD_RESET_DOMAIN') or 'techberryinfotech.com'
+).strip().lower()
+
+
+def _is_allowed_password_reset_email(email: str) -> bool:
+    if not email or '@' not in email:
+        return False
+    domain = email.rsplit('@', 1)[-1].strip().lower()
+    return domain == ALLOWED_PASSWORD_RESET_DOMAIN
 from app.domains.identity.authorization.rbac import build_hr_identity, ROLE_RECRUITER, get_user_id
 
 auth_bp = Blueprint('auth', __name__)
@@ -349,12 +361,12 @@ def hr_forgot_password():
 
         if not email:
             return jsonify({'error': 'Email is required.'}), 400
-        if not is_valid_email(email):
-            return jsonify({'error': 'Please provide a valid email address.'}), 400
+        if not is_valid_email(email) or not _is_allowed_password_reset_email(email):
+            return jsonify({'error': 'Invalid email'}), 400
 
         hr_signup = db_get('SELECT full_name, email, company, password FROM hr_signup WHERE email = ?', (email,))
         if not hr_signup:
-            return jsonify({'error': 'Account not found for this email.'}), 404
+            return jsonify({'error': 'Invalid email'}), 400
 
         otp = generate_otp()
         expiry = datetime.now(timezone.utc) + timedelta(minutes=10)
@@ -375,7 +387,7 @@ def hr_forgot_password():
             hr_auth.otp_expiry = expiry
             session.add(hr_auth)
 
-        if not send_email_otp(email, otp, user_type="HR"):
+        if not send_email_otp(email, otp, user_type="HR", purpose="password_reset", minutes=10):
             return jsonify({'error': 'Failed to send OTP email. Please try again later.'}), 500
 
         return jsonify({'message': 'OTP sent successfully. Please check your email.'}), 200
@@ -384,6 +396,12 @@ def hr_forgot_password():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Internal server error'}), 500
+
+
+@auth_bp.post('/forgot-password/resend-otp')
+def hr_forgot_password_resend():
+    """Resend password-reset OTP (same behavior as forgot-password)."""
+    return hr_forgot_password()
 
 
 @auth_bp.post('/forgot-password/verify-otp')
@@ -395,8 +413,8 @@ def hr_verify_reset_otp():
 
         if not email or not otp:
             return jsonify({'error': 'Email and OTP are required.'}), 400
-        if not is_valid_email(email):
-            return jsonify({'error': 'Please provide a valid email address.'}), 400
+        if not is_valid_email(email) or not _is_allowed_password_reset_email(email):
+            return jsonify({'error': 'Invalid email'}), 400
 
         with get_session() as session:
             hr_auth = session.query(HRAuth).filter(HRAuth.email == email).first()
@@ -434,6 +452,8 @@ def hr_reset_password():
 
         if not email or not otp:
             return jsonify({'error': 'Email and OTP are required.'}), 400
+        if not is_valid_email(email) or not _is_allowed_password_reset_email(email):
+            return jsonify({'error': 'Invalid email'}), 400
         ok, err = validate_password_strength(new_password)
         if not ok:
             return jsonify({'error': err}), 400

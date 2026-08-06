@@ -356,28 +356,65 @@ def capture_auth(page) -> None:
         page,
         "02-authentication",
         "05_forgot_password",
-        title="Forgot password",
-        action="Open Forgot Password (admin variant)",
-        expected="Password recovery request form",
+        title="Forgot password — request OTP",
+        action="From Admin Login, open Forgot password and enter work email",
+        expected="Reset with OTP form: work email field, Send OTP, Back to login",
         nav_path="/forgot-password/admin",
         roles=["Public → staff"],
-        purpose="Start staff password reset",
-        boxes=boxes(box_for(page, "button || input[type='email']")),
+        purpose="Start staff password reset by emailing a 6-digit OTP (valid 10 minutes)",
+        boxes=None,
     )
 
-    page.goto(f"{BASE}/signup/admin", wait_until="networkidle")
+    forgot_email = page.locator("input[type='email']").first
+    if forgot_email.count():
+        forgot_email.fill(HEAD_HR[0])
+        shot(
+            page,
+            "02-authentication",
+            "05b_forgot_password_email",
+            title="Forgot password — email entered",
+            action="Enter the staff work email, then click Send OTP",
+            expected="Work email filled; Send OTP ready; note that OTP is valid for 10 minutes",
+            nav_path="/forgot-password/admin",
+            roles=["Public → staff"],
+            purpose="Identify the account that will receive the password-reset OTP",
+            boxes=None,
+        )
+
+    page.goto(
+        f"{BASE}/forgot-password/admin/verify?email={HEAD_HR[0]}",
+        wait_until="networkidle",
+    )
     shot(
         page,
         "02-authentication",
-        "06_signup_admin",
-        title="Admin signup",
-        action="Open Sign Up as Admin",
-        expected="HR signup form (name, company, email, password) with OTP step",
-        nav_path="/signup/admin",
-        roles=["Public"],
-        purpose="Register a new recruiter/admin account (subject to product policy)",
-        boxes=boxes(box_for(page, "button[type='submit'] || button:has-text('Sign')")),
+        "05c_forgot_password_verify",
+        title="Forgot password — verify OTP",
+        action="Open the email, copy the 6-digit OTP, enter it, optionally Resend OTP",
+        expected="Verify OTP form with email (read-only), 6-digit OTP field, Verify OTP and Resend OTP",
+        nav_path="/forgot-password/admin/verify",
+        roles=["Public → staff"],
+        purpose="Confirm ownership of the email before allowing a password change",
+        boxes=None,
     )
+
+    page.goto(
+        f"{BASE}/forgot-password/admin/reset?email={HEAD_HR[0]}&otp=000000",
+        wait_until="networkidle",
+    )
+    shot(
+        page,
+        "02-authentication",
+        "05d_forgot_password_reset",
+        title="Forgot password — set new password",
+        action="After OTP verification, choose a strong new password and confirm it",
+        expected="Create new password form with strength rules, Reset password button",
+        nav_path="/forgot-password/admin/reset",
+        roles=["Public → staff"],
+        purpose="Complete password recovery and return to Admin Login",
+        boxes=None,
+    )
+
 
 
 def capture_head_hr(page, token: str, user: dict, jdid: str, cid: str) -> None:

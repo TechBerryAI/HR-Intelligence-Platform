@@ -39,8 +39,12 @@ MODULE_META = OrderedDict(
             "02-authentication",
             {
                 "title": "Authentication",
-                "purpose": "Staff login, signup, and password recovery for Recruiter, Head HR, and CEO accounts.",
-                "nav": "/login → /login/admin",
+                "purpose": (
+                    "Staff login and password recovery for Recruiter, Head HR, and CEO accounts. "
+                    "Forgot password sends a 6-digit OTP (valid 10 minutes), then verify OTP and set a new password. "
+                    "New staff accounts are created by Head HR (Admins), not via public self-signup."
+                ),
+                "nav": "/login → /login/admin → /forgot-password/admin → verify OTP → reset password",
                 "roles": "Public (unauthenticated); after login: RECRUITER | HEAD_HR | CEO",
             },
         ),
@@ -261,46 +265,116 @@ def _add_page_number(paragraph):
     run._r.append(end)
 
 
-def _add_toc_field(paragraph):
+_BOOKMARK_SEQ = 0
+
+
+def _next_bookmark_id() -> int:
+    global _BOOKMARK_SEQ
+    _BOOKMARK_SEQ += 1
+    return _BOOKMARK_SEQ
+
+
+def _add_bookmark(paragraph, name: str) -> None:
+    """Attach a Word bookmark to a paragraph (for TOC jump targets)."""
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
 
+    bid = str(_next_bookmark_id())
+    start = OxmlElement("w:bookmarkStart")
+    start.set(qn("w:id"), bid)
+    start.set(qn("w:name"), name)
+    end = OxmlElement("w:bookmarkEnd")
+    end.set(qn("w:id"), bid)
+    paragraph._p.insert(0, start)
+    paragraph._p.append(end)
+
+
+def _add_internal_hyperlink(paragraph, anchor: str, text: str, *, size_pt: int = 10) -> None:
+    """Add a clickable internal hyperlink (Word + PDF after Word export)."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+
+    hyperlink = OxmlElement("w:hyperlink")
+    hyperlink.set(qn("w:anchor"), anchor)
+    hyperlink.set(qn("w:history"), "1")
+
+    run = OxmlElement("w:r")
+    r_pr = OxmlElement("w:rPr")
+
+    r_fonts = OxmlElement("w:rFonts")
+    r_fonts.set(qn("w:ascii"), "Calibri")
+    r_fonts.set(qn("w:hAnsi"), "Calibri")
+    r_pr.append(r_fonts)
+
+    color = OxmlElement("w:color")
+    color.set(qn("w:val"), "0369A1")
+    r_pr.append(color)
+
+    underline = OxmlElement("w:u")
+    underline.set(qn("w:val"), "single")
+    r_pr.append(underline)
+
+    sz = OxmlElement("w:sz")
+    sz.set(qn("w:val"), str(size_pt * 2))
+    r_pr.append(sz)
+    sz_cs = OxmlElement("w:szCs")
+    sz_cs.set(qn("w:val"), str(size_pt * 2))
+    r_pr.append(sz_cs)
+
+    run.append(r_pr)
+    text_el = OxmlElement("w:t")
+    text_el.set(qn("xml:space"), "preserve")
+    text_el.text = text
+    run.append(text_el)
+    hyperlink.append(run)
+    paragraph._p.append(hyperlink)
+
+
+def _add_pageref_field(paragraph, bookmark: str, *, size_pt: int = 10) -> None:
+    """Insert a PAGEREF field (hyperlinked) so TOC page numbers update in Word."""
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.shared import Pt as DocPt
+    from docx.shared import RGBColor
+
     run = paragraph.add_run()
+    run.font.name = "Calibri"
+    run.font.size = DocPt(size_pt)
+    run.font.color.rgb = RGBColor(0x03, 0x69, 0xA1)
+
     begin = OxmlElement("w:fldChar")
     begin.set(qn("w:fldCharType"), "begin")
     instr = OxmlElement("w:instrText")
     instr.set(qn("xml:space"), "preserve")
-    instr.text = r'TOC \o "1-1" \h \z \u'
+    instr.text = f" PAGEREF {bookmark} \\h "
     sep = OxmlElement("w:fldChar")
     sep.set(qn("w:fldCharType"), "separate")
     placeholder = OxmlElement("w:t")
-    placeholder.text = "Updating table of contents…"
+    placeholder.text = "…"
     end = OxmlElement("w:fldChar")
     end.set(qn("w:fldCharType"), "end")
     run._r.append(begin)
     run._r.append(instr)
     run._r.append(sep)
-    run2 = paragraph.add_run()
-    run2._r.append(placeholder)
-    run3 = paragraph.add_run()
-    run3._r.append(end)
+    run._r.append(placeholder)
+    run._r.append(end)
 
 
-def build_toc_entries(manifest: list[dict]) -> list[tuple[str, str]]:
-    """Return [(chapter_no, title), ...] for TOC table."""
-    entries: list[tuple[str, str]] = [("1", "Introduction")]
+def build_toc_entries(manifest: list[dict]) -> list[tuple[str, str, str]]:
+    """Return [(chapter_no, title, bookmark), ...] for TOC table."""
+    entries: list[tuple[str, str, str]] = [("1", "Introduction", "sec_1")]
     modules = by_module(manifest)
     chapter = 2
     for mod_key, meta in MODULE_META.items():
         if modules.get(mod_key):
-            entries.append((str(chapter), meta["title"]))
+            entries.append((str(chapter), meta["title"], f"sec_{chapter}"))
             chapter += 1
     entries.extend(
         [
-            (str(chapter), "Forms, Fields, and Buttons Reference"),
-            (str(chapter + 1), "Troubleshooting"),
-            (str(chapter + 2), "FAQs"),
-            (str(chapter + 3), "Appendix"),
+            (str(chapter), "Forms, Fields, and Buttons Reference", f"sec_{chapter}"),
+            (str(chapter + 1), "Troubleshooting", f"sec_{chapter + 1}"),
+            (str(chapter + 2), "FAQs", f"sec_{chapter + 2}"),
+            (str(chapter + 3), "Appendix", f"sec_{chapter + 3}"),
         ]
     )
     return entries
@@ -331,7 +405,31 @@ def _set_cell_text(cell, text: str, *, bold: bool = False, size: int = 10) -> No
     run.font.size = DocPt(size)
 
 
+def _set_cell_toc_link(cell, text: str, bookmark: str, *, size: int = 10) -> None:
+    """TOC section cell: clickable jump to chapter bookmark."""
+    from docx.shared import Pt as DocPt
+
+    cell.text = ""
+    para = cell.paragraphs[0]
+    para.paragraph_format.space_before = DocPt(3)
+    para.paragraph_format.space_after = DocPt(3)
+    _add_internal_hyperlink(para, bookmark, text, size_pt=size)
+
+
+def _set_cell_pageref(cell, bookmark: str, *, size: int = 10) -> None:
+    """TOC page cell: PAGEREF field (also clickable)."""
+    from docx.shared import Pt as DocPt
+
+    cell.text = ""
+    para = cell.paragraphs[0]
+    para.paragraph_format.space_before = DocPt(3)
+    para.paragraph_format.space_after = DocPt(3)
+    _add_pageref_field(para, bookmark, size_pt=size)
+
+
 def build_docx(manifest: list[dict]) -> Path:
+    global _BOOKMARK_SEQ
+    _BOOKMARK_SEQ = 0
     from docx import Document
     from docx.enum.section import WD_SECTION
     from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
@@ -344,13 +442,20 @@ def build_docx(manifest: list[dict]) -> Path:
     normal.paragraph_format.space_after = Pt(8)
     normal.paragraph_format.line_spacing_rule = WD_LINE_SPACING.SINGLE
 
-    for level, size in ((1, 16), (2, 13), (3, 12)):
+    for level, size, space_before, space_after in (
+        (1, 24, 0, 14),
+        (2, 16, 16, 10),
+        (3, 13, 12, 8),
+    ):
         try:
             hs = doc.styles[f"Heading {level}"]
             hs.font.name = "Calibri"
             hs.font.size = Pt(size)
             hs.font.bold = True
             hs.font.color.rgb = RGBColor(0x0F, 0x17, 0x2A)
+            hs.paragraph_format.space_before = Pt(space_before)
+            hs.paragraph_format.space_after = Pt(space_after)
+            hs.paragraph_format.line_spacing = 1.15
         except KeyError:
             pass
 
@@ -376,19 +481,48 @@ def build_docx(manifest: list[dict]) -> Path:
             section.header.paragraphs[0].text = ""
             section.footer.paragraphs[0].text = ""
 
-    def h(text, level=1):
-        return doc.add_heading(text, level=level)
+    def h(text, level=1, bookmark=None):
+        para = doc.add_heading(text, level=level)
+        # Enforce size + gap even if Word theme overrides the style
+        sizes = {1: 24, 2: 16, 3: 13}
+        gaps_after = {1: 14, 2: 10, 3: 8}
+        gaps_before = {1: 0, 2: 16, 3: 12}
+        para.paragraph_format.space_before = Pt(gaps_before.get(level, 0))
+        para.paragraph_format.space_after = Pt(gaps_after.get(level, 8))
+        for run in para.runs:
+            run.bold = True
+            run.font.name = "Calibri"
+            run.font.size = Pt(sizes.get(level, 14))
+            run.font.color.rgb = RGBColor(0x0F, 0x17, 0x2A)
+        if bookmark:
+            _add_bookmark(para, bookmark)
+        return para
 
-    def p(text, bold=False, center=False):
+    def p(text, bold=False, center=False, *, keep_with_next=False, page_break_before=False):
         para = doc.add_paragraph()
         if center:
             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        r = para.add_run(text)
-        _set_run_font(r, size=11, bold=bold)
+        if page_break_before:
+            para.paragraph_format.page_break_before = True
+        if keep_with_next:
+            para.paragraph_format.keep_with_next = True
+        if bold:
+            # Inline section labels (e.g. "How to use this manual")
+            para.paragraph_format.space_before = Pt(12)
+            para.paragraph_format.space_after = Pt(6)
+            r = para.add_run(text)
+            _set_run_font(r, size=13, bold=True, color=(0x0F, 0x17, 0x2A))
+        else:
+            para.paragraph_format.space_after = Pt(10)
+            r = para.add_run(text)
+            _set_run_font(r, size=11, bold=False)
         return para
 
-    def bullet(text):
-        doc.add_paragraph(text, style="List Bullet")
+    def bullet(text, *, keep_with_next=False):
+        para = doc.add_paragraph(text, style="List Bullet")
+        if keep_with_next:
+            para.paragraph_format.keep_with_next = True
+        return para
 
     def add_figure(item: dict, fig_id: str):
         path = SHOTS / item["file"]
@@ -401,6 +535,7 @@ def build_docx(manifest: list[dict]) -> Path:
         r = cap.add_run(f"Figure {fig_id}  {item['title']}")
         r.italic = True
         _set_run_font(r, size=9, color=(0x47, 0x55, 0x69))
+        return cap
 
     # Cover
     configure_section(doc.sections[0], header=False)
@@ -435,8 +570,9 @@ def build_docx(manifest: list[dict]) -> Path:
     configure_section(sec, header=True)
 
     title = doc.add_paragraph()
+    title.paragraph_format.space_after = Pt(14)
     r = title.add_run("Document History")
-    _set_run_font(r, size=16, bold=True, color=(0x0F, 0x17, 0x2A))
+    _set_run_font(r, size=24, bold=True, color=(0x0F, 0x17, 0x2A))
     p("Revision history for this customer-facing user manual.")
     table = doc.add_table(rows=2, cols=4)
     table.style = "Table Grid"
@@ -455,11 +591,14 @@ def build_docx(manifest: list[dict]) -> Path:
 
     # ——— Table of Contents (formatted table) ———
     toc_title = doc.add_paragraph()
+    toc_title.paragraph_format.space_after = Pt(14)
     r = toc_title.add_run("Table of Contents")
-    _set_run_font(r, size=16, bold=True, color=(0x0F, 0x17, 0x2A))
+    _set_run_font(r, size=24, bold=True, color=(0x0F, 0x17, 0x2A))
     intro = doc.add_paragraph()
-    intro.paragraph_format.space_after = Pt(6)
-    r = intro.add_run("Use this table to locate each chapter in the manual.")
+    intro.paragraph_format.space_after = Pt(10)
+    r = intro.add_run(
+        "Click any section name (or page number) to jump to that chapter."
+    )
     _set_run_font(r, size=10, color=(0x64, 0x74, 0x8B))
 
     toc_entries = build_toc_entries(manifest)
@@ -470,10 +609,10 @@ def build_docx(manifest: list[dict]) -> Path:
         _shade_cell(toc_table.rows[0].cells[i], "0369A1")
         for run in toc_table.rows[0].cells[i].paragraphs[0].runs:
             run.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-    for row_i, (num, section) in enumerate(toc_entries, start=1):
+    for row_i, (num, section, bookmark) in enumerate(toc_entries, start=1):
         _set_cell_text(toc_table.rows[row_i].cells[0], num, size=10)
-        _set_cell_text(toc_table.rows[row_i].cells[1], section, size=10)
-        _set_cell_text(toc_table.rows[row_i].cells[2], str(row_i + 3), size=10)
+        _set_cell_toc_link(toc_table.rows[row_i].cells[1], section, bookmark, size=10)
+        _set_cell_pageref(toc_table.rows[row_i].cells[2], bookmark, size=10)
         if row_i % 2 == 0:
             for c in range(3):
                 _shade_cell(toc_table.rows[row_i].cells[c], "F8FAFC")
@@ -485,7 +624,7 @@ def build_docx(manifest: list[dict]) -> Path:
     doc.add_page_break()
 
     # ——— Introduction (single page) → then Home modules ———
-    h("1. Introduction", 1)
+    h("1. Introduction", 1, bookmark="sec_1")
     p(
         "HR Intelligence Platform is an AI-assisted recruitment application for publishing jobs, "
         "receiving applications, parsing resumes and job descriptions, scoring candidate–job fit, "
@@ -509,7 +648,7 @@ def build_docx(manifest: list[dict]) -> Path:
         items = modules.get(mod_key) or []
         if not items:
             continue
-        h(f"{chapter}. {meta['title']}", 1)
+        h(f"{chapter}. {meta['title']}", 1, bookmark=f"sec_{chapter}")
         p("Purpose", bold=True)
         p(meta["purpose"])
         p("Navigation Path", bold=True)
@@ -524,12 +663,13 @@ def build_docx(manifest: list[dict]) -> Path:
 
         for i, item in enumerate(items, start=1):
             h(f"Step {i}", 3)
-            p("Action:", bold=True)
+            p("Action:", bold=True, keep_with_next=True)
             bullet(item["action"])
             add_figure(item, f"{chapter}.{i}")
-            p("Description:", bold=True)
-            bullet(item.get("title") or item["action"])
-            p("Expected Result:", bold=True)
+            # Keep Description + Expected Result together on the page after the screenshot
+            p("Description:", bold=True, page_break_before=True, keep_with_next=True)
+            bullet(item.get("title") or item["action"], keep_with_next=True)
+            p("Expected Result:", bold=True, keep_with_next=True)
             bullet(item["expected"])
 
         p("Notes", bold=True)
@@ -540,7 +680,7 @@ def build_docx(manifest: list[dict]) -> Path:
 
     # Reference chapters — continue from next chapter number
     # (placeholder removed; existing block below still uses chapter variable)
-    h(f"{chapter}. Forms, Fields, and Buttons Reference", 1)
+    h(f"{chapter}. Forms, Fields, and Buttons Reference", 1, bookmark=f"sec_{chapter}")
     p("The following reference covers controls present in the shipped UI.")
     p("Job create / edit (Recruiter dashboard & Head HR overview posting)", bold=True)
     fields = [
@@ -583,7 +723,7 @@ def build_docx(manifest: list[dict]) -> Path:
     doc.add_page_break()
     chapter += 1
 
-    h(f"{chapter}. Troubleshooting", 1)
+    h(f"{chapter}. Troubleshooting", 1, bookmark=f"sec_{chapter}")
     rows = [
         ("Cannot sign in", "Confirm email/password; use Forgot Password; verify role in hr_signup"),
         ("Redirected away from a page", "Role guards send users to their home panel (/dashboard, /head-hr, /ceo)"),
@@ -602,7 +742,7 @@ def build_docx(manifest: list[dict]) -> Path:
     doc.add_page_break()
     chapter += 1
 
-    h(f"{chapter}. FAQs", 1)
+    h(f"{chapter}. FAQs", 1, bookmark=f"sec_{chapter}")
     faqs = [
         ("Is there a Super Admin role?", "No separate SUPER_ADMIN enum. Admin Login authenticates RECRUITER, HEAD_HR, or CEO."),
         ("Do candidates create accounts?", "Public apply is passwordless via /jobs. Candidate JWT sessions are cleared."),
@@ -616,7 +756,7 @@ def build_docx(manifest: list[dict]) -> Path:
     doc.add_page_break()
     chapter += 1
 
-    h(f"{chapter}. Appendix", 1)
+    h(f"{chapter}. Appendix", 1, bookmark=f"sec_{chapter}")
     p("From repository root with the app running, regenerate this manual with:")
     bullet("python docs/user-manual/capture.py")
     bullet("python docs/user-manual/build.py")
