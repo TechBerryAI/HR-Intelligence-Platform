@@ -12,6 +12,8 @@ from typing import Any, Literal
 
 from dotenv import load_dotenv
 
+from app.core.timing import timing
+
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]  # apps/backend
 _REPO_ROOT = _BACKEND_ROOT.parent.parent  # repository root (not apps/)
 _AI_ROOT = _REPO_ROOT / "ai"
@@ -914,6 +916,7 @@ def repair_jd_toon(data: dict[str, Any], raw_jd_text: str | None = None) -> tupl
     return _repair_jd_structure(data, raw_jd_text=raw_jd_text)
 
 
+@timing
 def parse_via_runtime(text: str, doc_type: Literal["resume", "jd"]) -> dict[str, Any]:
     """Run AI Runtime task and return validated structured output dict."""
     global _last_model_version

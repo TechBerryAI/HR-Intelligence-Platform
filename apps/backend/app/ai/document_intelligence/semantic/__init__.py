@@ -11,6 +11,8 @@ import os
 import re
 from typing import Any, Optional
 
+from app.core.timing import timing
+
 logger = logging.getLogger(__name__)
 
 _ENABLED = os.getenv('DOCUMENT_INTELLIGENCE_SEMANTIC_AI', 'true').lower() in ('1', 'true', 'yes')
@@ -59,11 +61,15 @@ def _needs_jd_semantic(profile_dict: dict[str, Any]) -> bool:
     return False
 
 
+@timing
 def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
     """Best-effort section LLM with a hard timeout so API/batch never hangs."""
     import concurrent.futures
 
+    from app.core.request_context import get_timing_context, run_in_timing_context
+
     timeout_sec = float(os.getenv('DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC', '25'))
+    timing_ctx = get_timing_context()
 
     def _invoke() -> Optional[dict[str, Any]]:
         try:
@@ -76,9 +82,14 @@ def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
             logger.debug('semantic AI unavailable: %s', exc)
         return None
 
+    def _invoke_timed() -> Optional[dict[str, Any]]:
+        if timing_ctx is not None:
+            return run_in_timing_context(timing_ctx, _invoke)
+        return _invoke()
+
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            fut = pool.submit(_invoke)
+            fut = pool.submit(_invoke_timed)
             return fut.result(timeout=timeout_sec)
     except concurrent.futures.TimeoutError:
         logger.warning('semantic AI timed out after %ss for %s', timeout_sec, doc_kind)
@@ -88,6 +99,7 @@ def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
         return None
 
 
+@timing
 def enrich_resume_semantic(
     profile,
     *,
@@ -215,6 +227,7 @@ def enrich_resume_semantic(
         return profile
 
 
+@timing
 def enrich_jd_semantic(profile, *, unresolved_text: str, force: bool = False):
     from app.ai.document_intelligence.canonical.from_toon import job_profile_from_toon
     from app.ai.document_intelligence.models.job import JobProfile

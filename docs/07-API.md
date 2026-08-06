@@ -444,3 +444,15 @@ _Auto-generated on 2026-08-06 by `scripts/sync_docs_from_code.py`. Do not hand-e
 
 _Route count: 87. If a route is missing, ensure it uses `@blueprint.route` / `.get` / `.post` and the blueprint is registered in `create_app.py`._
 <!-- END:GENERATED-API-ROUTES -->
+Prefix: `/api/admin/developer` — **requires `DEVELOPER_MODE=true`** and `HEAD_HR` (`developer:performance`). Otherwise 404 / 403.
+| GET | `/api/admin/developer/status` | SPA flag (`enabled` only for Head HR when mode on) |
+| GET | `/api/admin/developer/performance/recent` | Latest timing sessions (filterable) |
+| GET | `/api/admin/developer/performance/request/<id>` | Full breakdown for one request |
+| GET | `/api/admin/developer/performance/stats` | Averages, p95, slowest/fastest, chart series |
+| GET | `/api/admin/developer/performance/export` | CSV export of timing events |
+| `developer_bp` | `/api/admin/developer` |
+| `GET` | `/api/admin/developer/performance/export` | `developer_bp` | `app/domains/administration/api/developer.py` |
+| `GET` | `/api/admin/developer/performance/recent` | `developer_bp` | `app/domains/administration/api/developer.py` |
+| `GET` | `/api/admin/developer/performance/request/<request_id>` | `developer_bp` | `app/domains/administration/api/developer.py` |
+| `GET` | `/api/admin/developer/performance/stats` | `developer_bp` | `app/domains/administration/api/developer.py` |
+| `GET` | `/api/admin/developer/status` | `developer_bp` | `app/domains/administration/api/developer.py` |

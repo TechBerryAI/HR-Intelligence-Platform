@@ -17,6 +17,8 @@ from typing import Any
 import requests
 from docx import Document
 
+from app.core.timing import timing
+
 logger = logging.getLogger(__name__)
 
 PARSING_API_URL = os.getenv('PARSING_API_URL', 'http://localhost:4000')
@@ -583,6 +585,7 @@ def _force_pdf_ocr(file_data: bytes, *, dpi: int = 300) -> str:
         doc.close()
 
 
+@timing
 def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> str:
     """
     Extract text from file based on extension.

@@ -4,10 +4,11 @@ import { useApp } from '@/core/context/AppContext.jsx'
 import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
 import ThemeToggle from '@/shared/components/ThemeToggle.jsx'
 import {
-  FiGrid, FiUsers, FiUser, FiBriefcase, FiLogOut, FiMenu, FiX, FiShield, FiSettings, FiBarChart2, FiLayers,
+  FiGrid, FiUsers, FiUser, FiBriefcase, FiLogOut, FiMenu, FiX, FiShield, FiSettings, FiBarChart2, FiLayers, FiActivity,
 } from 'react-icons/fi'
+import { useDeveloperMode } from '@/features/admin/hooks/useDeveloperMode.js'
 
-const headHrNav = [
+const headHrNavBase = [
   { label: 'Overview', path: '/head-hr', icon: FiGrid, end: true },
   { label: 'Admins', path: '/head-hr/admins', icon: FiUsers },
   { label: 'Candidates', path: '/head-hr/candidates', icon: FiUser },
@@ -37,6 +38,14 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const isCeoPanel = variant === 'ceo' || readOnly
+  const { enabled: developerModeEnabled } = useDeveloperMode()
+  const headHrNav = developerModeEnabled
+    ? [
+        ...headHrNavBase.slice(0, 6),
+        { label: 'Developer Mode', path: '/head-hr/developer', icon: FiActivity },
+        headHrNavBase[6],
+      ]
+    : headHrNavBase
   const navItems = isCeoPanel ? ceoNav : headHrNav
   const displayEmail = auth?.email
   const displayName = auth?.fullName || (isCeoPanel ? 'CEO' : 'Head of HR')

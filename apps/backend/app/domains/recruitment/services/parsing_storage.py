@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, Tuple
 
 from app.ai.toon.runtime import toon_dumps, toon_loads_flex
 from app.core import media_storage
+from app.core.timing import timing
 from datetime import datetime
 
 # Back-compat: callers/tests may read UPLOAD_FOLDER; maps to MEDIA_ROOT/uploads
@@ -159,6 +160,7 @@ def validate_toon_format_bulk(
     return True, error_msg or 'Partial validation', 'partial'
 
 
+@timing
 def store_raw_file(
     uploader_id: str,
     uploader_role: str,

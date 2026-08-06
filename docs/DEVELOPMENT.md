@@ -203,3 +203,17 @@ Run all AI tests: `cd ai && pytest`
 | AI tests need Ollama | Proposal tests use mock runtime; runtime tests mock Ollama HTTP |
 
 More: [README.md](../README.md#troubleshooting)
+
+### Developer Mode (Admin performance dashboard)
+
+```bash
+# apps/backend/.env — enables collector + Admin APIs (restart required)
+DEVELOPER_MODE=true
+# optional: DEVELOPER_MODE_MAX_SESSIONS=500
+```
+
+1. Restart the backend after setting the flag.
+2. Log in as **Head of HR** → **Settings** → turn on **Developer Mode**.
+3. Sidebar shows **Developer Mode** → Performance Dashboard.
+
+Recruiters and CEO never see the toggle or nav. When `DEVELOPER_MODE=false`, the Settings toggle is disabled and APIs stay off (only `[TIMING]` INFO logs).
