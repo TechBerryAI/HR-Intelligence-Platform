@@ -23,6 +23,7 @@ const PERMISSIONS = {
   'bulk_parse:read_all': new Set([ROLES.CEO, ROLES.HEAD_HR]),
   'bulk_parse:read_own': new Set([ROLES.RECRUITER, ROLES.HEAD_HR, ROLES.CEO]),
   'settings:configure': new Set([ROLES.HEAD_HR]),
+  'developer:performance': new Set([ROLES.HEAD_HR]),
 }
 
 export function getRole(auth) {

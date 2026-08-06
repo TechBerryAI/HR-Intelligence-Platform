@@ -32,6 +32,7 @@ from app.domains.recruitment.services.job_delete import cascade_delete_job
 from app.domains.recruitment.services.ats_service import match_candidate_to_job, sync_application_match_score
 from app.domains.recruitment.services.company_scope import companies_related
 from app.domains.integrations.events import emit_job_closed, emit_job_created, emit_job_updated
+from app.core.timing import timing
 
 jobs_bp = Blueprint('jobs', __name__)
 
@@ -963,6 +964,7 @@ def _parse_json_field(raw, default=None):
 
 
 @jobs_bp.post('/<string:job_id>/apply')
+@timing
 def public_apply_to_job(job_id: str):
     """
     Public apply (no account): multipart form with profile fields + resume.

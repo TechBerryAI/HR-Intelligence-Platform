@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
+import { isHeadHr } from '@/core/permissions/rbac.js'
 import { useTheme } from '@/core/context/ThemeContext.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import IntegrationsSettingsPanel from '@/features/settings/components/IntegrationsSettingsPanel.jsx'
+import DeveloperModeToggle from '@/features/admin/components/DeveloperModeToggle.jsx'
 import ErrorBoundary from '@/shared/components/ErrorBoundary.jsx'
 import { motion } from 'framer-motion'
 import { FiShield, FiLock, FiCheck, FiAlertCircle, FiX, FiGrid, FiSettings } from 'react-icons/fi'
@@ -15,7 +17,7 @@ import { PASSWORD_RULES, isPasswordStrong } from '@/shared/utils/passwordValidat
  * When omitted, follows global Dark/Light toggle (`surfaceTheme`).
  */
 export default function Settings({ theme }) {
-  const { changePasswordHr } = useApp()
+  const { changePasswordHr, auth } = useApp()
   const { surfaceTheme } = useTheme()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = (searchParams.get('tab') || '').toLowerCase()
@@ -28,6 +30,7 @@ export default function Settings({ theme }) {
   const [message, setMessage] = useState({ type: '', text: '' })
 
   const enterprise = (theme || surfaceTheme) === 'enterprise'
+  const showDeveloperToggle = isHeadHr(auth)
   const changePassword = changePasswordHr
 
   useEffect(() => {
@@ -293,6 +296,18 @@ export default function Settings({ theme }) {
           </div>
         </motion.section>
       )}
+
+
+      {tab === 'security' && showDeveloperToggle ? (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="mt-6"
+        >
+          <DeveloperModeToggle enterprise={enterprise} />
+        </motion.div>
+      ) : null}
 
       {tab === 'integrations' && (
         <motion.section

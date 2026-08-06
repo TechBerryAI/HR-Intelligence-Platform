@@ -28,6 +28,7 @@ from app.ai.parser.engine.hardware import apply_hardware_env, detect_hardware_pr
 from app.ai.parser.engine.progress import complete_parse_job, create_parse_job, emit_stage
 from app.ai.parser.engine.sections import unresolved_semantic_text
 from app.ai.parser.engine.types import StageCallback, StageEvent
+from app.core.timing import timing
 from app.domains.recruitment.services.parsing_storage import (
     collect_toon_validation_issues,
     compute_file_hash,
@@ -129,7 +130,39 @@ def _emit(
         except Exception:
             pass
 
+    # Developer Mode: record per-stage duration for the Performance Dashboard
+    try:
+        from app.core.developer_mode import is_developer_mode_enabled
+        from app.core.request_context import mark_pipeline_stage_start, take_pipeline_stage_elapsed_ms
+        from app.core.timing_collector import make_timing_event, timing_collector
 
+        if not is_developer_mode_enabled() or not stage:
+            return
+        status_l = (status or '').lower()
+        if status_l == 'started':
+            mark_pipeline_stage_start(stage)
+            return
+        if status_l not in ('completed', 'failed', 'skipped'):
+            return
+        elapsed = take_pipeline_stage_elapsed_ms(stage)
+        if elapsed is None:
+            elapsed = 0.0
+        timing_collector.record(
+            make_timing_event(
+                function=stage,
+                module='app.ai.document_intelligence.pipeline',
+                duration_ms=elapsed,
+                success=status_l != 'failed',
+                exception_name='StageFailed' if status_l == 'failed' else None,
+                depth=2,
+                outcome=status_l,
+            )
+        )
+    except Exception:
+        pass
+
+
+@timing
 def run_document_intelligence(
     doc_type: str,
     file_data: bytes,
@@ -239,13 +272,38 @@ def run_jd_parse_pipeline(
 
 
 def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None):
-    """In-memory resume parse for tests / gold (no DB)."""
+    """In-memory resume parse for tests / gold / bulk (no DB)."""
+    import time as _time
+
+    from app.core.timing_collector import record_pipeline_stage
+
     profile_hw = detect_hardware_profile()
     workers = max_workers or min(4, max(1, profile_hw.cpu_count // 2))
+
+    t0 = _time.perf_counter()
     sections = detect_sections(text, 'resume')
+    record_pipeline_stage(
+        'sections',
+        'completed',
+        duration_ms=(_time.perf_counter() - t0) * 1000.0,
+        module='app.ai.document_intelligence.pipeline',
+    )
+
+    t0 = _time.perf_counter()
     profile = parse_resume_from_sections(sections, text, max_workers=workers)
+    record_pipeline_stage(
+        'deterministic',
+        'completed',
+        duration_ms=(_time.perf_counter() - t0) * 1000.0,
+        module='app.ai.document_intelligence.pipeline',
+    )
+
+    t0 = _time.perf_counter()
     profile = apply_knowledge_to_candidate(profile)
+    knowledge_ms = (_time.perf_counter() - t0) * 1000.0
+
     if not _SKIP_LLM:
+        t0 = _time.perf_counter()
         unresolved = unresolved_semantic_text(sections, 'resume') or text
         profile = enrich_resume_semantic(
             profile,
@@ -253,12 +311,21 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
             allow_experience_fill=bool(profile.experience),
         )
         profile = sanitize_candidate_profile(profile)
+        record_pipeline_stage(
+            'semantic',
+            'completed',
+            duration_ms=(_time.perf_counter() - t0) * 1000.0,
+            module='app.ai.document_intelligence.pipeline',
+        )
+        t0 = _time.perf_counter()
         profile = apply_knowledge_to_candidate(profile)
+        knowledge_ms += (_time.perf_counter() - t0) * 1000.0
     else:
         # Gate: only call AI if critical gaps (fresher OK with education+skills)
         has_id = bool(profile.personal.full_name and profile.contact.email)
         has_body = bool(profile.skills and (profile.experience or profile.education))
         if not (has_id and has_body):
+            t0 = _time.perf_counter()
             unresolved = unresolved_semantic_text(sections, 'resume') or text
             profile = enrich_resume_semantic(
                 profile,
@@ -266,7 +333,30 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
                 allow_experience_fill=bool(profile.experience),
             )
             profile = sanitize_candidate_profile(profile)
+            record_pipeline_stage(
+                'semantic',
+                'completed',
+                duration_ms=(_time.perf_counter() - t0) * 1000.0,
+                module='app.ai.document_intelligence.pipeline',
+            )
+            t0 = _time.perf_counter()
             profile = apply_knowledge_to_candidate(profile)
+            knowledge_ms += (_time.perf_counter() - t0) * 1000.0
+        else:
+            record_pipeline_stage(
+                'semantic',
+                'skipped',
+                duration_ms=0.0,
+                module='app.ai.document_intelligence.pipeline',
+            )
+
+    record_pipeline_stage(
+        'knowledge',
+        'completed',
+        duration_ms=knowledge_ms,
+        module='app.ai.document_intelligence.pipeline',
+    )
+
     form = map_candidate_to_form(profile)
     toon = candidate_to_toon(profile)
     return profile, form, toon
@@ -337,6 +427,7 @@ def _cache_hit_response(
     return body, 200
 
 
+@timing
 def _run_resume(
     file_data: bytes,
     filename: str,
@@ -533,6 +624,7 @@ def _run_resume(
     }, 200
 
 
+@timing
 def _run_jd(
     file_data: bytes,
     filename: str,

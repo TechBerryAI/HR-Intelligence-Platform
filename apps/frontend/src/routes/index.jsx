@@ -33,6 +33,7 @@ const HeadHrBulkParsing = lazy(() => import('@/features/organization/pages/head-
 const Settings = lazy(() => import('@/features/settings/pages/Settings.jsx'))
 const IntegrationsDashboard = lazy(() => import('@/features/dashboard/pages/IntegrationsDashboard.jsx'))
 const HeadHrIntegrations = lazy(() => import('@/features/organization/pages/head-hr/HeadHrIntegrations.jsx'))
+const PerformanceDashboard = lazy(() => import('@/features/admin/pages/admin/PerformanceDashboard.jsx'))
 const CeoDashboard = lazy(() => import('@/features/organization/pages/ceo/CeoDashboard.jsx'))
 const ResumeAutofillHarness = lazy(() => import('@/features/validation/ResumeAutofillHarness.jsx'))
 
@@ -86,6 +87,7 @@ export default function AppRoutes() {
       <Route path="/head-hr/jobs/:jdid" element={<HeadHrGuard><HeadHrJobDetail /></HeadHrGuard>} />
       <Route path="/head-hr/bulk-parsing" element={<HeadHrGuard><HeadHrBulkParsing /></HeadHrGuard>} />
       <Route path="/head-hr/integrations" element={<HeadHrGuard><HeadHrIntegrations /></HeadHrGuard>} />
+      <Route path="/head-hr/developer" element={<HeadHrGuard><PerformanceDashboard /></HeadHrGuard>} />
       <Route path="/head-hr/settings" element={<HeadHrGuard><HeadHrSettings /></HeadHrGuard>} />
       <Route path="*" element={<NotFound />} />
     </Routes>

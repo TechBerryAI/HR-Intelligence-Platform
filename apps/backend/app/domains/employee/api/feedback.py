@@ -28,13 +28,6 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
 
-def _feedback_upload_dir():
-    base = os.getenv('UPLOAD_FOLDER', './uploads')
-    path = os.path.join(base, 'feedback')
-    os.makedirs(path, exist_ok=True)
-    return path
-
-
 def _allowed_file(filename):
     if not filename or '.' not in filename:
         return False
@@ -125,12 +118,10 @@ def submit_feedback():
                 return jsonify({"error": "Screenshot must be under 5MB"}), 400
             ext = screenshot_file.filename.rsplit('.', 1)[1].lower()
             safe_name = f"{uuid.uuid4().hex}.{ext}"
-            upload_dir = _feedback_upload_dir()
-            file_path = os.path.join(upload_dir, safe_name)
-            with open(file_path, 'wb') as f:
-                f.write(blob)
-            # Store relative path for portability (e.g. feedback/filename.ext)
-            screenshot_path = os.path.join('feedback', safe_name)
+            from app.core import media_storage
+            key = media_storage.put(f'feedback/{safe_name}', blob)
+            # Store media key (portable across MEDIA_ROOT moves)
+            screenshot_path = key
 
         # Insert
         if BACKEND == "postgresql":
