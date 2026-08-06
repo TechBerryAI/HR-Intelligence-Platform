@@ -142,6 +142,7 @@ def create_app() -> Flask:
     from app.domains.recruitment.api.jobs import jobs_bp  # noqa: E402
     from app.domains.recruitment.api.parsing import parsing_bp  # noqa: E402
     from app.domains.support.api.routes import support_bp  # noqa: E402
+    from app.domains.integrations.api.routes import integrations_bp  # noqa: E402
 
     print("[DB] Initializing database at startup...")
     _db_host = os.getenv('POSTGRES_HOST', os.getenv('PGHOST', 'localhost'))
@@ -180,6 +181,7 @@ def create_app() -> Flask:
             "endpoints": [
                 "/health", "/api", "/api/jobs", "/api/candidate",
                 "/api/applications", "/api/sessions", "/api/admin",
+                "/api/integrations",
             ],
         })
 
@@ -219,5 +221,13 @@ def create_app() -> Flask:
     app.register_blueprint(feedback_bp, url_prefix='/api/feedback')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(head_hr_bp, url_prefix='/api/head-hr')
+    app.register_blueprint(integrations_bp, url_prefix='/api/integrations')
+
+    try:
+        from app.domains.integrations.bootstrap import init_integrations
+        init_integrations()
+        print("[INTEGRATIONS] Framework initialized")
+    except Exception as e:
+        print(f"[INTEGRATIONS] Init warning: {e}")
 
     return app

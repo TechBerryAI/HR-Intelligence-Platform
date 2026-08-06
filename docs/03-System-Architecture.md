@@ -95,6 +95,7 @@ flowchart TB
 | feedback | `/api/feedback` |
 | admin | `/api/admin` |
 | head_hr | `/api/head-hr` |
+| integrations | `/api/integrations` |
 
 ---
 
@@ -108,9 +109,11 @@ flowchart LR
   administration[administration]
   employee[employee]
   support[support]
+  integrations[integrations]
   identity --> recruitment
   candidate --> recruitment
   administration --> recruitment
+  recruitment -->|lifecycle events| integrations
 ```
 
 ---
@@ -124,6 +127,10 @@ flowchart LR
 | Email | `app/integrations/email/` |
 | LLM | `app/integrations/openai/llm_service.py` |
 | ATS | `app/domains/recruitment/services/ats_service.py` |
+| Job-board integrations | `app/domains/integrations/` (provider plugins, queue, REST `/api/integrations`) |
+
+**Current:** Built-in adapters — LinkedIn and Naukri only (staging external IDs `LI-…` / `NK-…` until partner APIs). Custom platforms via Settings → **Add platform** (name, API Base URL, endpoint paths, credentials); `GenericHttpProvider` performs real HTTP test/publish/update/close/sync. Synced board applications land in `external_applications` (not forced into HCIP `applications` yet). Auto-sync background tick for HTTP providers with `auto_sync`.  
+**Future:** Official OAuth SDKs for LinkedIn/Naukri; map `external_applications` into ATS when email/job match rules exist.
 
 ---
 

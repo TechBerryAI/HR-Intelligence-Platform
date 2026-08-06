@@ -45,6 +45,8 @@ Public apply is **passwordless**. Identity is established via validated email + 
 
 JWT secret, mail credentials, LLM keys via environment — never commit.
 
+**Integration provider credentials** (client secret, access/refresh tokens) are encrypted at rest with Fernet (`INTEGRATION_SECRETS_KEY`, or derived from `JWT_SECRET` in local dev). API responses never return plaintext secrets (masked / `*Configured` flags only).
+
 ---
 
 ## Authorization

@@ -7,7 +7,9 @@ import AnimatedContainer from '@/shared/components/AnimatedContainer.jsx'
 import JobDescriptionView from '@/shared/components/JobDescriptionView.jsx'
 import { Card } from '@/shared/components/ui/index.js'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiTrash2, FiEye } from 'react-icons/fi'
+import { FiBriefcase, FiMapPin, FiClock, FiEdit2, FiX, FiCheck, FiAlertCircle, FiTrash2, FiEye, FiShare2 } from 'react-icons/fi'
+import { publishJobToProviders } from '@/features/settings/services/integrationsApi.js'
+import ProviderBrandIcon from '@/features/integrations/components/ProviderBrandIcon.jsx'
 
 const formatDisplayDate = (dateString) => {
   if (!dateString) return ''
@@ -37,6 +39,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
   const [error, setError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [togglingJobId, setTogglingJobId] = useState(null)
+  const [publishingJobId, setPublishingJobId] = useState(null)
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [deleting, setDeleting] = useState(null)
   const [showPreview, setShowPreview] = useState(false)
@@ -105,6 +108,26 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
     } finally {
       setDeleting(null)
       setConfirmDelete(null)
+    }
+  }
+
+  const handlePublishExternal = async (job, providers) => {
+    const jobId = job.id || job.jdid
+    if (!jobId) return
+    setPublishingJobId(jobId)
+    setError('')
+    try {
+      await publishJobToProviders(jobId, providers)
+      setSuccess(
+        providers?.length === 1
+          ? `Queued publish to ${providers[0]}`
+          : 'Queued publish to enabled providers'
+      )
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (e) {
+      setError(e.message || 'Failed to queue publish')
+    } finally {
+      setPublishingJobId(null)
     }
   }
 
@@ -279,12 +302,28 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                 animate={{ opacity: 1, scale: 1 }}
                 className={`border px-5 py-4 rounded-xl flex items-center gap-3 ${
                   embedded
-                    ? 'border-[rgba(54,214,160,0.3)] bg-[rgba(54,214,160,0.1)]'
+                    ? ''
                     : 'border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10'
                 }`}
+                style={
+                  embedded
+                    ? {
+                        borderColor: 'var(--ei-tone-success-border)',
+                        background: 'var(--ei-tone-success-bg)',
+                      }
+                    : undefined
+                }
               >
-                <FiCheck className={`w-5 h-5 flex-shrink-0 ${embedded ? 'text-[#36D6A0]' : 'text-emerald-600 dark:text-emerald-400'}`} />
-                <span className={`text-sm font-medium ${embedded ? 'text-[#9AE6C8]' : 'text-emerald-700 dark:text-emerald-300'}`}>{success}</span>
+                <FiCheck
+                  className={`w-5 h-5 flex-shrink-0 ${embedded ? '' : 'text-emerald-600 dark:text-emerald-400'}`}
+                  style={embedded ? { color: 'var(--ei-tone-success)' } : undefined}
+                />
+                <span
+                  className={`text-sm font-medium ${embedded ? '' : 'text-emerald-700 dark:text-emerald-300'}`}
+                  style={embedded ? { color: 'var(--ei-tone-success)' } : undefined}
+                >
+                  {success}
+                </span>
               </motion.div>
             )}
             {error && (
@@ -293,12 +332,28 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                 animate={{ opacity: 1, scale: 1 }}
                 className={`border px-5 py-4 rounded-xl flex items-center gap-3 ${
                   embedded
-                    ? 'border-[rgba(255,102,133,0.3)] bg-[rgba(255,102,133,0.1)]'
+                    ? ''
                     : 'border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10'
                 }`}
+                style={
+                  embedded
+                    ? {
+                        borderColor: 'var(--ei-tone-danger-border)',
+                        background: 'var(--ei-tone-danger-bg)',
+                      }
+                    : undefined
+                }
               >
-                <FiAlertCircle className={`w-5 h-5 flex-shrink-0 ${embedded ? 'text-[#FF6685]' : 'text-red-600 dark:text-red-400'}`} />
-                <span className={`text-sm font-medium ${embedded ? 'text-[#FF8FA3]' : 'text-red-700 dark:text-red-300'}`}>{error}</span>
+                <FiAlertCircle
+                  className={`w-5 h-5 flex-shrink-0 ${embedded ? '' : 'text-red-600 dark:text-red-400'}`}
+                  style={embedded ? { color: 'var(--ei-tone-danger)' } : undefined}
+                />
+                <span
+                  className={`text-sm font-medium ${embedded ? '' : 'text-red-700 dark:text-red-300'}`}
+                  style={embedded ? { color: 'var(--ei-tone-danger)' } : undefined}
+                >
+                  {error}
+                </span>
               </motion.div>
             )}
 
@@ -507,6 +562,43 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                         >
                           Edit
                         </PremiumButton>
+                        <PremiumButton
+                          variant="secondary"
+                          size="sm"
+                          icon={FiShare2}
+                          disabled={publishingJobId === (job.id || job.jdid)}
+                          onClick={() => handlePublishExternal(job)}
+                          className={embedded ? '!bg-white/[0.05] !border-[var(--ei-border-primary)] !text-[var(--ei-text-primary)] hover:!bg-white/[0.09]' : ''}
+                          title="Publish to all enabled providers"
+                        >
+                          {publishingJobId === (job.id || job.jdid) ? '…' : 'Publish'}
+                        </PremiumButton>
+                        <button
+                          type="button"
+                          onClick={() => handlePublishExternal(job, ['linkedin'])}
+                          className={`inline-flex items-center justify-center px-2 py-1.5 rounded-lg border ${
+                            embedded
+                              ? 'text-[var(--ei-text-secondary)] border-[var(--ei-border-primary)] hover:bg-white/[0.05]'
+                              : 'text-slate-600 border-slate-200 dark:border-slate-600'
+                          }`}
+                          title="Publish to LinkedIn"
+                          aria-label="Publish to LinkedIn"
+                        >
+                          <ProviderBrandIcon provider="linkedin" className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePublishExternal(job, ['naukri'])}
+                          className={`inline-flex items-center justify-center px-2 py-1.5 rounded-lg border ${
+                            embedded
+                              ? 'text-[var(--ei-text-secondary)] border-[var(--ei-border-primary)] hover:bg-white/[0.05]'
+                              : 'text-slate-600 border-slate-200 dark:border-slate-600'
+                          }`}
+                          title="Publish to Naukri"
+                          aria-label="Publish to Naukri"
+                        >
+                          <ProviderBrandIcon provider="naukri" className="w-4 h-4" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => setConfirmDelete(job)}

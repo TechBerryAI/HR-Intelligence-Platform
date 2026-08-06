@@ -31,26 +31,34 @@ export default function ScoreCard({ factorName, scorePct, weightPct, variant = '
   if (enterprise) {
     return (
       <div
-        className="rounded-[14px] border border-white/[0.07] bg-white/[0.03] p-[18px] transition-all duration-[180ms] hover:bg-white/[0.045] hover:-translate-y-px"
+        className="rounded-[14px] border border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)] p-[18px] transition-all duration-[180ms] hover:border-[var(--ei-border-hover)] hover:-translate-y-px"
         role="article"
         aria-label={`${factorName}: ${score}%`}
       >
         <div className="flex items-baseline justify-between gap-2 mb-1.5">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-sm font-medium text-[#DCE3EA] truncate">{factorName}</span>
+            <span className="text-sm font-medium text-[var(--ei-text-primary)] truncate">{factorName}</span>
             {badge && (
-              <span className="flex-shrink-0 text-[9px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-full bg-[rgba(255,93,115,0.1)] border border-[rgba(255,93,115,0.22)] text-[#FF788B]">
+              <span
+                className="flex-shrink-0 text-[9px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded-full border"
+                style={{
+                  background: 'var(--ei-tone-danger-bg)',
+                  borderColor: 'var(--ei-tone-danger-border)',
+                  color: 'var(--ei-tone-danger)',
+                }}
+              >
                 {badge}
               </span>
             )}
           </div>
-          <span className="flex-shrink-0 text-[22px] font-bold tabular-nums text-[#F7FAFC] leading-none">{score}%</span>
+          <span className="flex-shrink-0 text-[22px] font-bold tabular-nums text-[var(--ei-text-primary)] leading-none">{score}%</span>
         </div>
         {subtitle && (
-          <p className="text-xs text-[#758596] mb-3 line-clamp-2">{subtitle}</p>
+          <p className="text-xs text-[var(--ei-text-muted)] mb-3 line-clamp-2">{subtitle}</p>
         )}
         <div
-          className="h-1.5 rounded-full bg-white/[0.08] overflow-hidden"
+          className="h-1.5 rounded-full overflow-hidden"
+          style={{ background: 'var(--ei-border-primary)' }}
           role="progressbar"
           aria-valuenow={score}
           aria-valuemin={0}

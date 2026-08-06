@@ -68,6 +68,7 @@ There is **no** candidate login required for the core apply path (passwordless a
 | `/api/feedback` | `feedback_bp` | `employee` |
 | `/api/admin` | `admin_bp` | `administration` |
 | `/api/head-hr` | `head_hr_bp` | `administration` |
+| `/api/integrations` | `integrations_bp` | `integrations` (job-board framework) |
 
 **Not registered:** interview scheduling / AI interview session blueprints (tables may exist as scaffolds).
 
@@ -155,6 +156,58 @@ Prefix: `/api/applications`
 | Method | Path | Purpose |
 |--------|------|---------|
 | POST | `/api/applications/ats/result` | Optional external ATS / n8n callback |
+
+---
+
+## Staff API — Integrations
+
+Prefix: `/api/integrations` (`integrations_bp`) — company-scoped via `company_key`
+
+**Current:** Built-ins `linkedin` / `naukri` (staging IDs until partner APIs). Custom platforms: any slug `[a-z0-9_]+` except reserved builtins; `settings_json.adapter = "http"` with `baseUrl` + `endpoints`. Secrets encrypted and masked in responses. HTTP adapters publish/sync via `GenericHttpProvider`; synced candidates stored in `external_applications`.
+
+**Custom platform `POST /provider` body (required):** `name` or `provider` slug; `baseUrl` (or `settings.baseUrl`); credentials (`accessToken` and/or `clientId`+`clientSecret`). Optional: `settings.endpoints` (`test`, `publish`, `update`, `close`, `applications`, `status` as `"METHOD /path"` with `{externalJobId}`), `custom: true`, toggles.
+
+**`settings_json` contract (custom HTTP):**
+
+```json
+{
+  "adapter": "http",
+  "displayName": "Glassdoor",
+  "baseUrl": "https://api.example.com",
+  "authHeader": "Bearer",
+  "endpoints": {
+    "test": "GET /health",
+    "publish": "POST /jobs",
+    "update": "PUT /jobs/{externalJobId}",
+    "close": "POST /jobs/{externalJobId}/close",
+    "applications": "GET /jobs/{externalJobId}/applications",
+    "status": "GET /jobs/{externalJobId}"
+  }
+}
+```
+
+| Method | Path | Purpose | Auth |
+|--------|------|---------|------|
+| GET | `/api/integrations/` | Summary + provider catalog | Staff JWT |
+| GET | `/api/integrations/providers` | Built-ins + company custom platforms | Staff JWT |
+| GET | `/api/integrations/provider/<provider>` | One provider config (masked) | Staff JWT |
+| POST | `/api/integrations/provider` | Create/upsert (builtins or custom HTTP) | Head HR |
+| PUT | `/api/integrations/provider/<provider>` | Update config / toggles / HTTP settings | Head HR |
+| DELETE | `/api/integrations/provider/<provider_or_id>` | Delete config | Head HR |
+| POST | `/api/integrations/provider/<provider>/connect` | Mark connected | Head HR |
+| POST | `/api/integrations/provider/<provider>/disconnect` | Clear tokens / disconnect | Head HR |
+| POST | `/api/integrations/provider/<provider>/test` | Test connection (HTTP or builtin staging) | Staff write roles |
+| POST | `/api/integrations/provider/<provider>/sync` | Sync applications → `external_applications` | Head HR / write roles |
+| POST | `/api/integrations/publish/<jobId>` | Manual publish (`providers` optional) | Recruiter / Head HR |
+| POST | `/api/integrations/republish/<jobId>` | Republish | Recruiter / Head HR |
+| POST | `/api/integrations/retry/<externalJobId>` | Retry failed/dead mapping | Recruiter / Head HR |
+| GET | `/api/integrations/jobs` | External job mappings | Staff JWT |
+| GET | `/api/integrations/applications` | Synced external applications | Staff JWT |
+| GET | `/api/integrations/logs` | Sync logs | Staff JWT |
+| GET | `/api/integrations/status` | Published / pending / failed counts | Staff JWT |
+| GET | `/api/integrations/dashboard` | Dashboard aggregate | Staff JWT |
+
+**Future:** OAuth connect flows and official LinkedIn/Naukri APIs — same paths.
 
 ---
 
@@ -263,7 +316,7 @@ python scripts/sync_docs_from_code.py
 ```
 
 <!-- BEGIN:GENERATED-API-ROUTES -->
-_Auto-generated on 2026-08-03 by `scripts/sync_docs_from_code.py`. Do not hand-edit this block._
+_Auto-generated on 2026-08-05 by `scripts/sync_docs_from_code.py`. Do not hand-edit this block._
 
 ### Registered blueprints
 
@@ -276,6 +329,7 @@ _Auto-generated on 2026-08-03 by `scripts/sync_docs_from_code.py`. Do not hand-e
 | `candidate_bp` | `/api/candidate` |
 | `feedback_bp` | `/api/feedback` |
 | `head_hr_bp` | `/api/head-hr` |
+| `integrations_bp` | `/api/integrations` |
 | `jobs_bp` | `/api/jobs` |
 | `sessions_bp` | `/api/sessions` |
 | `support_bp` | `/api/support` |
@@ -315,6 +369,24 @@ _Auto-generated on 2026-08-03 by `scripts/sync_docs_from_code.py`. Do not hand-e
 | `GET` | `/api/head-hr/jobs/<jdid>` | `head_hr_bp` | `app/domains/administration/api/head_hr.py` |
 | `OPTIONS` | `/api/head-hr/jobs/<jdid>` | `head_hr_bp` | `app/domains/administration/api/head_hr.py` |
 | `GET` | `/api/head-hr/stats` | `head_hr_bp` | `app/domains/administration/api/head_hr.py` |
+| `GET` | `/api/integrations/` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `GET` | `/api/integrations/applications` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `GET` | `/api/integrations/dashboard` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `GET` | `/api/integrations/jobs` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `GET` | `/api/integrations/logs` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `POST` | `/api/integrations/provider` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `GET` | `/api/integrations/provider/<string:provider>` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `PUT` | `/api/integrations/provider/<string:provider>` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `POST` | `/api/integrations/provider/<string:provider>/connect` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `POST` | `/api/integrations/provider/<string:provider>/disconnect` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `POST` | `/api/integrations/provider/<string:provider>/sync` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `POST` | `/api/integrations/provider/<string:provider>/test` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `DELETE` | `/api/integrations/provider/<string:provider_or_id>` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `GET` | `/api/integrations/providers` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `POST` | `/api/integrations/publish/<string:job_id>` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `POST` | `/api/integrations/republish/<string:job_id>` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `POST` | `/api/integrations/retry/<int:external_job_id>` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
+| `GET` | `/api/integrations/status` | `integrations_bp` | `app/domains/integrations/api/routes.py` |
 | `GET` | `/api/jobs/` | `jobs_bp` | `app/domains/recruitment/api/jobs.py` |
 | `POST` | `/api/jobs/` | `jobs_bp` | `app/domains/recruitment/api/jobs.py` |
 | `DELETE` | `/api/jobs/<string:job_id>` | `jobs_bp` | `app/domains/recruitment/api/jobs.py` |
@@ -330,8 +402,11 @@ _Auto-generated on 2026-08-03 by `scripts/sync_docs_from_code.py`. Do not hand-e
 | `POST` | `/api/login` | `auth_bp` | `app/domains/identity/api/hr_auth.py` |
 | `POST` | `/api/logout` | `auth_bp` | `app/domains/identity/api/hr_auth.py` |
 | `POST` | `/api/parse/jd` | `parsing_bp` | `app/domains/recruitment/api/parsing.py` |
+| `POST` | `/api/parse/jd/stream` | `parsing_bp` | `app/domains/recruitment/api/parsing.py` |
+| `GET` | `/api/parse/jobs/<job_id>/progress` | `parsing_bp` | `app/domains/recruitment/api/parsing.py` |
 | `POST` | `/api/parse/resume` | `parsing_bp` | `app/domains/recruitment/api/parsing.py` |
 | `POST` | `/api/parse/resume/public` | `parsing_bp` | `app/domains/recruitment/api/parsing.py` |
+| `POST` | `/api/parse/resume/public/stream` | `parsing_bp` | `app/domains/recruitment/api/parsing.py` |
 | `GET` | `/api/parsed/jd/<parsed_id>` | `parsing_bp` | `app/domains/recruitment/api/parsing.py` |
 | `GET` | `/api/parsed/resume/<parsed_id>` | `parsing_bp` | `app/domains/recruitment/api/parsing.py` |
 | `POST` | `/api/refresh` | `auth_bp` | `app/domains/identity/api/hr_auth.py` |
@@ -349,5 +424,5 @@ _Auto-generated on 2026-08-03 by `scripts/sync_docs_from_code.py`. Do not hand-e
 | `POST` | `/api/support/submit` | `support_bp` | `app/domains/support/api/routes.py` |
 | `POST` | `/api/verify-otp` | `auth_bp` | `app/domains/identity/api/hr_auth.py` |
 
-_Route count: 64. If a route is missing, ensure it uses `@blueprint.route` / `.get` / `.post` and the blueprint is registered in `create_app.py`._
+_Route count: 85. If a route is missing, ensure it uses `@blueprint.route` / `.get` / `.post` and the blueprint is registered in `create_app.py`._
 <!-- END:GENERATED-API-ROUTES -->

@@ -31,6 +31,8 @@ const HeadHrJobDetail = lazy(() => import('@/features/organization/pages/head-hr
 const HeadHrSettings = lazy(() => import('@/features/organization/pages/head-hr/HeadHrSettings.jsx'))
 const HeadHrBulkParsing = lazy(() => import('@/features/organization/pages/head-hr/HeadHrBulkParsing.jsx'))
 const Settings = lazy(() => import('@/features/settings/pages/Settings.jsx'))
+const IntegrationsDashboard = lazy(() => import('@/features/dashboard/pages/IntegrationsDashboard.jsx'))
+const HeadHrIntegrations = lazy(() => import('@/features/organization/pages/head-hr/HeadHrIntegrations.jsx'))
 const CeoDashboard = lazy(() => import('@/features/organization/pages/ceo/CeoDashboard.jsx'))
 const ResumeAutofillHarness = lazy(() => import('@/features/validation/ResumeAutofillHarness.jsx'))
 
@@ -70,6 +72,7 @@ export default function AppRoutes() {
       <Route path="/ceo/jobs" element={<CeoGuard><HeadHrJobs /></CeoGuard>} />
       <Route path="/ceo/jobs/:jdid" element={<CeoGuard><HeadHrJobDetail /></CeoGuard>} />
       <Route path="/settings" element={<StaffSettingsRoute><Settings /></StaffSettingsRoute>} />
+      <Route path="/integrations" element={<StaffSettingsRoute><IntegrationsDashboard /></StaffSettingsRoute>} />
       <Route path="/admin/bulk-resume-parser" element={<RecruiterGuard><BulkResumeParser /></RecruiterGuard>} />
       <Route path="/admin/feedback" element={<RecruiterGuard><FeedbackAdmin /></RecruiterGuard>} />
       <Route path="/head-hr" element={<HeadHrGuard><HeadHrDashboard /></HeadHrGuard>} />
@@ -82,6 +85,7 @@ export default function AppRoutes() {
       <Route path="/head-hr/jobs" element={<HeadHrGuard><HeadHrJobs /></HeadHrGuard>} />
       <Route path="/head-hr/jobs/:jdid" element={<HeadHrGuard><HeadHrJobDetail /></HeadHrGuard>} />
       <Route path="/head-hr/bulk-parsing" element={<HeadHrGuard><HeadHrBulkParsing /></HeadHrGuard>} />
+      <Route path="/head-hr/integrations" element={<HeadHrGuard><HeadHrIntegrations /></HeadHrGuard>} />
       <Route path="/head-hr/settings" element={<HeadHrGuard><HeadHrSettings /></HeadHrGuard>} />
       <Route path="*" element={<NotFound />} />
     </Routes>

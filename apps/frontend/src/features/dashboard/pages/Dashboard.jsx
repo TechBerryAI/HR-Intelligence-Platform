@@ -3,6 +3,7 @@ import { useApp } from '@/core/context/AppContext.jsx'
 import AnimatedContainer from '@/shared/components/AnimatedContainer.jsx'
 import { PageContainer } from '@/shared/components/PageContainer.jsx'
 import RecruiterJobDashboard from '@/features/dashboard/components/recruiter/RecruiterJobDashboard.jsx'
+import ExternalPublishingSection from '@/features/dashboard/components/ExternalPublishingSection.jsx'
 import { FiBriefcase, FiLayers } from 'react-icons/fi'
 
 function EnterpriseStatCard({ title, value, subtitle, icon: Icon }) {
@@ -50,6 +51,8 @@ export default function Dashboard() {
           <EnterpriseStatCard title="Active" value={activeJobs} subtitle="Currently visible" icon={FiLayers} />
         </div>
       </AnimatedContainer>
+
+      <ExternalPublishingSection />
 
       {/* Match Head HR enterprise glass surfaces */}
       <RecruiterJobDashboard embedded />

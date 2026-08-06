@@ -15,7 +15,8 @@ function isEnterpriseAppPath(pathname) {
     pathname.startsWith('/dashboard') ||
     pathname.startsWith('/candidates') ||
     pathname.startsWith('/admin') ||
-    pathname.startsWith('/settings')
+    pathname.startsWith('/settings') ||
+    pathname.startsWith('/integrations')
   )
 }
 

@@ -62,9 +62,16 @@ gantt
 - Recruiter / Head HR / CEO portals
 - Bulk resume parsing
 - JWT staff auth
+- Provider-agnostic Integration Framework (company-scoped credentials, LinkedIn/Naukri builtins + custom HTTP platforms, async publish queue)
 
 ---
 
+### Integration roadmap note
+
+| Horizon | Work |
+|---------|------|
+| **Current** | Framework + Settings / Dashboard; built-ins LinkedIn + Naukri; custom HTTP platforms (`GenericHttpProvider`, `external_applications`, auto-sync) |
+| **Future** | Official LinkedIn / Naukri OAuth SDKs; map synced external applications into HCIP ATS |
 ### Exit criteria examples
 
 | Phase | Exit criterion |

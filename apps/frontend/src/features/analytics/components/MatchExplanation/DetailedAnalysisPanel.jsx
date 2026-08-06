@@ -19,49 +19,49 @@ export default function DetailedAnalysisPanel({
 
   const enterprise = variant === 'enterprise'
   const labelClass = enterprise
-    ? 'text-[11px] font-semibold uppercase tracking-[0.1em] text-[#83909C]'
+    ? 'text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ei-text-muted)]'
     : 'text-xs font-semibold uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400'
-  const bodyClass = enterprise ? 'text-[#C5CED8]' : 'text-slate-700 dark:text-slate-300'
-  const mutedClass = enterprise ? 'text-[#8796A5]' : 'text-slate-500 dark:text-slate-400'
-  const borderClass = enterprise ? 'border-white/[0.08]' : 'border-slate-200 dark:border-slate-700'
-  const titleClass = enterprise ? 'text-[#F2F5F8]' : 'text-slate-900 dark:text-white'
+  const bodyClass = enterprise ? 'text-[var(--ei-text-secondary)]' : 'text-slate-700 dark:text-slate-300'
+  const mutedClass = enterprise ? 'text-[var(--ei-text-muted)]' : 'text-slate-500 dark:text-slate-400'
+  const borderClass = enterprise ? 'border-[var(--ei-border-primary)]' : 'border-slate-200 dark:border-slate-700'
+  const titleClass = enterprise ? 'text-[var(--ei-text-primary)]' : 'text-slate-900 dark:text-white'
   const panelBg = enterprise
-    ? 'border-white/[0.08] bg-gradient-to-br from-white/[0.04] to-white/[0.015]'
+    ? 'border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]'
     : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40'
-  const tableHead = enterprise ? 'text-[#6F7D8B]' : 'text-slate-500 dark:text-slate-400'
-  const rowBorder = enterprise ? 'border-white/[0.06]' : 'border-slate-100 dark:border-slate-800'
+  const tableHead = enterprise ? 'text-[var(--ei-text-muted)]' : 'text-slate-500 dark:text-slate-400'
+  const rowBorder = enterprise ? 'border-[var(--ei-border-primary)]' : 'border-slate-100 dark:border-slate-800'
 
   const outcomeTone =
     explanation.outcome === 'shortlist'
       ? enterprise
-        ? 'bg-[rgba(55,214,160,0.12)] text-[#67DFB4] border-[rgba(55,214,160,0.28)] shadow-[0_0_24px_rgba(55,214,160,0.08)]'
+        ? 'bg-[var(--ei-tone-success-bg)] text-[var(--ei-tone-success)] border-[var(--ei-tone-success-border)]'
         : 'bg-emerald-50 text-emerald-700 border-emerald-200'
       : explanation.outcome === 'review'
         ? enterprise
-          ? 'bg-[rgba(0,166,255,0.12)] text-[#5CBCFF] border-[rgba(0,166,255,0.28)] shadow-[0_0_24px_rgba(0,166,255,0.08)]'
+          ? 'bg-[var(--ei-tone-info-bg)] text-[var(--ei-tone-info)] border-[var(--ei-tone-info-border)]'
           : 'bg-sky-50 text-sky-700 border-sky-200'
         : enterprise
-          ? 'bg-[rgba(255,93,115,0.12)] text-[#FF788B] border-[rgba(255,93,115,0.28)] shadow-[0_0_24px_rgba(255,93,115,0.08)]'
+          ? 'bg-[var(--ei-tone-danger-bg)] text-[var(--ei-tone-danger)] border-[var(--ei-tone-danger-border)]'
           : 'bg-red-50 text-red-700 border-red-200'
 
   const resultTone = (result) => {
     if (result === 'match') {
       return enterprise
-        ? 'bg-[rgba(55,214,160,0.12)] text-[#67DFB4] border-[rgba(55,214,160,0.22)]'
+        ? 'bg-[var(--ei-tone-success-bg)] text-[var(--ei-tone-success)] border-[var(--ei-tone-success-border)]'
         : 'bg-emerald-50 text-emerald-700 border-emerald-200'
     }
     if (result === 'partial') {
       return enterprise
-        ? 'bg-[rgba(245,185,76,0.14)] text-[#F5B94C] border-[rgba(245,185,76,0.28)]'
+        ? 'bg-[var(--ei-tone-warning-bg)] text-[var(--ei-tone-warning)] border-[var(--ei-tone-warning-border)]'
         : 'bg-amber-50 text-amber-700 border-amber-200'
     }
     if (result === 'unclear') {
       return enterprise
-        ? 'bg-white/[0.06] text-[#A0ABB6] border-white/[0.1]'
+        ? 'bg-[var(--ei-surface-hover)] text-[var(--ei-text-secondary)] border-[var(--ei-border-primary)]'
         : 'bg-slate-100 text-slate-600 border-slate-200'
     }
     return enterprise
-      ? 'bg-[rgba(255,93,115,0.12)] text-[#FF788B] border-[rgba(255,93,115,0.22)]'
+      ? 'bg-[var(--ei-tone-danger-bg)] text-[var(--ei-tone-danger)] border-[var(--ei-tone-danger-border)]'
       : 'bg-red-50 text-red-700 border-red-200'
   }
 
@@ -71,7 +71,7 @@ export default function DetailedAnalysisPanel({
         <span
           className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
             enterprise
-              ? 'bg-[rgba(55,214,160,0.15)] text-[#67DFB4]'
+              ? 'bg-[var(--ei-tone-success-bg)] text-[var(--ei-tone-success)]'
               : 'bg-emerald-100 text-emerald-700'
           }`}
           aria-hidden
@@ -85,7 +85,7 @@ export default function DetailedAnalysisPanel({
         <span
           className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
             enterprise
-              ? 'bg-[rgba(245,185,76,0.15)] text-[#F5B94C]'
+              ? 'bg-[var(--ei-tone-warning-bg)] text-[var(--ei-tone-warning)]'
               : 'bg-amber-100 text-amber-700'
           }`}
           aria-hidden
@@ -98,7 +98,7 @@ export default function DetailedAnalysisPanel({
       <span
         className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
           enterprise
-            ? 'bg-[rgba(255,93,115,0.15)] text-[#FF788B]'
+            ? 'bg-[var(--ei-tone-danger-bg)] text-[var(--ei-tone-danger)]'
             : 'bg-red-100 text-red-700'
         }`}
         aria-hidden
@@ -201,11 +201,10 @@ export default function DetailedAnalysisPanel({
 
   return (
     <div className={`space-y-5 text-sm ${bodyClass}`}>
-      {/* Decision hero */}
       <section
         className={`relative overflow-hidden rounded-[16px] border p-4 sm:p-5 ${
           enterprise
-            ? 'border-white/[0.1] bg-[radial-gradient(120%_80%_at_0%_0%,rgba(0,166,255,0.08),transparent_50%),radial-gradient(90%_70%_at_100%_0%,rgba(255,93,115,0.06),transparent_45%),rgba(255,255,255,0.02)]'
+            ? 'border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]'
             : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50'
         }`}
       >
@@ -222,14 +221,14 @@ export default function DetailedAnalysisPanel({
           <ul className={`mt-3.5 space-y-2 ${mutedClass}`}>
             {whatHappened.map((line, i) => (
               <li key={i} className="flex gap-2.5 leading-relaxed">
-                <span className={`mt-2 h-1 w-1 shrink-0 rounded-full ${enterprise ? 'bg-[#5CBCFF]' : 'bg-sky-500'}`} />
+                <span className={`mt-2 h-1 w-1 shrink-0 rounded-full ${enterprise ? 'bg-[var(--ei-tone-info)]' : 'bg-sky-500'}`} />
                 <span>{line}</span>
               </li>
             ))}
           </ul>
         )}
         {explanation.reconciliation && (
-          <p className={`mt-3.5 rounded-[10px] border px-3.5 py-2.5 text-sm leading-relaxed ${enterprise ? 'border-white/[0.08] bg-white/[0.03]' : 'border-slate-200 bg-white/60'} ${mutedClass}`}>
+          <p className={`mt-3.5 rounded-[10px] border px-3.5 py-2.5 text-sm leading-relaxed ${enterprise ? 'border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]' : 'border-slate-200 bg-white/60'} ${mutedClass}`}>
             {explanation.reconciliation}
           </p>
         )}
@@ -246,7 +245,6 @@ export default function DetailedAnalysisPanel({
         )}
       </section>
 
-      {/* Category comparisons */}
       <section>
         <div className="mb-3">
           <p className={labelClass}>Requirement comparison</p>
@@ -263,20 +261,20 @@ export default function DetailedAnalysisPanel({
             footer={(
               <div className="mt-3 flex flex-wrap gap-2">
                 {skills.matchedCount != null && skills.rows?.length > 0 && (
-                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${enterprise ? 'border-[rgba(55,214,160,0.22)] text-[#67DFB4] bg-[rgba(55,214,160,0.08)]' : 'border-emerald-200 text-emerald-700 bg-emerald-50'}`}>
+                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${enterprise ? 'border-[var(--ei-tone-success-border)] text-[var(--ei-tone-success)] bg-[var(--ei-tone-success-bg)]' : 'border-emerald-200 text-emerald-700 bg-emerald-50'}`}>
                     <span aria-hidden>✓</span> {skills.matchedCount} matched
                   </span>
                 )}
                 {skills.missingCount > 0 && (
-                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${enterprise ? 'border-[rgba(255,93,115,0.22)] text-[#FF788B] bg-[rgba(255,93,115,0.08)]' : 'border-red-200 text-red-700 bg-red-50'}`}>
+                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${enterprise ? 'border-[var(--ei-tone-danger-border)] text-[var(--ei-tone-danger)] bg-[var(--ei-tone-danger-bg)]' : 'border-red-200 text-red-700 bg-red-50'}`}>
                     <span aria-hidden>✕</span> {skills.missingCount} missing
                   </span>
                 )}
                 {gatePct != null && skills.rows?.length > 0 && (
                   <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
                     skills.gateFailed
-                      ? (enterprise ? 'border-[rgba(255,93,115,0.22)] text-[#FF788B] bg-[rgba(255,93,115,0.08)]' : 'border-red-200 text-red-700 bg-red-50')
-                      : (enterprise ? 'border-[rgba(55,214,160,0.22)] text-[#67DFB4] bg-[rgba(55,214,160,0.08)]' : 'border-emerald-200 text-emerald-700 bg-emerald-50')
+                      ? (enterprise ? 'border-[var(--ei-tone-danger-border)] text-[var(--ei-tone-danger)] bg-[var(--ei-tone-danger-bg)]' : 'border-red-200 text-red-700 bg-red-50')
+                      : (enterprise ? 'border-[var(--ei-tone-success-border)] text-[var(--ei-tone-success)] bg-[var(--ei-tone-success-bg)]' : 'border-emerald-200 text-emerald-700 bg-emerald-50')
                   }`}>
                     Gate {Number(gatePct)}% / {gateThreshold}%
                   </span>
@@ -289,7 +287,7 @@ export default function DetailedAnalysisPanel({
             <article className={`rounded-[14px] border overflow-hidden ${panelBg}`}>
               <div className={`px-4 py-3 border-b ${borderClass}`}>
                 <div className="flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full ${enterprise ? 'bg-[#A78BFA]' : 'bg-violet-500'}`} aria-hidden />
+                  <span className={`h-2 w-2 rounded-full ${enterprise ? 'bg-[var(--ei-accent-purple)]' : 'bg-violet-500'}`} aria-hidden />
                   <h4 className={`text-sm font-semibold ${titleClass}`}>Preferred skills</h4>
                   <span className={`text-xs ${mutedClass}`}>Nice-to-have · does not drive the gate</span>
                 </div>
@@ -324,7 +322,6 @@ export default function DetailedAnalysisPanel({
         </div>
       </section>
 
-      {/* Rules */}
       {rulesApplied.length > 0 && (
         <section className={`rounded-[14px] border p-4 ${panelBg}`}>
           <p className={labelClass}>How we decide</p>
@@ -332,9 +329,9 @@ export default function DetailedAnalysisPanel({
             {rulesApplied.map((rule, i) => (
               <li
                 key={i}
-                className={`flex gap-2 rounded-[10px] border px-3 py-2.5 leading-relaxed ${enterprise ? 'border-white/[0.06] bg-black/10' : 'border-slate-100 bg-slate-50'}`}
+                className={`flex gap-2 rounded-[10px] border px-3 py-2.5 leading-relaxed ${enterprise ? 'border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]' : 'border-slate-100 bg-slate-50'}`}
               >
-                <span className={`shrink-0 font-semibold tabular-nums ${enterprise ? 'text-[#5CBCFF]' : 'text-sky-600'}`}>
+                <span className={`shrink-0 font-semibold tabular-nums ${enterprise ? 'text-[var(--ei-tone-info)]' : 'text-sky-600'}`}>
                   {String(i + 1).padStart(2, '0')}
                 </span>
                 <span>{rule}</span>

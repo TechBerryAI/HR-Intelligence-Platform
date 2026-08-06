@@ -195,12 +195,13 @@ Allow recruiters to publish jobs, attract applicants, and act on match intellige
 3. **Enable/disable** and **delete** update the public portal (`/jobs`): disabled jobs disappear from the board; deleted jobs are removed from the dashboard and portal (cascade removes applications/matches for that job).
 4. CEO is read-only; Head HR may act across the org.
 5. Bulk parse available for high-volume ingest.
+6. External job-board publish is **not** part of the Job module: create/update/close emit domain events; the Integration Framework auto-publishes when a provider has `auto_publish`, or recruiters use manual Publish actions / `POST /api/integrations/publish/<jobId>`.
 
 ---
 
 ### Current implementation
 
-`/dashboard`, `/candidates`, `/admin/bulk-resume-parser`, `/admin/feedback`, `/api/jobs/*`, parse JD endpoints. Staff UI uses the shared `org-shell` theme (Dark/Light toggle in the navbar; preference stored as `hcip-theme`).
+`/dashboard`, `/candidates`, `/integrations`, `/admin/bulk-resume-parser`, `/admin/feedback`, `/api/jobs/*`, `/api/integrations/*`, parse JD endpoints. Staff UI uses the shared `org-shell` theme (Dark/Light toggle in the navbar; preference stored as `hcip-theme`). Settings → Integrations always shows LinkedIn + Naukri; Head HR uses **Add platform** for any other board (HTTP Base URL + endpoints + credentials). Custom platforms are listed from the company config API. External Publishing strip on dashboards shows published/pending/failed counts.
 
 ---
 
@@ -215,6 +216,8 @@ flowchart LR
   E --> R[Review applicants]
   R --> S[Shortlist / reject]
   D --> B[Bulk parse]
+  J --> I[Integration queue]
+  I --> X[External providers]
 ```
 
 ---
@@ -224,6 +227,7 @@ flowchart LR
 - Hiring manager collaboration
 - Structured interview kits
 - Pipeline analytics
+- Live LinkedIn / Naukri OAuth + official publish APIs; ATS mapping from `external_applications`
 
 ---
 

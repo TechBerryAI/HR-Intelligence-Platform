@@ -21,7 +21,8 @@ function isStaffAppPath(pathname) {
     pathname.startsWith('/dashboard') ||
     pathname.startsWith('/candidates') ||
     pathname.startsWith('/admin') ||
-    pathname.startsWith('/settings')
+    pathname.startsWith('/settings') ||
+    pathname.startsWith('/integrations')
   )
 }
 
@@ -194,6 +195,9 @@ export default function Navbar() {
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate('/admin/feedback')} className={menuItemClass}>
                   <FiMessageSquare className="mr-2 h-4 w-4" /> Feedback (Admin)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate('/integrations')} className={menuItemClass}>
+                  <FiBriefcase className="mr-2 h-4 w-4" /> Integrations
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate('/settings')} className={menuItemClass}>
                   <FiSettings className="mr-2 h-4 w-4" /> Settings
