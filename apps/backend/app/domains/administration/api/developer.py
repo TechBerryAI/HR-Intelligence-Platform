@@ -94,6 +94,14 @@ def performance_recent():
     )
 
 
+@developer_bp.route("/performance/clear", methods=["POST", "DELETE"])
+@require_developer_admin
+def performance_clear():
+    """Wipe in-memory recent parse timing sessions (Developer Mode buffer)."""
+    removed = timing_collector.clear()
+    return jsonify({"ok": True, "cleared": True, "removed": removed})
+
+
 @developer_bp.route("/performance/request/<path:request_id>", methods=["GET"])
 @require_developer_admin
 def performance_request(request_id: str):

@@ -1,19 +1,31 @@
 /**
- * Admin Developer Mode — full resume/JD/bulk parse step checklist with timings.
+ * Admin Developer Mode — parse step timings (resume / JD / bulk).
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { FiActivity, FiCheck, FiMinus, FiRefreshCw, FiX } from 'react-icons/fi'
+import {
+  FiActivity,
+  FiCheck,
+  FiChevronDown,
+  FiClock,
+  FiFileText,
+  FiLayers,
+  FiMinus,
+  FiRefreshCw,
+  FiTrash2,
+  FiUpload,
+  FiX,
+} from 'react-icons/fi'
 import HeadHrLayout from '@/features/organization/pages/head-hr/HeadHrLayout.jsx'
 import { useToast } from '@/shared/components/Toast.jsx'
 import { useDeveloperMode } from '@/features/admin/hooks/useDeveloperMode.js'
 import {
+  clearPerformanceRecent,
   fetchPerformanceRecent,
   fetchPerformanceRequest,
 } from '@/features/admin/services/developerPerformanceService.js'
 import { DurationBadge, formatDuration } from '@/features/admin/components/PerformanceCharts.jsx'
 
-/** Exact resume checklist — always shown for resume / bulk parses */
 const RESUME_STEPS = [
   { key: 'cache', name: 'Cache Check' },
   { key: 'persist_raw', name: 'Store Raw File' },
@@ -27,7 +39,6 @@ const RESUME_STEPS = [
   { key: 'persist', name: 'Save Parsed Result' },
 ]
 
-/** Exact JD checklist — always shown for JD parses */
 const JD_STEPS = [
   { key: 'cache', name: 'Cache Check' },
   { key: 'persist_raw', name: 'Store Raw File' },
@@ -60,8 +71,18 @@ function formatTime(iso) {
   }
 }
 
-function formatMs(ms) {
-  return formatDuration(ms)
+function formatRelative(iso) {
+  if (!iso) return ''
+  try {
+    const t = new Date(iso).getTime()
+    const diff = Date.now() - t
+    if (diff < 60_000) return 'Just now'
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+    return formatTime(iso)
+  } catch {
+    return ''
+  }
 }
 
 function pipelineTitle(kind, session) {
@@ -70,13 +91,40 @@ function pipelineTitle(kind, session) {
   if (kind === 'apply') return 'Apply'
   if (kind === 'bulk_parse') {
     const n = session?.resume_count
-    if (n != null && n > 0) {
-      return `Bulk Parse · ${n} resume${n === 1 ? '' : 's'}`
-    }
+    if (n != null && n > 0) return `Bulk Parse · ${n} resume${n === 1 ? '' : 's'}`
     return 'Bulk Parse'
   }
   if (kind === 'resume_parse') return 'Resume Parsing'
   return 'Pipeline'
+}
+
+function kindMeta(kind) {
+  if (kind === 'jd_parse') {
+    return {
+      label: 'JD',
+      Icon: FiFileText,
+      chip: 'bg-[rgba(39,109,255,0.18)] text-[#8EB6FF] ring-[rgba(39,109,255,0.35)]',
+    }
+  }
+  if (kind === 'bulk_parse') {
+    return {
+      label: 'Bulk',
+      Icon: FiLayers,
+      chip: 'bg-[rgba(168,85,247,0.16)] text-[#D8B4FE] ring-[rgba(168,85,247,0.35)]',
+    }
+  }
+  if (kind === 'apply') {
+    return {
+      label: 'Apply',
+      Icon: FiUpload,
+      chip: 'bg-[rgba(54,214,160,0.14)] text-[#67DFB4] ring-[rgba(54,214,160,0.3)]',
+    }
+  }
+  return {
+    label: 'Resume',
+    Icon: FiFileText,
+    chip: 'bg-[rgba(0,166,255,0.14)] text-[#7DD3FF] ring-[rgba(0,166,255,0.3)]',
+  }
 }
 
 function detectKind(detail) {
@@ -105,40 +153,6 @@ function detectKind(detail) {
   return detail.kind || null
 }
 
-function statusMeta(status) {
-  if (status === 'completed') {
-    return {
-      label: 'Completed',
-      icon: FiCheck,
-      className: 'text-emerald-400',
-      badge: 'bg-emerald-500/15 text-emerald-400',
-    }
-  }
-  if (status === 'skipped') {
-    return {
-      label: 'Skipped',
-      icon: FiMinus,
-      className: 'text-amber-300',
-      badge: 'bg-amber-500/15 text-amber-300',
-    }
-  }
-  if (status === 'failed') {
-    return {
-      label: 'Failed',
-      icon: FiX,
-      className: 'text-rose-300',
-      badge: 'bg-rose-500/15 text-rose-300',
-    }
-  }
-  return {
-    label: 'Not run',
-    icon: FiMinus,
-    className: 'text-[var(--ei-text-muted)]',
-    badge: 'bg-[var(--ei-surface-hover)] text-[var(--ei-text-muted)]',
-  }
-}
-
-/** Merge API parse_steps with the exact template so resume always lists all 10 steps. */
 function buildParseSteps(detail) {
   const kind = detectKind(detail)
   const template =
@@ -190,13 +204,20 @@ function buildParseSteps(detail) {
       step: idx + 1,
       key: t.key,
       name: t.name,
-      // Skipped / not run: never show a duration — only the status label
       duration_ms: status === 'skipped' || status === 'not_run' ? null : hit.duration_ms,
       status,
       success: hit.success,
       function: hit.function || t.key,
     }
   })
+
+  // If the pipeline clearly ran, treat idle steps as skipped (clearer than "Not run")
+  const hasWork = rows.some((r) => r.status === 'completed' || r.status === 'failed')
+  if (hasWork) {
+    for (const r of rows) {
+      if (r.status === 'not_run') r.status = 'skipped'
+    }
+  }
 
   const llm =
     (detail?.events || []).find((e) => e.function === 'parse_via_runtime') ||
@@ -205,7 +226,7 @@ function buildParseSteps(detail) {
     rows.push({
       step: null,
       key: 'llm_inference',
-      name: '↳ LLM Inference (AI Runtime)',
+      name: 'LLM Inference (AI Runtime)',
       duration_ms: llm.duration_ms,
       status: llm.success === false ? 'failed' : llm.status || 'completed',
       success: llm.success !== false,
@@ -216,122 +237,238 @@ function buildParseSteps(detail) {
   return rows
 }
 
-function ParseStepsView({ steps, title, subtitle, totalMs, path, files }) {
+function StepRow({ step, maxMs, isLast }) {
+  const showTime = step.status === 'completed' && step.duration_ms != null
+  const pct = showTime ? Math.min(100, (step.duration_ms / maxMs) * 100) : 0
+  const isIdle = step.status === 'skipped' || step.status === 'not_run'
+  const n = step.step
+
+  return (
+    <li className={`relative flex gap-3 ${step.detail ? 'ml-5' : ''}`}>
+      <div className="flex flex-col items-center w-7 shrink-0">
+        <span
+          className={`z-[1] flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${
+            step.status === 'completed'
+              ? 'bg-[#00A6FF] text-white shadow-[0_0_0_3px_rgba(0,166,255,0.2)]'
+              : step.status === 'failed'
+                ? 'bg-rose-500 text-white'
+                : isIdle
+                  ? 'bg-transparent text-[var(--ei-text-muted)] ring-1 ring-[var(--ei-border-primary)]'
+                  : 'bg-[var(--ei-surface-hover)] text-[var(--ei-text-muted)]'
+          }`}
+        >
+          {step.detail ? '·' : step.status === 'completed' ? <FiCheck className="w-3.5 h-3.5" /> : n}
+        </span>
+        {!isLast ? (
+          <span
+            className={`w-px flex-1 min-h-[0.5rem] ${
+              step.status === 'completed' ? 'bg-[#00A6FF]/35' : 'bg-[var(--ei-border-primary)]'
+            }`}
+            aria-hidden
+          />
+        ) : null}
+      </div>
+
+      <div
+        className={`flex-1 min-w-0 mb-2 rounded-lg px-3 py-2.5 transition ${
+          showTime
+            ? 'bg-[rgba(0,166,255,0.06)] ring-1 ring-[rgba(0,166,255,0.22)]'
+            : step.status === 'failed'
+              ? 'bg-[rgba(255,90,110,0.08)] ring-1 ring-[rgba(255,90,110,0.25)]'
+              : 'bg-transparent'
+        }`}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p
+              className={`text-sm font-medium truncate ${
+                isIdle ? 'text-[var(--ei-text-muted)]' : 'text-[var(--ei-text-primary)]'
+              }`}
+            >
+              {step.name}
+            </p>
+            {step.status === 'failed' ? (
+              <p className="text-[11px] text-rose-300 mt-0.5 flex items-center gap-1">
+                <FiX className="w-3 h-3" /> Failed
+              </p>
+            ) : null}
+          </div>
+          <div className="shrink-0">
+            {showTime ? (
+              <DurationBadge ms={step.duration_ms} />
+            ) : step.status === 'failed' ? (
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-300">
+                Failed
+              </span>
+            ) : (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-md text-amber-300/90 bg-amber-500/10">
+                Skipped
+              </span>
+            )}
+          </div>
+        </div>
+        {showTime ? (
+          <div className="mt-2 h-1 rounded-full bg-[var(--ei-bg-primary)]/80 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-[#00A6FF] to-[#276DFF]"
+              style={{ width: `${Math.max(pct, 4)}%` }}
+            />
+          </div>
+        ) : null}
+      </div>
+    </li>
+  )
+}
+
+function BulkResumeAccordion({ file, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const steps = useMemo(
+    () =>
+      buildParseSteps({
+        kind: 'resume_parse',
+        parse_steps: file?.parse_steps,
+        events: [],
+        total_duration_ms: file?.total_duration_ms,
+      }),
+    [file]
+  )
   const maxMs = Math.max(
     ...steps.filter((s) => s.status === 'completed').map((s) => s.duration_ms || 0),
     1
   )
+  const failed = file?.status === 'error'
 
   return (
-    <div>
-      <div className="mb-5">
-        <h4 className="text-lg font-semibold text-[var(--ei-text-primary)]">{title}</h4>
-        <p className="text-xs text-[var(--ei-text-muted)] mt-1">
-          {subtitle || 'Time for every pipeline step'}
-        </p>
-        {path && !files?.length ? (
-          <p className="text-[11px] text-[var(--ei-text-secondary)] mt-2 font-mono truncate">{path}</p>
-        ) : null}
-      </div>
-
-      <ol className="space-y-0">
-        {steps.map((step, idx) => {
-          const meta = statusMeta(step.status)
-          const Icon = meta.icon
-          const isDetail = Boolean(step.detail)
-          const n = step.step ?? idx + 1
-          const showTime = step.status === 'completed' && step.duration_ms != null
-          const pct = showTime ? Math.min(100, (step.duration_ms / maxMs) * 100) : 0
-          return (
-            <li key={`${step.key}-${idx}`} className={`relative flex gap-3 ${isDetail ? 'ml-6' : ''}`}>
-              <div className="flex flex-col items-center w-8 shrink-0">
-                <span
-                  className={`z-[1] flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold ring-2 ring-[var(--ei-surface-card)] ${
-                    step.status === 'completed'
-                      ? 'bg-[#00A6FF] text-white'
-                      : step.status === 'failed'
-                        ? 'bg-rose-500 text-white'
-                        : step.status === 'skipped'
-                          ? 'bg-amber-500/80 text-white'
-                          : 'bg-[var(--ei-surface-hover)] text-[var(--ei-text-muted)]'
-                  }`}
-                >
-                  {isDetail ? '↳' : n}
-                </span>
-                {idx < steps.length - 1 ? (
-                  <span className="w-px flex-1 min-h-[0.75rem] bg-[var(--ei-border-primary)]" aria-hidden />
-                ) : null}
-              </div>
-
-              <div className="flex-1 min-w-0 pb-3">
-                <div className="rounded-xl border border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]/45 px-3.5 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-[var(--ei-text-primary)]">{step.name}</p>
-                      <p className={`mt-1 text-[11px] flex items-center gap-1 ${meta.className}`}>
-                        <Icon className="w-3 h-3" />
-                        {meta.label}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      {showTime ? (
-                        <DurationBadge ms={step.duration_ms} />
-                      ) : (
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${meta.badge}`}>
-                          {step.status === 'skipped'
-                            ? 'Skipped'
-                            : step.status === 'failed'
-                              ? 'Failed'
-                              : '—'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  {showTime ? (
-                    <div className="mt-2.5 h-1.5 rounded-full bg-[var(--ei-bg-primary)] overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-[#00A6FF] to-[#276DFF]"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </li>
-          )
-        })}
-      </ol>
-
-      <div className="mt-2 rounded-xl border border-[rgba(0,166,255,0.35)] bg-[rgba(0,166,255,0.08)] px-4 py-3.5 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-[var(--ei-text-primary)]">Overall pipeline</p>
-          <p className="text-xs text-[var(--ei-text-muted)] mt-0.5">Total time for {title}</p>
+    <li className="rounded-xl ring-1 ring-[var(--ei-border-primary)] bg-[var(--ei-bg-primary)]/40 overflow-hidden">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-[var(--ei-surface-hover)] transition"
+      >
+        <FiChevronDown
+          className={`w-4 h-4 shrink-0 text-[var(--ei-text-muted)] transition ${open ? 'rotate-0' : '-rotate-90'}`}
+        />
+        <span className="min-w-0 flex-1 text-[12px] font-mono font-medium text-[var(--ei-text-primary)] truncate">
+          {file?.filename || 'resume'}
+        </span>
+        <span className="shrink-0">
+          {failed ? (
+            <span className="text-[11px] text-rose-300 font-medium">Failed</span>
+          ) : (
+            <DurationBadge ms={file?.total_duration_ms} />
+          )}
+        </span>
+      </button>
+      {open ? (
+        <div className="px-3 pb-3 pt-1 border-t border-[var(--ei-border-primary)]/60">
+          <p className="text-[10px] uppercase tracking-wide text-[var(--ei-text-muted)] font-semibold mb-2">
+            Pipeline steps
+          </p>
+          {steps.length ? (
+            <ol className="space-y-0">
+              {steps.map((step, idx) => (
+                <StepRow
+                  key={`${file?.request_id || file?.filename}-${step.key}-${idx}`}
+                  step={step}
+                  maxMs={maxMs}
+                  isLast={idx === steps.length - 1}
+                />
+              ))}
+            </ol>
+          ) : (
+            <p className="text-xs text-[var(--ei-text-muted)] py-2">No step timings for this file.</p>
+          )}
         </div>
-        <span className="text-base font-bold tabular-nums text-[#00A6FF]">{formatMs(totalMs)}</span>
+      ) : null}
+    </li>
+  )
+}
+
+function ParseStepsView({ steps, title, kind, totalMs, files, resumeCount }) {
+  const maxMs = Math.max(
+    ...steps.filter((s) => s.status === 'completed').map((s) => s.duration_ms || 0),
+    1
+  )
+  const completed = steps.filter((s) => s.status === 'completed').length
+  const skipped = steps.filter((s) => s.status === 'skipped' || s.status === 'not_run').length
+  const failed = steps.filter((s) => s.status === 'failed').length
+  const km = kindMeta(kind)
+  const KindIcon = km.Icon
+  const isBulk = kind === 'bulk_parse'
+
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className={`inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md ring-1 ${km.chip}`}
+            >
+              <KindIcon className="w-3 h-3" />
+              {km.label}
+            </span>
+            {isBulk && resumeCount ? (
+              <span className="text-xs text-[var(--ei-text-secondary)]">
+                {resumeCount} resume{resumeCount === 1 ? '' : 's'}
+              </span>
+            ) : null}
+          </div>
+          <h4 className="text-lg font-semibold text-[var(--ei-text-primary)] mt-2">{title}</h4>
+          <p className="text-xs text-[var(--ei-text-muted)] mt-0.5">
+            {isBulk
+              ? 'Expand each resume to see its pipeline steps'
+              : 'How long each pipeline step took'}
+          </p>
+        </div>
+        <div className="text-right shrink-0 rounded-xl bg-[rgba(0,166,255,0.08)] ring-1 ring-[rgba(0,166,255,0.25)] px-3.5 py-2.5">
+          <p className="text-[10px] uppercase tracking-wide text-[var(--ei-text-muted)] font-semibold">
+            Total
+          </p>
+          <p className="text-xl font-bold tabular-nums text-[#00A6FF] leading-tight">
+            {formatDuration(totalMs)}
+          </p>
+        </div>
       </div>
 
-      {Array.isArray(files) && files.length > 0 ? (
-        <div className="mt-5">
-          <h5 className="text-sm font-semibold text-[var(--ei-text-primary)] mb-2">
-            Resumes in this bulk job ({files.length})
+      {isBulk && Array.isArray(files) && files.length > 0 ? (
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+          <h5 className="text-xs font-semibold uppercase tracking-wide text-[var(--ei-text-muted)] mb-2">
+            Resumes in this job
           </h5>
-          <ul className="rounded-xl border border-[var(--ei-border-primary)] divide-y divide-[var(--ei-border-primary)] overflow-hidden">
-            {files.map((f) => (
-              <li
+          <ul className="space-y-2">
+            {files.map((f, i) => (
+              <BulkResumeAccordion
                 key={f.request_id || f.filename}
-                className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-[var(--ei-surface-hover)]/30"
-              >
-                <span className="text-sm text-[var(--ei-text-primary)] truncate font-mono text-[12px]">
-                  {f.filename}
-                </span>
-                <span className="text-xs tabular-nums text-[var(--ei-text-secondary)] shrink-0">
-                  {f.status === 'error' ? 'Failed' : formatMs(f.total_duration_ms)}
-                </span>
-              </li>
+                file={f}
+                defaultOpen={i === 0}
+              />
             ))}
           </ul>
         </div>
-      ) : null}
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap gap-2 text-[11px]">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,166,255,0.1)] text-[#7DD3FF]">
+              <FiCheck className="w-3 h-3" /> {completed} timed
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300">
+              <FiMinus className="w-3 h-3" /> {skipped} skipped
+            </span>
+            {failed > 0 ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-300">
+                <FiX className="w-3 h-3" /> {failed} failed
+              </span>
+            ) : null}
+          </div>
+
+          <ol className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-0">
+            {steps.map((step, idx) => (
+              <StepRow key={`${step.key}-${idx}`} step={step} maxMs={maxMs} isLast={idx === steps.length - 1} />
+            ))}
+          </ol>
+        </>
+      )}
     </div>
   )
 }
@@ -340,37 +477,227 @@ function PipelineView({ detail }) {
   const kind = detectKind(detail)
   const steps = useMemo(() => buildParseSteps(detail), [detail])
   const title = pipelineTitle(kind || detail?.kind, detail)
-  const resumeCount = detail?.resume_count
-  const subtitle =
-    kind === 'bulk_parse' && resumeCount
-      ? `Avg step time across ${resumeCount} resume${resumeCount === 1 ? '' : 's'}`
-      : 'Time for every pipeline step'
 
   if (!detail) {
     return (
-      <p className="text-sm text-[var(--ei-text-muted)] py-12 text-center">
-        Select a parse on the left to see every step’s timing.
-      </p>
+      <div className="flex flex-col items-center justify-center py-16 text-center px-6">
+        <div className="w-12 h-12 rounded-2xl bg-[rgba(0,166,255,0.1)] flex items-center justify-center mb-3">
+          <FiClock className="w-6 h-6 text-[#00A6FF]" />
+        </div>
+        <p className="text-sm font-medium text-[var(--ei-text-primary)]">Select a parse</p>
+        <p className="text-xs text-[var(--ei-text-muted)] mt-1 max-w-xs">
+          Choose a row on the left to see each pipeline step and how long it took.
+        </p>
+      </div>
     )
   }
 
-  if (steps.length) {
+  if (!steps.length) {
     return (
-      <ParseStepsView
-        steps={steps}
-        title={title}
-        subtitle={subtitle}
-        totalMs={detail.total_duration_ms}
-        path={detail.path}
-        files={detail.files}
-      />
+      <div className="flex flex-col items-center justify-center py-16 text-center px-6">
+        <p className="text-sm text-[var(--ei-text-muted)]">
+          No step timings for this request. Run a parse with Developer Mode on, then refresh.
+        </p>
+      </div>
     )
   }
 
   return (
-    <p className="text-sm text-[var(--ei-text-muted)] py-12 text-center">
-      No parse step timings yet. Parse a resume, JD, or run bulk parse, then refresh.
-    </p>
+    <ParseStepsView
+      steps={steps}
+      title={title}
+      kind={kind || detail?.kind}
+      totalMs={detail.total_duration_ms}
+      files={detail.files}
+      resumeCount={detail.resume_count}
+    />
+  )
+}
+
+const FILTER_OPTIONS = [
+  { value: 'all', label: 'All' },
+  { value: 'resume_parse', label: 'Resume' },
+  { value: 'jd_parse', label: 'JD' },
+  { value: 'apply', label: 'Apply' },
+  { value: 'bulk_parse', label: 'Bulk' },
+]
+
+/** Single resume → Resume; bulk job group → Bulk; never mix the two. */
+function matchesKindFilter(session, filter) {
+  if (filter === 'all') return true
+  const kind = session?.kind
+  if (filter === 'bulk_parse') {
+    return kind === 'bulk_parse' || session?.is_bulk_group === true
+  }
+  if (filter === 'resume_parse') {
+    return kind === 'resume_parse' && !session?.is_bulk_group
+  }
+  return kind === filter
+}
+
+function KindFilterDropdown({ value, onChange }) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef(null)
+  const selected = FILTER_OPTIONS.find((o) => o.value === value) || FILTER_OPTIONS[0]
+
+  useEffect(() => {
+    if (!open) return undefined
+    const onDoc = (e) => {
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false)
+    }
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onDoc)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDoc)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div className="relative shrink-0 z-20" ref={rootRef}>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={`inline-flex items-center gap-1.5 text-xs font-semibold rounded-lg px-2.5 py-1.5 transition ${
+          open
+            ? 'bg-[var(--ei-bg-secondary)] text-[var(--ei-text-primary)] ring-1 ring-[#00A6FF]/55'
+            : 'bg-[var(--ei-bg-primary)] text-[var(--ei-text-primary)] ring-1 ring-[var(--ei-border-primary)] hover:ring-[#00A6FF]/40'
+        }`}
+      >
+        {selected.label}
+        <FiChevronDown className={`w-3.5 h-3.5 text-[var(--ei-text-muted)] transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open ? (
+        <ul
+          role="listbox"
+          className="absolute right-0 z-50 mt-1.5 min-w-[9rem] rounded-xl border border-[var(--ei-border-primary)] bg-[var(--ei-bg-secondary)] py-1 shadow-[0_16px_40px_rgba(0,0,0,0.45)] isolate"
+        >
+          {FILTER_OPTIONS.map((opt) => {
+            const active = opt.value === value
+            return (
+              <li key={opt.value} role="option" aria-selected={active}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value)
+                    setOpen(false)
+                  }}
+                  className={`w-full text-left px-3 py-2 text-xs font-semibold flex items-center justify-between gap-2 transition ${
+                    active
+                      ? 'bg-[var(--ei-tone-info-bg)] text-[var(--ei-accent-blue)]'
+                      : 'text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)]'
+                  }`}
+                >
+                  {opt.label}
+                  {active ? <FiCheck className="w-3.5 h-3.5 shrink-0" /> : null}
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
+function SessionRow({ session, active, onSelect }) {
+  const kind = session.kind
+  const km = kindMeta(kind)
+  const KindIcon = km.Icon
+  const isBulk = kind === 'bulk_parse'
+  const fileList = Array.isArray(session.files) ? session.files : []
+  const [filesOpen, setFilesOpen] = useState(false)
+
+  return (
+    <div
+      className={`border-b border-[var(--ei-border-primary)]/50 ${
+        active
+          ? 'bg-[rgba(0,166,255,0.1)] border-l-2 border-l-[#00A6FF]'
+          : 'hover:bg-[var(--ei-surface-hover)] border-l-2 border-l-transparent'
+      }`}
+    >
+      <div className="flex items-stretch">
+        <button
+          type="button"
+          onClick={() => onSelect(session.request_id)}
+          className="flex-1 min-w-0 text-left px-3.5 py-3 transition"
+        >
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span
+                  className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ring-1 ${km.chip}`}
+                >
+                  <KindIcon className="w-2.5 h-2.5" />
+                  {km.label}
+                </span>
+                {isBulk && session.resume_count ? (
+                  <span className="text-[11px] text-[var(--ei-text-secondary)]">
+                    {session.resume_count} files
+                  </span>
+                ) : null}
+              </div>
+              <p className="text-sm font-medium text-[var(--ei-text-primary)] mt-1.5 truncate">
+                {pipelineTitle(kind, session)}
+              </p>
+              <p className="text-[11px] text-[var(--ei-text-muted)] mt-0.5" title={formatTime(session.started_at)}>
+                {formatRelative(session.started_at)}
+              </p>
+            </div>
+            <DurationBadge ms={session.total_duration_ms} className="shrink-0" />
+          </div>
+        </button>
+        {isBulk && fileList.length > 0 ? (
+          <button
+            type="button"
+            aria-label={filesOpen ? 'Hide resumes' : 'Show resumes'}
+            aria-expanded={filesOpen}
+            title="Show resumes in this bulk job"
+            onClick={(e) => {
+              e.stopPropagation()
+              setFilesOpen((v) => !v)
+              onSelect(session.request_id)
+            }}
+            className="shrink-0 px-2.5 flex items-center justify-center border-l border-[var(--ei-border-primary)]/40 text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)] transition"
+          >
+            <FiChevronDown className={`w-4 h-4 transition ${filesOpen ? 'rotate-0' : '-rotate-90'}`} />
+          </button>
+        ) : null}
+      </div>
+      {isBulk && filesOpen && fileList.length > 0 ? (
+        <ul className="px-3 pb-3 space-y-1">
+          {fileList.map((f) => (
+            <li
+              key={f.request_id || f.filename}
+              className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 bg-[var(--ei-bg-primary)]/50 ring-1 ring-[var(--ei-border-primary)]/60"
+            >
+              <span className="text-[11px] font-mono text-[var(--ei-text-primary)] truncate">
+                {f.filename}
+              </span>
+              {f.status === 'error' ? (
+                <span className="text-[10px] text-rose-300 font-medium shrink-0">Failed</span>
+              ) : (
+                <DurationBadge ms={f.total_duration_ms} className="shrink-0 scale-90 origin-right" />
+              )}
+            </li>
+          ))}
+          <li className="pt-1">
+            <button
+              type="button"
+              onClick={() => onSelect(session.request_id)}
+              className="text-[11px] font-semibold text-[#00A6FF] hover:underline"
+            >
+              Open step details →
+            </button>
+          </li>
+        </ul>
+      ) : null}
+    </div>
   )
 }
 
@@ -380,6 +707,13 @@ function DashboardBody() {
   const [selectedId, setSelectedId] = useState(null)
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [clearing, setClearing] = useState(false)
+  const [kindFilter, setKindFilter] = useState('all')
+
+  const filteredSessions = useMemo(() => {
+    if (kindFilter === 'all') return sessions
+    return sessions.filter((s) => matchesKindFilter(s, kindFilter))
+  }, [sessions, kindFilter])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -387,20 +721,65 @@ function DashboardBody() {
       const recent = await fetchPerformanceRecent({ limit: 50 })
       const list = recent?.sessions || []
       setSessions(list)
-      setSelectedId((prev) => {
-        if (prev && list.some((s) => s.request_id === prev)) return prev
-        return list[0]?.request_id || null
-      })
     } catch (err) {
       toast.error(err?.message || 'Failed to load performance data')
     } finally {
       setLoading(false)
+    }
+    // toast methods are stable; omit from deps to avoid remount refetch races
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const clearRecent = useCallback(async () => {
+    if (
+      !window.confirm(
+        'Clear all recent parse timings from this server? This cannot be undone until new parses run.'
+      )
+    ) {
+      return
+    }
+    setClearing(true)
+    try {
+      const result = await clearPerformanceRecent()
+      // Confirm from server so UI matches the wiped buffer
+      const recent = await fetchPerformanceRecent({ limit: 50 })
+      const list = recent?.sessions || []
+      setSessions(list)
+      setSelectedId(null)
+      setDetail(null)
+      const removed = typeof result?.removed === 'number' ? result.removed : null
+      toast.success(
+        removed != null
+          ? `Cleared ${removed} timing session${removed === 1 ? '' : 's'}`
+          : 'Recent parse timings cleared'
+      )
+    } catch (err) {
+      const status = err?.status
+      toast.error(
+        status === 404
+          ? 'Clear API not found — restart the backend so the new route is loaded, then try again.'
+          : err?.message || 'Failed to clear timings'
+      )
+    } finally {
+      setClearing(false)
     }
   }, [toast])
 
   useEffect(() => {
     load()
   }, [load])
+
+  // Keep selection inside the active filter
+  useEffect(() => {
+    if (!filteredSessions.length) {
+      setSelectedId(null)
+      return
+    }
+    setSelectedId((prev) => {
+      if (prev && filteredSessions.some((s) => s.request_id === prev)) return prev
+      return filteredSessions[0].request_id
+    })
+  }, [filteredSessions])
 
   useEffect(() => {
     if (!selectedId) {
@@ -422,88 +801,93 @@ function DashboardBody() {
   }, [selectedId])
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+    <div className="space-y-5 h-full flex flex-col min-h-0">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shrink-0">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-[rgba(0,166,255,0.14)] flex items-center justify-center ring-1 ring-[rgba(0,166,255,0.25)] shrink-0">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[rgba(0,166,255,0.2)] to-[rgba(39,109,255,0.15)] flex items-center justify-center ring-1 ring-[rgba(0,166,255,0.3)] shrink-0">
             <FiActivity className="w-5 h-5 text-[#00A6FF]" />
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ei-text-muted)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--ei-text-muted)]">
               Developer Mode
             </p>
-            <h1 className="text-2xl font-bold text-[var(--ei-text-primary)]">Parse Step Timings</h1>
-            <p className="text-sm text-[var(--ei-text-secondary)]">
-              Resume, JD &amp; bulk — every pipeline step with duration
+            <h1 className="text-2xl font-bold text-[var(--ei-text-primary)] tracking-tight">
+              Parse Step Timings
+            </h1>
+            <p className="text-sm text-[var(--ei-text-secondary)] mt-0.5">
+              See where time goes — resume, JD, and bulk parse
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={load}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#00A6FF] text-white text-sm font-medium hover:bg-[#0090e0] self-start"
-        >
-          <FiRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
-        </button>
+        <div className="flex items-center gap-2 self-start">
+          <button
+            type="button"
+            onClick={clearRecent}
+            disabled={clearing || loading || (!sessions.length && !clearing)}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold ring-1 ring-[var(--ei-border-primary)] bg-[var(--ei-bg-secondary)] text-[var(--ei-text-primary)] hover:ring-[var(--ei-tone-danger-border)] hover:text-[var(--ei-tone-danger)] disabled:opacity-50 disabled:pointer-events-none transition"
+          >
+            <FiTrash2 className={`w-4 h-4 ${clearing ? 'animate-pulse' : ''}`} />
+            Clean
+          </button>
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading || clearing}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#00A6FF] text-white text-sm font-semibold hover:bg-[#0090e0] shadow-[0_8px_24px_rgba(0,166,255,0.25)] disabled:opacity-60"
+          >
+            <FiRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
-        <div className="xl:col-span-2 rounded-xl border border-[var(--ei-border-primary)] bg-[var(--ei-surface-card)] overflow-hidden">
-          <div className="px-4 py-3 border-b border-[var(--ei-border-primary)]">
-            <h3 className="text-sm font-semibold text-[var(--ei-text-primary)]">Recent parses</h3>
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4 flex-1 min-h-0">
+        <div className="xl:col-span-2 rounded-2xl ring-1 ring-[var(--ei-border-primary)] bg-[var(--ei-bg-secondary)] overflow-hidden flex flex-col min-h-[22rem] max-h-[calc(100vh-14rem)]">
+          <div className="relative z-10 px-4 py-3 border-b border-[var(--ei-border-primary)] flex items-center justify-between gap-3 shrink-0 bg-[var(--ei-bg-secondary)]">
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-[var(--ei-text-primary)]">Recent parses</h3>
+              <p className="text-[11px] text-[var(--ei-text-muted)] mt-0.5">
+                {filteredSessions.length
+                  ? `${filteredSessions.length} recorded${
+                      kindFilter !== 'all' ? ` · ${FILTER_OPTIONS.find((o) => o.value === kindFilter)?.label}` : ''
+                    }`
+                  : 'Waiting for activity'}
+              </p>
+            </div>
+            <KindFilterDropdown value={kindFilter} onChange={setKindFilter} />
           </div>
-          <div className="overflow-x-auto max-h-[calc(100vh-16rem)] overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-[var(--ei-surface-card)] z-[1]">
-                <tr className="text-left text-xs uppercase tracking-wide text-[var(--ei-text-muted)] border-b border-[var(--ei-border-primary)]">
-                  <th className="px-4 py-2 font-semibold">Time</th>
-                  <th className="px-4 py-2 font-semibold">Type</th>
-                  <th className="px-4 py-2 font-semibold">Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading && !sessions.length ? (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-8 text-center text-[var(--ei-text-muted)]">
-                      Loading…
-                    </td>
-                  </tr>
-                ) : null}
-                {!loading && !sessions.length ? (
-                  <tr>
-                    <td colSpan={3} className="px-4 py-8 text-center text-[var(--ei-text-muted)]">
-                      No parses yet. Parse a resume, JD, or run bulk parse, then refresh.
-                    </td>
-                  </tr>
-                ) : null}
-                {sessions.map((s) => {
-                  const active = s.request_id === selectedId
-                  return (
-                    <tr
-                      key={s.request_id}
-                      onClick={() => setSelectedId(s.request_id)}
-                      className={`cursor-pointer border-b border-[var(--ei-border-primary)]/60 hover:bg-[var(--ei-surface-hover)] ${
-                        active ? 'bg-[rgba(0,166,255,0.08)]' : ''
-                      }`}
-                    >
-                      <td className="px-4 py-2.5 whitespace-nowrap text-[var(--ei-text-secondary)]">
-                        {formatTime(s.started_at)}
-                      </td>
-                      <td className="px-4 py-2.5 text-[var(--ei-text-primary)] font-medium">
-                        {pipelineTitle(s.kind, s)}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <DurationBadge ms={s.total_duration_ms} />
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {loading && !sessions.length ? (
+              <p className="px-4 py-10 text-center text-sm text-[var(--ei-text-muted)]">Loading…</p>
+            ) : null}
+            {!loading && !sessions.length ? (
+              <div className="px-6 py-12 text-center">
+                <p className="text-sm font-medium text-[var(--ei-text-primary)]">No parses yet</p>
+                <p className="text-xs text-[var(--ei-text-muted)] mt-1.5 leading-relaxed">
+                  Parse a resume or JD, or run bulk parsing, then hit Refresh.
+                </p>
+              </div>
+            ) : null}
+            {!loading && sessions.length > 0 && !filteredSessions.length ? (
+              <div className="px-6 py-12 text-center">
+                <p className="text-sm font-medium text-[var(--ei-text-primary)]">No matches</p>
+                <p className="text-xs text-[var(--ei-text-muted)] mt-1.5 leading-relaxed">
+                  Nothing in this filter. Try All or another type.
+                </p>
+              </div>
+            ) : null}
+            {filteredSessions.map((s) => (
+              <SessionRow
+                key={s.request_id}
+                session={s}
+                active={s.request_id === selectedId}
+                onSelect={setSelectedId}
+              />
+            ))}
           </div>
         </div>
 
-        <div className="xl:col-span-3 rounded-xl border border-[var(--ei-border-primary)] bg-[var(--ei-surface-card)] p-5 sm:p-6">
+        <div className="xl:col-span-3 rounded-2xl ring-1 ring-[var(--ei-border-primary)] bg-[var(--ei-bg-secondary)] p-5 sm:p-6 overflow-y-auto min-h-[22rem] max-h-[calc(100vh-14rem)]">
           <PipelineView detail={detail} />
         </div>
       </div>

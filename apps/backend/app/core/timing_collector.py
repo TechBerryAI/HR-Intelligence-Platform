@@ -192,6 +192,8 @@ class TimingSession:
     finished_at: Optional[str] = None
 
     def to_summary(self) -> dict[str, Any]:
+        # Re-resolve so path-based bulk vs single resume stays accurate in filters
+        kind = _classify_session(self)
         return {
             "request_id": self.request_id,
             "started_at": self.started_at,
@@ -203,9 +205,11 @@ class TimingSession:
             "job_id": self.job_id,
             "status": self.status,
             "total_duration_ms": round(self.total_duration_ms, 2),
-            "kind": self.kind,
+            "kind": kind,
             "event_count": len(self.events),
             "stages": self.stage_timeline(),
+            "is_bulk_group": False,
+            "resume_count": None,
         }
 
     def to_detail(self) -> dict[str, Any]:
@@ -488,11 +492,14 @@ class TimingCollector:
         self._order: deque[str] = deque(maxlen=self._max)
         self._open: dict[str, TimingSession] = {}
 
-    def clear(self) -> None:
+    def clear(self) -> int:
+        """Remove all stored / in-flight timing sessions. Returns how many were dropped."""
         with self._lock:
+            removed = len(self._sessions) + len(self._open)
             self._sessions.clear()
             self._order.clear()
             self._open.clear()
+            return removed
 
     def begin_session(
         self,
@@ -620,6 +627,8 @@ class TimingCollector:
                 continue
             if status and s.status != status:
                 continue
+            # Finalize kind before filtering so open/legacy sessions match UI filters
+            s.kind = _classify_session(s)
             if kind and s.kind != kind:
                 continue
             if function_name:
@@ -630,9 +639,6 @@ class TimingCollector:
                 continue
             if date_to and s.started_at > date_to:
                 continue
-            # Finalize kind for open sessions so the UI can label them
-            if not s.kind or s.kind == "other":
-                s.kind = _classify_session(s)
             if s.total_duration_ms <= 0 and s.events:
                 s.total_duration_ms = max(e.duration_ms for e in s.events)
             out.append(s)
@@ -750,34 +756,43 @@ class TimingCollector:
         """
         Recent sessions for the dashboard.
 
-        Bulk file sessions that share a job_id are folded into one
-        ``Bulk Parse`` row with resume_count.
+        - Single resume parse → ``resume_parse`` rows (Resume filter)
+        - Bulk worker files → one ``bulk_parse`` row per job (Bulk filter)
+        Kind filter is applied after grouping so Resume never includes bulk jobs.
         """
-        # Over-fetch so grouping still fills the limit
-        raw = self.list_recent(limit=max(limit * 4, 80), **filters)
+        kind_filter = (filters.get("kind") or "").strip() or None
+        # Fetch without kind so bulk grouping still works when filtering by kind
+        fetch_filters = {k: v for k, v in filters.items() if k != "kind"}
+        raw = self.list_recent(limit=max(limit * 4, 80), **fetch_filters)
+
         by_job: dict[str, list[TimingSession]] = {}
         for s in raw:
-            kind = s.kind or _classify_session(s)
-            if kind == "bulk_parse" and s.job_id:
-                by_job.setdefault(str(s.job_id), []).append(s)
+            kind = _classify_session(s)
+            s.kind = kind
+            if kind == "bulk_parse":
+                jid = str(s.job_id or s.request_id)
+                by_job.setdefault(jid, []).append(s)
 
         seen_jobs: set[str] = set()
         out: list[dict[str, Any]] = []
         for s in raw:
-            kind = s.kind or _classify_session(s)
-            if kind == "bulk_parse" and s.job_id:
-                jid = str(s.job_id)
+            kind = _classify_session(s)
+            s.kind = kind
+            if kind == "bulk_parse":
+                jid = str(s.job_id or s.request_id)
                 if jid in seen_jobs:
                     continue
                 seen_jobs.add(jid)
                 kids = by_job.get(jid) or [s]
-                # Include any other stored sessions for this bulk job
-                kids = self._bulk_sessions_for_job(jid) or kids
-                out.append(_bulk_group_summary(jid, kids))
+                if s.job_id:
+                    kids = self._bulk_sessions_for_job(str(s.job_id)) or kids
+                summary = _bulk_group_summary(str(s.job_id or jid), kids)
             else:
+                # Never surface bulk worker files under Resume / JD / Apply
                 summary = s.to_summary()
-                summary["resume_count"] = None
-                out.append(summary)
+            if kind_filter and summary.get("kind") != kind_filter:
+                continue
+            out.append(summary)
             if len(out) >= limit:
                 break
         return out
@@ -797,6 +812,11 @@ class TimingCollector:
 
     def get_bulk_detail(self, job_id: str) -> Optional[dict[str, Any]]:
         kids = self._bulk_sessions_for_job(job_id)
+        if not kids:
+            # Synthetic group key when a bulk file had no job_id (request_id used)
+            sess = self.get_session(job_id)
+            if sess is not None and _classify_session(sess) == "bulk_parse":
+                kids = [sess]
         if not kids:
             return None
         return _bulk_group_detail(str(job_id), kids)
@@ -846,6 +866,16 @@ def _bulk_group_summary(job_id: str, kids: list[TimingSession]) -> dict[str, Any
         "success_count": ok,
         "failed_count": failed,
         "is_bulk_group": True,
+        # Lightweight file list for sidebar expand (no full step payloads)
+        "files": [
+            {
+                "request_id": s.request_id,
+                "filename": _filename_from_bulk_path(s.path),
+                "total_duration_ms": round(float(s.total_duration_ms or 0), 2),
+                "status": s.status,
+            }
+            for s in kids
+        ],
     }
 
 
@@ -934,6 +964,9 @@ def _bulk_group_detail(job_id: str, kids: list[TimingSession]) -> dict[str, Any]
                 "total_duration_ms": round(float(s.total_duration_ms or 0), 2),
                 "status": s.status,
                 "started_at": s.started_at,
+                # Per-resume checklist — same shape as a single resume_parse detail
+                "parse_steps": s.parse_checklist(),
+                "kind": "resume_parse",
             }
         )
 
