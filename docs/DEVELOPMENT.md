@@ -118,6 +118,23 @@ Optional integration vars (see `apps/backend/.env.example`):
 - `INTEGRATION_RETRY_BASE_SECONDS` — default `1.0`
 - `INTEGRATION_WORKER_MAX_WORKERS` — default `4`
 
+### Google Calendar interview scheduling (Current)
+
+After an application becomes **Shortlisted** (manual or ATS), if the assigned recruiter has connected Google Calendar, the backend generates FreeBusy-aware slots, stores an `Invited` interview + `interview_slots`, and emails a secure booking link (`FRONTEND_URL/book/<token>`). Booking creates a Google Calendar event with Meet and sets `applications.status` to **Interview**. Interview lifecycle detail lives on `interviews.status` (`Invited` → `Scheduled` → …).
+
+| Env | Purpose |
+|-----|---------|
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client |
+| `GOOGLE_OAUTH_REDIRECT_URI` | e.g. `http://localhost:3000/api/integrations/google/callback` |
+| `INTERVIEW_DURATION_MINUTES` | default `30` |
+| `INTERVIEW_LOOKAHEAD_DAYS` | business days to offer (default `5`) |
+| `INTERVIEW_TZ` | default `Asia/Kolkata` |
+| `INTERVIEW_INVITE_TTL_HOURS` | booking link TTL (default `72`) |
+
+Recruiter connect UI: **Settings → Integrations → Google Calendar**.
+
+**Future:** interview reminder workers (hooks stubbed as `on_invite_sent` / `on_interview_scheduled`).
+
 ### Media (`MEDIA_ROOT` + Postgres site assets)
 
 **Current**

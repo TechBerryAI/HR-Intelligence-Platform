@@ -29,6 +29,7 @@ const STATUS_BADGES = {
   applied: { label: 'Applied', Icon: FiCheck, variant: 'success' },
   reviewed: { label: 'Reviewed', Icon: FiEye, variant: 'warning' },
   shortlisted: { label: 'Shortlisted', Icon: FiAward, variant: 'accent' },
+  interview: { label: 'Interview', Icon: FiClock, variant: 'accent' },
   rejected: { label: 'Rejected', Icon: FiSlash, variant: 'danger' },
 }
 

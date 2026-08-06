@@ -71,6 +71,7 @@ The system integrates resume and job-description (JD) parsing (LLM-based TOON fo
 - **Authentication:** Separate HR (OTP signup/verify, JWT access+refresh) and candidate (OTP signup/verify, JWT) flows; Head of HR (`HEAD_HR`) uses `POST /api/login` like other staff roles.
 - **Jobs:** CRUD, enable/disable, jdid auto-generation from title; list filtered by role (HR sees own, public sees enabled only).
 - **Applications:** Apply (validates profile + parsed resume); ATS runs in background (in-process or n8n callback); shortlist/reject and match score stored.
+- **Interview scheduling (Current):** On Shortlisted, if recruiter Google Calendar is connected, generate FreeBusy slots, email `/book/<token>`; booking creates Meet event and sets application status to Interview. Reminder workers are Future (stubs only).
 - **Resume/JD parsing:** PDF/DOC/DOCX upload, LLM-based TOON extraction, storage in `parsed_resumes`/`parsed_jds`; used for apply and ATS.
 - **Bulk resume parsing:** Admin upload to external Bulk-Resume-Parser API (or in-process fallback); progress and Excel download.
 - **Support & feedback:** Support requests (contact), employee HRMS testing feedback with optional screenshot.

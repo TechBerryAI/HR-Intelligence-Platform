@@ -4,6 +4,20 @@ Completed sprint freeze reports and repository migration notes. Kept for audit t
 
 ---
 
+## Interview scheduling — Google Calendar (Current)
+
+**Date:** 2026-08-06
+
+- Extended `interviews` (`Invited` status, `calendar_event_id`, `invite_expires_at`, `interviewer_hrid`) and added `interview_slots`.
+- Per-recruiter Google OAuth tokens on `oauth_tokens.hrid`.
+- On Shortlisted (manual PATCH + ATS persist/callback): `InterviewSchedulingService` generates slots via `CalendarProvider` / `GoogleCalendarProvider`, emails booking link.
+- Public `GET/POST /api/interviews/book/<token>`; booking sets `applications.status = Interview`.
+- Reminder workers: **Future** (stub hooks only).
+
+Migration: `14_interview_scheduling.sql`.
+
+---
+
 ## Table of contents
 
 - [Database Freeze Report — Sprint 1.2](#database-freeze-report-sprint-1-2)

@@ -148,6 +148,8 @@ def create_app() -> Flask:
     from app.domains.support.api.routes import support_bp  # noqa: E402
     from app.domains.support.api.media import media_bp  # noqa: E402
     from app.domains.integrations.api.routes import integrations_bp  # noqa: E402
+    from app.domains.integrations.api.calendar_oauth_routes import calendar_oauth_bp  # noqa: E402
+    from app.domains.recruitment.api.interview_booking import interview_bp  # noqa: E402
 
 
     # Developer Mode: correlate @timing events per HTTP request (no-op when disabled)
@@ -283,6 +285,8 @@ def create_app() -> Flask:
     app.register_blueprint(developer_bp, url_prefix='/api/admin/developer')
     app.register_blueprint(head_hr_bp, url_prefix='/api/head-hr')
     app.register_blueprint(integrations_bp, url_prefix='/api/integrations')
+    app.register_blueprint(calendar_oauth_bp, url_prefix='/api/integrations')
+    app.register_blueprint(interview_bp, url_prefix='/api/interviews')
 
     try:
         from app.core import media_storage, site_assets
