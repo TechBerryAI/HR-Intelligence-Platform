@@ -42,7 +42,7 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
 - **Frontend:** Single-page app; single AppContext for auth, jobs, applicant state; role-based route guards (Recruiter, Candidate, Head of HR, CEO).
 - **Backend:** Monolithic Flask app; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, head-hr. Connection-pooled PostgreSQL; raw SQL via `db_run`/`db_get`/`db_all`.
 
-Detailed docs: **[docs/README.md](docs/README.md)** (HCIP `01`–`10`). Setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**. Legacy archive: **[docs/legacy/](docs/legacy/README.md)**.
+Docs: **[docs/README.md](docs/README.md)** · setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** · user manuals: **[docs/user-manual/](docs/user-manual/README.md)**.
 
 ---
 
@@ -201,7 +201,7 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 | Admin | `/api/admin` | `POST /bulk-parse/upload`, `GET /bulk-parse/progress/:id`, `GET /job-matches` |
 | Head of HR | `/api/head-hr` | `GET /stats`, `GET /admins`, `GET /candidates`, `GET /jobs`, `GET /applications` |
 
-Full endpoint list: **[docs/07-API.md](docs/07-API.md)**.
+For full route details, inspect Flask blueprints under `apps/backend/` (see [docs/ENGINEERING.md](docs/ENGINEERING.md) for narrative).
 
 ---
 
@@ -249,7 +249,7 @@ Electron opens a window that loads the app and uses OS folder dialogs.
 - **Email not sending:** Set `MAIL_SUPPRESS_SEND=true` in `apps/backend/.env` for testing.
 - **Other device cannot reach API:** Leave `VITE_API_URL` empty and open the Vite URL (`http://<host-ip>:5173`), not a hardcoded `localhost` API URL. Ensure firewall allows port 5173.
 
-More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [docs/07-API.md](docs/07-API.md).
+More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ---
 
@@ -260,7 +260,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for branch workflow, architecture boundar
 Quick summary:
 
 1. Create a feature branch from `main`.
-2. Follow existing patterns (see [docs/README.md](docs/README.md), [docs/03-System-Architecture.md](docs/03-System-Architecture.md), and [docs/07-API.md](docs/07-API.md)).
+2. Follow existing patterns (see [docs/README.md](docs/README.md) and [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)).
 3. Ensure backend and frontend run cleanly; add tests where applicable.
 4. Open a pull request with a clear description and reference to any issue.
 
