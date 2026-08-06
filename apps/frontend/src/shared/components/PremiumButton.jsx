@@ -19,9 +19,11 @@ export default function PremiumButton({
   const baseClasses = 'relative overflow-hidden font-semibold transition-all duration-300 flex items-center justify-center gap-2';
   
   const variants = {
-    primary: 'bg-primary dark:bg-accent-blue hover:opacity-90 text-white shadow-md',
+    primary:
+      'bg-[var(--ei-btn-primary-from)] hover:brightness-105 text-[var(--ei-btn-primary-text)] shadow-md border border-white/10',
     secondary: 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700',
-    outline: 'border-2 border-primary dark:border-accent-blue text-primary dark:text-accent-blue hover:bg-slate-100 dark:hover:bg-slate-800',
+    outline:
+      'border-2 border-[var(--ei-btn-primary-from)] text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)]',
     ghost: 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800',
     success: 'bg-emerald-600 hover:bg-emerald-500 text-white',
     danger: 'bg-red-600 hover:bg-red-500 text-white',

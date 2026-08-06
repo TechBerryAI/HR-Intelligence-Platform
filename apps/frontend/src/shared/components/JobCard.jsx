@@ -125,7 +125,7 @@ export default function JobCard({
       >
         <div
           className={`absolute inset-y-0 left-0 w-0.5 bg-transparent transition-colors ${
-            enterprise ? 'group-hover:bg-[#00A6FF]' : 'group-hover:bg-slate-900'
+            enterprise ? 'group-hover:bg-[var(--ei-btn-primary-from)]' : 'group-hover:bg-slate-900'
           }`}
         />
         <div
@@ -243,7 +243,7 @@ export default function JobCard({
                       ? 'cursor-not-allowed bg-white/[0.06] text-[#71808E]'
                       : 'cursor-not-allowed bg-slate-100 text-slate-400'
                     : enterprise
-                      ? 'bg-gradient-to-r from-[#00A6FF] to-[#276DFF] text-white hover:opacity-95 shadow-[0_6px_20px_rgba(0,166,255,0.25)]'
+                      ? 'bg-[var(--ei-btn-primary-from)] text-[var(--ei-btn-primary-text)] hover:brightness-105 shadow-[0_6px_16px_var(--ei-btn-primary-shadow)]'
                       : 'bg-slate-900 text-white hover:bg-slate-800'
                 }`}
               >
@@ -360,7 +360,7 @@ export default function JobCard({
                     }}
                     className={`w-full sm:w-auto ${
                       enterprise
-                        ? '!bg-gradient-to-r !from-[#00A6FF] !to-[#276DFF] !text-white'
+                        ? '!bg-[var(--ei-btn-primary-from)] !text-[var(--ei-btn-primary-text)]'
                         : ''
                     }`}
                   >
