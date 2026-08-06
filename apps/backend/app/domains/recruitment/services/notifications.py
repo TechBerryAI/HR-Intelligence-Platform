@@ -6,6 +6,11 @@ Per the ATS spec: PROFILE_VIEWED, SHORTLISTED, NOT_SHORTLISTED.
 """
 
 from typing import Tuple
+from app.common.application_status import (
+    STATUS_REJECTED,
+    STATUS_SCREENING,
+    STATUS_SHORTLISTED,
+)
 from app.integrations.email.utils import send_notification_email
 from app.integrations.email.templates import candidate_notification_html
 
@@ -16,11 +21,11 @@ STATUS_LABELS = {
     'rejected': 'Not Shortlisted',
 }
 
-# DB status values
+# Canonical DB status values (applications_status_check)
 STATUS_DB = {
-    'profile_viewed': 'profile_viewed',
-    'shortlisted': 'shortlisted',
-    'rejected': 'rejected',
+    'profile_viewed': STATUS_SCREENING,
+    'shortlisted': STATUS_SHORTLISTED,
+    'rejected': STATUS_REJECTED,
 }
 
 
@@ -122,21 +127,22 @@ def process_hr_action(
         subject, body, html = _build_email_profile_viewed(
             candidate_name, candidate_email, job_title, company_name
         )
-        status = 'profile_viewed'
+        status_key = 'profile_viewed'
     elif hr_action == 'SHORTLISTED':
         subject, body, html = _build_email_shortlisted(
             candidate_name, candidate_email, job_title, company_name
         )
-        status = 'shortlisted'
+        status_key = 'shortlisted'
     elif hr_action == 'NOT_SHORTLISTED':
         subject, body, html = _build_email_not_shortlisted(
             candidate_name, candidate_email, job_title, company_name
         )
-        status = 'rejected'
+        status_key = 'rejected'
     else:
         raise ValueError(f"Unknown hr_action: {hr_action}")
 
-    label = STATUS_LABELS.get(status, status)
+    label = STATUS_LABELS.get(status_key, status_key)
+    status_db = STATUS_DB[status_key]
     return {
         "email": {
             "to": candidate_email,
@@ -147,7 +153,7 @@ def process_hr_action(
         "profile_update": {
             "application_id": str(application_id),
             "status": label,
-            "status_db": status,
+            "status_db": status_db,
             "updated_at": timestamp,
         },
     }

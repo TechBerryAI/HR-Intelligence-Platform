@@ -211,3 +211,76 @@ def candidate_notification_html(
     <p style="margin: 16px 0 0 0; color: #64748b; font-size: 14px;">— {_escape(BRAND_SHORT)} Team</p>
     """
     return _wrap_content(subject_title, content, preheader=subject_title)
+
+
+def interview_invite_html(
+    candidate_name: str,
+    job_title: str,
+    company_name: str,
+    recruiter_name: str,
+    booking_url: str,
+    ttl_hours: int = 72,
+) -> str:
+    """Invite candidate to book an interview slot."""
+    name = _escape(candidate_name) or "there"
+    job = _escape(job_title) or "the position"
+    company = _escape(company_name) or "the company"
+    recruiter = _escape(recruiter_name) or "the recruiter"
+    url = _escape(booking_url)
+    content = f"""
+    <h2 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 700; color: #0f172a;">Schedule your interview</h2>
+    <p style="margin: 0 0 16px 0;">Hi {name},</p>
+    <p style="margin: 0 0 16px 0;">
+      You have been shortlisted for <strong>{job}</strong> at <strong>{company}</strong>.
+      Please choose a time to meet with <strong>{recruiter}</strong>.
+    </p>
+    <p style="margin: 0 0 24px 0; text-align: center;">
+      <a href="{url}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;">
+        Book interview slot
+      </a>
+    </p>
+    <p style="margin: 0; color: #64748b; font-size: 13px;">
+      This link expires in {int(ttl_hours)} hours. If the button does not work, open:<br/>
+      <a href="{url}" style="color:#2563eb;word-break:break-all;">{url}</a>
+    </p>
+    """
+    return _wrap_content("Schedule your interview", content, preheader="Book your interview slot")
+
+
+def interview_confirmation_html(
+    candidate_name: str,
+    job_title: str,
+    company_name: str,
+    when_str: str,
+    meet_link: str,
+    for_recruiter: bool = False,
+) -> str:
+    """Interview booking confirmation for candidate or recruiter."""
+    name = _escape(candidate_name) or "Candidate"
+    job = _escape(job_title) or "the position"
+    company = _escape(company_name) or "the company"
+    when = _escape(when_str) or "—"
+    meet = _escape(meet_link) if meet_link else ""
+    if for_recruiter:
+        greeting = f"<p style=\"margin: 0 0 16px 0;\">{name} booked an interview for <strong>{job}</strong> at <strong>{company}</strong>.</p>"
+        title = "Interview booked"
+    else:
+        greeting = f"<p style=\"margin: 0 0 16px 0;\">Hi {_escape(candidate_name) or 'there'},</p><p style=\"margin: 0 0 16px 0;\">Your interview for <strong>{job}</strong> at <strong>{company}</strong> is confirmed.</p>"
+        title = "Interview confirmed"
+    meet_block = ""
+    if meet:
+        meet_block = f"""
+        <p style="margin: 12px 0 0 0;">
+          <a href="{meet}" style="color:#2563eb;">Join Google Meet</a>
+        </p>
+        """
+    content = f"""
+    <h2 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 700; color: #0f172a;">{title}</h2>
+    {greeting}
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse: collapse; margin: 16px 0;">
+      <tr><td style="padding: 8px 0; color: #475569; font-size: 13px;">When</td><td style="padding: 8px 0; color: #0f172a;">{when}</td></tr>
+    </table>
+    {meet_block}
+    <p style="margin: 16px 0 0 0; color: #64748b; font-size: 14px;">A calendar invite has also been sent.</p>
+    """
+    return _wrap_content(title, content, preheader=title)

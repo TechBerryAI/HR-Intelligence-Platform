@@ -401,6 +401,14 @@ def receive_ats_result():
         )
         
         print(f"[ATS_RESULT] Successfully updated application with detailed analysis. New status: {new_status}")
+
+        if new_status == STATUS_SHORTLISTED:
+            from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
+            job_row = db_get('SELECT posted_by FROM jobs WHERE jdid = ?', (job_id,))
+            trigger_interview_scheduling(
+                application['id'],
+                recruiter_hrid=(job_row or {}).get('posted_by'),
+            )
         
         return jsonify({
             'status': 'ok',

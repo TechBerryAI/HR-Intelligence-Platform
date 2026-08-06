@@ -170,66 +170,25 @@ def db_all(query: str, params: list | tuple = ()):
             return [dict(r) for r in rows] if rows else []
 
 
-def _split_sql_statements(sql: str):
-    """Split SQL by ; but keep DO $$ ... END $$; as a single statement."""
-    sql = sql.strip()
-    if not sql:
-        return []
-    # If file contains a DO $$ block, run it as a single statement (no split)
-    if 'DO $$' in sql or 'do $$' in sql.lower():
-        return [sql] if sql.endswith(';') else [sql + ';']
-    statements = [s.strip() for s in sql.split(';') if s.strip()]
-    return [s + ';' if not s.endswith(';') else s for s in statements]
-
-
-def run_migrations():
-    """Run PostgreSQL schema from app/database/migrations in sorted order."""
-    schema_dir = os.path.join(os.path.dirname(__file__), '..', 'migrations')
-    if not os.path.isdir(schema_dir):
-        return
-    import glob
-    sql_files = sorted(glob.glob(os.path.join(schema_dir, '*.sql')))
-    for schema_file in sql_files:
-        with open(schema_file, 'r', encoding='utf-8') as f:
-            sql = f.read()
-        lines = []
-        for line in sql.splitlines():
-            stripped = line.strip()
-            if stripped.startswith('--') or not stripped:
-                continue
-            lines.append(line)
-        sql_clean = '\n'.join(lines)
-        # Split into statements; keep DO $$ ... END $$; blocks as one statement
-        statements = _split_sql_statements(sql_clean)
-        with get_conn() as conn:
-            with conn.cursor() as cursor:
-                for stmt in statements:
-                    try:
-                        cursor.execute(stmt)
-                    except Exception as e:
-                        if 'already exists' not in str(e).lower() and 'duplicate' not in str(e).lower():
-                            print(f"[DB] Migration warning in {os.path.basename(schema_file)}: {e}")
-                        conn.rollback()
-
-    # Ensure role column exists on hr_signup (idempotent)
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("""
-                    SELECT 1 FROM information_schema.columns
-                    WHERE table_schema = current_schema() AND table_name = 'hr_signup' AND column_name = 'role'
-                """)
-                if cursor.fetchone() is None:
-                    cursor.execute("""
-                        ALTER TABLE hr_signup ADD COLUMN role VARCHAR(20) NOT NULL DEFAULT 'RECRUITER'
-                    """)
-                    print("[DB] Added column hr_signup.role")
-    except Exception as e:
-        print(f"[DB] Warning ensuring role column: {e}")
-
-    # Admin accounts are seeded via schema_pg/06_seed_admin_accounts.sql and 07_seed_ceo_account.sql
-
-
 def init_db():
-    """Apply schema from schema_pg/01_schema.sql (idempotent)."""
-    run_migrations()
+    """Apply schema via Alembic (consolidated schema_pg + revision chain)."""
+    try:
+        from app.database.alembic_runner import stamp_if_needed, upgrade_head
+        from app.database.schema_apply import _ensure_hr_role_column
+
+        stamp_if_needed()
+        upgrade_head()
+        _ensure_hr_role_column()
+        print('[DB] Schema ready (Alembic + schema_pg)')
+    except Exception as e:
+        print(f'[DB] Alembic/schema error: {e}')
+        import traceback
+        traceback.print_exc()
+        # Last-resort bootstrap for brand-new DBs if Alembic is unavailable
+        try:
+            from app.database.schema_apply import apply_consolidated_schema
+
+            print('[DB] Falling back to direct schema_pg apply…')
+            apply_consolidated_schema()
+        except Exception as e2:
+            print(f'[DB] Schema fallback failed: {e2}')

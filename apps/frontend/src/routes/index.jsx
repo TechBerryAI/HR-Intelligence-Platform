@@ -36,6 +36,7 @@ const HeadHrIntegrations = lazy(() => import('@/features/organization/pages/head
 const PerformanceDashboard = lazy(() => import('@/features/admin/pages/admin/PerformanceDashboard.jsx'))
 const CeoDashboard = lazy(() => import('@/features/organization/pages/ceo/CeoDashboard.jsx'))
 const ResumeAutofillHarness = lazy(() => import('@/features/validation/ResumeAutofillHarness.jsx'))
+const BookInterview = lazy(() => import('@/features/interview/pages/BookInterview.jsx'))
 
 function StaffSettingsRoute({ children }) {
   const { auth } = useApp()
@@ -51,6 +52,7 @@ export default function AppRoutes() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/jobs" element={<Jobs />} />
+      <Route path="/book/:token" element={<BookInterview />} />
       <Route path="/validation/resume-autofill" element={<ResumeAutofillHarness />} />
       <Route path="/support/faq" element={<FAQ />} />
       <Route path="/support/contact" element={<ContactUs />} />

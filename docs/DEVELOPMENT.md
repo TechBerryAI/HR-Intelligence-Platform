@@ -101,6 +101,28 @@ node scripts/db-preflight.js
 python scripts/database/test_db_connection.py
 ```
 
+### Schema migrations (Alembic — Current)
+
+Consolidated SQL lives in `apps/backend/schema_pg/`:
+
+| File | Contents |
+|------|----------|
+| `01_core.sql` | Core tables (auth, jobs, applications, raw_files, parsing, …) |
+| `02_domain.sql` | Domain freeze, interviews, RBAC cleanup, keywords, blobs |
+| `03_integrations.sql` | Job-board integrations, OAuth, site assets |
+| `04_seeds.sql` | Seed admin / CEO accounts |
+
+Alembic applies these and tracks versions:
+
+```bash
+cd apps/backend
+alembic upgrade head
+alembic current
+alembic revision -m "describe_change"
+```
+
+Do **not** add new numbered SQL migration files. See `apps/backend/alembic/README.md`.
+
 ## Environment files
 
 | File | Purpose |
@@ -118,23 +140,54 @@ Optional integration vars (see `apps/backend/.env.example`):
 - `INTEGRATION_RETRY_BASE_SECONDS` — default `1.0`
 - `INTEGRATION_WORKER_MAX_WORKERS` — default `4`
 
-### Media volume (`MEDIA_ROOT`)
+### Google Calendar interview scheduling (Current)
 
-Durable product files (parse uploads, feedback screenshots, bulk staging, landing hero MP4) live **outside the git tree**:
+After an application becomes **Shortlisted** (manual or ATS), if the assigned recruiter has connected Google Calendar, the backend generates FreeBusy-aware slots, stores an `Invited` interview + `interview_slots`, and emails a secure booking link (`FRONTEND_URL/book/<token>`). Booking creates a Google Calendar event with Meet and sets `applications.status` to **Interview**. Interview lifecycle detail lives on `interviews.status` (`Invited` → `Scheduled` → …).
+
+| Env | Purpose |
+|-----|---------|
+| `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client |
+| `GOOGLE_OAUTH_REDIRECT_URI` | e.g. `http://localhost:3000/api/integrations/google/callback` |
+| `INTERVIEW_DURATION_MINUTES` | default `30` |
+| `INTERVIEW_LOOKAHEAD_DAYS` | business days to offer (default `5`) |
+| `INTERVIEW_TZ` | default `Asia/Kolkata` |
+| `INTERVIEW_INVITE_TTL_HOURS` | booking link TTL (default `72`) |
+
+Recruiter connect UI: **Settings → Integrations → Google Calendar**.
+
+**Future:** interview reminder workers (hooks stubbed as `on_invite_sent` / `on_interview_scheduled`).
+
+### Media (`MEDIA_ROOT` + Postgres site assets)
+
+**Current**
+
+| Asset | Storage | Served by |
+|-------|---------|-----------|
+| Parse uploads (resume/JD originals) | Postgres `raw_files.file_data` (`BYTEA`) — durable | `load_raw_file_bytes(id)`; disk `.media/uploads` is optional cache |
+| Apply-path candidate resume | Postgres `candidate_profiles.resume` (`BYTEA`) | HR download endpoints |
+| Feedback screenshots, bulk staging | Disk volume `MEDIA_ROOT` (default `<repo>/.media`) | Internal keys `media:…` |
+| Landing / home hero MP4 | Postgres `site_assets` (`BYTEA`) | `GET /api/media/public/hero-video` |
 
 | Key | Purpose |
 |-----|---------|
-| `MEDIA_ROOT` | Absolute path to media volume (prod). Default when unset: `<repo>/.media` (gitignored) |
+| `MEDIA_ROOT` | Absolute path to media volume (prod). Default when unset: `<repo>/.media` |
 | `VITE_HERO_VIDEO_URL` | Optional CDN/HTTPS override for landing video; else `/api/media/public/hero-video` |
 
 ```bash
-# Seed hero video from a one-time copy (or place website-hero.mp4 under MEDIA_ROOT/public/)
+# Create dirs, copy disk seed if needed, upsert hero into site_assets
 python scripts/ensure_media_assets.py
+# Re-read disk and overwrite DB row:
+python scripts/ensure_media_assets.py --force
 ```
 
+Place `website-hero.mp4` under `MEDIA_ROOT/public/` before the first seed (or keep the existing `.media/public/website-hero.mp4`). After seed, the Home page loads the video from the API/DB — it is **not** a frontend `public/` static file.
+
 - Apply resumes remain Postgres `BYTEA` (`candidate_profiles.resume`).
+- Parsed resume/JD originals are also Postgres `BYTEA` (`raw_files.file_data`). Backfill legacy disk-only rows: `python scripts/backfill_raw_file_blobs.py`.
 - Head HR PDF reports stay client-side downloads (not stored on the server).
-- `raw_files.storage_url` uses opaque keys `media:uploads/...` (not `file://` absolute paths).
+- `raw_files.storage_url` may still point at optional disk cache keys `media:uploads/...`.
+
+**Future:** optional object storage (S3) behind the same media keys; CDN for hero delivery.
 
 ## Where to put new code
 

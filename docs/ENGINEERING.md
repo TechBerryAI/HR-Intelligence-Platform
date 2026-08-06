@@ -71,6 +71,7 @@ The system integrates resume and job-description (JD) parsing (LLM-based TOON fo
 - **Authentication:** Separate HR (OTP signup/verify, JWT access+refresh) and candidate (OTP signup/verify, JWT) flows; Head of HR (`HEAD_HR`) uses `POST /api/login` like other staff roles.
 - **Jobs:** CRUD, enable/disable, jdid auto-generation from title; list filtered by role (HR sees own, public sees enabled only).
 - **Applications:** Apply (validates profile + parsed resume); ATS runs in background (in-process or n8n callback); shortlist/reject and match score stored.
+- **Interview scheduling (Current):** On Shortlisted, if recruiter Google Calendar is connected, generate FreeBusy slots, email `/book/<token>`; booking creates Meet event and sets application status to Interview. Reminder workers are Future (stubs only).
 - **Resume/JD parsing:** PDF/DOC/DOCX upload, LLM-based TOON extraction, storage in `parsed_resumes`/`parsed_jds`; used for apply and ATS.
 - **Bulk resume parsing:** Admin upload to external Bulk-Resume-Parser API (or in-process fallback); progress and Excel download.
 - **Support & feedback:** Support requests (contact), employee HRMS testing feedback with optional screenshot.
@@ -194,11 +195,11 @@ HR-Job-Portal-App/
 │   ├── support.py            # support submit, my-requests, all, by id, status
 │   ├── feedback_routes.py    # feedback submit, list, status
 │   ├── head_hr.py        # head-hr stats, stats, admins, candidates, jobs, applications
-│   ├── db.py                 # PostgreSQL pool, get_conn, db_run, db_get, db_all, run_migrations, init_db
+│   ├── db.py                 # PostgreSQL pool, get_conn, db_run, db_get, db_all, init_db
 │   ├── utils.py              # JWT, authenticate_token, require_recruiter, require_candidate, require_head_hr, optional_authenticate_token
 │   ├── env_validator.py, extensions.py (Flask-Mail)
 │   ├── toon.py, text_extraction.py, parsing_utils.py, llm_service.py
-│   ├── matching.py, llm_key_manager.py
+│   ├── llm_key_manager.py
 │   ├── models/               # SQLAlchemy: hr_auth.py, candidate_auth.py (HR/candidate OTP flows)
 │   ├── routes/
 │   │   └── simple_candidate_auth.py  # candidate signup, verify-otp, resend-otp, login (no SQLAlchemy)
@@ -206,17 +207,15 @@ HR-Job-Portal-App/
 │   │   └── routes.py         # bulk-parse upload/progress/download, job-matches
 │   ├── helpers/              # email_utils, email_templates, otp_utils, mail_send
 │   ├── services/             # ats_service, candidate_notification_service, bulk_parsing_service
-│   ├── schema_pg/
-│   │   ├── 01_schema.sql     # Tables: hr_signup, candidate_signup, jobs, applications, parsed_*, etc.
-│   │   ├── 02_seed_admin_accounts.sql
-│   │   └── 03_employee_feedback.sql
+│   ├── schema_pg/            # Consolidated DDL (01_core … 04_seeds); applied via Alembic
+│   ├── alembic/              # Migration revisions
 │   ├── requirements.txt, .env.example
 │   └── gunicorn.conf.py
-├── electron/                 # Desktop shell (native dialogs, IPC only)
+├── desktop/                  # Desktop shell (native dialogs, IPC only)
 │   ├── main.js, preload.js, ipc-handlers.js
 ├── scripts/                  # Root utilities
 ├── tests/                    # Test index
-├── tools/                    # CLI index
+├── packages/knowledge/       # Knowledge path helpers (used by parser)
 └── ai/toon/v1/types/         # TOON TypeScript contracts (toon.ts)
 ```
 
@@ -266,7 +265,7 @@ Defined in `App.jsx`. All page components are lazy-loaded via `React.lazy()`.
 
 Location: `frontend/src/components/ui/`. Barrel: `ui/index.js`.
 
-- **Button** (buttonVariants), **Card** (CardHeader, CardFooter, CardTitle, CardDescription, CardContent), **Input**, **Textarea**, **Badge** (badgeVariants), **Avatar** (AvatarImage, AvatarFallback, AvatarWithInitials), **StatCard**, **Modal**, **Tabs** (TabPanel), **Skeleton**, **SkeletonLoader** (SkeletonCard, SkeletonList), **DropdownMenu** (Trigger, Content, Item, Label, Separator), **Dialog** (Trigger, Content, Header, Footer, Title, Description), **Progress**, **Table** (Header, Body, Footer, Head, Row, Cell, Caption), **Separator**.
+- **Button** (buttonVariants), **Card** (CardHeader, CardFooter, CardTitle, CardDescription, CardContent), **Input**, **Badge** (badgeVariants), **Avatar** (AvatarImage, AvatarFallback, AvatarWithInitials), **Modal**, **DropdownMenu** (Trigger, Content, Item, Label, Separator).
 
 Built with Radix primitives and Tailwind; variants via cva + cn.
 
@@ -303,7 +302,7 @@ Login flows: HR and candidate each use email + password; HR and candidate signup
 #### 5.1 Framework & Structure
 
 - **Flask** application in `app.py`. Loads `.env` from backend directory; runs `EnvValidator` at startup; configures CORS (origins from `FRONTEND_URLS`/`FRONTEND_URL` or localhost + local IP), Flask-Mail, `init_models()`, `init_db()`; registers blueprints.
-- **Database:** `db.py` — PostgreSQL via psycopg3, connection pool (default 5), `get_conn()`, `db_run`, `db_get`, `db_all`. Placeholders normalized from `?` to `%s` for psycopg. Migrations: `schema_pg/*.sql` run in order by `run_migrations()`.
+- **Database:** `db.py` — PostgreSQL via psycopg3, connection pool (default 5), `get_conn()`, `db_run`, `db_get`, `db_all`. Placeholders normalized from `?` to `%s` for psycopg. Schema: consolidated `schema_pg/*.sql` applied by Alembic (`init_db` → `upgrade head`).
 
 #### 5.2 API Design
 
@@ -323,7 +322,7 @@ Login flows: HR and candidate each use email + password; HR and candidate signup
 
 #### 5.5 Database Interaction
 
-- All queries go through `db_run`, `db_get`, `db_all`. Schema in `schema_pg/01_schema.sql`: hr_signup, candidate_signup, candidate_education/certifications/experiences, hr_login, candidate_login, jobs, candidate_profiles, applications, support_requests, raw_files, parsed_resumes, parsed_jds, login_history, CandidateAuth, HRAuth. Additional tables in 02/03 for seed and employee_feedback.
+- All queries go through `db_run`, `db_get`, `db_all`. Schema lives in consolidated `schema_pg/01_core.sql` … `04_seeds.sql` (applied by Alembic): hr_signup, candidate_signup, jobs, applications, raw_files, parsed_*, integrations, interviews, etc.
 
 ---
 
@@ -547,7 +546,7 @@ Base URL: `http://localhost:3000` (or `VITE_API_URL`). All below are relative to
 #### 9.4 db.py (backend)
 
 - **Purpose:** PostgreSQL connection pool and query helpers.
-- **Design:** ConnectionPool with Queue; get_connection checks pool, validates with SELECT 1, or creates new connection. get_conn context manager commits on success, rollback on exception, always returns connection to pool. run_migrations runs schema_pg/*.sql in order; idempotent column adds for is_head_hr, is_head_hr.
+- **Design:** ConnectionPool with Queue; get_connection checks pool, validates with SELECT 1, or creates new connection. get_conn context manager commits on success, rollback on exception, always returns connection to pool. `init_db()` runs Alembic (`stamp_if_needed` + `upgrade head`) against consolidated `schema_pg`.
 
 ---
 
@@ -677,7 +676,6 @@ backend/
 ├── parsing_utils.py          # File hash, store raw file, store parsed resume/JD, cache lookup
 ├── llm_service.py            # LLM calls (e.g. Grok/XAI) for parsing and classification
 ├── llm_key_manager.py        # API key rotation for LLM
-├── matching.py               # Matching percentage logic (e.g. for applications)
 ├── sessions_service.py       # Session tracking, login history, logout
 ├── requirements.txt
 ├── gunicorn.conf.py          # Gunicorn config for production
@@ -705,10 +703,12 @@ backend/
 │   ├── candidate_notification_service.py  # Email on profile viewed / shortlisted / rejected
 │   ├── bulk_parsing_service.py   # Proxy to BULK_PARSER_URL (upload, progress, download)
 │   └── local_bulk_parser.py  # In-process bulk parsing fallback
+├── alembic/                 # Alembic env + versions (primary schema manager)
 └── schema_pg/
-    ├── 01_schema.sql        # Main tables (hr_signup, jobs, applications, parsed_*, etc.)
-    ├── 02_seed_admin_accounts.sql
-    └── 03_employee_feedback.sql
+    ├── 01_core.sql          # Auth, jobs, applications, raw_files, parsing, feedback
+    ├── 02_domain.sql        # Domain freeze, interviews/slots, keywords, blobs
+    ├── 03_integrations.sql  # Integrations, OAuth, site_assets (BYTEA)
+    └── 04_seeds.sql         # Admin / CEO seed accounts
 ```
 
 ---
@@ -731,7 +731,7 @@ backend/
 
 6. **Models:** `init_models()` (SQLAlchemy).
 
-7. **Database:** `init_db()` is called at startup (not lazy) so the first request does not wait for schema run. Runs `run_migrations()` from db.py.
+7. **Database:** `init_db()` is called at startup (not lazy) so the first request does not wait for schema run. Runs Alembic `stamp_if_needed` + `upgrade head` (consolidated `schema_pg`).
 
 8. **Routes:**  
    - `GET /` — API root JSON.  
@@ -761,10 +761,10 @@ backend/
 - **db_get(query, params):** Same replacement, uses cursor with dict_row, returns the first row as a dict or None.
 - **db_all(query, params):** Returns all rows as a list of dicts.
 
-**Migrations:**
+**Migrations (Current):**
 
-- **run_migrations():** Reads all `.sql` files from `schema_pg/` in order, strips comments and empty lines, splits by `;` (keeping `DO $$ ... END $$;` as one statement), executes each. Then ensures columns `is_HEAD_HR` and `is_head_hr` exist on `hr_signup` (idempotent ALTER).
-- **init_db():** Just calls `run_migrations()`.
+- **schema_apply.apply_consolidated_schema():** Applies `schema_pg/01_core.sql` … `04_seeds.sql` idempotently (used by Alembic baseline revisions).
+- **init_db():** `stamp_if_needed()` then Alembic `upgrade head`, then ensures `hr_signup.role`.
 
 ---
 
@@ -1374,14 +1374,8 @@ Guards are small wrapper components that either render `children` or redirect.
 - **Input, Textarea:** Styled inputs with optional props.
 - **Badge:** Status/type badges with `badgeVariants`.
 - **Avatar:** AvatarImage, AvatarFallback, AvatarWithInitials (from Radix Avatar).
-- **Modal, Dialog:** Overlay and content; Dialog uses Radix.
-- **Tabs:** TabPanel and tab list.
-- **Table:** Header, Body, Footer, Head, Row, Cell, Caption for consistent tables.
+- **Modal:** Overlay dialog used by landing demo and similar flows.
 - **DropdownMenu:** Trigger, Content, Item, Label, Separator (Radix Dropdown).
-- **Skeleton, SkeletonLoader:** Loading placeholders (SkeletonCard, SkeletonList).
-- **Progress:** Progress bar (Radix).
-- **Separator:** Horizontal/vertical divider.
-- **StatCard:** Small stat display (e.g. number + label).
 
 All use Tailwind and, where applicable, Radix UI primitives and `class-variance-authority` + `tailwind-merge` for variant styling.
 
