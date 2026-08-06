@@ -56,9 +56,10 @@ Component tests are colocated. See [tests/README.md](tests/README.md).
 
 When adding or changing a major component:
 
-- Update the directory README (see [documentation standard](docs/README.md#documentation-standard))
+- Update the relevant README under `docs/` or the component directory
+- Keep [docs/user-manual/](docs/user-manual/README.md) in mind for user-facing flow changes
 - Fix cross-references if paths change
-- Do not duplicate content — link to the canonical source
+- Prefer live code as the source of truth over archive narratives
 
 ## AI platform conventions
 
@@ -82,7 +83,7 @@ Significant AI platform decisions require an ADR in `ai/docs/adr/`. See [ai/docs
 
 ## Questions
 
-- HCIP docs: [docs/README.md](docs/README.md) · [docs/01-Product-Constitution.md](docs/01-Product-Constitution.md)
+- Docs index: [docs/README.md](docs/README.md)
+- User manuals: [docs/user-manual/README.md](docs/user-manual/README.md)
 - AI platform: [ai/README.md](ai/README.md)
 - TOON: [ai/toon/README.md](ai/toon/README.md)
-- Legacy archive: [docs/legacy/README.md](docs/legacy/README.md)
