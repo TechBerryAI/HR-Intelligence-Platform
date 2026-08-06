@@ -756,8 +756,17 @@ def _optional_llm_narrative(evidence: dict) -> str:
                 return ""
             return ""
 
+        from app.core.request_context import get_timing_context, run_in_timing_context
+
+        timing_ctx = get_timing_context()
+
+        def _invoke_timed() -> str:
+            if timing_ctx is not None:
+                return run_in_timing_context(timing_ctx, _invoke)
+            return _invoke()
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            fut = pool.submit(_invoke)
+            fut = pool.submit(_invoke_timed)
             return (fut.result(timeout=timeout_sec) or "").strip()
     except Exception:
         return ""

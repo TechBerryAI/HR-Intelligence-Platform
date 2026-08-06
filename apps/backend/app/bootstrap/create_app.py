@@ -87,6 +87,9 @@ def create_app() -> Flask:
     app.config['MAIL_SUPPRESS_SEND'] = os.getenv('MAIL_SUPPRESS_SEND', 'false').lower() == 'true'
     app.config['MAIL_TIMEOUT'] = int(os.getenv('MAIL_TIMEOUT', '25'))
     app.config['MAIL_SEND_RETRIES'] = int(os.getenv('MAIL_SEND_RETRIES', '3'))
+    app.config['DEVELOPER_MODE'] = os.getenv('DEVELOPER_MODE', 'false').lower() in (
+        '1', 'true', 'yes', 'on',
+    )
 
     if not app.config['MAIL_SUPPRESS_SEND'] and app.config.get('MAIL_USERNAME'):
         un = app.config['MAIL_USERNAME'].strip()
@@ -133,6 +136,8 @@ def create_app() -> Flask:
 
     from app.database.connection.db import init_db  # noqa: E402
     from app.domains.administration.api.admin import admin_bp  # noqa: E402
+    from app.domains.administration.api.developer import developer_bp  # noqa: E402
+    from app.domains.integrations.api.routes import integrations_bp  # noqa: E402
     from app.domains.administration.api.head_hr import head_hr_bp  # noqa: E402
     from app.domains.candidate.api.routes import candidate_bp  # noqa: E402
     from app.domains.employee.api.feedback import feedback_bp  # noqa: E402
@@ -142,7 +147,59 @@ def create_app() -> Flask:
     from app.domains.recruitment.api.jobs import jobs_bp  # noqa: E402
     from app.domains.recruitment.api.parsing import parsing_bp  # noqa: E402
     from app.domains.support.api.routes import support_bp  # noqa: E402
-    from app.domains.integrations.api.routes import integrations_bp  # noqa: E402
+
+    # Developer Mode: correlate @timing events per HTTP request (no-op when disabled)
+    @app.before_request
+    def _developer_timing_begin():
+        try:
+            from app.core.developer_mode import is_developer_mode_enabled
+            from app.core.request_context import start_request_context
+            from app.core.timing_collector import timing_collector
+
+            if not is_developer_mode_enabled():
+                return
+            # Skip noisy probes and the developer dashboard APIs themselves
+            path = request.path or ''
+            if path in ('/health', '/', '/api/test-cors') or path.startswith('/api/admin/developer'):
+                return
+            ctx = start_request_context(path=path, method=request.method)
+            timing_collector.begin_session(
+                request_id=ctx.request_id,
+                started_at=ctx.started_at_iso,
+                path=ctx.path,
+                method=ctx.method,
+            )
+            request.timing_request_id = ctx.request_id
+            request.timing_started_at = ctx.started_at
+        except Exception:
+            pass
+
+    @app.teardown_request
+    def _developer_timing_end(exc):
+        try:
+            from app.core.developer_mode import is_developer_mode_enabled
+            from app.core.request_context import get_timing_context, set_timing_context
+            from app.core.timing_collector import timing_collector
+            import time as _time
+
+            if not is_developer_mode_enabled():
+                return
+            rid = getattr(request, 'timing_request_id', None)
+            started = getattr(request, 'timing_started_at', None)
+            if not rid:
+                ctx = get_timing_context()
+                rid = ctx.request_id if ctx else None
+                started = ctx.started_at if ctx else None
+            if rid:
+                wall_ms = None
+                if started is not None:
+                    wall_ms = (_time.perf_counter() - started) * 1000.0
+                if exc is not None:
+                    timing_collector.mark_error(rid)
+                timing_collector.end_session(rid, wall_duration_ms=wall_ms)
+            set_timing_context(None)
+        except Exception:
+            pass
 
     print("[DB] Initializing database at startup...")
     _db_host = os.getenv('POSTGRES_HOST', os.getenv('PGHOST', 'localhost'))
@@ -181,7 +238,6 @@ def create_app() -> Flask:
             "endpoints": [
                 "/health", "/api", "/api/jobs", "/api/candidate",
                 "/api/applications", "/api/sessions", "/api/admin",
-                "/api/integrations",
             ],
         })
 
@@ -220,8 +276,13 @@ def create_app() -> Flask:
     app.register_blueprint(support_bp, url_prefix='/api/support')
     app.register_blueprint(feedback_bp, url_prefix='/api/feedback')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
-    app.register_blueprint(head_hr_bp, url_prefix='/api/head-hr')
+    app.register_blueprint(developer_bp, url_prefix='/api/admin/developer')
     app.register_blueprint(integrations_bp, url_prefix='/api/integrations')
+    app.register_blueprint(head_hr_bp, url_prefix='/api/head-hr')
+
+    if app.config.get('DEVELOPER_MODE'):
+        print("[DEVELOPER MODE] Enabled — Admin performance collector active")
+
 
     try:
         from app.domains.integrations.bootstrap import init_integrations

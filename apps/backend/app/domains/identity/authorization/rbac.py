@@ -27,6 +27,7 @@ PERMISSIONS = {
     'bulk_parse:read_all': {ROLE_CEO, ROLE_HEAD_HR},
     'bulk_parse:read_own': {ROLE_RECRUITER, ROLE_HEAD_HR, ROLE_CEO},
     'settings:configure': {ROLE_HEAD_HR},
+    'developer:performance': {ROLE_HEAD_HR},
 }
 
 

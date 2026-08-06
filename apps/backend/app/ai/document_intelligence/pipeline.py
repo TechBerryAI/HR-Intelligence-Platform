@@ -130,6 +130,37 @@ def _emit(
         except Exception:
             pass
 
+    # Developer Mode: record per-stage duration for the Performance Dashboard
+    try:
+        from app.core.developer_mode import is_developer_mode_enabled
+        from app.core.request_context import mark_pipeline_stage_start, take_pipeline_stage_elapsed_ms
+        from app.core.timing_collector import make_timing_event, timing_collector
+
+        if not is_developer_mode_enabled() or not stage:
+            return
+        status_l = (status or '').lower()
+        if status_l == 'started':
+            mark_pipeline_stage_start(stage)
+            return
+        if status_l not in ('completed', 'failed', 'skipped'):
+            return
+        elapsed = take_pipeline_stage_elapsed_ms(stage)
+        if elapsed is None:
+            elapsed = 0.0
+        timing_collector.record(
+            make_timing_event(
+                function=stage,
+                module='app.ai.document_intelligence.pipeline',
+                duration_ms=elapsed,
+                success=status_l != 'failed',
+                exception_name='StageFailed' if status_l == 'failed' else None,
+                depth=2,
+                outcome=status_l,
+            )
+        )
+    except Exception:
+        pass
+
 
 @timing
 def run_document_intelligence(

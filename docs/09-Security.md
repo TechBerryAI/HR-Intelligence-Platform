@@ -133,3 +133,13 @@ Future: immutable audit log stream for admin actions and Copilot tool use.
 | Hired employee data | Longer HR retention |
 
 Formal legal schedules should be approved by the customer’s compliance owners.
+
+### Developer Mode (Current)
+
+Admin-only diagnostics for pipeline timings. Controlled by backend env `DEVELOPER_MODE` (and Flask `DEVELOPER_MODE` config). When off:
+
+- Timing collector inactive (INFO logs remain)
+- `/api/admin/developer/performance/*` returns 404
+- Frontend nav/page hidden (Recruiters, CEO, candidates, public APIs never see it)
+
+When on: `HEAD_HR` opens **Settings**, turns on the **Developer Mode** toggle, then uses `/head-hr/developer`. The Settings toggle is Admin-only and does not appear for Recruiters.

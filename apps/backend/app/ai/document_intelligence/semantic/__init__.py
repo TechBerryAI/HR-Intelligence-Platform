@@ -61,11 +61,15 @@ def _needs_jd_semantic(profile_dict: dict[str, Any]) -> bool:
     return False
 
 
+@timing
 def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
     """Best-effort section LLM with a hard timeout so API/batch never hangs."""
     import concurrent.futures
 
+    from app.core.request_context import get_timing_context, run_in_timing_context
+
     timeout_sec = float(os.getenv('DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC', '25'))
+    timing_ctx = get_timing_context()
 
     def _invoke() -> Optional[dict[str, Any]]:
         try:
@@ -78,9 +82,14 @@ def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
             logger.debug('semantic AI unavailable: %s', exc)
         return None
 
+    def _invoke_timed() -> Optional[dict[str, Any]]:
+        if timing_ctx is not None:
+            return run_in_timing_context(timing_ctx, _invoke)
+        return _invoke()
+
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            fut = pool.submit(_invoke)
+            fut = pool.submit(_invoke_timed)
             return fut.result(timeout=timeout_sec)
     except concurrent.futures.TimeoutError:
         logger.warning('semantic AI timed out after %ss for %s', timeout_sec, doc_kind)

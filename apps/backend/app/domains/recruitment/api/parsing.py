@@ -327,9 +327,25 @@ def parse_resume_public_stream():
         # Run pipeline synchronously while flushing queued stage events
         from concurrent.futures import ThreadPoolExecutor
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(
-                run_resume_parse_pipeline,
+        from app.core.request_context import get_timing_context, run_in_timing_context
+
+        timing_ctx = get_timing_context()
+
+        def _run_pipeline():
+            if timing_ctx is not None:
+                return run_in_timing_context(
+                    timing_ctx,
+                    run_resume_parse_pipeline,
+                    file_data,
+                    filename,
+                    uploader_id=public_uploader_id,
+                    uploader_role='public',
+                    candidate_id=None,
+                    enrichment_context=None,
+                    parse_job_id=parse_job_id,
+                    on_stage=on_stage,
+                )
+            return run_resume_parse_pipeline(
                 file_data,
                 filename,
                 uploader_id=public_uploader_id,
@@ -339,6 +355,9 @@ def parse_resume_public_stream():
                 parse_job_id=parse_job_id,
                 on_stage=on_stage,
             )
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(_run_pipeline)
             while not future.done():
                 while events_q:
                     ev = events_q.pop(0)
@@ -403,14 +422,29 @@ def parse_jd_stream():
         import json
         from concurrent.futures import ThreadPoolExecutor
 
+        from app.core.request_context import get_timing_context, run_in_timing_context
+
         events_q: list = []
 
         def on_stage(event):
             events_q.append(event)
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(
-                run_jd_parse_pipeline,
+        timing_ctx = get_timing_context()
+
+        def _run_pipeline():
+            if timing_ctx is not None:
+                return run_in_timing_context(
+                    timing_ctx,
+                    run_jd_parse_pipeline,
+                    file_data,
+                    filename,
+                    uploader_id=uploader_id,
+                    uploader_role=uploader_role,
+                    job_id=job_id,
+                    parse_job_id=parse_job_id,
+                    on_stage=on_stage,
+                )
+            return run_jd_parse_pipeline(
                 file_data,
                 filename,
                 uploader_id=uploader_id,
@@ -419,6 +453,9 @@ def parse_jd_stream():
                 parse_job_id=parse_job_id,
                 on_stage=on_stage,
             )
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(_run_pipeline)
             while not future.done():
                 while events_q:
                     ev = events_q.pop(0)
