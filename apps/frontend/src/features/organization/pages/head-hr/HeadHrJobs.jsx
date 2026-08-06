@@ -321,7 +321,7 @@ export default function HeadHrJobs() {
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); openEditJob(job) }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[#E8EDF3] hover:bg-white/10 border border-white/15 transition-all"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)] border border-[var(--ei-border-primary)] transition-all"
                         >
                           <FiEdit2 className="w-3.5 h-3.5" /> Edit
                         </button>
