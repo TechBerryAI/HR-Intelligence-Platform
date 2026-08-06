@@ -145,13 +145,15 @@ def _emit(
         if status_l not in ('completed', 'failed', 'skipped'):
             return
         elapsed = take_pipeline_stage_elapsed_ms(stage)
+        # Missing start mark → unknown duration. Still record outcome for the checklist;
+        # the UI formats measured 0 / sub-ms as "<1 ms" (never a misleading "0 ms").
         if elapsed is None:
             elapsed = 0.0
         timing_collector.record(
             make_timing_event(
                 function=stage,
                 module='app.ai.document_intelligence.pipeline',
-                duration_ms=elapsed,
+                duration_ms=max(0.0, float(elapsed)),
                 success=status_l != 'failed',
                 exception_name='StageFailed' if status_l == 'failed' else None,
                 depth=2,
@@ -472,8 +474,9 @@ def _run_resume(
 
     from app.ai.parser.text_extraction import extract_text
 
-    _emit(parse_job_id, 'layout', 'started', 'Layout + text extraction', on_stage=on_stage)
+    # Time text and layout separately (layout must not include extract_text wall time)
     _emit(parse_job_id, 'text', 'started', on_stage=on_stage)
+    text_done_msg = ''
     try:
         raw_text = extract_text(file_data, filename)
     except Exception as e:
@@ -494,16 +497,24 @@ def _run_resume(
             if raw_text and '\x00' in raw_text:
                 raw_text = raw_text.replace('\x00', '')
             text_length = len(raw_text.strip()) if raw_text else 0
-            _emit(parse_job_id, 'text', 'completed', f'OCR DPI retry → {text_length} chars', on_stage=on_stage)
+            text_done_msg = f'OCR DPI retry → {text_length} chars'
         except Exception as retry_err:
             _emit(parse_job_id, 'text', 'failed', f'DPI retry: {retry_err}', on_stage=on_stage)
+            return {'status': 'error', 'error': f'Text extraction failed: {retry_err}'}, 400
 
     if not raw_text or text_length < 30:
         error_msg = 'Could not extract sufficient text from document'
         _emit(parse_job_id, 'text', 'failed', error_msg, on_stage=on_stage)
         return {'status': 'error', 'error': error_msg}, 400
-    _emit(parse_job_id, 'text', 'completed', f'Extracted {text_length} chars', on_stage=on_stage)
+    _emit(
+        parse_job_id,
+        'text',
+        'completed',
+        text_done_msg or f'Extracted {text_length} chars',
+        on_stage=on_stage,
+    )
 
+    _emit(parse_job_id, 'layout', 'started', 'Layout analysis', on_stage=on_stage)
     try:
         from app.ai.parser.layout.detector import enhance_resume_text, is_layout_enabled
 
@@ -720,6 +731,13 @@ def _run_jd(
 
     _emit(parse_job_id, 'coverage', 'started', on_stage=on_stage)
     profile, coverage = recover_jd_profile_gaps(profile, raw_text)
+    _emit(
+        parse_job_id,
+        'coverage',
+        'completed',
+        f'recovered={len(coverage.recovered_fields)} missing_evidence={len(coverage.missing_with_evidence)}',
+        on_stage=on_stage,
+    )
 
     used_llm = False
     _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
@@ -740,13 +758,6 @@ def _run_jd(
     profile, coverage = recover_jd_profile_gaps(profile, raw_text)
     toon = job_to_toon(profile)
     missing_ev = coverage.missing_with_evidence
-    _emit(
-        parse_job_id,
-        'coverage',
-        'completed',
-        f'recovered={len(coverage.recovered_fields)} missing_evidence={len(missing_ev)}',
-        on_stage=on_stage,
-    )
     form = map_job_to_form(profile, coverage=coverage.as_dicts(), raw_text=raw_text)
 
     _emit(parse_job_id, 'validate', 'started', on_stage=on_stage)

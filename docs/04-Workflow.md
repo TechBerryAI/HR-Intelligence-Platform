@@ -539,6 +539,8 @@ Score candidate fit to a job using structured resume and JD intelligence and per
 
 `ats_service.match_candidate_to_job`; UI match panels under Head HR / recruiter views. Optional n8n path exists but public apply uses in-process ATS.
 
+**Public apply submit (Current):** Runs deterministic ATS scoring only — optional LLM narrative is skipped on submit so the button stays responsive. Developer Mode → Apply filter shows per-step timings (validate → candidate → profile → link resume → load JD → ATS → DB save).
+
 ---
 
 ### Flow
