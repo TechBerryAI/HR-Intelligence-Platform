@@ -118,23 +118,34 @@ Optional integration vars (see `apps/backend/.env.example`):
 - `INTEGRATION_RETRY_BASE_SECONDS` — default `1.0`
 - `INTEGRATION_WORKER_MAX_WORKERS` — default `4`
 
-### Media volume (`MEDIA_ROOT`)
+### Media (`MEDIA_ROOT` + Postgres site assets)
 
-Durable product files (parse uploads, feedback screenshots, bulk staging, landing hero MP4) live **outside the git tree**:
+**Current**
+
+| Asset | Storage | Served by |
+|-------|---------|-----------|
+| Landing / home hero MP4 | Postgres `site_assets` (`asset_key = landing.hero_video`, `BYTEA`) | `GET /api/media/public/hero-video` (no auth) |
+| Parse uploads, feedback screenshots, bulk staging | Disk volume `MEDIA_ROOT` (default `<repo>/.media`, gitignored) | Internal keys `media:uploads/...` |
 
 | Key | Purpose |
 |-----|---------|
-| `MEDIA_ROOT` | Absolute path to media volume (prod). Default when unset: `<repo>/.media` (gitignored) |
+| `MEDIA_ROOT` | Absolute path to media volume (prod). Default when unset: `<repo>/.media` |
 | `VITE_HERO_VIDEO_URL` | Optional CDN/HTTPS override for landing video; else `/api/media/public/hero-video` |
 
 ```bash
-# Seed hero video from a one-time copy (or place website-hero.mp4 under MEDIA_ROOT/public/)
+# Create dirs, copy disk seed if needed, upsert hero into site_assets
 python scripts/ensure_media_assets.py
+# Re-read disk and overwrite DB row:
+python scripts/ensure_media_assets.py --force
 ```
+
+Place `website-hero.mp4` under `MEDIA_ROOT/public/` before the first seed (or keep the existing `.media/public/website-hero.mp4`). After seed, the Home page loads the video from the API/DB — it is **not** a frontend `public/` static file.
 
 - Apply resumes remain Postgres `BYTEA` (`candidate_profiles.resume`).
 - Head HR PDF reports stay client-side downloads (not stored on the server).
 - `raw_files.storage_url` uses opaque keys `media:uploads/...` (not `file://` absolute paths).
+
+**Future:** optional object storage (S3) behind the same media keys; CDN for hero delivery.
 
 ## Where to put new code
 

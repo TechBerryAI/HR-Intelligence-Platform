@@ -285,10 +285,12 @@ def create_app() -> Flask:
     app.register_blueprint(integrations_bp, url_prefix='/api/integrations')
 
     try:
-        from app.core import media_storage
+        from app.core import media_storage, site_assets
         root = media_storage.get_media_root()
         media_storage.ensure_hero_video()
-        print(f"[MEDIA] MEDIA_ROOT={root}")
+        hero = site_assets.ensure_hero_video_in_db()
+        size = int(hero.get('byte_size') or 0) if hero else 0
+        print(f"[MEDIA] MEDIA_ROOT={root} hero_db_bytes={size}")
     except Exception as e:
         print(f"[MEDIA] Init warning: {e}")
 

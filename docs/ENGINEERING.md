@@ -708,7 +708,8 @@ backend/
 └── schema_pg/
     ├── 01_schema.sql        # Main tables (hr_signup, jobs, applications, parsed_*, etc.)
     ├── 02_seed_admin_accounts.sql
-    └── 03_employee_feedback.sql
+    ├── 03_employee_feedback.sql
+    └── … through 13_site_assets.sql  # landing hero MP4 in Postgres BYTEA (site_assets)
 ```
 
 ---
