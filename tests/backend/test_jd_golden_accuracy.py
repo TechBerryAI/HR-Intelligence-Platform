@@ -112,6 +112,7 @@ def test_golden_titles(fixture, title_substr):
 def test_golden_aws_not_role_overview():
     _text, _profile, form = _parse("aws_cloud_engineer.txt")
     assert "overview" not in form.title.lower()
+    assert (form.location or "").strip().lower() == "mumbai", f"got location={form.location!r}"
     skills = form.mandatorySkills or form.skillsList or []
     joined = " ".join(skills).lower()
     assert any(
@@ -279,7 +280,8 @@ def test_keywords_from_overall_jd_not_mandatory_copy():
 
 def test_location_mumbai_without_colon():
     _text, _profile, form = _parse("location_mumbai_unlabeled.txt")
-    assert "Mumbai" in (form.location or ""), f"got location={form.location!r}"
+    # Must be exactly Mumbai — not "Mumbai Work from offi" newline bleed
+    assert (form.location or "").strip().lower() == "mumbai", f"got location={form.location!r}"
     skills = " ".join(form.mandatorySkills or form.skillsList or []).lower()
     assert "weblogic" in skills or "websphere" in skills or "ohs" in skills, skills
     missing = [
@@ -308,6 +310,7 @@ def test_video_editor_rejects_job_token_and_stops_at_education():
 
 def test_wireframing_strips_o_bullets_and_prefers_figma():
     _text, _profile, form = _parse("wireframing_bullet_o.txt")
+    assert (form.location or "").strip().lower() == "mumbai", f"got location={form.location!r}"
     skills = form.mandatorySkills or form.skillsList or []
     assert skills, "expected skills"
     assert not any(re.match(r"^[oO]\s+", s) for s in skills), skills
@@ -323,4 +326,29 @@ def test_wireframing_strips_o_bullets_and_prefers_figma():
     ]
     assert len(soft_only) < len(skills) or "figma" in joined
     assert not form.salary or re.search(r"\d|lpa|lakh|negotiable", form.salary, re.I), form.salary
+
+
+def test_extract_location_no_newline_bleed_and_title_city():
+    from app.ai.parser.enrichment.jd_text_inference import (
+        extract_location_from_text,
+        is_plausible_jd_location,
+    )
+
+    middleware = (
+        "Location Mumbai(Looking for candidates from Mumbai Location only)\n"
+        "Work from office and rotational shifts\n"
+    )
+    assert extract_location_from_text(middleware).strip().lower() == "mumbai"
+
+    aws = "Job Description: Cloud Engineer (AWS) – Mumbai\nRole Overview\n"
+    assert extract_location_from_text(aws).strip().lower() == "mumbai"
+
+    wire = "Job Description: Wireframing and Figma Design - Mumbai\nWe are seeking\n"
+    assert extract_location_from_text(wire).strip().lower() == "mumbai"
+
+    assert not is_plausible_jd_location("and job scheduling")
+    assert not is_plausible_jd_location("Remote support")
+    assert is_plausible_jd_location("Remote")
+    assert is_plausible_jd_location("Mumbai")
+    assert is_plausible_jd_location("Vikhroli, Mumbai")
 

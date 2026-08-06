@@ -13,7 +13,7 @@
     "employmentType": "",
     "mandatorySkills": [
       "SME",
-      "Amazon Web Services",
+      "AWS",
       "OCI",
       "EC2",
       "ECS",
@@ -36,7 +36,7 @@
     "preferredSkills": [],
     "skillsList": [
       "SME",
-      "Amazon Web Services",
+      "AWS",
       "OCI",
       "EC2",
       "ECS",
@@ -119,6 +119,7 @@
     "skills_hit": 20,
     "skills_checked": 20,
     "skills_count": 20,
+    "skills_look_skill_like": true,
     "location_in_source": null,
     "company_in_source": null,
     "experience": {

@@ -7,12 +7,11 @@
     "title": ".NET developer",
     "company": "",
     "location": "",
-    "salary": "RS",
+    "salary": "",
     "experienceFrom": "",
     "experienceTo": "",
     "employmentType": "",
     "mandatorySkills": [
-      ".NET",
       "ASP",
       "SQL",
       "ORACLE",
@@ -22,11 +21,11 @@
       "SSAS",
       "OWASP",
       "SVN",
-      "Java"
+      "Java",
+      "ASP.NET"
     ],
     "preferredSkills": [],
     "skillsList": [
-      ".NET",
       "ASP",
       "SQL",
       "ORACLE",
@@ -36,7 +35,8 @@
       "SSAS",
       "OWASP",
       "SVN",
-      "Java"
+      "Java",
+      "ASP.NET"
     ],
     "responsibilities": [
       "Participate in requirement analysis",
@@ -97,7 +97,7 @@
       },
       {
         "field": "salary",
-        "status": "filled",
+        "status": "missing_with_evidence",
         "evidence": true,
         "detail": ""
       },
@@ -123,6 +123,7 @@
     "skills_hit": 11,
     "skills_checked": 11,
     "skills_count": 11,
+    "skills_look_skill_like": true,
     "location_in_source": null,
     "company_in_source": null,
     "experience": {
@@ -132,10 +133,12 @@
       "ok": null
     },
     "has_description": true,
-    "coverage_missing_with_evidence": [],
+    "coverage_missing_with_evidence": [
+      "salary"
+    ],
     "coverage_recovered": [],
     "source_preview": "Job Description |  | Seeking a skilled .NET developer to join our team and contribute to the development of the software | using .NET infrastructure. The work profile includes fine tuning, upgrading or creating applications | from the start and providing support wherever necessary. |  | Responsibilities | ● Participate in requirement analysis | ● Collaborate with internal teams for design and architecture | ● Write clean code with minimum or no dependency on external utilities | ● Test and deploy the application | ● Revise, update and debug code thus improving the software | ● Providing support mainly technically | ● S"
   },
-  "toon_preview": "{'type': 'job_description', 'title': '.NET developer', 'company': '', 'location': '', 'employment_type': '', 'description': 'Seeking a skilled .NET developer to join our team and contribute to the development of the software\\nusing .NET infrastructure. The work profile includes fine tuning, upgrading or creating applications\\nfrom the start and providing support wherever necessary.\\n\\n**Responsibilities:**\\n• Participate in requirement analysis\\n• Collaborate with internal teams for design and architecture\\n• Write clean code with minimum or no dependency on external utilities\\n• Test and deploy the application\\n• Revise, update and debug code thus improving the software\\n• Providing support mainly technically\\n• Should support well as a team player.\\n• Good problem-solving skills\\n• Requirement and skill (Items in bold are must have)\\n• Platform: .NET Framework 4.5 and above, .NET Core\\n• Languages: C#, ASP.NET\\n• DB: MS SQL Server, ORACLE - exposure is good to have\\n• Reports and services: SSIS (ETL Packages), SSRS, SSAS\\n• Scripting: Javascripts, Jquery - Exposure will be useful\\n• Utilities: MS Office\\n• Basic retail banking domain knowledge is essential.\\n• Application security is important, hence familiarity with OWASP standards would be helpful.\\n• Using SVN\\n• Familiarity with Webservices, RESTful APIs development and integration', 'min_experience_years': None, 'max_experience_years': None, 'skills': ['.NET', 'ASP', 'SQL', 'ORACLE', 'SSIS', 'ETL', 'SSRS', 'SSAS', 'OWA",
+  "toon_preview": "{'type': 'job_description', 'title': '.NET developer', 'company': '', 'location': '', 'employment_type': '', 'description': 'Seeking a skilled .NET developer to join our team and contribute to the development of the software\\nusing .NET infrastructure. The work profile includes fine tuning, upgrading or creating applications\\nfrom the start and providing support wherever necessary.\\n\\n**Responsibilities:**\\n• Participate in requirement analysis\\n• Collaborate with internal teams for design and architecture\\n• Write clean code with minimum or no dependency on external utilities\\n• Test and deploy the application\\n• Revise, update and debug code thus improving the software\\n• Providing support mainly technically\\n• Should support well as a team player.\\n• Good problem-solving skills\\n• Requirement and skill (Items in bold are must have)\\n• Platform: .NET Framework 4.5 and above, .NET Core\\n• Languages: C#, ASP.NET\\n• DB: MS SQL Server, ORACLE - exposure is good to have\\n• Reports and services: SSIS (ETL Packages), SSRS, SSAS\\n• Scripting: Javascripts, Jquery - Exposure will be useful\\n• Utilities: MS Office\\n• Basic retail banking domain knowledge is essential.\\n• Application security is important, hence familiarity with OWASP standards would be helpful.\\n• Using SVN\\n• Familiarity with Webservices, RESTful APIs development and integration', 'min_experience_years': None, 'max_experience_years': None, 'skills': ['ASP', 'SQL', 'ORACLE', 'SSIS', 'ETL', 'SSRS', 'SSAS', 'OWASP', 'SV",
   "source_preview": "Job Description\n\nSeeking a skilled .NET developer to join our team and contribute to the development of the software\nusing .NET infrastructure. The work profile includes fine tuning, upgrading or creating applications\nfrom the start and providing support wherever necessary.\n\nResponsibilities\n● Participate in requirement analysis\n● Collaborate with internal teams for design and architecture\n● Write clean code with minimum or no dependency on external utilities\n● Test and deploy the application\n● Revise, update and debug code thus improving the software\n● Providing support mainly technically\n● Should support well as a team player.\n● Good problem-solving skills\n\nRequirement and skill (Items in bold are must have)\n● Platform: .NET Framework 4.5 and above, .NET Core\n● Languages: C#, ASP.NET\n● DB: MS SQL Server, ORACLE - exposure is good to have\n● Reports and services: SSIS (ETL Packages), SSRS, SSAS\n● Scripting: Javascripts, Jquery - Exposure will be useful\n● Utilities: MS Office\n● Basic retail banking domain knowledge is essential.\n● Application security is important, hence familiarity with OWASP standards would be helpful.\n● Using SVN\n● Familiarity with Webservices, RESTful APIs development and integration"
 }

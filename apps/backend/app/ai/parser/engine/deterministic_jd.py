@@ -8,15 +8,12 @@ JD_DET_CONFIDENCE = max(
     0.0, min(1.0, float(os.getenv('JD_DET_CONFIDENCE', '0.70')))
 )
 
-_JD_SKIP_LLM = os.getenv('JD_SKIP_LLM_WHEN_DETERMINISTIC', 'true').lower() in (
-    '1',
-    'true',
-    'yes',
-)
-
-
 def jd_skip_llm_enabled() -> bool:
-    return _JD_SKIP_LLM
+    return os.getenv('JD_SKIP_LLM_WHEN_DETERMINISTIC', 'false').lower() in (
+        '1',
+        'true',
+        'yes',
+    )
 
 
 def _nonempty(value: Any) -> bool:

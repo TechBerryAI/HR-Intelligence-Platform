@@ -67,11 +67,17 @@ _DUTY_VERB_START = re.compile(
     r'(?i)^(managed|executed|coordinated|collaborated|utilized|maintained|'
     r'facilitated|developed|designed|created|built|led|drove|implemented|'
     r'optimized|improved|increased|worked|assisted|supported|handled|'
-    r'performed|conducted|analyzed|monitored|delivered|owned|spearheaded)\b'
+    r'performed|conducted|analyzed|monitored|delivered|owned|spearheaded|'
+    r'configured|deployed|integrated|automated|migrated|refactored|'
+    r'responsible|ensuring|resulting)\b'
 )
 _PROJECT_LIKE_EXP = re.compile(
     r'(?i)\b(?:assignment|coursera|project|internship\s+project|fictional\s+brand|'
     r'client\s*name\s*/?\s*projects?)\b'
+)
+_COMPANY_ORG_CUE = re.compile(
+    r'(?i)\b(?:inc|llc|ltd|llp|corp|pvt|private\s+limited|technologies|technology|'
+    r'solutions|systems|labs|limited|company|co\.|services|consulting|group)\b'
 )
 _DEGREE_PAT = re.compile(
     r'(?i)\b('
@@ -426,13 +432,28 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
             field = 'Computer Science'
 
         # Gold one-liner: "B.Tech Computer Science, State University, 2015"
+        # Also when misclassified as institution-only: "Bachelor of Commerce, Mumbai University, 2021"
+        one_liner = ''
         if degree and not institution and ',' in degree:
-            parts = [p.strip() for p in degree.split(',') if p.strip()]
+            one_liner = degree
+        elif institution and not degree and ',' in institution and _DEGREE_PAT.search(institution):
+            one_liner = institution
+        elif (
+            not degree
+            and not institution
+            and ',' in line_wo_dates
+            and _DEGREE_PAT.search(line_wo_dates)
+        ):
+            one_liner = line_wo_dates
+        if one_liner and ',' in one_liner:
+            parts = [p.strip() for p in one_liner.split(',') if p.strip()]
             non_year = [p for p in parts if not re.fullmatch(r'(?:19|20)\d{2}', p)]
             if len(non_year) >= 2 and (
                 is_institution_like(non_year[-1])
                 or 'university' in non_year[-1].lower()
                 or 'college' in non_year[-1].lower()
+                or 'school' in non_year[-1].lower()
+                or 'institute' in non_year[-1].lower()
                 or 'state' in non_year[-1].lower()
             ):
                 institution = non_year[-1]
@@ -555,15 +576,97 @@ def parse_personal(text: str, preamble: str, *, source_filename: str = '') -> Pe
 
 def parse_contact(text: str, preamble: str) -> ContactInfo:
     src = f'{preamble}\n{text}' if preamble else text
+    preferred = ''
+    pref_m = re.search(
+        r'(?im)^(?:preferred\s*(?:location|city|work\s*location)|willing\s+to\s+relocate(?:\s+to)?|'
+        r'relocation\s*(?:preference|to)?)\s*[:\-–—]\s*([^\n,]{2,80})',
+        src,
+    )
+    if pref_m:
+        preferred = pref_m.group(1).strip(' .,;')[:120]
     return ContactInfo(
         email=extract_email(src),
         phone=extract_phone(src),
         location=extract_simple_location(src),
-        preferred_location='',
+        preferred_location=preferred,
         linkedin=extract_linkedin(src),
         github=extract_github(src),
         portfolio=extract_portfolio(src),
     )
+
+
+def _looks_like_company_only_line(line: str) -> bool:
+    s = re.sub(r'^[\s•·\-\*●]+', '', (line or '').strip())
+    if not s or len(s) > 80 or _is_bullet_or_duty_line(s) or _EXP_META_LINE.match(s):
+        return False
+    if extract_date_range(s)[0]:
+        return False
+    if is_plausible_job_title(s) and not _COMPANY_ORG_CUE.search(s):
+        return False
+    if _DUTY_VERB_START.match(s):
+        return False
+    return bool(_COMPANY_ORG_CUE.search(s)) or (
+        len(s.split()) <= 6
+        and s[:1].isupper()
+        and not is_plausible_job_title(s)
+    )
+
+
+def _normalize_company_first_experience_lines(lines: list[str]) -> list[str]:
+    """
+    Rewrite company-first blocks into Role - Company - (dates) headers.
+    Example:
+      Acme Technologies Pvt Ltd
+      Backend Engineer
+      Jan 2021 - Present
+    → Backend Engineer - Acme Technologies Pvt Ltd - (Jan 2021 - Present)
+    """
+    if not lines:
+        return []
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        cur = lines[i].strip()
+        nxt = lines[i + 1].strip() if i + 1 < len(lines) else ''
+        third = lines[i + 2].strip() if i + 2 < len(lines) else ''
+        if _looks_like_company_only_line(cur) and nxt and not _is_bullet_or_duty_line(nxt):
+            role_line = re.sub(r'^[\s•·\-\*●]+', '', nxt)
+            # Role on next line; dates may be on role line or following line
+            r_start, r_end = extract_date_range(role_line)
+            if r_start:
+                role_wo = _DATE_RANGE_STRIP.sub('', role_line).strip(' \t|-–—,()')
+                date_span = _DATE_RANGE_STRIP.search(role_line)
+                date_txt = date_span.group(0).strip() if date_span else ''
+                if role_wo and date_txt and (
+                    is_plausible_job_title(role_wo) or (2 <= len(role_wo.split()) <= 8)
+                ):
+                    out.append(f'{role_wo} - {cur} - ({date_txt})')
+                    i += 2
+                    continue
+            elif third and not _is_bullet_or_duty_line(third):
+                d_start, _d_end = extract_date_range(third)
+                if d_start and (
+                    is_plausible_job_title(role_line) or (2 <= len(role_line.split()) <= 8)
+                ):
+                    out.append(f'{role_line} - {cur} - ({third.strip()})')
+                    i += 3
+                    continue
+                if (
+                    is_plausible_job_title(role_line)
+                    or (2 <= len(role_line.split()) <= 8 and not _DUTY_VERB_START.match(role_line))
+                ):
+                    out.append(f'{role_line} - {cur}')
+                    i += 2
+                    continue
+            elif is_plausible_job_title(role_line) or (
+                2 <= len(role_line.split()) <= 8 and not _DUTY_VERB_START.match(role_line)
+            ):
+                out.append(f'{role_line} - {cur}')
+                i += 2
+                continue
+        out.append(cur)
+        i += 1
+    return out
 
 
 def _is_project_like_experience(role: str, company: str = '', description: str = '') -> bool:
@@ -619,6 +722,13 @@ def _join_wrapped_experience_lines(lines: list[str]) -> list[str]:
             out.append(n)
             continue
         if _EXP_META_LINE.match(re.sub(r'^[\s•·\-\*●]+', '', n)):
+            out.append(n)
+            continue
+        # Never glue a company-only line onto a following role title (or vice versa)
+        if _looks_like_company_only_line(p) or _looks_like_company_only_line(n):
+            out.append(n)
+            continue
+        if is_plausible_job_title(n) and not extract_date_range(n)[0]:
             out.append(n)
             continue
         # Continuation of previous bullet / soft-wrapped sentence
@@ -756,6 +866,8 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
         return []
 
     lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    # Company-first → Role - Company - (dates) before wrap-join, so titles are not glued onto company lines
+    lines = _normalize_company_first_experience_lines(lines)
     lines = _join_wrapped_experience_lines(lines)
 
     entries: list[ExperienceEntry] = []

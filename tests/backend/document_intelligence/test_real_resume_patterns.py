@@ -206,6 +206,50 @@ def test_coalesce_education_orphan_pairs():
     assert 'Somaiya' in merged[1].institution
 
 
+def test_parse_education_single_line_degree_institution_year():
+    rows = parse_education('Bachelor of Commerce, Mumbai University, 2021')
+    assert len(rows) == 1
+    assert 'bachelor' in rows[0].degree.lower() or 'commerce' in rows[0].degree.lower()
+    assert 'mumbai' in rows[0].institution.lower()
+    assert rows[0].end == '2021' or '2021' in (rows[0].end or '')
+
+
+def test_parse_education_rejects_duty_line_bleed():
+    section = """
+Mumbai University
+Bachelor of Science
+Configured MySQL master-slave replication for production
+"""
+    rows = parse_education(section)
+    blob = ' '.join(f'{r.degree} {r.institution}' for r in rows).lower()
+    assert 'configured mysql' not in blob
+    assert any('mumbai' in (r.institution or '').lower() for r in rows)
+    assert any('bachelor' in (r.degree or '').lower() or 'science' in (r.degree or '').lower() for r in rows)
+
+
+def test_preferred_location_extracted_and_fallback_on_form():
+    text = """
+Jane Doe
+Austin, TX
+Email: jane@example.com
+Preferred location: Remote
+
+EDUCATION
+Bachelor of Commerce, Mumbai University, 2021
+
+EXPERIENCE
+Engineer - Acme - (Jan 2020 - Present)
+Built APIs
+"""
+    _profile, form, _toon = parse_resume_text_to_canonical(text)
+    assert form.preferredLocation.lower() == 'remote' or 'remote' in form.preferredLocation.lower()
+    # When preferred absent, mapper falls back to current
+    text2 = text.replace('Preferred location: Remote\n', '')
+    _p2, form2, _t2 = parse_resume_text_to_canonical(text2)
+    assert form2.currentLocation
+    assert form2.preferredLocation == form2.currentLocation
+
+
 def test_parse_education_wrapped_section_direct():
     section = """
 The SIA College of Higher
@@ -364,3 +408,47 @@ def test_dash_role_company_dates_line_parses():
     assert e.start == '2024-09'
     assert e.is_current is True
     assert e.end == ''
+
+
+COMPANY_FIRST_EXPERIENCE = """
+Alex Kumar
+Email: alex.kumar@example.com
+Pune, India
+
+SKILLS
+Python, Django, PostgreSQL, Docker
+
+EXPERIENCE
+Acme Technologies Pvt Ltd
+Backend Engineer
+Jan 2021 - Present
+• Built REST APIs and microservices for payment workflows
+• Deployed containerized services with Docker
+• Collaborated with product managers on roadmap delivery
+
+Beta Systems Inc
+Software Developer
+Mar 2018 - Dec 2020
+• Designed data pipelines for analytics
+• Configured monitoring dashboards for production services
+"""
+
+
+def test_company_first_experience_row_count_not_fragmented():
+    """Non-Dhruti layout: company then role then dates; bullets must not become jobs."""
+    _profile, form, _toon = parse_resume_text_to_canonical(COMPANY_FIRST_EXPERIENCE)
+    assert len(form.experiences) == 2, [(e.role, e.company) for e in form.experiences]
+    roles = [e.role for e in form.experiences]
+    companies = [e.company for e in form.experiences]
+    assert roles[0] == 'Backend Engineer'
+    assert 'Acme' in companies[0]
+    assert form.experiences[0].isCurrent is True
+    assert roles[1] == 'Software Developer'
+    assert 'Beta' in companies[1]
+    blob = ' '.join(f'{e.role} {e.company}' for e in form.experiences).lower()
+    assert 'built rest' not in blob
+    assert 'deployed' not in blob
+    assert 'configured monitoring' not in blob
+    assert 'collaborated' not in blob
+    assert 'payment' in (form.experiences[0].description or '').lower()
+    assert 'pipelines' in (form.experiences[1].description or '').lower()

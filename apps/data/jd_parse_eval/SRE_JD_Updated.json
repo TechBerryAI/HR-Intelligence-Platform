@@ -7,58 +7,58 @@
     "title": "Site Reliability Engineer",
     "company": "",
     "location": "Navi Mumbai - Mahape",
-    "salary": "rs",
+    "salary": "",
     "experienceFrom": "5",
     "experienceTo": "",
     "employmentType": "",
     "mandatorySkills": [
-      "PUBLIC",
       "SRE",
       "GKE",
       "ELK",
       "RBAC",
-      "Google Cloud Platform",
+      "GCP",
       "VPC",
       "IAM",
       "Kubernetes",
       "Docker",
       "Python",
       "Java",
-      "RAG"
+      "RAG",
+      "Terraform"
     ],
     "preferredSkills": [],
     "skillsList": [
-      "PUBLIC",
       "SRE",
       "GKE",
       "ELK",
       "RBAC",
-      "Google Cloud Platform",
+      "GCP",
       "VPC",
       "IAM",
       "Kubernetes",
       "Docker",
       "Python",
       "Java",
-      "RAG"
+      "RAG",
+      "Terraform"
     ],
     "responsibilities": [
       "be responsible for automating our infrastructure, onboarding new applications, and conducting Proof of Concepts (POCs) for multi-tier application automation.",
-      "Key Responsibilities",
       "Kubernetes Mastery: Design, manage, and optimize GKE (Google Kubernetes Engine) clusters. Act as the subject matter expert for all K8s-related tasks, including resource scaling, networking, and security.",
-      "ELK Stack Administration: Full ownership of the ELK (Elasticsearch, Logstash, Kibana) infrastructure. This includes: o Onboarding new applications and log sources.",
-      "o Managing User Access (RBAC) and security roles.",
-      "o Creating advanced Kibana dashboards and alerting systems.",
-      "Data Tier Management: o Redis: Deploy and manage Redis Sentinel for high availability; handle instance creation and performance tuning.",
-      "o Apache Kafka: Manage Kafka clusters, including topic creation, replication factor management, and partition balancing.",
+      "ELK Stack Administration: Full ownership of the ELK (Elasticsearch, Logstash, Kibana) infrastructure. This includes:",
+      "Onboarding new applications and log sources.",
+      "Managing User Access (RBAC) and security roles.",
+      "Creating advanced Kibana dashboards and alerting systems.",
+      "Data Tier Management:",
+      "Redis: Deploy and manage Redis Sentinel for high availability; handle instance creation and performance tuning.",
+      "Apache Kafka: Manage Kafka clusters, including topic creation, replication factor management, and partition balancing.",
       "Automation & POCs: Drive innovation by performing POCs for multi-tier applications.",
       "Build custom automation to reduce manual toil across the entire stack.",
-      "Cloud Infrastructure: Manage GCP resources using Infrastructure as Code",
-      "(Terraform/Ansible) with a focus on cost-efficiency and 99.99% availability."
+      "Cloud Infrastructure: Manage GCP resources using Infrastructure as Code"
     ],
     "qualifications": [],
-    "descriptionPreview": "We are seeking a highly skilled Site Reliability Engineer (SRE) with deep expertise in Kubernetes\n(GKE) and high-scale data platforms. This role is critical for a candidate who is not just a user of\ntools, but an expert in managing the lifecycle of ELK clusters, Redis Sentinels, and Apache\nKafka.\n\n**Key Responsibilities:**\n• be responsible for automating our infrastructure, onboarding new applications, and conducting Proof of Concepts (POCs) for multi-tier application automation.\n• Key Responsib",
-    "descriptionLen": 2145,
+    "descriptionPreview": "We are seeking a highly skilled Site Reliability Engineer (SRE) with deep expertise in Kubernetes\n(GKE) and high-scale data platforms. This role is critical for a candidate who is not just a user of\ntools, but an expert in managing the lifecycle of ELK clusters, Redis Sentinels, and Apache\nKafka.\n\n**Key Responsibilities:**\n• be responsible for automating our infrastructure, onboarding new applications, and conducting Proof of Concepts (POCs) for multi-tier application automation.\n• Kubernetes Ma",
+    "descriptionLen": 2022,
     "coverage": [
       {
         "field": "title",
@@ -92,7 +92,7 @@
       },
       {
         "field": "salary",
-        "status": "filled",
+        "status": "missing_with_evidence",
         "evidence": true,
         "detail": ""
       },
@@ -118,6 +118,7 @@
     "skills_hit": 13,
     "skills_checked": 13,
     "skills_count": 13,
+    "skills_look_skill_like": true,
     "location_in_source": true,
     "company_in_source": null,
     "experience": {
@@ -129,10 +130,12 @@
       "ok": true
     },
     "has_description": true,
-    "coverage_missing_with_evidence": [],
+    "coverage_missing_with_evidence": [
+      "salary"
+    ],
     "coverage_recovered": [],
     "source_preview": "PUBLIC | Role – Site Reliability Engineer | Work Experience – 5 Years + | Work Location – Navi Mumbai - Mahape |  | Role Overview | We are seeking a highly skilled Site Reliability Engineer (SRE) with deep expertise in Kubernetes | (GKE) and high-scale data platforms. This role is critical for a candidate who is not just a user of | tools, but an expert in managing the lifecycle of ELK clusters, Redis Sentinels, and Apache | Kafka. You will be responsible for automating our infrastructure, onboarding new applications, | and conducting Proof of Concepts (POCs) for multi-tier application automation. | Key Responsibil"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'Site Reliability Engineer', 'company': '', 'location': 'Navi Mumbai - Mahape', 'employment_type': '', 'description': 'We are seeking a highly skilled Site Reliability Engineer (SRE) with deep expertise in Kubernetes\\n(GKE) and high-scale data platforms. This role is critical for a candidate who is not just a user of\\ntools, but an expert in managing the lifecycle of ELK clusters, Redis Sentinels, and Apache\\nKafka.\\n\\n**Key Responsibilities:**\\n• be responsible for automating our infrastructure, onboarding new applications, and conducting Proof of Concepts (POCs) for multi-tier application automation.\\n• Key Responsibilities\\n• Kubernetes Mastery: Design, manage, and optimize GKE (Google Kubernetes Engine) clusters. Act as the subject matter expert for all K8s-related tasks, including resource scaling, networking, and security.\\n• ELK Stack Administration: Full ownership of the ELK (Elasticsearch, Logstash, Kibana) infrastructure. This includes: o Onboarding new applications and log sources.\\n• o Managing User Access (RBAC) and security roles.\\n• o Creating advanced Kibana dashboards and alerting systems.\\n• Data Tier Management: o Redis: Deploy and manage Redis Sentinel for high availability; handle instance creation and performance tuning.\\n• o Apache Kafka: Manage Kafka clusters, including topic creation, replication factor management, and partition balancing.\\n• Automation & POCs: Drive innovation by performing POCs for multi-tier app",
+  "toon_preview": "{'type': 'job_description', 'title': 'Site Reliability Engineer', 'company': '', 'location': 'Navi Mumbai - Mahape', 'employment_type': '', 'description': 'We are seeking a highly skilled Site Reliability Engineer (SRE) with deep expertise in Kubernetes\\n(GKE) and high-scale data platforms. This role is critical for a candidate who is not just a user of\\ntools, but an expert in managing the lifecycle of ELK clusters, Redis Sentinels, and Apache\\nKafka.\\n\\n**Key Responsibilities:**\\n• be responsible for automating our infrastructure, onboarding new applications, and conducting Proof of Concepts (POCs) for multi-tier application automation.\\n• Kubernetes Mastery: Design, manage, and optimize GKE (Google Kubernetes Engine) clusters. Act as the subject matter expert for all K8s-related tasks, including resource scaling, networking, and security.\\n• ELK Stack Administration: Full ownership of the ELK (Elasticsearch, Logstash, Kibana) infrastructure. This includes:\\n• Onboarding new applications and log sources.\\n• Managing User Access (RBAC) and security roles.\\n• Creating advanced Kibana dashboards and alerting systems.\\n• Data Tier Management:\\n• Redis: Deploy and manage Redis Sentinel for high availability; handle instance creation and performance tuning.\\n• Apache Kafka: Manage Kafka clusters, including topic creation, replication factor management, and partition balancing.\\n• Automation & POCs: Drive innovation by performing POCs for multi-tier applications.\\n• Build custom a",
   "source_preview": "PUBLIC\nRole – Site Reliability Engineer\nWork Experience – 5 Years +\nWork Location – Navi Mumbai - Mahape\n\nRole Overview\nWe are seeking a highly skilled Site Reliability Engineer (SRE) with deep expertise in Kubernetes\n(GKE) and high-scale data platforms. This role is critical for a candidate who is not just a user of\ntools, but an expert in managing the lifecycle of ELK clusters, Redis Sentinels, and Apache\nKafka. You will be responsible for automating our infrastructure, onboarding new applications,\nand conducting Proof of Concepts (POCs) for multi-tier application automation.\nKey Responsibilities\n\n•\nKubernetes Mastery: Design, manage, and optimize GKE (Google Kubernetes Engine)\nclusters. Act as the subject matter expert for all K8s-related tasks, including resource\nscaling, networking, and security.\n\n•\nELK Stack Administration: Full ownership of the ELK (Elasticsearch, Logstash, Kibana)\ninfrastructure. This includes:\no Onboarding new applications and log sources.\no Managing User Access (RBAC) and security roles.\no Creating advanced Kibana dashboards and alerting systems.\n\n•\nData Tier Management:\no Redis: Deploy and manage Redis Sentinel for high availability; handle instance\ncreation and performance tuning.\no Apache Kafka: Manage Kafka clusters, including topic creation, replication factor\nmanagement, and partition balancing.\n\n•\nAutomation & POCs: Drive innovation by performing POCs for multi-tier applications.\nBuild custom automation to reduce manual toil across the entire stack.\n\n•\nCloud Infrastructure: Manage GCP resources using Infrastructure as Code\n(Terraform/Ansible) with a focus on cost-efficiency and 99.99% availability.\n\nPUBLIC\nRequired Technical Skills\n\n•\nOrchestration: Expert-level knowledge of Kubernetes (GKE) and Docker.\n\n•\nObservability: Deep experience in ELK Stack administration (not just searching logs, but\nmanaging the cluster health and user permissions).\n\n•\nMessaging & Caching: Hands-on experience managing Apache Kafka\n(Topics/Replication) and Redis (Sentinel/Clustering).\n\n•\nAutomation: Proficiency in Python or Java for building automation tools and conducting\ncomplex technical POCs.\n\n•\nCI/CD: Experience with ArgoCD, Jenkins, or GitLab CI/CD for automated application\ndelivery.\n\n•\nCloud: Strong knowledge of GCP (VPC, IAM, GKE, Cloud Storage)."
 }

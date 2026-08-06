@@ -4,9 +4,9 @@
     "title_from_filename": "MongoDB DBA"
   },
   "form": {
-    "title": "MongoDB Database Administrator",
+    "title": "- MongoDB Database Administrator",
     "company": "",
-    "location": "Mumbai, Navi Mumbai (On-site)",
+    "location": "Navi Mumbai",
     "salary": "",
     "experienceFrom": "1",
     "experienceTo": "4",
@@ -20,18 +20,15 @@
       "and optimization",
       "Implement clustering and sharding strategies for scaling databases",
       "Troubleshoot and resolve database issues",
-      "Assist in database design",
-      "including schema design and indexing strategies",
       "Ensure data security and implement data recovery plans",
       "Document database environments and processes",
-      "Knowledge of Linux/Unix operating systems",
+      "Linux/Unix operating systems",
       "Linux",
-      "Experience with other NoSQL databases",
-      "Knowledge of cloud platforms such as AWS",
-      "Amazon Web Services",
+      "other NoSQL databases",
+      "AWS",
       "Azure",
       "or GCP",
-      "Google Cloud Platform"
+      "GCP"
     ],
     "preferredSkills": [],
     "skillsList": [
@@ -43,23 +40,20 @@
       "and optimization",
       "Implement clustering and sharding strategies for scaling databases",
       "Troubleshoot and resolve database issues",
-      "Assist in database design",
-      "including schema design and indexing strategies",
       "Ensure data security and implement data recovery plans",
       "Document database environments and processes",
-      "Knowledge of Linux/Unix operating systems",
+      "Linux/Unix operating systems",
       "Linux",
-      "Experience with other NoSQL databases",
-      "Knowledge of cloud platforms such as AWS",
-      "Amazon Web Services",
+      "other NoSQL databases",
+      "AWS",
       "Azure",
       "or GCP",
-      "Google Cloud Platform"
+      "GCP"
     ],
     "responsibilities": [],
     "qualifications": [],
-    "descriptionPreview": "**Required Skills:**\nMongoDB, Mandatory to have worked on Clustering, Perform routine maintenance tasks, including backups, indexing, and optimization, Implement clustering and sharding strategies for scaling databases, Troubleshoot and resolve database issues, Assist in database design, including schema design and indexing strategies, Ensure data security and implement data recovery plans, Document database environments and processes, Knowledge of Linux/Unix operating systems, Linux, Experience",
-    "descriptionLen": 628,
+    "descriptionPreview": "**Required Skills:**\nMongoDB, Mandatory to have worked on Clustering, Perform routine maintenance tasks, including backups, indexing, and optimization, Implement clustering and sharding strategies for scaling databases, Troubleshoot and resolve database issues, Ensure data security and implement data recovery plans, Document database environments and processes, Linux/Unix operating systems, Linux, other NoSQL databases, AWS, Azure, or GCP, GCP",
+    "descriptionLen": 447,
     "coverage": [
       {
         "field": "title",
@@ -81,9 +75,9 @@
       },
       {
         "field": "skills",
-        "status": "filled",
+        "status": "recovered",
         "evidence": true,
-        "detail": ""
+        "detail": "recovered from source"
       },
       {
         "field": "description",
@@ -115,10 +109,11 @@
     "title_overlap_source": 1.0,
     "title_overlap_filename": 0.333,
     "title_present": true,
-    "skills_precision": 0.95,
-    "skills_hit": 19,
-    "skills_checked": 20,
-    "skills_count": 20,
+    "skills_precision": 1.0,
+    "skills_hit": 17,
+    "skills_checked": 17,
+    "skills_count": 17,
+    "skills_look_skill_like": true,
     "location_in_source": true,
     "company_in_source": null,
     "experience": {
@@ -131,9 +126,11 @@
     },
     "has_description": true,
     "coverage_missing_with_evidence": [],
-    "coverage_recovered": [],
+    "coverage_recovered": [
+      "skills"
+    ],
     "source_preview": "MongoDB DBA_JD |  | Job Title :- MongoDB Database Administrator | Experience :- 1 to 4 years | Location :- Mumbai, Navi Mumbai (On-site) |  | Required Skills:- |  | • | Mandatory to have skills of Managing MongoDB databases through MongoDB Atlas. |  | • | Mandatory to have worked on Clustering. |  | • | Perform routine maintenance tasks, including backups, indexing, and optimization. |  | • | Monitor database performance and ensure high availability and reliability. |  | • | Implement clustering and sharding strategies for scaling databases. |  | • | Troubleshoot and resolve database issues. |  | • | Assist in database design, including schema de"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'MongoDB Database Administrator', 'company': '', 'location': 'Mumbai, Navi Mumbai (On-site)', 'employment_type': '', 'description': '**Required Skills:**\\nMongoDB, Mandatory to have worked on Clustering, Perform routine maintenance tasks, including backups, indexing, and optimization, Implement clustering and sharding strategies for scaling databases, Troubleshoot and resolve database issues, Assist in database design, including schema design and indexing strategies, Ensure data security and implement data recovery plans, Document database environments and processes, Knowledge of Linux/Unix operating systems, Linux, Experience with other NoSQL databases, Knowledge of cloud platforms such as AWS, Amazon Web Services, Azure, or GCP, Google Cloud Platform', 'min_experience_years': 1.0, 'max_experience_years': 4.0, 'skills': ['MongoDB', 'Mandatory to have worked on Clustering', 'Perform routine maintenance tasks', 'including backups', 'indexing', 'and optimization', 'Implement clustering and sharding strategies for scaling databases', 'Troubleshoot and resolve database issues', 'Assist in database design', 'including schema design and indexing strategies', 'Ensure data security and implement data recovery plans', 'Document database environments and processes', 'Knowledge of Linux/Unix operating systems', 'Linux', 'Experience with other NoSQL databases', 'Knowledge of cloud platforms such as AWS', 'Amazon Web Services', 'Azure', 'or GCP', 'Goog",
+  "toon_preview": "{'type': 'job_description', 'title': '- MongoDB Database Administrator', 'company': '', 'location': 'Navi Mumbai', 'employment_type': '', 'description': '**Required Skills:**\\nMongoDB, Mandatory to have worked on Clustering, Perform routine maintenance tasks, including backups, indexing, and optimization, Implement clustering and sharding strategies for scaling databases, Troubleshoot and resolve database issues, Ensure data security and implement data recovery plans, Document database environments and processes, Linux/Unix operating systems, Linux, other NoSQL databases, AWS, Azure, or GCP, GCP', 'min_experience_years': 1.0, 'max_experience_years': 4.0, 'skills': ['MongoDB', 'Mandatory to have worked on Clustering', 'Perform routine maintenance tasks', 'including backups', 'indexing', 'and optimization', 'Implement clustering and sharding strategies for scaling databases', 'Troubleshoot and resolve database issues', 'Ensure data security and implement data recovery plans', 'Document database environments and processes', 'Linux/Unix operating systems', 'Linux', 'other NoSQL databases', 'AWS', 'Azure', 'or GCP', 'GCP'], 'mandatory_skills': ['MongoDB', 'Mandatory to have worked on Clustering', 'Perform routine maintenance tasks', 'including backups', 'indexing', 'and optimization', 'Implement clustering and sharding strategies for scaling databases', 'Troubleshoot and resolve database issues', 'Ensure data security and implement data recovery plans', 'Document database environm",
   "source_preview": "MongoDB DBA_JD\n\nJob Title :- MongoDB Database Administrator\nExperience :- 1 to 4 years\nLocation :- Mumbai, Navi Mumbai (On-site)\n\nRequired Skills:-\n\n•\nMandatory to have skills of Managing MongoDB databases through MongoDB Atlas.\n\n•\nMandatory to have worked on Clustering.\n\n•\nPerform routine maintenance tasks, including backups, indexing, and optimization.\n\n•\nMonitor database performance and ensure high availability and reliability.\n\n•\nImplement clustering and sharding strategies for scaling databases.\n\n•\nTroubleshoot and resolve database issues.\n\n•\nAssist in database design, including schema design and indexing strategies.\n\n•\nEnsure data security and implement data recovery plans.\n\n•\nCollaborate with development teams to optimize queries and improve performance.\n\n•\nDocument database environments and processes.\n\n•\nKnowledge of Linux/Unix operating systems.\n\n•\nExperience with other NoSQL databases.\n\n•\nKnowledge of cloud platforms such as AWS, Azure, or GCP."
 }

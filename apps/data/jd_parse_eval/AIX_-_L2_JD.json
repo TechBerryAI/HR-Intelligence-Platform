@@ -94,6 +94,7 @@
     "skills_hit": 2,
     "skills_checked": 2,
     "skills_count": 2,
+    "skills_look_skill_like": true,
     "location_in_source": true,
     "company_in_source": null,
     "experience": {

@@ -191,14 +191,22 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
         )
     )
 
-    # preferredLocation: only contact.preferred_location (no fallback to current)
+    # preferredLocation: preferred_location, else current location
+    # VALIDATION_FIX_preferred_location_fallback
     pref = (profile.contact.preferred_location or '').strip()
-    pref_ok, pref_reason = validate_nonempty(pref, 'preferred_location')
+    if not pref and current_location:
+        pref = current_location
+        pref_source_path = 'contact.location'
+        pref_reason = 'fallback_current_location'
+    else:
+        pref_source_path = 'contact.preferred_location'
+        pref_reason = 'ok' if pref else 'empty'
+    pref_ok, _pref_val_reason = validate_nonempty(pref, 'preferred_location')
     preferred_location = pref if pref_ok else ''
     traces.append(
         _trace(
             'preferredLocation',
-            'contact.preferred_location',
+            pref_source_path,
             source=_meta_source(profile, 'person.preferred_location', 'deterministic'),
             validator='validate_nonempty' if pref_ok else 'none',
             confidence=0.85 if pref_ok else 0.0,
@@ -320,23 +328,12 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
                 parts = _re.split(r'\s*[-–—]\s*', degree, maxsplit=1)
                 if len(parts) == 2 and len(parts[1].strip()) >= 3:
                     degree, institution = parts[0].strip()[:200], parts[1].strip()[:200]
-        # Still missing one side: keep row if the other is strong enough for ATS,
-        # and fill the blank with a grounded placeholder from the same string.
+        # Still missing one side: keep row only when we can split real content —
+        # do not invent a generic "Education" degree or copy degree↔institution.
         if (degree or '').strip() and not (institution or '').strip():
-            institution = degree.strip()[:200]
+            continue
         if (institution or '').strip() and not (degree or '').strip():
-            # Only invent generic degree when institution looks academic, not job duty text
-            inst_l = institution.lower()
-            if any(
-                tok in inst_l
-                for tok in (
-                    'university', 'college', 'school', 'institute', 'academy',
-                    'board', 'vidyalaya', 'polytechnic',
-                )
-            ):
-                degree = 'Education'
-            else:
-                continue
+            continue
         # Drop experience/project pollution rows
         blob = f'{degree} {institution}'.lower()
         if any(

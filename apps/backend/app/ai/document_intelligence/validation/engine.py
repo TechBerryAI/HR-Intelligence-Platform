@@ -195,6 +195,8 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
         r'facilitated|developed|designed|created|built|led|drove|implemented|'
         r'optimized|improved|increased|worked|assisted|supported|handled|'
         r'performed|conducted|analyzed|monitored|delivered|owned|spearheaded|'
+        r'configured|deployed|integrated|automated|migrated|refactored|'
+        r'responsible|ensuring|resulting|'
         r'[•·\*●])',
         role,
     ) or re.match(

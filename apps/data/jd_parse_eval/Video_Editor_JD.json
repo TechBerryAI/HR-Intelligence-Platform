@@ -12,29 +12,28 @@
     "experienceTo": "",
     "employmentType": "",
     "mandatorySkills": [
-      "JOB"
+      "Adobe Premiere",
+      "Premiere Pro",
+      "After Effects"
     ],
     "preferredSkills": [],
     "skillsList": [
-      "JOB"
+      "Adobe Premiere",
+      "Premiere Pro",
+      "After Effects"
     ],
     "responsibilities": [
       "work closely with our production team to create engaging videos for various platforms, including social media, marketing, and internal communications.",
-      "Key Responsibilities:",
       "Edit raw video footage into polished final products that meet the creative direction and specifications.",
       "Add graphics, music, sound effects, and voiceovers to enhance the overall quality of the video.",
       "Ensure video content is optimized for different platforms (e.g., social media, website, YouTube, etc.).",
       "Review and edit videos based on feedback, ensuring high-quality standards are met.",
       "Manage and organize video files and assets for easy retrieval and editing.",
-      "Keep up with industry trends and best practices in video editing, and incorporate new techniques as appropriate.",
-      "Education",
-      "Proven experience as a video editor or similar role.",
-      "Proficiency in video editing software such as Adobe Premiere Pro, Final",
-      "Cut Pro, or other industry-standard tools."
+      "Keep up with industry trends and best practices in video editing, and incorporate new techniques as appropriate."
     ],
     "qualifications": [],
-    "descriptionPreview": "We are seeking a creative and detail-oriented Video Editor to join our team.\nThe ideal candidate will have a strong understanding of video production,\nincluding editing, motion graphics, and sound design.\n\n**Key Responsibilities:**\n• work closely with our production team to create engaging videos for various platforms, including social media, marketing, and internal communications.\n• Key Responsibilities:\n• Edit raw video footage into polished final products that meet the creative direction and ",
-    "descriptionLen": 1372,
+    "descriptionPreview": "We are seeking a creative and detail-oriented Video Editor to join our team.\nThe ideal candidate will have a strong understanding of video production,\nincluding editing, motion graphics, and sound design.\n\n**Key Responsibilities:**\n• work closely with our production team to create engaging videos for various platforms, including social media, marketing, and internal communications.\n• Edit raw video footage into polished final products that meet the creative direction and specifications.\n• Add gr",
+    "descriptionLen": 972,
     "coverage": [
       {
         "field": "title",
@@ -57,7 +56,7 @@
       {
         "field": "skills",
         "status": "filled",
-        "evidence": false,
+        "evidence": true,
         "detail": ""
       },
       {
@@ -91,9 +90,10 @@
     "title_overlap_filename": 1.0,
     "title_present": true,
     "skills_precision": 1.0,
-    "skills_hit": 1,
-    "skills_checked": 1,
-    "skills_count": 1,
+    "skills_hit": 3,
+    "skills_checked": 3,
+    "skills_count": 3,
+    "skills_look_skill_like": true,
     "location_in_source": true,
     "company_in_source": null,
     "experience": {
@@ -107,6 +107,6 @@
     "coverage_recovered": [],
     "source_preview": "JOB DESCRIPTION | Job Title: Video Editor | Location: Vikhroli, Mumbai | Job Summary: | We are seeking a creative and detail-oriented Video Editor to join our team. | The ideal candidate will have a strong understanding of video production, | including editing, motion graphics, and sound design. You will work closely with | our production team to create engaging videos for various platforms, including | social media, marketing, and internal communications. | Key Responsibilities: | • Edit raw video footage into polished final products that meet the creative | direction and specifications. | • Add graphics, music, sou"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'Video Editor', 'company': '', 'location': 'Vikhroli, Mumbai', 'employment_type': '', 'description': 'We are seeking a creative and detail-oriented Video Editor to join our team.\\nThe ideal candidate will have a strong understanding of video production,\\nincluding editing, motion graphics, and sound design.\\n\\n**Key Responsibilities:**\\n• work closely with our production team to create engaging videos for various platforms, including social media, marketing, and internal communications.\\n• Key Responsibilities:\\n• Edit raw video footage into polished final products that meet the creative direction and specifications.\\n• Add graphics, music, sound effects, and voiceovers to enhance the overall quality of the video.\\n• Ensure video content is optimized for different platforms (e.g., social media, website, YouTube, etc.).\\n• Review and edit videos based on feedback, ensuring high-quality standards are met.\\n• Manage and organize video files and assets for easy retrieval and editing.\\n• Keep up with industry trends and best practices in video editing, and incorporate new techniques as appropriate.\\n• Education\\n• Proven experience as a video editor or similar role.\\n• Proficiency in video editing software such as Adobe Premiere Pro, Final\\n• Cut Pro, or other industry-standard tools.\\n• Experience with motion graphics and animation (Adobe After Effects or similar is a plus).\\n• Strong understanding of video formats, aspect ratios, and optimiza",
+  "toon_preview": "{'type': 'job_description', 'title': 'Video Editor', 'company': '', 'location': 'Vikhroli, Mumbai', 'employment_type': '', 'description': 'We are seeking a creative and detail-oriented Video Editor to join our team.\\nThe ideal candidate will have a strong understanding of video production,\\nincluding editing, motion graphics, and sound design.\\n\\n**Key Responsibilities:**\\n• work closely with our production team to create engaging videos for various platforms, including social media, marketing, and internal communications.\\n• Edit raw video footage into polished final products that meet the creative direction and specifications.\\n• Add graphics, music, sound effects, and voiceovers to enhance the overall quality of the video.\\n• Ensure video content is optimized for different platforms (e.g., social media, website, YouTube, etc.).\\n• Review and edit videos based on feedback, ensuring high-quality standards are met.\\n• Manage and organize video files and assets for easy retrieval and editing.\\n• Keep up with industry trends and best practices in video editing, and incorporate new techniques as appropriate.', 'min_experience_years': None, 'max_experience_years': None, 'skills': ['Adobe Premiere', 'Premiere Pro', 'After Effects'], 'mandatory_skills': ['Adobe Premiere', 'Premiere Pro', 'After Effects'], 'preferred_skills': [], 'responsibilities': ['work closely with our production team to create engaging videos for various platforms, including social media, marketing, and interna",
   "source_preview": "JOB DESCRIPTION\nJob Title: Video Editor\nLocation: Vikhroli, Mumbai\nJob Summary:\nWe are seeking a creative and detail-oriented Video Editor to join our team.\nThe ideal candidate will have a strong understanding of video production,\nincluding editing, motion graphics, and sound design. You will work closely with\nour production team to create engaging videos for various platforms, including\nsocial media, marketing, and internal communications.\nKey Responsibilities:\n• Edit raw video footage into polished final products that meet the creative\ndirection and specifications.\n• Add graphics, music, sound effects, and voiceovers to enhance the\noverall quality of the video.\n• Ensure video content is optimized for different platforms (e.g., social\nmedia, website, YouTube, etc.).\n• Review and edit videos based on feedback, ensuring high-quality\nstandards are met.\n• Manage and organize video files and assets for easy retrieval and editing.\n• Keep up with industry trends and best practices in video editing, and\nincorporate new techniques as appropriate.\n\nEducation\n• Proven experience as a video editor or similar role.\n• Proficiency in video editing software such as Adobe Premiere Pro, Final\nCut Pro, or other industry-standard tools.\n• Experience with motion graphics and animation (Adobe After Effects or\nsimilar is a plus).\n• Strong understanding of video formats, aspect ratios, and optimization\nfor different platforms."
 }

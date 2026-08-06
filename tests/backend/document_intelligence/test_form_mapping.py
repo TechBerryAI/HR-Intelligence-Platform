@@ -175,11 +175,19 @@ def test_invalid_email_does_not_autofill():
     assert form.email == ''
 
 
-def test_preferred_location_has_no_fallback_to_current():
+def test_preferred_location_falls_back_to_current():
     toon = dict(SAMPLE_RESUME_TOON)
     toon['person'] = dict(toon['person'], preferred_location='')
     form = map_candidate_to_form(candidate_profile_from_toon(toon))
-    assert form.preferredLocation == ''
+    assert form.currentLocation == 'Austin, TX'
+    assert form.preferredLocation == 'Austin, TX'
+
+
+def test_preferred_location_keeps_explicit_value():
+    toon = dict(SAMPLE_RESUME_TOON)
+    toon['person'] = dict(toon['person'], preferred_location='Remote')
+    form = map_candidate_to_form(candidate_profile_from_toon(toon))
+    assert form.preferredLocation == 'Remote'
     assert form.currentLocation == 'Austin, TX'
 
 
