@@ -29,7 +29,7 @@ Sole entry: `app.ai.document_intelligence.pipeline.run_document_intelligence`.
 | Every form field deterministic | FieldContract registry + explicit mappers | YES |
 | Every field traceable | `form.trace[]` | YES |
 | No duplicate schemas (runtime) | One CandidateProfile, one JobProfile | YES |
-| One canonical pipeline | `pipeline.py`; orchestrator re-exports | YES |
+| One canonical pipeline | `pipeline.py` | YES |
 | Works on GPU and CPU | `hardware.py` tiers retained | YES |
 | Gold dataset passes | e2e pytest + accuracy harness | YES |
 | Legacy root shims removed | Deleted apps/backend/*.py shims | YES |

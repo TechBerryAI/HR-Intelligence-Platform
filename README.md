@@ -172,12 +172,13 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 │   ├── auth.py, jobs.py, candidate.py, applications.py, ...
 │   ├── db.py             # PostgreSQL pool + helpers
 │   ├── utils.py          # JWT, auth decorators
-│   ├── schema_pg/        # PostgreSQL schema (01_schema.sql, ...)
+│   ├── schema_pg/        # Consolidated DDL (01_core … 04_seeds); Alembic applies
+│   ├── alembic/          # Schema migration revisions
 │   └── requirements.txt
-├── electron/             # Desktop shell (native dialogs, IPC only)
+├── desktop/              # Electron shell (native dialogs, IPC)
 ├── scripts/              # Root utilities (db-preflight, database tests)
 ├── tests/                # Test index (component tests colocated with owners)
-├── tools/                # CLI entry-point index
+├── packages/             # Shared path helpers (knowledge)
 ├── ai/                   # AI platform (runtime, providers, capabilities, dataset, toon)
 └── docs/
     ├── README.md            # Documentation index

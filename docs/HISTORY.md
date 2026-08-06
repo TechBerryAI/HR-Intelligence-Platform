@@ -16,6 +16,24 @@ Completed sprint freeze reports and repository migration notes. Kept for audit t
 
 Migration: `14_interview_scheduling.sql`.
 
+## Raw file blobs in Postgres (Current)
+
+**Date:** 2026-08-06
+
+- `raw_files.file_data BYTEA` stores original resume/JD PDF/DOCX bytes (durable source of truth).
+- Apply-path resumes already used `candidate_profiles.resume` BYTEA.
+- Disk `.media/uploads` remains optional cache; backfill: `python scripts/backfill_raw_file_blobs.py`.
+
+Migration content now lives in consolidated `schema_pg/02_domain.sql` (`raw_files.file_data`).
+
+## Schema consolidation + Alembic (Current)
+
+**Date:** 2026-08-06
+
+- Numbered SQL `01`–`15` merged into four files: `01_core.sql`, `02_domain.sql`, `03_integrations.sql`, `04_seeds.sql`.
+- Alembic owns apply: baseline `20260806_0001` + ensure `20260806_0002`; `init_db()` runs `stamp_if_needed` then `upgrade head`.
+- New schema changes: `alembic revision` / `alembic upgrade head` only (do not add numbered SQL files).
+
 ---
 
 ## Table of contents
@@ -35,7 +53,7 @@ Migration: `14_interview_scheduling.sql`.
 **Document ID:** ARCH-12  
 **Status:** FROZEN — core platform foundation for all future AI modules  
 **Date:** 2026-06-29  
-**Related:** [06_DATA_MODEL.md](ARCHITECTURE.md#conceptual-data-model) · [02_DOMAIN_MODEL.md](ARCHITECTURE.md#domain-model) · [`apps/backend/schema_pg/04_domain_freeze.sql`](../../apps/backend/schema_pg/04_domain_freeze.sql)
+**Related:** [06_DATA_MODEL.md](ARCHITECTURE.md#conceptual-data-model) · [02_DOMAIN_MODEL.md](ARCHITECTURE.md#domain-model) · [`apps/backend/schema_pg/02_domain.sql`](../../apps/backend/schema_pg/02_domain.sql) (domain freeze section)
 
 ---
 
@@ -374,7 +392,7 @@ SELECT status, enabled, COUNT(*) FROM jobs GROUP BY status, enabled;
 
 | Resource | Path |
 |----------|------|
-| DDL migration | `apps/backend/schema_pg/04_domain_freeze.sql` |
+| DDL migration | `apps/backend/schema_pg/02_domain.sql` (domain freeze section; formerly `04_domain_freeze.sql`) |
 | RBAC resolution | `backend/rbac.py` → `resolve_hr_role()` |
 | Bulk persistence | `backend/services/bulk_session_db.py` |
 | Conceptual model | [06_DATA_MODEL.md](ARCHITECTURE.md#conceptual-data-model) |
@@ -432,7 +450,7 @@ From `hr_signup`:
 - `is_head_hr` — dropped
 - `is_ceo` — dropped
 
-Migration: [`apps/backend/schema_pg/05_remove_legacy_rbac.sql`](../../apps/backend/schema_pg/05_remove_legacy_rbac.sql)
+Migration: consolidated into [`apps/backend/schema_pg/02_domain.sql`](../../apps/backend/schema_pg/02_domain.sql) (formerly `05_remove_legacy_rbac.sql`)
 
 Trigger removed: `trg_hr_signup_role_sync` / `hr_signup_role_sync()`
 
@@ -457,7 +475,7 @@ Trigger removed: `trg_hr_signup_role_sync` / `hr_signup_role_sync()`
 - `modules/admin/routes.py`, `sessions_routes.py`, `sessions_service.py`
 - `routes/simple_candidate_auth.py`
 - `db.py`
-- `schema_pg/01_schema.sql`, `04_domain_freeze.sql`, `06_seed_admin_accounts.sql`, `07_seed_ceo_account.sql`
+- `schema_pg/01_core.sql`, `02_domain.sql`, `04_seeds.sql` (formerly `01_schema`, `04_domain_freeze`, `06`/`07` seeds)
 
 #### Frontend
 - `utils/rbac.js`, `App.jsx`, `AppContext.jsx`, `LoginAdmin.jsx`
@@ -584,14 +602,16 @@ Login API `user` object still includes `hrId` for UI convenience (not in JWT).
 
 ---
 
-### Migration file order (final)
+### Migration file order (final → Current)
 
-1. `01_schema.sql`
-2. `03_employee_feedback.sql`
-3. `04_domain_freeze.sql`
-4. `05_remove_legacy_rbac.sql`
-5. `06_seed_admin_accounts.sql`
-6. `07_seed_ceo_account.sql`
+Historical numbered files were consolidated (2026-08-06):
+
+1. `01_core.sql` — core + feedback  
+2. `02_domain.sql` — domain freeze, RBAC cleanup, interviews, keywords, blobs  
+3. `03_integrations.sql` — integrations / OAuth / site assets  
+4. `04_seeds.sql` — admin / CEO seeds  
+
+Applied by Alembic (`20260806_0001` → `20260806_0002`).
 
 ---
 

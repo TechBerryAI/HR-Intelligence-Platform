@@ -24,14 +24,127 @@ def compute_file_hash(file_data: bytes) -> str:
 
 def save_file_to_storage(file_data: bytes, filename: str, uploader_id: str) -> str:
     """
-    Save file under MEDIA_ROOT/uploads.
+    Optional local cache under MEDIA_ROOT/uploads.
+    Durable copy lives in raw_files.file_data (Postgres).
     Returns opaque media key (media:uploads/...).
     """
     file_id = str(uuid.uuid4())
     extension = os.path.splitext(filename)[1]
     storage_filename = f"{uploader_id}_{file_id}{extension}"
     relative = f"uploads/{storage_filename}"
-    return media_storage.put(relative, file_data)
+    try:
+        return media_storage.put(relative, file_data)
+    except Exception:
+        # Disk cache must never block durable DB storage
+        return f"media:{relative}"
+
+
+def _as_bytes(value) -> bytes | None:
+    if value is None:
+        return None
+    if isinstance(value, memoryview):
+        return value.tobytes()
+    if isinstance(value, bytearray):
+        return bytes(value)
+    if isinstance(value, bytes):
+        return value
+    return None
+
+
+def load_raw_file_bytes(raw_file_id: str) -> bytes | None:
+    """
+    Load original upload bytes. Prefers Postgres raw_files.file_data;
+    falls back to disk cache via storage_url for legacy rows.
+    """
+    from app.database.connection.db import db_get
+
+    row = db_get(
+        'SELECT file_data, storage_url FROM raw_files WHERE id = ?',
+        (raw_file_id,),
+    )
+    if not row:
+        return None
+    blob = _as_bytes(row.get('file_data'))
+    if blob:
+        return blob
+    storage_url = row.get('storage_url')
+    if not storage_url:
+        return None
+    try:
+        if media_storage.exists(storage_url):
+            with media_storage.open_stream(storage_url) as fh:
+                return fh.read()
+    except Exception:
+        return None
+    return None
+
+
+@timing
+def store_raw_file(
+    uploader_id: str,
+    uploader_role: str,
+    file_data: bytes,
+    filename: str,
+    mime_type: str,
+    db_conn
+) -> Dict[str, Any]:
+    """
+    Store raw file metadata + original bytes in Postgres (durable).
+    Also writes an optional disk cache key in storage_url.
+    
+    Returns:
+        Dict with raw_file record data
+    """
+    from app.database.connection.db import db_get, db_run
+    
+    if not isinstance(file_data, (bytes, bytearray, memoryview)):
+        raise TypeError('file_data must be bytes')
+    payload = bytes(file_data)
+    file_hash = compute_file_hash(payload)
+    
+    # Check for duplicate
+    existing = db_get(
+        """
+        SELECT id, storage_url, created_at, file_data
+        FROM raw_files 
+        WHERE file_hash = ? AND uploader_id = ?
+        """,
+        (file_hash, uploader_id)
+    )
+    
+    if existing:
+        # Backfill durable bytes if an older row only had disk storage
+        if not existing.get('file_data'):
+            db_run(
+                'UPDATE raw_files SET file_data = ?, size_bytes = ? WHERE id = ?',
+                (payload, len(payload), existing['id']),
+            )
+        return {
+            'id': existing['id'],
+            'storage_url': existing['storage_url'],
+            'is_duplicate': True,
+            'created_at': existing['created_at']
+        }
+    
+    # Optional disk cache + durable DB blob
+    storage_url = save_file_to_storage(payload, filename, uploader_id)
+    
+    raw_file_id = str(uuid.uuid4())
+    db_run(
+        """
+        INSERT INTO raw_files 
+        (id, uploader_id, uploader_role, original_filename, storage_url, mime_type, file_hash, size_bytes, file_data)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (raw_file_id, uploader_id, uploader_role, filename, storage_url, mime_type, file_hash, len(payload), payload)
+    )
+    
+    return {
+        'id': raw_file_id,
+        'storage_url': storage_url,
+        'is_duplicate': False,
+        'created_at': datetime.utcnow().isoformat()
+    }
 
 
 def collect_toon_validation_issues(toon: Dict[str, Any], document_type: str) -> list[str]:
@@ -158,65 +271,6 @@ def validate_toon_format_bulk(
     if is_valid:
         return True, None, 'ok'
     return True, error_msg or 'Partial validation', 'partial'
-
-
-@timing
-def store_raw_file(
-    uploader_id: str,
-    uploader_role: str,
-    file_data: bytes,
-    filename: str,
-    mime_type: str,
-    db_conn
-) -> Dict[str, Any]:
-    """
-    Store raw file metadata in database
-    
-    Returns:
-        Dict with raw_file record data
-    """
-    from app.database.connection.db import db_get, db_run
-    
-    file_hash = compute_file_hash(file_data)
-    
-    # Check for duplicate
-    existing = db_get(
-        """
-        SELECT id, storage_url, created_at 
-        FROM raw_files 
-        WHERE file_hash = ? AND uploader_id = ?
-        """,
-        (file_hash, uploader_id)
-    )
-    
-    if existing:
-        return {
-            'id': existing['id'],
-            'storage_url': existing['storage_url'],
-            'is_duplicate': True,
-            'created_at': existing['created_at']
-        }
-    
-    # Save file to storage
-    storage_url = save_file_to_storage(file_data, filename, uploader_id)
-    
-    # Insert into database
-    raw_file_id = str(uuid.uuid4())
-    db_run(
-        """
-        INSERT INTO raw_files 
-        (id, uploader_id, uploader_role, original_filename, storage_url, mime_type, file_hash, size_bytes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (raw_file_id, uploader_id, uploader_role, filename, storage_url, mime_type, file_hash, len(file_data))
-    )
-    
-    return {
-        'id': raw_file_id,
-        'storage_url': storage_url,
-        'is_duplicate': False,
-        'created_at': datetime.utcnow().isoformat()
-    }
 
 
 def store_parsed_resume(

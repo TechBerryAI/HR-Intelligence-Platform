@@ -1,8 +1,8 @@
 # Current Database Flow — Storage and Retrieval
 
 **Status:** Reverse-engineered from production code  
-**Schema source:** `backend/schema_pg/01_schema.sql`  
-**Access layer:** `backend/db.py` (via `db_run`, `db_get`, `db_all`)
+**Schema source:** `apps/backend/schema_pg/` (01_core … 04_seeds; Alembic)  
+**Access layer:** `apps/backend/app/database/connection/db.py` (via `db_run`, `db_get`, `db_all`)
 
 ---
 
