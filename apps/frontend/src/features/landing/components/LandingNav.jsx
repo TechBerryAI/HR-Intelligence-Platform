@@ -67,7 +67,7 @@ export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
             <button
               type="button"
               onClick={onGetStarted}
-              className="hidden md:inline-flex items-center px-7 py-3 rounded-full text-[15px] font-semibold text-white bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 border border-sky-400/25 transition-all duration-300 shadow-[0_6px_28px_rgba(14,165,233,0.35)]"
+              className="hidden md:inline-flex items-center px-7 py-3 rounded-full text-[15px] font-semibold text-[#0b1118] bg-[#e8eef4] hover:bg-white border border-white/20 transition-all duration-300 shadow-[0_6px_20px_rgba(0,0,0,0.35)]"
             >
               Get Started
             </button>
@@ -116,7 +116,7 @@ export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
                   onGetStarted()
                   setMenuOpen(false)
                 }}
-                className="w-full px-4 py-3 text-[15px] text-white font-semibold rounded-xl bg-gradient-to-r from-sky-500 to-blue-600"
+                className="w-full px-4 py-3 text-[15px] text-[#0b1118] font-semibold rounded-xl bg-[#e8eef4] hover:bg-white transition-colors"
               >
                 Get Started
               </button>

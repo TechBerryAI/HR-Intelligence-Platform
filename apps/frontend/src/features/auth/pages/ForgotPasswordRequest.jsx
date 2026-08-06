@@ -1,6 +1,19 @@
 import React, { useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
+import AuthPageLayout from '@/layouts/AuthPageLayout.jsx'
+import { Input } from '@/shared/components/ui/Input.jsx'
+import { FiKey } from 'react-icons/fi'
+
+/** Staff password reset is limited to Techberry Infotech work emails. */
+const ALLOWED_EMAIL_DOMAIN = 'techberryinfotech.com'
+
+function isTechberryStaffEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase()
+  const at = normalized.lastIndexOf('@')
+  if (at < 1) return false
+  return normalized.slice(at + 1) === ALLOWED_EMAIL_DOMAIN
+}
 
 export default function ForgotPasswordRequest() {
   const { variant } = useParams()
@@ -19,68 +32,78 @@ export default function ForgotPasswordRequest() {
     event.preventDefault()
     setStatus('')
     setError('')
+    const normalized = email.trim().toLowerCase()
+    if (!isTechberryStaffEmail(normalized)) {
+      setError('Invalid email')
+      return
+    }
     setLoading(true)
-    const res = await requestHrPasswordReset(email.trim().toLowerCase())
+    const res = await requestHrPasswordReset(normalized)
     setLoading(false)
     if (res.ok) {
-      setStatus('OTP sent to your email. Please proceed to verification.')
-      navigate(`/forgot-password/admin/verify?email=${encodeURIComponent(email.trim().toLowerCase())}`)
+      setStatus('OTP sent to your email. Continue to verification.')
+      navigate(`/forgot-password/admin/verify?email=${encodeURIComponent(normalized)}`)
     } else {
       setError(res.message || 'Failed to send OTP')
     }
   }
 
   return (
-    <section className="relative min-h-[calc(100vh-180px)] flex items-center justify-center px-4 py-10 overflow-hidden">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
-        <div className="absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
+    <AuthPageLayout
+      title="Forgot password"
+      subtitle="We will email a one-time code so you can reset your staff password."
+    >
+      <div className="auth-glass-card">
         <div
-          className="absolute inset-0 opacity-[0.07]"
-          style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)', backgroundSize: '24px 24px' }}
-        />
-      </div>
-
-      <div className="w-full max-w-xl relative">
-        <div className="rounded-2xl bg-gradient-to-br from-zinc-900/90 via-zinc-900/70 to-zinc-900/50 p-[1px] shadow-2xl">
-          <div className="rounded-2xl bg-zinc-950/70 backdrop-blur-md p-6 sm:p-8">
-            <h2 className="text-2xl font-semibold text-white">Admin Password Reset</h2>
-            <p className="mt-1 text-sm text-zinc-400">Enter the admin email to receive an OTP for reset.</p>
-
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wide text-zinc-400">Email</label>
-                <input
-                  type="email"
-                  className="mt-1 w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-white focus:outline-none"
-                  placeholder="hr@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-
-              {error && <p className="text-sm text-red-400">{error}</p>}
-              {status && <p className="text-sm text-emerald-400">{status}</p>}
-
-              <button
-                type="submit"
-                className="w-full rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-zinc-100 disabled:opacity-60"
-                disabled={loading || !email}
-              >
-                {loading ? 'Sending OTP...' : 'Send OTP'}
-              </button>
-            </form>
-
-            <p className="mt-4 text-sm text-zinc-400">
-              Remembered your password?{' '}
-              <Link to="/login/admin" className="text-white font-medium hover:underline">
-                Back to login
-              </Link>
-            </p>
-          </div>
+          className="mb-5 flex h-12 w-12 items-center justify-center rounded-[14px] border border-[rgba(67,158,255,0.2)]"
+          style={{
+            background: 'linear-gradient(135deg, rgba(0,166,255,0.18), rgba(92,72,255,0.18))',
+          }}
+        >
+          <FiKey className="h-6 w-6 text-[#0284c7] dark:text-[#55B9FF]" aria-hidden="true" />
         </div>
+        <h2 className="text-xl font-semibold text-[var(--ei-text-primary)]">Reset with OTP</h2>
+        <p className="mt-1 text-sm text-[var(--ei-text-secondary)]">
+          Enter your Techberry Infotech work email (Recruiter, Head HR, or CEO).
+        </p>
+
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          {error && (
+            <div className="rounded-xl border border-[rgba(255,90,110,0.55)] bg-[rgba(255,102,133,0.1)] px-4 py-3 text-sm text-[#FF7B8E]">
+              {error}
+            </div>
+          )}
+          {status && (
+            <div className="rounded-xl border border-[rgba(54,214,160,0.4)] bg-[rgba(54,214,160,0.1)] px-4 py-3 text-sm text-[#36D6A0]">
+              {status}
+            </div>
+          )}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-[var(--ei-text-label)]">Work email</label>
+            <Input
+              type="email"
+              className="input-premium h-12 min-h-[3rem] text-base"
+              placeholder="name@techberryinfotech.com"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value)
+                if (error) setError('')
+              }}
+              required
+              autoFocus
+            />
+          </div>
+          <button type="submit" className="auth-cta" disabled={loading || !email.trim()}>
+            {loading ? 'Sending OTP…' : 'Send OTP'}
+          </button>
+          <p className="pt-1 text-center text-sm text-[var(--ei-text-secondary)]">
+            Remembered your password?{' '}
+            <Link to="/login/admin" className="text-[#55B9FF] hover:underline">
+              Back to login
+            </Link>
+          </p>
+        </form>
       </div>
-    </section>
+    </AuthPageLayout>
   )
 }

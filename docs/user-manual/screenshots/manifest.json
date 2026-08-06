@@ -1,0 +1,535 @@
+[
+  {
+    "file": "01-home/01_landing.png",
+    "module": "01-home",
+    "name": "01_landing",
+    "title": "Home / Landing page",
+    "action": "Open the application URL",
+    "expected": "Landing page loads with product branding and Get Started CTA",
+    "nav_path": "/",
+    "roles": [
+      "Public"
+    ],
+    "purpose": "Introduce the platform and route visitors to the jobs board"
+  },
+  {
+    "file": "03-public-jobs/01_jobs_board.png",
+    "module": "03-public-jobs",
+    "name": "01_jobs_board",
+    "title": "Public jobs board",
+    "action": "Open Jobs from the navigation bar (or Get Started)",
+    "expected": "List of published jobs with search/filter controls",
+    "nav_path": "/jobs",
+    "roles": [
+      "Public",
+      "RECRUITER",
+      "HEAD_HR",
+      "CEO"
+    ],
+    "purpose": "Browse open roles and start an application"
+  },
+  {
+    "file": "03-public-jobs/02_apply_modal.png",
+    "module": "03-public-jobs",
+    "name": "02_apply_modal",
+    "title": "Apply to job modal",
+    "action": "Click Apply on a job card",
+    "expected": "Application modal opens with resume upload and profile fields",
+    "nav_path": "/jobs \u2192 Apply",
+    "roles": [
+      "Public"
+    ],
+    "purpose": "Submit a candidate application with optional AI resume autofill"
+  },
+  {
+    "file": "04-support/01_faq.png",
+    "module": "04-support",
+    "name": "01_faq",
+    "title": "FAQ",
+    "action": "Open Support \u2192 FAQ",
+    "expected": "FAQ accordion page with common questions",
+    "nav_path": "/support/faq",
+    "roles": [
+      "Public"
+    ],
+    "purpose": "Answer common product questions without contacting support"
+  },
+  {
+    "file": "04-support/02_contact.png",
+    "module": "04-support",
+    "name": "02_contact",
+    "title": "Contact Us",
+    "action": "Open Support \u2192 Contact Us",
+    "expected": "Support request form (name, email, subject, message, priority)",
+    "nav_path": "/support/contact",
+    "roles": [
+      "Public"
+    ],
+    "purpose": "Submit a support request to the operations team"
+  },
+  {
+    "file": "04-support/03_hrms_feedback.png",
+    "module": "04-support",
+    "name": "03_hrms_feedback",
+    "title": "HRMS Testing Feedback",
+    "action": "Open Support \u2192 HRMS Testing Feedback",
+    "expected": "Feedback form for type, module, severity, description, screenshot",
+    "nav_path": "/support/hrms-feedback",
+    "roles": [
+      "Public"
+    ],
+    "purpose": "Collect product testing feedback from users"
+  },
+  {
+    "file": "05-head-hr-overview/01_dashboard.png",
+    "module": "05-head-hr-overview",
+    "name": "01_dashboard",
+    "title": "Head HR Overview Dashboard",
+    "action": "Sign in as Head HR (or open /head-hr)",
+    "expected": "Organization overview with sidebar navigation and posting tools",
+    "nav_path": "/head-hr",
+    "roles": [
+      "HEAD_HR"
+    ],
+    "purpose": "Org-wide recruitment overview and job posting for Head of HR"
+  },
+  {
+    "file": "06-head-hr-admins/01_admins.png",
+    "module": "06-head-hr-admins",
+    "name": "01_admins",
+    "title": "Admins management",
+    "action": "Sidebar \u2192 Admins",
+    "expected": "Table of HR admin/recruiter accounts with create/delete actions",
+    "nav_path": "/head-hr/admins",
+    "roles": [
+      "HEAD_HR"
+    ],
+    "purpose": "Provision and manage recruiter/admin users for the organization"
+  },
+  {
+    "file": "07-head-hr-candidates/01_candidates.png",
+    "module": "07-head-hr-candidates",
+    "name": "01_candidates",
+    "title": "Candidates list",
+    "action": "Sidebar \u2192 Candidates",
+    "expected": "Org-wide candidate table with search and row actions",
+    "nav_path": "/head-hr/candidates",
+    "roles": [
+      "HEAD_HR"
+    ],
+    "purpose": "Browse all candidates known to the organization"
+  },
+  {
+    "file": "07-head-hr-candidates/02_candidate_detail.png",
+    "module": "07-head-hr-candidates",
+    "name": "02_candidate_detail",
+    "title": "Candidate detail",
+    "action": "Open candidate CID007 from the candidates list",
+    "expected": "Candidate profile detail for the selected CID",
+    "nav_path": "/head-hr/candidates/CID007",
+    "roles": [
+      "HEAD_HR"
+    ],
+    "purpose": "Review a candidate\u2019s stored profile information"
+  },
+  {
+    "file": "08-head-hr-jobs/01_jobs_list.png",
+    "module": "08-head-hr-jobs",
+    "name": "01_jobs_list",
+    "title": "Head HR Jobs list",
+    "action": "Sidebar \u2192 Jobs",
+    "expected": "Organization job list with search, refresh, edit/delete (Head HR)",
+    "nav_path": "/head-hr/jobs",
+    "roles": [
+      "HEAD_HR"
+    ],
+    "purpose": "Manage all jobs across recruiters in the organization"
+  },
+  {
+    "file": "09-head-hr-job-detail/01_job_detail.png",
+    "module": "09-head-hr-job-detail",
+    "name": "01_job_detail",
+    "title": "Job details with applicants",
+    "action": "Open job PDA001 from the jobs list",
+    "expected": "Job Details / Candidates tabs with applicant rows",
+    "nav_path": "/head-hr/jobs/PDA001",
+    "roles": [
+      "HEAD_HR"
+    ],
+    "purpose": "Inspect a job posting and its applied candidates"
+  },
+  {
+    "file": "09-head-hr-job-detail/02_job_applicants.png",
+    "module": "09-head-hr-job-detail",
+    "name": "02_job_applicants",
+    "title": "Applied candidates for job",
+    "action": "Open the Candidates tab on job detail",
+    "expected": "Table of applicants for this job",
+    "nav_path": "/head-hr/jobs/PDA001 \u2192 Candidates",
+    "roles": [
+      "HEAD_HR"
+    ],
+    "purpose": "Review who applied and open evaluation"
+  },
+  {
+    "file": "10-candidate-evaluation/01_profile_tab.png",
+    "module": "10-candidate-evaluation",
+    "name": "01_profile_tab",
+    "title": "Candidate Evaluation \u2014 Profile & Resume",
+    "action": "Open applicant CID007 for job PDA001",
+    "expected": "Profile & Resume tab with candidate identity and resume actions",
+    "nav_path": "/head-hr/jobs/PDA001/candidates/CID007",
+    "roles": [
+      "HEAD_HR",
+      "CEO (read-only)"
+    ],
+    "purpose": "Evaluate applicant profile against the job"
+  },
+  {
+    "file": "10-candidate-evaluation/02_match_tab.png",
+    "module": "10-candidate-evaluation",
+    "name": "02_match_tab",
+    "title": "Candidate Evaluation \u2014 Application & Match",
+    "action": "Open Application & Match tab",
+    "expected": "ATS score, verdict, and match breakdown",
+    "nav_path": "/head-hr/jobs/PDA001/candidates/CID007?tab=application",
+    "roles": [
+      "HEAD_HR",
+      "CEO (read-only)"
+    ],
+    "purpose": "Explain AI/ATS match scoring for the application"
+  },
+  {
+    "file": "11-bulk-parsing/01_bulk_parsing.png",
+    "module": "11-bulk-parsing",
+    "name": "01_bulk_parsing",
+    "title": "Bulk Resume Parser (Head HR)",
+    "action": "Sidebar \u2192 Bulk Parsing",
+    "expected": "Bulk upload workspace (ZIP/files, output, parse controls)",
+    "nav_path": "/head-hr/bulk-parsing",
+    "roles": [
+      "HEAD_HR"
+    ],
+    "purpose": "Parse many resumes in a batch for recruitment intake"
+  },
+  {
+    "file": "11-bulk-parsing/02_browse_file_dialog.png",
+    "module": "11-bulk-parsing",
+    "name": "02_browse_file_dialog",
+    "title": "Browse and select ZIP or resume files",
+    "action": "Click Browse or Upload ZIP and choose files in the system file dialog",
+    "expected": "Windows Open dialog appears so you can select a ZIP or resume files from your computer",
+    "nav_path": "/head-hr/bulk-parsing \u2192 Browse / Upload ZIP",
+    "roles": [
+      "HEAD_HR"
+    ],
+    "purpose": "Select the resume ZIP or files to parse"
+  },
+  {
+    "file": "11-bulk-parsing/03_bulk_parsing_progress.png",
+    "module": "11-bulk-parsing",
+    "name": "03_bulk_parsing_progress",
+    "title": "Bulk parsing in progress",
+    "action": "After selecting input and output, start Parse and watch progress",
+    "expected": "Processing status, progress bar, processed/failed/queued counts, and file activity lists update live",
+    "nav_path": "/head-hr/bulk-parsing \u2192 Parse",
+    "roles": [
+      "HEAD_HR"
+    ],
+    "purpose": "Monitor batch resume parsing until completion"
+  },
+  {
+    "file": "12-integrations/01_integrations.png",
+    "module": "12-integrations",
+    "name": "01_integrations",
+    "title": "Integrations (Head HR)",
+    "action": "Sidebar \u2192 Integrations",
+    "expected": "External publishing / integrations dashboard",
+    "nav_path": "/head-hr/integrations",
+    "roles": [
+      "HEAD_HR"
+    ],
+    "purpose": "Monitor and configure job-board integrations"
+  },
+  {
+    "file": "13-settings/01_head_hr_settings.png",
+    "module": "13-settings",
+    "name": "01_head_hr_settings",
+    "title": "Head HR Settings",
+    "action": "Sidebar \u2192 Settings",
+    "expected": "Settings page with Security / Integrations tabs",
+    "nav_path": "/head-hr/settings",
+    "roles": [
+      "HEAD_HR"
+    ],
+    "purpose": "Change password and manage integration settings"
+  },
+  {
+    "file": "14-recruiter-dashboard/01_dashboard.png",
+    "module": "14-recruiter-dashboard",
+    "name": "01_dashboard",
+    "title": "Recruiter Dashboard",
+    "action": "Sign in as Recruiter (lands on /dashboard)",
+    "expected": "Recruiter stats, publishing section, and job create/list workspace",
+    "nav_path": "/dashboard",
+    "roles": [
+      "RECRUITER"
+    ],
+    "purpose": "Create, edit, publish, and manage the recruiter\u2019s own jobs"
+  },
+  {
+    "file": "15-recruiter-candidates/01_applied_candidates.png",
+    "module": "15-recruiter-candidates",
+    "name": "01_applied_candidates",
+    "title": "Applied Candidates (Recruiter)",
+    "action": "Navbar avatar menu \u2192 Candidates",
+    "expected": "Applicants for recruiter jobs with shortlist/reject and match reason",
+    "nav_path": "/candidates",
+    "roles": [
+      "RECRUITER"
+    ],
+    "purpose": "Review and act on applications to the recruiter\u2019s jobs"
+  },
+  {
+    "file": "16-recruiter-bulk/01_bulk_parser.png",
+    "module": "16-recruiter-bulk",
+    "name": "01_bulk_parser",
+    "title": "Bulk Resume Parser (Recruiter)",
+    "action": "Navbar avatar menu \u2192 Bulk Resume Parser",
+    "expected": "Same bulk parsing workspace under /admin/bulk-resume-parser",
+    "nav_path": "/admin/bulk-resume-parser",
+    "roles": [
+      "RECRUITER"
+    ],
+    "purpose": "Batch-parse resumes for the recruiter workflow"
+  },
+  {
+    "file": "17-feedback-admin/01_feedback_admin.png",
+    "module": "17-feedback-admin",
+    "name": "01_feedback_admin",
+    "title": "Feedback Admin",
+    "action": "Navbar avatar menu \u2192 Feedback (Admin)",
+    "expected": "Feedback inbox with filters and refresh",
+    "nav_path": "/admin/feedback",
+    "roles": [
+      "RECRUITER"
+    ],
+    "purpose": "Review submitted HRMS testing feedback"
+  },
+  {
+    "file": "18-recruiter-integrations/01_integrations.png",
+    "module": "18-recruiter-integrations",
+    "name": "01_integrations",
+    "title": "Integrations (Recruiter)",
+    "action": "Navbar avatar menu \u2192 Integrations",
+    "expected": "Integrations dashboard for the recruiter session",
+    "nav_path": "/integrations",
+    "roles": [
+      "RECRUITER",
+      "HEAD_HR",
+      "CEO"
+    ],
+    "purpose": "View integration health and open settings"
+  },
+  {
+    "file": "19-recruiter-settings/01_settings.png",
+    "module": "19-recruiter-settings",
+    "name": "01_settings",
+    "title": "Settings (Recruiter)",
+    "action": "Navbar avatar menu \u2192 Settings",
+    "expected": "Security password change and integrations settings tabs",
+    "nav_path": "/settings",
+    "roles": [
+      "RECRUITER",
+      "HEAD_HR",
+      "CEO"
+    ],
+    "purpose": "Manage account security settings"
+  },
+  {
+    "file": "20-ceo-overview/01_dashboard.png",
+    "module": "20-ceo-overview",
+    "name": "01_dashboard",
+    "title": "CEO / Executive Overview",
+    "action": "Sign in as CEO (lands on /ceo)",
+    "expected": "Read-only executive overview (no Admins / Bulk / Settings in sidebar)",
+    "nav_path": "/ceo",
+    "roles": [
+      "CEO"
+    ],
+    "purpose": "Executive read-only view of organization recruitment health"
+  },
+  {
+    "file": "20-ceo-overview/02_jobs_readonly.png",
+    "module": "20-ceo-overview",
+    "name": "02_jobs_readonly",
+    "title": "CEO Jobs (read-only)",
+    "action": "Sidebar \u2192 Jobs",
+    "expected": "Jobs list without destructive create/delete controls",
+    "nav_path": "/ceo/jobs",
+    "roles": [
+      "CEO"
+    ],
+    "purpose": "Inspect open jobs without modifying them"
+  },
+  {
+    "file": "20-ceo-overview/03_candidates_readonly.png",
+    "module": "20-ceo-overview",
+    "name": "03_candidates_readonly",
+    "title": "CEO Candidates (read-only)",
+    "action": "Sidebar \u2192 Candidates",
+    "expected": "Candidates list in read-only executive mode",
+    "nav_path": "/ceo/candidates",
+    "roles": [
+      "CEO"
+    ],
+    "purpose": "Inspect candidate pipeline without destructive actions"
+  },
+  {
+    "file": "20-ceo-overview/04_eval_readonly.png",
+    "module": "20-ceo-overview",
+    "name": "04_eval_readonly",
+    "title": "CEO candidate evaluation (read-only)",
+    "action": "Open /ceo/jobs/PDA001/candidates/CID007",
+    "expected": "Same evaluation UI as Head HR, without write actions",
+    "nav_path": "/ceo/jobs/PDA001/candidates/CID007",
+    "roles": [
+      "CEO"
+    ],
+    "purpose": "Review match analysis for executive insight"
+  },
+  {
+    "file": "21-logout/01_logout_control.png",
+    "module": "21-logout",
+    "name": "01_logout_control",
+    "title": "Logout control",
+    "action": "Locate Logout in the Head HR sidebar",
+    "expected": "Logout control is visible in the panel chrome",
+    "nav_path": "/head-hr \u2192 Logout",
+    "roles": [
+      "HEAD_HR",
+      "CEO",
+      "RECRUITER"
+    ],
+    "purpose": "End the authenticated staff session"
+  },
+  {
+    "file": "21-logout/02_after_logout.png",
+    "module": "21-logout",
+    "name": "02_after_logout",
+    "title": "After logout",
+    "action": "Click Logout",
+    "expected": "Session cleared; user returned to admin login (or public home for recruiter)",
+    "nav_path": "/login/admin (Head HR / CEO)",
+    "roles": [
+      "HEAD_HR",
+      "CEO",
+      "RECRUITER"
+    ],
+    "purpose": "Prevent unauthorized access after the user finishes work"
+  },
+  {
+    "file": "02-authentication/01_login_chooser.png",
+    "module": "02-authentication",
+    "name": "01_login_chooser",
+    "title": "Login chooser",
+    "action": "Open /login",
+    "expected": "Login landing with Admin Login entry point",
+    "nav_path": "/login",
+    "roles": [
+      "Public"
+    ],
+    "purpose": "Route staff users to admin authentication"
+  },
+  {
+    "file": "02-authentication/02_login_admin_empty.png",
+    "module": "02-authentication",
+    "name": "02_login_admin_empty",
+    "title": "Admin login form (empty)",
+    "action": "Open Admin Login",
+    "expected": "Email and password fields with Sign in button",
+    "nav_path": "/login/admin",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Authenticate Recruiter, Head HR, or CEO accounts"
+  },
+  {
+    "file": "02-authentication/03_login_email_filled.png",
+    "module": "02-authentication",
+    "name": "03_login_email_filled",
+    "title": "Email entered",
+    "action": "Enter staff email address",
+    "expected": "Email field shows the entered address; password still empty",
+    "nav_path": "/login/admin",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Identify the staff account"
+  },
+  {
+    "file": "02-authentication/04_login_password_filled.png",
+    "module": "02-authentication",
+    "name": "04_login_password_filled",
+    "title": "Password entered",
+    "action": "Enter password",
+    "expected": "Password field is filled (masked)",
+    "nav_path": "/login/admin",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Prove account ownership"
+  },
+  {
+    "file": "02-authentication/05_forgot_password.png",
+    "module": "02-authentication",
+    "name": "05_forgot_password",
+    "title": "Forgot password \u2014 request OTP",
+    "action": "From Admin Login, open Forgot password and enter work email",
+    "expected": "Reset with OTP form: work email field, Send OTP, Back to login",
+    "nav_path": "/forgot-password/admin",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Start staff password reset by emailing a 6-digit OTP (valid 10 minutes)"
+  },
+  {
+    "file": "02-authentication/05b_forgot_password_email.png",
+    "module": "02-authentication",
+    "name": "05b_forgot_password_email",
+    "title": "Forgot password \u2014 email entered",
+    "action": "Enter the staff work email, then click Send OTP",
+    "expected": "Work email filled; Send OTP ready; note that OTP is valid for 10 minutes",
+    "nav_path": "/forgot-password/admin",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Identify the account that will receive the password-reset OTP"
+  },
+  {
+    "file": "02-authentication/05c_forgot_password_verify.png",
+    "module": "02-authentication",
+    "name": "05c_forgot_password_verify",
+    "title": "Forgot password \u2014 verify OTP",
+    "action": "Open the email, copy the 6-digit OTP, enter it, optionally Resend OTP",
+    "expected": "Verify OTP form with email (read-only), 6-digit OTP field, Verify OTP and Resend OTP",
+    "nav_path": "/forgot-password/admin/verify",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Confirm ownership of the email before allowing a password change"
+  },
+  {
+    "file": "02-authentication/05d_forgot_password_reset.png",
+    "module": "02-authentication",
+    "name": "05d_forgot_password_reset",
+    "title": "Forgot password \u2014 set new password",
+    "action": "After OTP verification, choose a strong new password and confirm it",
+    "expected": "Create new password form with strength rules, Reset password button",
+    "nav_path": "/forgot-password/admin/reset",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Complete password recovery and return to Admin Login"
+  }
+]

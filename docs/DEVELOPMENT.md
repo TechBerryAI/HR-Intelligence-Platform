@@ -184,10 +184,8 @@ Run all AI tests: `cd ai && pytest`
 | Topic | Document |
 |-------|----------|
 | Docs index | [README.md](README.md) |
-| Keep docs in sync after code changes | Run `python scripts/sync_docs_from_code.py` · see [README.md § Keeping docs up to date](README.md#keeping-docs-up-to-date-automatic--required) |
-| Product & system architecture | [03-System-Architecture.md](03-System-Architecture.md) · [01-Product-Constitution.md](01-Product-Constitution.md) |
-| APIs & security | [07-API.md](07-API.md) · [09-Security.md](09-Security.md) |
-| Legacy deep narrative (optional) | [legacy/README.md](legacy/README.md) |
+| User manuals (screenshots) | [user-manual/README.md](user-manual/README.md) |
+| Architecture / engineering archive (optional) | [ARCHITECTURE.md](ARCHITECTURE.md) · [ENGINEERING.md](ENGINEERING.md) |
 | AI platform overview | [ai/README.md](../ai/README.md) |
 | TOON ontology | [ai/toon/README.md](../ai/toon/README.md) |
 | Data pipeline | [ai/docs/DATA_PIPELINE.md](../ai/docs/DATA_PIPELINE.md) |

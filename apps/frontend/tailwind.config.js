@@ -26,9 +26,9 @@ export default {
           gold: '#C9A227',
           'gold-light': '#E5C158',
           'gold-dark': '#A68520',
-          blue: '#3B82F6',
-          'blue-light': '#60A5FA',
-          'blue-dark': '#2563EB',
+          blue: '#8FA3B8',
+          'blue-light': '#A8B8C8',
+          'blue-dark': '#6B7F94',
         },
         surface: {
           DEFAULT: '#F8FAFC',
