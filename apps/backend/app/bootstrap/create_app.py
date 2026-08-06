@@ -142,6 +142,7 @@ def create_app() -> Flask:
     from app.domains.recruitment.api.jobs import jobs_bp  # noqa: E402
     from app.domains.recruitment.api.parsing import parsing_bp  # noqa: E402
     from app.domains.support.api.routes import support_bp  # noqa: E402
+    from app.domains.support.api.media import media_bp  # noqa: E402
     from app.domains.integrations.api.routes import integrations_bp  # noqa: E402
 
     print("[DB] Initializing database at startup...")
@@ -218,10 +219,19 @@ def create_app() -> Flask:
     app.register_blueprint(sessions_bp, url_prefix='/api/sessions')
     app.register_blueprint(parsing_bp, url_prefix='/api')
     app.register_blueprint(support_bp, url_prefix='/api/support')
+    app.register_blueprint(media_bp, url_prefix='/api/media')
     app.register_blueprint(feedback_bp, url_prefix='/api/feedback')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(head_hr_bp, url_prefix='/api/head-hr')
     app.register_blueprint(integrations_bp, url_prefix='/api/integrations')
+
+    try:
+        from app.core import media_storage
+        root = media_storage.get_media_root()
+        media_storage.ensure_hero_video()
+        print(f"[MEDIA] MEDIA_ROOT={root}")
+    except Exception as e:
+        print(f"[MEDIA] Init warning: {e}")
 
     try:
         from app.domains.integrations.bootstrap import init_integrations

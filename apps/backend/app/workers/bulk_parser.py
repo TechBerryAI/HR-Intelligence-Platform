@@ -17,13 +17,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
+from app.core import media_storage
+
 # In-memory job store: job_id -> job dict
 _local_jobs: dict[str, dict[str, Any]] = {}
 _local_jobs_lock = threading.Lock()
 
-_DATA_DIR = Path(__file__).resolve().parents[3] / 'data'
-_BULK_EXPORT_DIR = _DATA_DIR / 'bulk_exports'
-_BULK_UPLOAD_DIR = _DATA_DIR / 'bulk_uploads'
+_BULK_EXPORT_DIR = media_storage.bulk_exports_dir()
+_BULK_UPLOAD_DIR = media_storage.bulk_uploads_dir()
 
 ALLOWED_EXT = {'pdf', 'doc', 'docx'}
 EXCEL_HEADERS = [

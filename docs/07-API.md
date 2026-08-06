@@ -163,9 +163,9 @@ Prefix: `/api/applications`
 
 Prefix: `/api/integrations` (`integrations_bp`) — company-scoped via `company_key`
 
-**Current:** Built-ins `linkedin` / `naukri` (staging IDs until partner APIs). Custom platforms: any slug `[a-z0-9_]+` except reserved builtins; `settings_json.adapter = "http"` with `baseUrl` + `endpoints`. Secrets encrypted and masked in responses. HTTP adapters publish/sync via `GenericHttpProvider`; synced candidates stored in `external_applications`.
+**Current:** Built-ins `linkedin` / `naukri` (staging IDs until partner APIs). Builtin brand icons are frontend inline SVG / react-icons (not stored as repo images or DB blobs). Custom platforms: any slug `[a-z0-9_]+` except reserved builtins; `settings_json.adapter = "http"` with `baseUrl` + `endpoints` + optional HTTPS `logoUrl`. Secrets encrypted and masked in responses. HTTP adapters publish/sync via `GenericHttpProvider`; synced candidates stored in `external_applications`.
 
-**Custom platform `POST /provider` body (required):** `name` or `provider` slug; `baseUrl` (or `settings.baseUrl`); credentials (`accessToken` and/or `clientId`+`clientSecret`). Optional: `settings.endpoints` (`test`, `publish`, `update`, `close`, `applications`, `status` as `"METHOD /path"` with `{externalJobId}`), `custom: true`, toggles.
+**Custom platform `POST /provider` body (required):** `name` or `provider` slug; `baseUrl` (or `settings.baseUrl`); credentials (`accessToken` and/or `clientId`+`clientSecret`). Optional: `logoUrl` / `settings.logoUrl` (HTTPS only), `settings.endpoints` (`test`, `publish`, `update`, `close`, `applications`, `status` as `"METHOD /path"` with `{externalJobId}`), `custom: true`, toggles.
 
 **`settings_json` contract (custom HTTP):**
 
@@ -174,6 +174,7 @@ Prefix: `/api/integrations` (`integrations_bp`) — company-scoped via `company_
   "adapter": "http",
   "displayName": "Glassdoor",
   "baseUrl": "https://api.example.com",
+  "logoUrl": "https://cdn.example.com/glassdoor.png",
   "authHeader": "Bearer",
   "endpoints": {
     "test": "GET /health",
@@ -186,6 +187,7 @@ Prefix: `/api/integrations` (`integrations_bp`) — company-scoped via `company_
 }
 ```
 
+`logoUrl` must be `https://…` (reject `http://`, `data:`, relative paths). Empty string clears it.
 | Method | Path | Purpose | Auth |
 |--------|------|---------|------|
 | GET | `/api/integrations/` | Summary + provider catalog | Staff JWT |
@@ -208,6 +210,19 @@ Prefix: `/api/integrations` (`integrations_bp`) — company-scoped via `company_
 | GET | `/api/integrations/dashboard` | Dashboard aggregate | Staff JWT |
 
 **Future:** OAuth connect flows and official LinkedIn/Naukri APIs — same paths.
+
+---
+
+## Public media
+
+Prefix: `/api/media` (`media_bp`) — files from `MEDIA_ROOT` (not the git tree).
+
+| Method | Path | Purpose | Auth |
+|--------|------|---------|------|
+| GET | `/api/media/public/hero-video` | Stream landing hero MP4 | None |
+| GET | `/api/media/health` | Media root + hero present | None |
+
+Override landing URL with frontend `VITE_HERO_VIDEO_URL` (HTTPS CDN) without code changes.
 
 ---
 
@@ -316,7 +331,7 @@ python scripts/sync_docs_from_code.py
 ```
 
 <!-- BEGIN:GENERATED-API-ROUTES -->
-_Auto-generated on 2026-08-05 by `scripts/sync_docs_from_code.py`. Do not hand-edit this block._
+_Auto-generated on 2026-08-06 by `scripts/sync_docs_from_code.py`. Do not hand-edit this block._
 
 ### Registered blueprints
 
@@ -331,6 +346,7 @@ _Auto-generated on 2026-08-05 by `scripts/sync_docs_from_code.py`. Do not hand-e
 | `head_hr_bp` | `/api/head-hr` |
 | `integrations_bp` | `/api/integrations` |
 | `jobs_bp` | `/api/jobs` |
+| `media_bp` | `/api/media` |
 | `sessions_bp` | `/api/sessions` |
 | `support_bp` | `/api/support` |
 
@@ -401,6 +417,8 @@ _Auto-generated on 2026-08-05 by `scripts/sync_docs_from_code.py`. Do not hand-e
 | `GET` | `/api/jobs/all` | `jobs_bp` | `app/domains/recruitment/api/jobs.py` |
 | `POST` | `/api/login` | `auth_bp` | `app/domains/identity/api/hr_auth.py` |
 | `POST` | `/api/logout` | `auth_bp` | `app/domains/identity/api/hr_auth.py` |
+| `GET` | `/api/media/health` | `media_bp` | `app/domains/support/api/media.py` |
+| `GET` | `/api/media/public/hero-video` | `media_bp` | `app/domains/support/api/media.py` |
 | `POST` | `/api/parse/jd` | `parsing_bp` | `app/domains/recruitment/api/parsing.py` |
 | `POST` | `/api/parse/jd/stream` | `parsing_bp` | `app/domains/recruitment/api/parsing.py` |
 | `GET` | `/api/parse/jobs/<job_id>/progress` | `parsing_bp` | `app/domains/recruitment/api/parsing.py` |
@@ -424,5 +442,5 @@ _Auto-generated on 2026-08-05 by `scripts/sync_docs_from_code.py`. Do not hand-e
 | `POST` | `/api/support/submit` | `support_bp` | `app/domains/support/api/routes.py` |
 | `POST` | `/api/verify-otp` | `auth_bp` | `app/domains/identity/api/hr_auth.py` |
 
-_Route count: 85. If a route is missing, ensure it uses `@blueprint.route` / `.get` / `.post` and the blueprint is registered in `create_app.py`._
+_Route count: 87. If a route is missing, ensure it uses `@blueprint.route` / `.get` / `.post` and the blueprint is registered in `create_app.py`._
 <!-- END:GENERATED-API-ROUTES -->

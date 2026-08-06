@@ -70,7 +70,12 @@ export default function ExternalPublishingSection({ className = '', detailsTo = 
           >
             <div className="flex items-center justify-between gap-2 mb-3">
               <div className="flex items-center gap-2 min-w-0">
-                <ProviderBrandIcon provider={p.provider} className="w-5 h-5 shrink-0" />
+                <ProviderBrandIcon
+                  provider={p.provider}
+                  className="w-5 h-5 shrink-0"
+                  logoUrl={p.logoUrl}
+                  title={p.name}
+                />
                 <p className="font-medium text-[var(--ei-text-primary)] truncate">{p.name}</p>
               </div>
               <span
