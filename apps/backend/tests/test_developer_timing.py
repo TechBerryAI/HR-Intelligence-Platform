@@ -212,6 +212,62 @@ class TimingDecoratorTests(unittest.TestCase):
         self.assertEqual(text_step["duration_ms"], 800)
         self.assertEqual(text_step["status"], "completed")
 
+    def test_bulk_parse_uses_resume_checklist(self):
+        from app.core.request_context import start_request_context, set_timing_context
+        from app.core.timing_collector import TimingCollector, record_pipeline_stage
+
+        col = TimingCollector()
+        # Patch singleton used by record_pipeline_stage
+        import app.core.timing_collector as tc
+
+        prev = tc.timing_collector
+        tc.timing_collector = col
+        try:
+            ctx = start_request_context(
+                path="/api/admin/bulk-parse/alice.pdf", method="WORKER"
+            )
+            col.begin_session(
+                request_id=ctx.request_id,
+                started_at=ctx.started_at_iso,
+                path=ctx.path,
+                method=ctx.method,
+            )
+            record_pipeline_stage("cache", "skipped")
+            record_pipeline_stage("text", "completed", duration_ms=50)
+            record_pipeline_stage("sections", "completed", duration_ms=5)
+            record_pipeline_stage("deterministic", "completed", duration_ms=20)
+            record_pipeline_stage("semantic", "skipped")
+            record_pipeline_stage("knowledge", "completed", duration_ms=4)
+            record_pipeline_stage("validate", "completed", duration_ms=2)
+            record_pipeline_stage("persist", "completed", duration_ms=1)
+            col.end_session(ctx.request_id, wall_duration_ms=90)
+            sess = col.get_session(ctx.request_id)
+            self.assertEqual(sess.kind, "bulk_parse")
+            checklist = sess.parse_checklist()
+            names = [c["name"] for c in checklist if not c.get("detail")]
+            self.assertEqual(
+                names,
+                [
+                    "Cache Check",
+                    "Store Raw File",
+                    "Extract Text",
+                    "Layout Analysis",
+                    "Section Detection",
+                    "Deterministic Parse",
+                    "Semantic Enrichment (LLM)",
+                    "Knowledge Enrichment",
+                    "Validation",
+                    "Save Parsed Result",
+                ],
+            )
+            text_step = next(c for c in checklist if c["key"] == "text")
+            self.assertEqual(text_step["duration_ms"], 50)
+            cache_step = next(c for c in checklist if c["key"] == "cache")
+            self.assertEqual(cache_step["status"], "skipped")
+        finally:
+            tc.timing_collector = prev
+            set_timing_context(None)
+
 
 if __name__ == "__main__":
     unittest.main()

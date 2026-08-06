@@ -1,5 +1,5 @@
 /**
- * Admin Developer Mode — full resume/JD parse step checklist with timings.
+ * Admin Developer Mode — full resume/JD/bulk parse step checklist with timings.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate } from 'react-router-dom'
@@ -11,9 +11,9 @@ import {
   fetchPerformanceRecent,
   fetchPerformanceRequest,
 } from '@/features/admin/services/developerPerformanceService.js'
-import { DurationBadge } from '@/features/admin/components/PerformanceCharts.jsx'
+import { DurationBadge, formatDuration } from '@/features/admin/components/PerformanceCharts.jsx'
 
-/** Exact resume checklist — always shown for resume parses */
+/** Exact resume checklist — always shown for resume / bulk parses */
 const RESUME_STEPS = [
   { key: 'cache', name: 'Cache Check' },
   { key: 'persist_raw', name: 'Store Raw File' },
@@ -61,24 +61,35 @@ function formatTime(iso) {
 }
 
 function formatMs(ms) {
-  if (ms == null || Number.isNaN(Number(ms))) return '—'
-  const n = Number(ms)
-  if (n >= 1000) return `${(n / 1000).toFixed(2)} s`
-  return `${Math.round(n)} ms`
+  return formatDuration(ms)
 }
 
-function pipelineTitle(kind) {
+function pipelineTitle(kind, session) {
   if (kind === 'jd_parse') return 'JD Parsing'
   if (kind === 'ats') return 'ATS Matching'
   if (kind === 'apply') return 'Apply'
+  if (kind === 'bulk_parse') {
+    const n = session?.resume_count
+    if (n != null && n > 0) {
+      return `Bulk Parse · ${n} resume${n === 1 ? '' : 's'}`
+    }
+    return 'Bulk Parse'
+  }
   if (kind === 'resume_parse') return 'Resume Parsing'
   return 'Pipeline'
 }
 
 function detectKind(detail) {
   if (!detail) return null
-  if (detail.kind === 'jd_parse' || detail.kind === 'resume_parse') return detail.kind
+  if (
+    detail.kind === 'jd_parse' ||
+    detail.kind === 'resume_parse' ||
+    detail.kind === 'bulk_parse'
+  ) {
+    return detail.kind
+  }
   const path = (detail.path || '').toLowerCase()
+  if (path.includes('/bulk-parse') || path.includes('bulk-parse')) return 'bulk_parse'
   if (path.includes('/parse/jd')) return 'jd_parse'
   if (path.includes('/parse/resume')) return 'resume_parse'
   const fns = new Set((detail.events || []).map((e) => e.function))
@@ -130,7 +141,12 @@ function statusMeta(status) {
 /** Merge API parse_steps with the exact template so resume always lists all 10 steps. */
 function buildParseSteps(detail) {
   const kind = detectKind(detail)
-  const template = kind === 'jd_parse' ? JD_STEPS : kind === 'resume_parse' ? RESUME_STEPS : null
+  const template =
+    kind === 'jd_parse'
+      ? JD_STEPS
+      : kind === 'resume_parse' || kind === 'bulk_parse'
+        ? RESUME_STEPS
+        : null
   if (!template) return detail?.parse_steps || []
 
   const fromApi = Array.isArray(detail?.parse_steps) ? detail.parse_steps : []
@@ -144,11 +160,12 @@ function buildParseSteps(detail) {
     if (STEP_ALIASES[key]) key = STEP_ALIASES[key]
     const existing = byKey.get(key)
     if (!existing || (e.duration_ms != null && existing.duration_ms == null)) {
+      const status = e.outcome || (e.success === false ? 'failed' : 'completed')
       byKey.set(key, {
         key,
         name: template.find((t) => t.key === key)?.name || e.stage || key,
-        duration_ms: e.duration_ms,
-        status: e.outcome || (e.success === false ? 'failed' : 'completed'),
+        duration_ms: status === 'skipped' ? null : e.duration_ms,
+        status,
         success: e.success,
         function: e.function,
       })
@@ -168,12 +185,14 @@ function buildParseSteps(detail) {
         function: t.key,
       }
     }
+    const status = hit.status || 'completed'
     return {
       step: idx + 1,
       key: t.key,
       name: t.name,
-      duration_ms: hit.duration_ms,
-      status: hit.status || 'completed',
+      // Skipped / not run: never show a duration — only the status label
+      duration_ms: status === 'skipped' || status === 'not_run' ? null : hit.duration_ms,
+      status,
       success: hit.success,
       function: hit.function || t.key,
     }
@@ -182,7 +201,7 @@ function buildParseSteps(detail) {
   const llm =
     (detail?.events || []).find((e) => e.function === 'parse_via_runtime') ||
     fromApi.find((s) => s.key === 'llm_inference')
-  if (llm) {
+  if (llm && llm.status !== 'skipped') {
     rows.push({
       step: null,
       key: 'llm_inference',
@@ -197,15 +216,20 @@ function buildParseSteps(detail) {
   return rows
 }
 
-function ParseStepsView({ steps, title, totalMs, path }) {
-  const maxMs = Math.max(...steps.map((s) => s.duration_ms || 0), 1)
+function ParseStepsView({ steps, title, subtitle, totalMs, path, files }) {
+  const maxMs = Math.max(
+    ...steps.filter((s) => s.status === 'completed').map((s) => s.duration_ms || 0),
+    1
+  )
 
   return (
     <div>
       <div className="mb-5">
         <h4 className="text-lg font-semibold text-[var(--ei-text-primary)]">{title}</h4>
-        <p className="text-xs text-[var(--ei-text-muted)] mt-1">Time for every pipeline step</p>
-        {path ? (
+        <p className="text-xs text-[var(--ei-text-muted)] mt-1">
+          {subtitle || 'Time for every pipeline step'}
+        </p>
+        {path && !files?.length ? (
           <p className="text-[11px] text-[var(--ei-text-secondary)] mt-2 font-mono truncate">{path}</p>
         ) : null}
       </div>
@@ -216,8 +240,8 @@ function ParseStepsView({ steps, title, totalMs, path }) {
           const Icon = meta.icon
           const isDetail = Boolean(step.detail)
           const n = step.step ?? idx + 1
-          const pct =
-            step.duration_ms != null ? Math.min(100, (step.duration_ms / maxMs) * 100) : 0
+          const showTime = step.status === 'completed' && step.duration_ms != null
+          const pct = showTime ? Math.min(100, (step.duration_ms / maxMs) * 100) : 0
           return (
             <li key={`${step.key}-${idx}`} className={`relative flex gap-3 ${isDetail ? 'ml-6' : ''}`}>
               <div className="flex flex-col items-center w-8 shrink-0">
@@ -250,21 +274,20 @@ function ParseStepsView({ steps, title, totalMs, path }) {
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      {step.duration_ms != null ? (
-                        <>
-                          <DurationBadge ms={step.duration_ms} />
-                          <p className="text-[10px] text-[var(--ei-text-muted)] tabular-nums mt-1">
-                            {Number(step.duration_ms).toFixed(2)} ms
-                          </p>
-                        </>
+                      {showTime ? (
+                        <DurationBadge ms={step.duration_ms} />
                       ) : (
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-md ${meta.badge}`}>
-                          —
+                          {step.status === 'skipped'
+                            ? 'Skipped'
+                            : step.status === 'failed'
+                              ? 'Failed'
+                              : '—'}
                         </span>
                       )}
                     </div>
                   </div>
-                  {step.duration_ms != null && step.status === 'completed' ? (
+                  {showTime ? (
                     <div className="mt-2.5 h-1.5 rounded-full bg-[var(--ei-bg-primary)] overflow-hidden">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-[#00A6FF] to-[#276DFF]"
@@ -286,6 +309,29 @@ function ParseStepsView({ steps, title, totalMs, path }) {
         </div>
         <span className="text-base font-bold tabular-nums text-[#00A6FF]">{formatMs(totalMs)}</span>
       </div>
+
+      {Array.isArray(files) && files.length > 0 ? (
+        <div className="mt-5">
+          <h5 className="text-sm font-semibold text-[var(--ei-text-primary)] mb-2">
+            Resumes in this bulk job ({files.length})
+          </h5>
+          <ul className="rounded-xl border border-[var(--ei-border-primary)] divide-y divide-[var(--ei-border-primary)] overflow-hidden">
+            {files.map((f) => (
+              <li
+                key={f.request_id || f.filename}
+                className="flex items-center justify-between gap-3 px-3.5 py-2.5 bg-[var(--ei-surface-hover)]/30"
+              >
+                <span className="text-sm text-[var(--ei-text-primary)] truncate font-mono text-[12px]">
+                  {f.filename}
+                </span>
+                <span className="text-xs tabular-nums text-[var(--ei-text-secondary)] shrink-0">
+                  {f.status === 'error' ? 'Failed' : formatMs(f.total_duration_ms)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -293,7 +339,12 @@ function ParseStepsView({ steps, title, totalMs, path }) {
 function PipelineView({ detail }) {
   const kind = detectKind(detail)
   const steps = useMemo(() => buildParseSteps(detail), [detail])
-  const title = pipelineTitle(kind || detail?.kind)
+  const title = pipelineTitle(kind || detail?.kind, detail)
+  const resumeCount = detail?.resume_count
+  const subtitle =
+    kind === 'bulk_parse' && resumeCount
+      ? `Avg step time across ${resumeCount} resume${resumeCount === 1 ? '' : 's'}`
+      : 'Time for every pipeline step'
 
   if (!detail) {
     return (
@@ -308,15 +359,17 @@ function PipelineView({ detail }) {
       <ParseStepsView
         steps={steps}
         title={title}
+        subtitle={subtitle}
         totalMs={detail.total_duration_ms}
         path={detail.path}
+        files={detail.files}
       />
     )
   }
 
   return (
     <p className="text-sm text-[var(--ei-text-muted)] py-12 text-center">
-      No parse step timings yet. Parse a resume or JD, then refresh.
+      No parse step timings yet. Parse a resume, JD, or run bulk parse, then refresh.
     </p>
   )
 }
@@ -381,7 +434,7 @@ function DashboardBody() {
             </p>
             <h1 className="text-2xl font-bold text-[var(--ei-text-primary)]">Parse Step Timings</h1>
             <p className="text-sm text-[var(--ei-text-secondary)]">
-              Resume &amp; JD — every pipeline step with duration
+              Resume, JD &amp; bulk — every pipeline step with duration
             </p>
           </div>
         </div>
@@ -419,7 +472,7 @@ function DashboardBody() {
                 {!loading && !sessions.length ? (
                   <tr>
                     <td colSpan={3} className="px-4 py-8 text-center text-[var(--ei-text-muted)]">
-                      No parses yet. Parse a resume or JD, then refresh.
+                      No parses yet. Parse a resume, JD, or run bulk parse, then refresh.
                     </td>
                   </tr>
                 ) : null}
@@ -437,7 +490,7 @@ function DashboardBody() {
                         {formatTime(s.started_at)}
                       </td>
                       <td className="px-4 py-2.5 text-[var(--ei-text-primary)] font-medium">
-                        {pipelineTitle(s.kind)}
+                        {pipelineTitle(s.kind, s)}
                       </td>
                       <td className="px-4 py-2.5">
                         <DurationBadge ms={s.total_duration_ms} />

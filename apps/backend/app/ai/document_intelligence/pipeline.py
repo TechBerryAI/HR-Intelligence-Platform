@@ -272,13 +272,38 @@ def run_jd_parse_pipeline(
 
 
 def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None):
-    """In-memory resume parse for tests / gold (no DB)."""
+    """In-memory resume parse for tests / gold / bulk (no DB)."""
+    import time as _time
+
+    from app.core.timing_collector import record_pipeline_stage
+
     profile_hw = detect_hardware_profile()
     workers = max_workers or min(4, max(1, profile_hw.cpu_count // 2))
+
+    t0 = _time.perf_counter()
     sections = detect_sections(text, 'resume')
+    record_pipeline_stage(
+        'sections',
+        'completed',
+        duration_ms=(_time.perf_counter() - t0) * 1000.0,
+        module='app.ai.document_intelligence.pipeline',
+    )
+
+    t0 = _time.perf_counter()
     profile = parse_resume_from_sections(sections, text, max_workers=workers)
+    record_pipeline_stage(
+        'deterministic',
+        'completed',
+        duration_ms=(_time.perf_counter() - t0) * 1000.0,
+        module='app.ai.document_intelligence.pipeline',
+    )
+
+    t0 = _time.perf_counter()
     profile = apply_knowledge_to_candidate(profile)
+    knowledge_ms = (_time.perf_counter() - t0) * 1000.0
+
     if not _SKIP_LLM:
+        t0 = _time.perf_counter()
         unresolved = unresolved_semantic_text(sections, 'resume') or text
         profile = enrich_resume_semantic(
             profile,
@@ -286,12 +311,21 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
             allow_experience_fill=bool(profile.experience),
         )
         profile = sanitize_candidate_profile(profile)
+        record_pipeline_stage(
+            'semantic',
+            'completed',
+            duration_ms=(_time.perf_counter() - t0) * 1000.0,
+            module='app.ai.document_intelligence.pipeline',
+        )
+        t0 = _time.perf_counter()
         profile = apply_knowledge_to_candidate(profile)
+        knowledge_ms += (_time.perf_counter() - t0) * 1000.0
     else:
         # Gate: only call AI if critical gaps (fresher OK with education+skills)
         has_id = bool(profile.personal.full_name and profile.contact.email)
         has_body = bool(profile.skills and (profile.experience or profile.education))
         if not (has_id and has_body):
+            t0 = _time.perf_counter()
             unresolved = unresolved_semantic_text(sections, 'resume') or text
             profile = enrich_resume_semantic(
                 profile,
@@ -299,7 +333,30 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
                 allow_experience_fill=bool(profile.experience),
             )
             profile = sanitize_candidate_profile(profile)
+            record_pipeline_stage(
+                'semantic',
+                'completed',
+                duration_ms=(_time.perf_counter() - t0) * 1000.0,
+                module='app.ai.document_intelligence.pipeline',
+            )
+            t0 = _time.perf_counter()
             profile = apply_knowledge_to_candidate(profile)
+            knowledge_ms += (_time.perf_counter() - t0) * 1000.0
+        else:
+            record_pipeline_stage(
+                'semantic',
+                'skipped',
+                duration_ms=0.0,
+                module='app.ai.document_intelligence.pipeline',
+            )
+
+    record_pipeline_stage(
+        'knowledge',
+        'completed',
+        duration_ms=knowledge_ms,
+        module='app.ai.document_intelligence.pipeline',
+    )
+
     form = map_candidate_to_form(profile)
     toon = candidate_to_toon(profile)
     return profile, form, toon
