@@ -13,36 +13,42 @@
     "employmentType": "Full-Time",
     "mandatorySkills": [
       "Strong proficiency in Java and Node.js",
-      "Node.js",
       "Java",
-      "databases: MongoDB",
+      "Experience with databases: MongoDB",
       "MongoDB",
       "MySQL",
       "PostgreSQL",
+      "Hands-on experience with front-end frameworks: Flutter",
       "Ionic",
       "Vue.js",
       "React",
-      "Strong understanding of RESTful APIs and web services"
+      "Strong understanding of RESTful APIs and web services",
+      "Proficiency in version control tools like Git",
+      "Strong problem-solving and analytical skills"
     ],
     "preferredSkills": [
       "LMS",
-      "CI/CD pipelines",
-      "AWS",
-      "GCP",
-      "AZURE"
+      "Knowledge of CI/CD pipelines and DevOps practices",
+      "Familiarity with cloud platforms (AWS",
+      "Amazon Web Services",
+      "Azure",
+      "GCP) is a plus",
+      "Google Cloud Platform"
     ],
     "skillsList": [
       "Strong proficiency in Java and Node.js",
-      "Node.js",
       "Java",
-      "databases: MongoDB",
+      "Experience with databases: MongoDB",
       "MongoDB",
       "MySQL",
       "PostgreSQL",
+      "Hands-on experience with front-end frameworks: Flutter",
       "Ionic",
       "Vue.js",
       "React",
-      "Strong understanding of RESTful APIs and web services"
+      "Strong understanding of RESTful APIs and web services",
+      "Proficiency in version control tools like Git",
+      "Strong problem-solving and analytical skills"
     ],
     "responsibilities": [
       "Design, develop, and maintain robust, scalable, and high-performance applications.",
@@ -82,9 +88,9 @@
       },
       {
         "field": "skills",
-        "status": "recovered",
+        "status": "filled",
         "evidence": true,
-        "detail": "recovered from source"
+        "detail": ""
       },
       {
         "field": "description",
@@ -117,10 +123,9 @@
     "title_overlap_filename": 0.5,
     "title_present": true,
     "skills_precision": 1.0,
-    "skills_hit": 16,
-    "skills_checked": 16,
-    "skills_count": 16,
-    "skills_look_skill_like": true,
+    "skills_hit": 20,
+    "skills_checked": 20,
+    "skills_count": 20,
     "location_in_source": true,
     "company_in_source": null,
     "experience": {
@@ -133,11 +138,9 @@
     },
     "has_description": true,
     "coverage_missing_with_evidence": [],
-    "coverage_recovered": [
-      "skills"
-    ],
+    "coverage_recovered": [],
     "source_preview": "Job Description: Java Full Stack Developer | Experience: 3-5 Years | Location: Mumbai | Notice period-   Immediate to 45 days | Employment Type: Full-Time | Key Responsibilities: |  | • | Design, develop, and maintain robust, scalable, and high-performance applications. |  | • | Develop back-end components using Java, Node.js, and databases like MongoDB, | MySQL, or PostgreSQL. |  | • | Build responsive and dynamic front-end applications using Flutter, Ionic, Vue.js, or | React. |  | • | Collaborate with cross-functional teams to define, design, and deliver new features. |  | • | Ensure the performance, quality, and responsiveness of ap"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'Java Full Stack Developer', 'company': '', 'location': 'Mumbai', 'employment_type': 'Full-Time', 'description': '**Key Responsibilities:**\\n• Design, develop, and maintain robust, scalable, and high-performance applications.\\n• Develop back-end components using Java, Node.js, and databases like MongoDB, MySQL, or PostgreSQL.\\n• Build responsive and dynamic front-end applications using Flutter, Ionic, Vue.js, or\\n• React.\\n• Collaborate with cross-functional teams to define, design, and deliver new features.\\n• Ensure the performance, quality, and responsiveness of applications.\\n• Troubleshoot, debug, and upgrade existing software.\\n• Participate in code reviews to maintain code quality and best practices.\\n• Key Result Areas (KRAs): •\\n• Timely delivery of high-quality software modules.\\n• Effective collaboration with team members and stakeholders.\\n• Continuous improvement in application performance and user experience.\\n• Adherence to coding standards and best practices.\\n• Key Performance Indicators (KPIs): •\\n• Code quality and maintainability metrics.\\n• On-time completion of development tasks and projects.\\n• Number of critical bugs identified post-deployment.\\n• User feedback on application performance and usability.', 'min_experience_years': 3.0, 'max_experience_years': 5.0, 'skills': ['Strong proficiency in Java and Node.js', 'Node.js', 'Java', 'databases: MongoDB', 'MongoDB', 'MySQL', 'PostgreSQL', 'Ionic', 'Vue.js', 'React', '",
+  "toon_preview": "{'type': 'job_description', 'title': 'Java Full Stack Developer', 'company': '', 'location': 'Mumbai', 'employment_type': 'Full-Time', 'description': '**Key Responsibilities:**\\n• Design, develop, and maintain robust, scalable, and high-performance applications.\\n• Develop back-end components using Java, Node.js, and databases like MongoDB, MySQL, or PostgreSQL.\\n• Build responsive and dynamic front-end applications using Flutter, Ionic, Vue.js, or\\n• React.\\n• Collaborate with cross-functional teams to define, design, and deliver new features.\\n• Ensure the performance, quality, and responsiveness of applications.\\n• Troubleshoot, debug, and upgrade existing software.\\n• Participate in code reviews to maintain code quality and best practices.\\n• Key Result Areas (KRAs): •\\n• Timely delivery of high-quality software modules.\\n• Effective collaboration with team members and stakeholders.\\n• Continuous improvement in application performance and user experience.\\n• Adherence to coding standards and best practices.\\n• Key Performance Indicators (KPIs): •\\n• Code quality and maintainability metrics.\\n• On-time completion of development tasks and projects.\\n• Number of critical bugs identified post-deployment.\\n• User feedback on application performance and usability.', 'min_experience_years': 3.0, 'max_experience_years': 5.0, 'skills': ['Strong proficiency in Java and Node.js', 'Java', 'Experience with databases: MongoDB', 'MongoDB', 'MySQL', 'PostgreSQL', 'Hands-on experience wit",
   "source_preview": "Job Description: Java Full Stack Developer\nExperience: 3-5 Years\nLocation: Mumbai\nNotice period-   Immediate to 45 days\nEmployment Type: Full-Time\nKey Responsibilities:\n\n•\nDesign, develop, and maintain robust, scalable, and high-performance applications.\n\n•\nDevelop back-end components using Java, Node.js, and databases like MongoDB,\nMySQL, or PostgreSQL.\n\n•\nBuild responsive and dynamic front-end applications using Flutter, Ionic, Vue.js, or\nReact.\n\n•\nCollaborate with cross-functional teams to define, design, and deliver new features.\n\n•\nEnsure the performance, quality, and responsiveness of applications.\n\n•\nTroubleshoot, debug, and upgrade existing software.\n\n•\nParticipate in code reviews to maintain code quality and best practices.\nKey Result Areas (KRAs):\n\n•\nTimely delivery of high-quality software modules.\n\n•\nEffective collaboration with team members and stakeholders.\n\n•\nContinuous improvement in application performance and user experience.\n\n•\nAdherence to coding standards and best practices.\nKey Performance Indicators (KPIs):\n\n•\nCode quality and maintainability metrics.\n\n•\nOn-time completion of development tasks and projects.\n\n•\nNumber of critical bugs identified post-deployment.\n\n•\nUser feedback on application performance and usability.\nRequired Skills:\n\n•\nStrong proficiency in Java and Node.js.\n\n•\nExperience with databases: MongoDB, MySQL, PostgreSQL.\n\n•\nHands-on experience with front-end frameworks: Flutter, Ionic, Vue.js, React.\n\n\n•\nStrong understanding of RESTful APIs and web services.\n\n•\nProficiency in version control tools like Git.\n\n•\nStrong problem-solving and analytical skills.\nPreferred Skills:\n\n•\nExperience with Learning Management Systems (LMS) is an added advantage.\n\n•\nKnowledge of CI/CD pipelines and DevOps practices.\n\n•\nFamiliarity with cloud platforms (AWS, Azure, GCP) is a plus.\n\nEducation\n\n•\nBachelor’s degree in Computer Science, Information Technology, or related field."
 }

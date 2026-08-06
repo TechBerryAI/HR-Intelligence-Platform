@@ -7,38 +7,20 @@
     "title": "L2 Network Engineer",
     "company": "",
     "location": "",
-    "salary": "",
+    "salary": "rs",
     "experienceFrom": "",
     "experienceTo": "",
     "employmentType": "",
     "mandatorySkills": [
       "CCNA",
-      "Firewall",
-      "WAN",
-      "AWS",
-      "VPN",
-      "LAN",
-      "BGP",
-      "WAF",
-      "WLC",
-      "LLB",
-      "AZURE",
-      "Palo Alto"
+      "Checkpoint",
+      "Firewall"
     ],
     "preferredSkills": [],
     "skillsList": [
       "CCNA",
-      "Firewall",
-      "WAN",
-      "AWS",
-      "VPN",
-      "LAN",
-      "BGP",
-      "WAF",
-      "WLC",
-      "LLB",
-      "AZURE",
-      "Palo Alto"
+      "Checkpoint",
+      "Firewall"
     ],
     "responsibilities": [],
     "qualifications": [],
@@ -77,7 +59,7 @@
       },
       {
         "field": "salary",
-        "status": "missing_with_evidence",
+        "status": "filled",
         "evidence": true,
         "detail": ""
       },
@@ -100,10 +82,9 @@
     "title_overlap_filename": 1.0,
     "title_present": true,
     "skills_precision": 1.0,
-    "skills_hit": 12,
-    "skills_checked": 12,
-    "skills_count": 12,
-    "skills_look_skill_like": true,
+    "skills_hit": 3,
+    "skills_checked": 3,
+    "skills_count": 3,
     "location_in_source": null,
     "company_in_source": null,
     "experience": {
@@ -113,9 +94,7 @@
       "ok": null
     },
     "has_description": true,
-    "coverage_missing_with_evidence": [
-      "salary"
-    ],
+    "coverage_missing_with_evidence": [],
     "coverage_recovered": [],
     "source_preview": "JD |  | Role Category: L2 Network Engineer |  |  | • | Hands-on experience with SD-WAN setup |  | • | Strong knowledge and hands-on experience with Palo Alto firewall |  | • | Good understanding of Google Cloud, AWS, or Azure platforms |  | • | Experience with Meraki, Extreme, and Aruba is a must |  | • | Good understanding of Zscaler VPN and Netskope cloud proxy |  | • | Coordination with vendors for escalation |  | • | Preparing & validation of Root Cause Analysis |  | • | Preparation & Updating of Network diagram - LAN/WAN topology on Periodic Basis |  | • | Configuration & Validating the Configuration of new network devices. |  | • | Syslog analysis & Pr"
   },

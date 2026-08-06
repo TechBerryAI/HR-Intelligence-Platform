@@ -11,8 +11,7 @@ from flask.wrappers import Request as FlaskRequest
 from flask_cors import CORS
 
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-# Prefer apps/backend/.env over inherited shell/machine vars (e.g. stale SKIP_LLM flags).
-load_dotenv(os.path.join(_BACKEND_DIR, '.env'), override=True)
+load_dotenv(os.path.join(_BACKEND_DIR, '.env'))
 
 from app.bootstrap.extensions import mail  # noqa: E402
 from app.config.env_validator import EnvValidator  # noqa: E402

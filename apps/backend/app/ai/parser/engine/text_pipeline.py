@@ -36,7 +36,7 @@ def parse_resume_text_via_engine(
     skip = (
         skip_llm_when_deterministic
         if skip_llm_when_deterministic is not None
-        else os.getenv('RESUME_SKIP_LLM_WHEN_DETERMINISTIC', 'false').lower()
+        else os.getenv('RESUME_SKIP_LLM_WHEN_DETERMINISTIC', 'true').lower()
         in ('1', 'true', 'yes')
     )
     if not allow_llm:

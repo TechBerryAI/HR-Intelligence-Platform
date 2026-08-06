@@ -6,37 +6,33 @@
   "form": {
     "title": "Cloud Engineer (AWS)",
     "company": "",
-    "location": "Mumbai",
+    "location": "",
     "salary": "",
     "experienceFrom": "2",
     "experienceTo": "",
     "employmentType": "",
     "mandatorySkills": [
+      "Amazon Web Services",
       "EC2",
       "RDS",
       "VPC",
       "IAM",
-      "Python",
-      "Terraform",
-      "Cloudformation"
-    ],
-    "preferredSkills": [
-      "containerization technologies (Docker",
-      "Kubernetes",
+      "API",
       "Kubernetes",
       "Docker",
-      "AWS",
-      "Engineer",
-      "API"
+      "Python"
     ],
+    "preferredSkills": [],
     "skillsList": [
+      "Amazon Web Services",
       "EC2",
       "RDS",
       "VPC",
       "IAM",
-      "Python",
-      "Terraform",
-      "Cloudformation"
+      "API",
+      "Kubernetes",
+      "Docker",
+      "Python"
     ],
     "responsibilities": [
       "Design, build, and maintain scalable and reliable AWS cloud infrastructure.",
@@ -46,11 +42,14 @@
       "CloudFormation.",
       "Troubleshoot and resolve cloud-related issues in a timely manner.",
       "Collaborate with development teams to ensure smooth deployment and operation of applications on AWS.",
-      "Stay up-to-date with the latest AWS services and technologies."
+      "Stay up-to-date with the latest AWS services and technologies.",
+      "Education",
+      "2+ years of experience working with AWS cloud services.",
+      "Strong understanding of AWS core services (EC2, S3, VPC, IAM, RDS, etc.)."
     ],
     "qualifications": [],
     "descriptionPreview": "We are seeking a Cloud Engineer with 2+ years of experience in AWS to join our team. The\nideal candidate will have a strong understanding of AWS services and operational experience,\nand be able to design, build, and maintain scalable cloud infrastructure.\n\n**Responsibilities:**\n• Design, build, and maintain scalable and reliable AWS cloud infrastructure.\n• Manage and optimize AWS resources, including EC2 instances, S3 buckets, RDS databases, and more.\n• Implement and maintain cloud security best",
-    "descriptionLen": 875,
+    "descriptionLen": 1021,
     "coverage": [
       {
         "field": "title",
@@ -60,7 +59,7 @@
       },
       {
         "field": "location",
-        "status": "filled",
+        "status": "missing_with_evidence",
         "evidence": true,
         "detail": ""
       },
@@ -107,11 +106,10 @@
     "title_overlap_filename": 0.333,
     "title_present": true,
     "skills_precision": 1.0,
-    "skills_hit": 13,
-    "skills_checked": 13,
-    "skills_count": 13,
-    "skills_look_skill_like": true,
-    "location_in_source": true,
+    "skills_hit": 9,
+    "skills_checked": 9,
+    "skills_count": 9,
+    "location_in_source": null,
     "company_in_source": null,
     "experience": {
       "parsed_from": "2",
@@ -122,10 +120,12 @@
       "ok": true
     },
     "has_description": true,
-    "coverage_missing_with_evidence": [],
+    "coverage_missing_with_evidence": [
+      "location"
+    ],
     "coverage_recovered": [],
     "source_preview": "Job Description: Cloud Engineer (AWS) – Mumbai |  | Role Overview | We are seeking a Cloud Engineer with 2+ years of experience in AWS to join our team. The | ideal candidate will have a strong understanding of AWS services and operational experience, | and be able to design, build, and maintain scalable cloud infrastructure. |  | Responsibilities |  | • | Design, build, and maintain scalable and reliable AWS cloud infrastructure. |  | • | Manage and optimize AWS resources, including EC2 instances, S3 buckets, RDS | databases, and more. |  | • | Implement and maintain cloud security best practices to protect sensitive data. |  | •"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'Cloud Engineer (AWS)', 'company': '', 'location': 'Mumbai', 'employment_type': '', 'description': 'We are seeking a Cloud Engineer with 2+ years of experience in AWS to join our team. The\\nideal candidate will have a strong understanding of AWS services and operational experience,\\nand be able to design, build, and maintain scalable cloud infrastructure.\\n\\n**Responsibilities:**\\n• Design, build, and maintain scalable and reliable AWS cloud infrastructure.\\n• Manage and optimize AWS resources, including EC2 instances, S3 buckets, RDS databases, and more.\\n• Implement and maintain cloud security best practices to protect sensitive data.\\n• Automate infrastructure provisioning and management using tools like Terraform or\\n• CloudFormation.\\n• Troubleshoot and resolve cloud-related issues in a timely manner.\\n• Collaborate with development teams to ensure smooth deployment and operation of applications on AWS.\\n• Stay up-to-date with the latest AWS services and technologies.', 'min_experience_years': 2.0, 'max_experience_years': None, 'skills': ['EC2', 'RDS', 'VPC', 'IAM', 'Python', 'Terraform', 'Cloudformation'], 'mandatory_skills': ['EC2', 'RDS', 'VPC', 'IAM', 'Python', 'Terraform', 'Cloudformation'], 'preferred_skills': ['containerization technologies (Docker', 'Kubernetes', 'Kubernetes', 'Docker', 'AWS', 'Engineer', 'API'], 'responsibilities': ['Design, build, and maintain scalable and reliable AWS cloud infrastructure.', 'Manage and opt",
+  "toon_preview": "{'type': 'job_description', 'title': 'Cloud Engineer (AWS)', 'company': '', 'location': '', 'employment_type': '', 'description': 'We are seeking a Cloud Engineer with 2+ years of experience in AWS to join our team. The\\nideal candidate will have a strong understanding of AWS services and operational experience,\\nand be able to design, build, and maintain scalable cloud infrastructure.\\n\\n**Responsibilities:**\\n• Design, build, and maintain scalable and reliable AWS cloud infrastructure.\\n• Manage and optimize AWS resources, including EC2 instances, S3 buckets, RDS databases, and more.\\n• Implement and maintain cloud security best practices to protect sensitive data.\\n• Automate infrastructure provisioning and management using tools like Terraform or\\n• CloudFormation.\\n• Troubleshoot and resolve cloud-related issues in a timely manner.\\n• Collaborate with development teams to ensure smooth deployment and operation of applications on AWS.\\n• Stay up-to-date with the latest AWS services and technologies.\\n• Education\\n• 2+ years of experience working with AWS cloud services.\\n• Strong understanding of AWS core services (EC2, S3, VPC, IAM, RDS, etc.).', 'min_experience_years': 2.0, 'max_experience_years': None, 'skills': ['Amazon Web Services', 'EC2', 'RDS', 'VPC', 'IAM', 'API', 'Kubernetes', 'Docker', 'Python'], 'mandatory_skills': ['Amazon Web Services', 'EC2', 'RDS', 'VPC', 'IAM', 'API', 'Kubernetes', 'Docker', 'Python'], 'preferred_skills': [], 'responsibilities': ['Design,",
   "source_preview": "Job Description: Cloud Engineer (AWS) – Mumbai\n\nRole Overview\nWe are seeking a Cloud Engineer with 2+ years of experience in AWS to join our team. The\nideal candidate will have a strong understanding of AWS services and operational experience,\nand be able to design, build, and maintain scalable cloud infrastructure.\n\nResponsibilities\n\n•\nDesign, build, and maintain scalable and reliable AWS cloud infrastructure.\n\n•\nManage and optimize AWS resources, including EC2 instances, S3 buckets, RDS\ndatabases, and more.\n\n•\nImplement and maintain cloud security best practices to protect sensitive data.\n\n•\nAutomate infrastructure provisioning and management using tools like Terraform or\nCloudFormation.\n\n•\nTroubleshoot and resolve cloud-related issues in a timely manner.\n\n•\nCollaborate with development teams to ensure smooth deployment and operation of\napplications on AWS.\n\n•\nStay up-to-date with the latest AWS services and technologies.\n\n\nEducation\n\n•\n2+ years of experience working with AWS cloud services.\n\n•\nStrong understanding of AWS core services (EC2, S3, VPC, IAM, RDS, etc.).\n\n•\nExperience with infrastructure as code tools (Terraform, CloudFormation).\n\n•\nKnowledge of scripting languages (Python, Bash).\n\n•\nExperience with cloud security best practices.\n\n•\nAbility to troubleshoot and resolve complex technical issues.\n\n•\nExcellent communication and collaboration skills.\n\nBonus Points\n\n•\nExperience with containerization technologies (Docker, Kubernetes).\n\n•\nCertification in AWS (AWS Certified Solutions Architect, AWS Certified DevOps\nEngineer).\n\n•\nExperience with serverless computing (Lambda, API Gateway)."
 }

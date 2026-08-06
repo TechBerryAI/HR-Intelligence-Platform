@@ -48,24 +48,11 @@ MIME_TYPE_MAP = {
     'doc': 'application/msword',
 }
 
-
-def _env_flag(name: str, default: str = 'false') -> bool:
-    return os.getenv(name, default).lower() in ('1', 'true', 'yes')
-
-
-def _use_parse_cache() -> bool:
-    """When false, every resume/JD upload re-runs the full pipeline (no cache hit)."""
-    return _env_flag('DOCUMENT_INTELLIGENCE_USE_CACHE', 'false')
-
-
-def _skip_resume_llm_when_deterministic() -> bool:
-    """When false, semantic/LLM enrichment always runs for resumes."""
-    return _env_flag('RESUME_SKIP_LLM_WHEN_DETERMINISTIC', 'false')
-
-
-def _skip_jd_llm_when_deterministic() -> bool:
-    """When false, semantic/LLM enrichment always runs for JDs."""
-    return _env_flag('JD_SKIP_LLM_WHEN_DETERMINISTIC', 'false')
+_SKIP_LLM = os.getenv('RESUME_SKIP_LLM_WHEN_DETERMINISTIC', 'true').lower() in (
+    '1',
+    'true',
+    'yes',
+)
 
 
 def _jd_deterministic_is_strong(profile, coverage=None) -> bool:
@@ -158,11 +145,7 @@ def _emit(
         if status_l not in ('completed', 'failed', 'skipped'):
             return
         elapsed = take_pipeline_stage_elapsed_ms(stage)
-        # Without a matching 'started' mark we have no real duration — still record
-        # skipped/failed so the checklist is complete, but avoid fake 0ms "completed".
         if elapsed is None:
-            if status_l == 'completed':
-                return
             elapsed = 0.0
         timing_collector.record(
             make_timing_event(
@@ -319,7 +302,7 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
     profile = apply_knowledge_to_candidate(profile)
     knowledge_ms = (_time.perf_counter() - t0) * 1000.0
 
-    if not _skip_resume_llm_when_deterministic():
+    if not _SKIP_LLM:
         t0 = _time.perf_counter()
         unresolved = unresolved_semantic_text(sections, 'resume') or text
         profile = enrich_resume_semantic(
@@ -395,9 +378,7 @@ def parse_jd_text_to_canonical(text: str, *, max_workers: int | None = None):
     profile = apply_knowledge_to_job(profile)
     # Coverage first so residual LLM only runs when grounded gaps remain
     profile, coverage = recover_jd_profile_gaps(profile, working)
-    run_semantic = (not _skip_jd_llm_when_deterministic()) or (
-        not _jd_deterministic_is_strong(profile, coverage)
-    )
+    run_semantic = (not _SKIP_LLM) or (not _jd_deterministic_is_strong(profile, coverage))
     if run_semantic:
         unresolved = unresolved_semantic_text(sections, 'jd') or working
         profile = enrich_jd_semantic(profile, unresolved_text=unresolved, force=bool(coverage.missing_with_evidence))
@@ -467,12 +448,9 @@ def _run_resume(
 
     _emit(parse_job_id, 'cache', 'started', 'Checking parse cache', on_stage=on_stage)
     file_hash = compute_file_hash(file_data)
-    allow_cache = _use_parse_cache()
-    cached = None
-    if allow_cache:
-        cached = get_cached_parsing_result(file_hash, uploader_id, 'resume')
-        if not cached and use_content_hash_cache and uploader_role == 'public':
-            cached = get_cached_parsing_result_by_hash(file_hash, 'resume')
+    cached = get_cached_parsing_result(file_hash, uploader_id, 'resume')
+    if not cached and use_content_hash_cache and uploader_role == 'public':
+        cached = get_cached_parsing_result_by_hash(file_hash, 'resume')
     if cached:
         _emit(parse_job_id, 'cache', 'completed', 'Cache hit', on_stage=on_stage)
         return _cache_hit_response(
@@ -483,13 +461,7 @@ def _run_resume(
             parse_job_id=parse_job_id,
             kind='resume',
         )
-    _emit(
-        parse_job_id,
-        'cache',
-        'completed',
-        'Cache miss' if allow_cache else 'Cache disabled — fresh parse',
-        on_stage=on_stage,
-    )
+    _emit(parse_job_id, 'cache', 'completed', 'Cache miss', on_stage=on_stage)
 
     _emit(parse_job_id, 'persist_raw', 'started', on_stage=on_stage)
     raw_file_record = store_raw_file(
@@ -571,7 +543,7 @@ def _run_resume(
     has_id = bool(profile.personal.full_name and profile.contact.email)
     has_body = bool(profile.skills and (profile.experience or profile.education))
     _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
-    if _skip_resume_llm_when_deterministic() and has_id and has_body:
+    if _SKIP_LLM and has_id and has_body:
         _emit(parse_job_id, 'semantic', 'skipped', 'Deterministic coverage sufficient', on_stage=on_stage)
     else:
         unresolved = unresolved_semantic_text(sections, 'resume') or raw_text
@@ -615,7 +587,7 @@ def _run_resume(
 
     confidence = calculate_confidence(toon, 'resume')
     model_version = _model_version_label()
-    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v7-parse-autofill')
+    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v6-jd-coverage')
     if not used_llm:
         model_version = f'{model_version}+{cache_tag}+deterministic'
     else:
@@ -673,12 +645,9 @@ def _run_jd(
 
     _emit(parse_job_id, 'cache', 'started', on_stage=on_stage)
     file_hash = compute_file_hash(file_data)
-    allow_cache = _use_parse_cache()
-    cached = None
-    if allow_cache:
-        cached = get_cached_parsing_result(file_hash, uploader_id, 'job_description')
-        if not cached and use_content_hash_cache:
-            cached = get_cached_parsing_result_by_hash(file_hash, 'job_description')
+    cached = get_cached_parsing_result(file_hash, uploader_id, 'job_description')
+    if not cached and use_content_hash_cache:
+        cached = get_cached_parsing_result_by_hash(file_hash, 'job_description')
     if cached:
         _emit(parse_job_id, 'cache', 'completed', 'Cache hit', on_stage=on_stage)
         return _cache_hit_response(
@@ -689,13 +658,7 @@ def _run_jd(
             parse_job_id=parse_job_id,
             kind='jd',
         )
-    _emit(
-        parse_job_id,
-        'cache',
-        'completed',
-        'Cache miss' if allow_cache else 'Cache disabled — fresh parse',
-        on_stage=on_stage,
-    )
+    _emit(parse_job_id, 'cache', 'completed', 'Cache miss', on_stage=on_stage)
 
     _emit(parse_job_id, 'persist_raw', 'started', on_stage=on_stage)
     raw_file_record = store_raw_file(
@@ -760,7 +723,7 @@ def _run_jd(
 
     used_llm = False
     _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
-    if _skip_jd_llm_when_deterministic() and _jd_deterministic_is_strong(profile, coverage):
+    if _SKIP_LLM and _jd_deterministic_is_strong(profile, coverage):
         _emit(parse_job_id, 'semantic', 'skipped', on_stage=on_stage)
     else:
         unresolved = unresolved_semantic_text(sections, 'jd') or raw_text
@@ -796,7 +759,7 @@ def _run_jd(
     confidence = calculate_confidence(toon, 'job_description')
     model_version = _model_version_label()
     # Bump cache tag when shipping parser accuracy fixes so stale TOON is not reused
-    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v7-parse-autofill')
+    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v6-jd-coverage')
     model_version = f'{model_version}+{cache_tag}+{"hybrid" if used_llm else "deterministic"}'
 
     _emit(parse_job_id, 'persist', 'started', on_stage=on_stage)

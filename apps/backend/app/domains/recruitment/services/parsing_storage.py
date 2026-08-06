@@ -288,7 +288,7 @@ def _cache_model_acceptable(model_version: str | None) -> bool:
     """
     import os
 
-    tag = (os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG') or 'canonical-v7-parse-autofill').strip()
+    tag = (os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG') or 'canonical-v6-jd-coverage').strip()
     if not tag:
         return True
     return tag.lower() in str(model_version or '').lower()

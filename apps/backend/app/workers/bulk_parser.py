@@ -55,7 +55,7 @@ OLLAMA_MAX_CONCURRENT = max(1, min(8, int(os.getenv('OLLAMA_MAX_CONCURRENT', '1'
 BULK_LLM_ATTEMPTS = max(2, min(8, int(os.getenv('BULK_LLM_ATTEMPTS', '4'))))
 BULK_EXCEL_CHECKPOINT_EVERY = max(5, int(os.getenv('BULK_EXCEL_CHECKPOINT_EVERY', '25')))
 BULK_SKIP_LLM_WHEN_DETERMINISTIC = os.getenv(
-    'BULK_SKIP_LLM_WHEN_DETERMINISTIC', 'false'
+    'BULK_SKIP_LLM_WHEN_DETERMINISTIC', 'true'
 ).lower() in ('1', 'true', 'yes')
 _llm_semaphore = threading.Semaphore(OLLAMA_MAX_CONCURRENT)
 
@@ -462,15 +462,11 @@ def _process_one_file_inner(filename: str, path: Path) -> tuple[str, dict | None
                 from app.ai.parser.engine import parse_resume_text_via_engine
                 from app.ai.parser.deterministic_resume import score_resume_toon
 
-                t_eng = time.perf_counter()
                 det_toon, source, eng_notes = parse_resume_text_via_engine(
                     raw_text,
                     allow_llm=False,
                     skip_llm_when_deterministic=True,
                 )
-                # parse_resume_text_to_canonical already records sections/deterministic/…
-                # Keep a note of engine wall if stages were skipped somehow
-                eng_ms = (time.perf_counter() - t_eng) * 1000.0
                 conf, missing, passes = score_resume_toon(
                     det_toon if isinstance(det_toon, dict) else {}
                 )
@@ -485,7 +481,7 @@ def _process_one_file_inner(filename: str, path: Path) -> tuple[str, dict | None
                     if accept:
                         t_persist = time.perf_counter()
                         row = _flatten_toon(det_toon, filename)
-                        note_bits = [f"source=engine:{source}", f"conf={conf:.2f}", f"eng_ms={eng_ms:.0f}"]
+                        note_bits = [f"source=engine:{source}", f"conf={conf:.2f}"]
                         note_bits.extend(eng_notes[:4])
                         if missing:
                             note_bits.append("weak=" + ",".join(missing[:6]))

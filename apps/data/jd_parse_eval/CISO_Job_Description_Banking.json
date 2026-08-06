@@ -7,7 +7,7 @@
     "title": "Chief Information Security Officer (CISO)",
     "company": "",
     "location": "Andheri, Mumbai",
-    "salary": "",
+    "salary": "rs",
     "experienceFrom": "12",
     "experienceTo": "18",
     "employmentType": "",
@@ -115,7 +115,7 @@
       },
       {
         "field": "salary",
-        "status": "missing_with_evidence",
+        "status": "filled",
         "evidence": true,
         "detail": ""
       },
@@ -141,7 +141,6 @@
     "skills_hit": 20,
     "skills_checked": 20,
     "skills_count": 20,
-    "skills_look_skill_like": true,
     "location_in_source": true,
     "company_in_source": null,
     "experience": {
@@ -153,9 +152,7 @@
       "ok": true
     },
     "has_description": true,
-    "coverage_missing_with_evidence": [
-      "salary"
-    ],
+    "coverage_missing_with_evidence": [],
     "coverage_recovered": [],
     "source_preview": "Job Description – Chief Information Security Officer (CISO) | (Banking & Financial Services Industry) |  | Position Title: Chief Information Security Officer (CISO) | Industry: Banking & Financial Services | Reports To: Managing Director / CEO / Board / CRO | Location: Andheri, Mumbai |  | Role Purpose: | The Chief Information Security Officer (CISO) is a senior executive responsible for | establishing, executing, and overseeing the enterprise-wide information and cyber security | strategy for the Bank. The role ensures protection of customer data, digital assets, and | critical infrastructure while enabling secure b"
   },

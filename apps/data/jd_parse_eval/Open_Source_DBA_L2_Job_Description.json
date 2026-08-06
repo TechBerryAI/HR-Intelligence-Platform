@@ -6,21 +6,37 @@
   "form": {
     "title": "Open Source DBA (L2)",
     "company": "",
-    "location": "Navi Mumbai",
-    "salary": "",
+    "location": "Mumbai / Navi Mumbai",
+    "salary": "rs",
     "experienceFrom": "3",
     "experienceTo": "",
     "employmentType": "",
     "mandatorySkills": [
+      "Strong hands-on experience in MySQL (mandatory)",
+      "Working knowledge of MongoDB & PostgreSQL",
+      "PostgreSQL",
+      "MongoDB",
       "Understanding of replication",
-      "Linux/Unix systems",
-      "Linux"
+      "database internals & storage engines",
+      "RAG",
+      "Experience with Linux/Unix systems",
+      "Linux",
+      "Knowledge of HA/DR concepts & production support (L2)",
+      "Willingness to work in shifts/on-call support"
     ],
     "preferredSkills": [],
     "skillsList": [
+      "Strong hands-on experience in MySQL (mandatory)",
+      "Working knowledge of MongoDB & PostgreSQL",
+      "PostgreSQL",
+      "MongoDB",
       "Understanding of replication",
-      "Linux/Unix systems",
-      "Linux"
+      "database internals & storage engines",
+      "RAG",
+      "Experience with Linux/Unix systems",
+      "Linux",
+      "Knowledge of HA/DR concepts & production support (L2)",
+      "Willingness to work in shifts/on-call support"
     ],
     "responsibilities": [
       "Manage end-to-end administration of MongoDB, MySQL & PostgreSQL (Prod/Non-Prod)",
@@ -66,7 +82,7 @@
       },
       {
         "field": "salary",
-        "status": "missing_with_evidence",
+        "status": "filled",
         "evidence": true,
         "detail": ""
       },
@@ -89,10 +105,9 @@
     "title_overlap_filename": 1.0,
     "title_present": true,
     "skills_precision": 1.0,
-    "skills_hit": 3,
-    "skills_checked": 3,
-    "skills_count": 3,
-    "skills_look_skill_like": true,
+    "skills_hit": 11,
+    "skills_checked": 11,
+    "skills_count": 11,
     "location_in_source": true,
     "company_in_source": null,
     "experience": {
@@ -104,12 +119,10 @@
       "ok": true
     },
     "has_description": true,
-    "coverage_missing_with_evidence": [
-      "salary"
-    ],
+    "coverage_missing_with_evidence": [],
     "coverage_recovered": [],
     "source_preview": "We’re Hiring: Open Source DBA (L2) | Location: Mumbai / Navi Mumbai | Experience: 3+ Years |  | Job Summary: | We are looking for an experienced Open Source Database Administrator (L2) with strong | hands-on expertise in MySQL, MongoDB, and PostgreSQL to manage and support | production database environments. |  | Key Responsibilities: | • Manage end-to-end administration of MongoDB, MySQL & PostgreSQL (Prod/Non-Prod) | • Handle installation, upgrades, replication, clustering & high availability (HA) setups | • Perform backup, restore, performance tuning & troubleshooting | • Manage users, access control, and database s"
   },
-  "toon_preview": "{'type': 'job_description', 'title': 'Open Source DBA (L2)', 'company': '', 'location': 'Navi Mumbai', 'employment_type': '', 'description': 'We are looking for an experienced Open Source Database Administrator (L2) with strong\\nhands-on expertise in MySQL, MongoDB, and PostgreSQL to manage and support\\nproduction database environments.\\n\\n**Key Responsibilities:**\\n• Manage end-to-end administration of MongoDB, MySQL & PostgreSQL (Prod/Non-Prod)\\n• Handle installation, upgrades, replication, clustering & high availability (HA) setups\\n• Perform backup, restore, performance tuning & troubleshooting\\n• Manage users, access control, and database security\\n• Execute disaster recovery (DR) setup, failover testing & data migration\\n• Monitor logs, resolve incidents & provide support to application teams', 'min_experience_years': 3.0, 'max_experience_years': None, 'skills': ['Understanding of replication', 'Linux/Unix systems', 'Linux'], 'mandatory_skills': ['Understanding of replication', 'Linux/Unix systems', 'Linux'], 'preferred_skills': [], 'responsibilities': ['Manage end-to-end administration of MongoDB, MySQL & PostgreSQL (Prod/Non-Prod)', 'Handle installation, upgrades, replication, clustering & high availability (HA) setups', 'Perform backup, restore, performance tuning & troubleshooting', 'Manage users, access control, and database security', 'Execute disaster recovery (DR) setup, failover testing & data migration', 'Monitor logs, resolve incidents & provide support to ap",
+  "toon_preview": "{'type': 'job_description', 'title': 'Open Source DBA (L2)', 'company': '', 'location': 'Mumbai / Navi Mumbai', 'employment_type': '', 'description': 'We are looking for an experienced Open Source Database Administrator (L2) with strong\\nhands-on expertise in MySQL, MongoDB, and PostgreSQL to manage and support\\nproduction database environments.\\n\\n**Key Responsibilities:**\\n• Manage end-to-end administration of MongoDB, MySQL & PostgreSQL (Prod/Non-Prod)\\n• Handle installation, upgrades, replication, clustering & high availability (HA) setups\\n• Perform backup, restore, performance tuning & troubleshooting\\n• Manage users, access control, and database security\\n• Execute disaster recovery (DR) setup, failover testing & data migration\\n• Monitor logs, resolve incidents & provide support to application teams', 'min_experience_years': 3.0, 'max_experience_years': None, 'skills': ['Strong hands-on experience in MySQL (mandatory)', 'Working knowledge of MongoDB & PostgreSQL', 'PostgreSQL', 'MongoDB', 'Understanding of replication', 'database internals & storage engines', 'RAG', 'Experience with Linux/Unix systems', 'Linux', 'Knowledge of HA/DR concepts & production support (L2)', 'Willingness to work in shifts/on-call support'], 'mandatory_skills': ['Strong hands-on experience in MySQL (mandatory)', 'Working knowledge of MongoDB & PostgreSQL', 'PostgreSQL', 'MongoDB', 'Understanding of replication', 'database internals & storage engines', 'RAG', 'Experience with Linux/Unix system",
   "source_preview": "We’re Hiring: Open Source DBA (L2)\nLocation: Mumbai / Navi Mumbai\nExperience: 3+ Years\n\nJob Summary:\nWe are looking for an experienced Open Source Database Administrator (L2) with strong\nhands-on expertise in MySQL, MongoDB, and PostgreSQL to manage and support\nproduction database environments.\n\nKey Responsibilities:\n• Manage end-to-end administration of MongoDB, MySQL & PostgreSQL (Prod/Non-Prod)\n• Handle installation, upgrades, replication, clustering & high availability (HA) setups\n• Perform backup, restore, performance tuning & troubleshooting\n• Manage users, access control, and database security\n• Execute disaster recovery (DR) setup, failover testing & data migration\n• Monitor logs, resolve incidents & provide support to application teams\n\nRequired Skills:\n• Strong hands-on experience in MySQL (mandatory)\n• Working knowledge of MongoDB & PostgreSQL\n• Understanding of replication, database internals & storage engines\n• Experience with Linux/Unix systems\n• Knowledge of HA/DR concepts & production support (L2)\n• Willingness to work in shifts/on-call support"
 }

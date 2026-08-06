@@ -144,18 +144,7 @@ def detect_jd_evidence(text: str) -> dict[str, bool]:
 
 
 def _profile_filled(profile: JobProfile) -> dict[str, bool]:
-    try:
-        from app.ai.parser.enrichment.jd_text_inference import (
-            is_plausible_jd_location,
-            skills_look_skill_like,
-        )
-    except ImportError:
-        # Stale process may predate is_plausible_jd_location — keep coverage usable
-        from app.ai.parser.enrichment.jd_text_inference import skills_look_skill_like
-
-        def is_plausible_jd_location(loc: str) -> bool:
-            s = (loc or '').strip()
-            return bool(s) and '\n' not in s and '\r' not in s and 2 <= len(s) <= 80
+    from app.ai.parser.enrichment.jd_text_inference import skills_look_skill_like
 
     skills = list(profile.skills.mandatory or []) + list(profile.skills.general or [])
     desc = (profile.basic.description or '').strip()
@@ -163,11 +152,9 @@ def _profile_filled(profile: JobProfile) -> dict[str, bool]:
     salary = (profile.compensation.salary_range or '').strip()
     # Currency-only noise is not a filled salary
     salary_ok = bool(salary) and bool(re.search(r'\d', salary) or re.search(r'(?i)lpa|lakh|negotiable', salary))
-    loc = (profile.location.primary or '').strip()
     return {
         'title': bool((profile.basic.title or '').strip()),
-        # Garbage locations (newline bleed / duty noise) count as unfilled so recovery can replace them
-        'location': bool(loc) and is_plausible_jd_location(loc),
+        'location': bool((profile.location.primary or '').strip()),
         'experience': profile.requirements.min_experience_years is not None
         or profile.requirements.max_experience_years is not None,
         'skills': skills_look_skill_like(skills),
@@ -202,14 +189,6 @@ def recover_jd_profile_gaps(profile: JobProfile, raw_text: str) -> tuple[JobProf
         skills_look_skill_like,
     )
 
-    try:
-        from app.ai.parser.enrichment.jd_text_inference import is_plausible_jd_location
-    except ImportError:
-
-        def is_plausible_jd_location(loc: str) -> bool:
-            s = (loc or '').strip()
-            return bool(s) and '\n' not in s and '\r' not in s and 2 <= len(s) <= 80
-
     evidence = detect_jd_evidence(raw_text)
     filled = _profile_filled(profile)
     report = CoverageReport()
@@ -226,23 +205,13 @@ def recover_jd_profile_gaps(profile: JobProfile, raw_text: str) -> tuple[JobProf
             recovered.add('title')
             filled['title'] = True
 
-    # Location — replace empty or implausible captures; never accept duty/newline noise
+    # Location
     if not filled['location'] and evidence['location']:
         loc = (kv.get('location') or extract_location_from_text(raw_text) or '').strip()
-        grounded = bool(
-            loc
-            and (
-                loc.lower() in raw_text.lower()
-                or loc.split(',')[0].lower().strip() in raw_text.lower()
-            )
-        )
-        if loc and grounded and is_plausible_jd_location(loc):
+        if loc and (loc.lower() in raw_text.lower() or loc.split(',')[0].lower() in raw_text.lower()):
             data['location']['primary'] = loc[:120]
             recovered.add('location')
             filled['location'] = True
-        elif data.get('location', {}).get('primary'):
-            # Clear garbage so status stays missing_with_evidence rather than filled
-            data['location']['primary'] = ''
 
     # Experience
     if not filled['experience'] and evidence['experience']:

@@ -18,8 +18,45 @@ def ensure_preferred_location_fallback(mapping_path: Path | None = None) -> bool
     marker = 'VALIDATION_FIX_preferred_location_fallback'
     if marker in text:
         return False
-    # Production code already ships the fallback; marker present after Phase 2 plan.
-    return False
+
+    old = """    # preferredLocation: ONLY contact.preferred_location (no fallback to current)
+    pref = profile.contact.preferred_location.strip()
+    pref_ok = bool(pref)
+    preferred_location = pref if pref_ok else ''
+    traces.append(
+        _trace(
+            'preferredLocation',
+            'contact.preferred_location',
+            source=_meta_source(profile, 'person.preferred_location', 'deterministic'),
+            validator='validate_nonempty' if pref_ok else 'none',
+            confidence=0.85 if pref_ok else 0.0,
+            reason='ok' if pref_ok else 'empty_no_fallback',
+"""
+    new = """    # preferredLocation: preferred_location, else current location
+    # VALIDATION_FIX_preferred_location_fallback
+    pref = (profile.contact.preferred_location or '').strip()
+    if not pref and current_location:
+        pref = current_location
+        pref_source_path = 'contact.location'
+        pref_reason = 'fallback_current_location'
+    else:
+        pref_source_path = 'contact.preferred_location'
+        pref_reason = 'ok' if pref else 'empty'
+    pref_ok = bool(pref)
+    preferred_location = pref if pref_ok else ''
+    traces.append(
+        _trace(
+            'preferredLocation',
+            pref_source_path,
+            source=_meta_source(profile, 'person.preferred_location', 'deterministic'),
+            validator='validate_nonempty' if pref_ok else 'none',
+            confidence=0.85 if pref_ok else 0.0,
+            reason=pref_reason,
+"""
+    if old not in text:
+        return False
+    path.write_text(text.replace(old, new, 1), encoding='utf-8')
+    return True
 
 
 def ensure_contact_header_scan() -> bool:

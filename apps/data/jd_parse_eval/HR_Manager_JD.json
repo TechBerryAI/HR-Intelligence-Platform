@@ -14,13 +14,13 @@
     "mandatorySkills": [
       "HRMS",
       "ESI",
-      "AWS"
+      "Amazon Web Services"
     ],
     "preferredSkills": [],
     "skillsList": [
       "HRMS",
       "ESI",
-      "AWS"
+      "Amazon Web Services"
     ],
     "responsibilities": [
       "Recruitment & Onboarding",
@@ -94,11 +94,10 @@
     "title_overlap_source": 1.0,
     "title_overlap_filename": 0.667,
     "title_present": true,
-    "skills_precision": 1.0,
-    "skills_hit": 3,
+    "skills_precision": 0.667,
+    "skills_hit": 2,
     "skills_checked": 3,
     "skills_count": 3,
-    "skills_look_skill_like": true,
     "location_in_source": true,
     "company_in_source": null,
     "experience": {

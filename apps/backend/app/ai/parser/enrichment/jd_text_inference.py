@@ -994,85 +994,6 @@ def extract_experience_years(experience_str: str) -> tuple[Any, Any]:
     return None, None
 
 
-_LOCATION_STOP_START = frozenset({
-    'and', 'or', 'the', 'for', 'with', 'from', 'into', 'onto', 'over', 'under',
-    'job', 'jobs', 'role', 'work', 'working', 'office', 'candidate', 'candidates',
-    'looking', 'notice', 'experience', 'years', 'yrs', 'scheduling', 'support',
-})
-_LOCATION_NOISE_RE = re.compile(
-    r'(?i)\b(?:work\s+from\s+offi|rotational\s+shifts?|notice\s+period|'
-    r'looking\s+for\s+candidates|candidates?\s+from|job\s+scheduling|'
-    r'scheduling|responsibilities|requirements|experience)\b'
-)
-
-
-def _known_city_match(loc: str) -> str:
-    """Return the longest known-city / work-mode token found in loc (original casing preferred)."""
-    if not loc:
-        return ''
-    lower = loc.lower()
-    for city in sorted(_KNOWN_CITIES, key=len, reverse=True):
-        m = re.search(rf'(?i)\b{re.escape(city)}\b', loc)
-        if m:
-            return m.group(0)
-        if city in lower:
-            # Multi-word city without word-boundary edge (e.g. "navi mumbai")
-            idx = lower.find(city)
-            return loc[idx : idx + len(city)]
-    return ''
-
-
-def _location_tail_ok(after: str) -> bool:
-    """Allow short area qualifiers after a city; reject duty noise."""
-    t = (after or '').strip(' ,;/-–—')
-    if not t:
-        return True
-    if _LOCATION_NOISE_RE.search(t):
-        return False
-    if re.fullmatch(r'\([^)]{1,40}\)', t):
-        return True
-    tokens = [x for x in re.split(r'[\s,/]+', t) if x]
-    if len(tokens) > 4:
-        return False
-    if any(tok.lower().strip('()') in _LOCATION_STOP_START for tok in tokens[:1]):
-        return False
-    return bool(re.fullmatch(r'[A-Za-z0-9\s,.\-/()]{1,50}', t))
-
-
-def is_plausible_jd_location(loc: str) -> bool:
-    """Reject multi-line / duty-noise location captures; allow known cities and short place names."""
-    s = (loc or '').strip()
-    if not s or len(s) < 2 or len(s) > 80:
-        return False
-    if '\n' in s or '\r' in s:
-        return False
-    if re.fullmatch(r'(?i)remote|hybrid|wfh|work\s+from\s+home', s):
-        return True
-    if _LOCATION_NOISE_RE.search(s):
-        city = _known_city_match(s)
-        if city and re.fullmatch(re.escape(city), s, re.I):
-            return True
-        return False
-    city = _known_city_match(s)
-    if city:
-        m = re.search(rf'(?i)\b{re.escape(city)}\b(.*)$', s)
-        after = m.group(1) if m else ''
-        before = s[: m.start()].strip() if m else s
-        if before and not re.fullmatch(r'[\s,.\-/]*', before):
-            if not re.fullmatch(r'(?i)india\s*\(?', before):
-                return False
-        return _location_tail_ok(after)
-    tokens = [t for t in re.split(r'[\s,/]+', s) if t]
-    if not (1 <= len(tokens) <= 3):
-        return False
-    if tokens[0].lower().strip('()') in _LOCATION_STOP_START:
-        return False
-    if not re.fullmatch(r'[A-Za-z][A-Za-z0-9\s,.\-/()]{1,60}', s):
-        return False
-    if s.islower() and len(tokens) > 1:
-        return False
-    return True
-
 def extract_location_from_text(text: str) -> str:
     if not text:
         return ''
@@ -1081,8 +1002,6 @@ def extract_location_from_text(text: str) -> str:
         loc = (raw or '').strip().strip('.,;:')
         if not loc:
             return ''
-        # Never keep newline bleed from unlabeled captures
-        loc = loc.splitlines()[0].strip(' .,;:-')
         # Drop interview / process notes in parentheses
         if re.search(
             r'(?i)\((?:final\s+round|face[- ]to[- ]face|interview|onsite\s+interview|'
@@ -1096,40 +1015,26 @@ def extract_location_from_text(text: str) -> str:
             ' ',
             loc,
         ).strip(' ,;-')
-        # Unclosed paren bleed: "Mumbai(Looking for..." without closing )
-        loc = re.sub(
-            r'(?i)\s*\((?:looking\s+for|candidates?\s+from).*$',
-            '',
-            loc,
-        ).strip(' ,;-')
         # Trim trailing process clauses after em-dash / hyphen notes
         loc = re.split(r'\s*[–—]\s*(?:Final|Face|Interview)', loc, maxsplit=1, flags=re.I)[0]
         loc = re.sub(r'\s{2,}', ' ', loc).strip(' .,;:-')
-        # If noise remains after city, prefer the known-city token alone
-        if loc and not is_plausible_jd_location(loc):
-            city = _known_city_match(loc)
-            if city and is_plausible_jd_location(city):
-                return city[:80]
-            return ''
         if 2 <= len(loc) <= 80:
             return loc
         return ''
 
     # Labeled with optional separator: "Location: Mumbai", "Location Mumbai", "Location - Pune"
-    # Pattern 2 uses [^\n] (not \s) so "Location Mumbai(...)\nWork from…" cannot bleed.
     patterns = [
         r'(?:location|work\s*location|job\s*location)\s*[:\-–—]+\s*([^\n]+)',
-        r'(?:location|work\s*location|job\s*location)\s+([A-Za-z][A-Za-z0-9 \t,\.\-/()]{1,70})',
-        r'(?:based\s+in|office\s+location)\s+([A-Za-z][A-Za-z \t,\.\-]{2,60})',
+        r'(?:location|work\s*location|job\s*location)\s+([A-Za-z][A-Za-z0-9\s,\.\-/()]{1,70})',
+        r'(?:based\s+in|office\s+location)\s+([A-Za-z][A-Za-z\s,\.\-]{2,60})',
         r'\b(Remote|Hybrid|Work\s+from\s+home|WFH)\b',
     ]
     for pat in patterns:
         m = re.search(pat, text, re.I)
         if m and m.group(1):
             loc = _clean_loc(m.group(1))
-            if loc and is_plausible_jd_location(loc):
+            if loc:
                 return loc
-            # Implausible labeled capture → fall through to title/city heuristics
 
     # City after role title dash: "Cloud Engineer (AWS) – Mumbai"
     title_city = re.search(
@@ -1158,9 +1063,7 @@ def extract_location_from_text(text: str) -> str:
             span = near.group(1) or near.group(2) or city
             # Preserve original casing from source when possible
             m2 = re.search(re.escape(span), text, re.I)
-            cand = (m2.group(0) if m2 else span.title())[:80]
-            if is_plausible_jd_location(cand):
-                return cand
+            return (m2.group(0) if m2 else span.title())[:80]
     # Bare known city on its own line or early header
     for line in text.splitlines()[:25]:
         s = line.strip()
@@ -1171,12 +1074,7 @@ def extract_location_from_text(text: str) -> str:
             if sl == city or sl.startswith(city + ',') or sl.startswith(city + ' /'):
                 return s[:80]
             if re.match(rf'(?i)^{re.escape(city)}\b', s):
-                cleaned = _clean_loc(s) or s[:80]
-                if is_plausible_jd_location(cleaned):
-                    return cleaned
-                city_only = _known_city_match(s)
-                if city_only and is_plausible_jd_location(city_only):
-                    return city_only[:80]
+                return _clean_loc(s) or s[:80]
             # Trailing city on a short header line
             if re.search(rf'(?i)[–—,\-]\s*{re.escape(city)}\b\s*$', s):
                 m2 = re.search(rf'(?i)({re.escape(city)})\b\s*$', s)
