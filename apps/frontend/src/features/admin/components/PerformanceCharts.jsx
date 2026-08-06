@@ -7,7 +7,19 @@ function durationTone(ms) {
   return 'red'
 }
 
-/** Duration chip: green &lt;500ms, yellow 500–2000, red &gt;2000. */
+/** Format wall time: ms under 1s, sec at 1s+. */
+export function formatDuration(ms) {
+  if (ms == null || Number.isNaN(Number(ms))) return '—'
+  const n = Number(ms)
+  if (n >= 1000) {
+    const sec = n / 1000
+    const rounded = sec >= 10 ? sec.toFixed(1) : sec.toFixed(2)
+    return `${rounded} sec`
+  }
+  return `${Math.round(n)} ms`
+}
+
+/** Duration chip: green &lt;500ms, yellow 500–2000, red &gt;2000. Shows ms or sec. */
 export function DurationBadge({ ms, className = '' }) {
   const tone = durationTone(ms)
   const colors = {
@@ -16,12 +28,11 @@ export function DurationBadge({ ms, className = '' }) {
     red: 'text-rose-300 bg-rose-500/10 ring-rose-500/25',
     muted: 'text-[var(--ei-text-muted)] bg-[var(--ei-surface-hover)] ring-[var(--ei-border-primary)]',
   }
-  const label = ms == null || Number.isNaN(Number(ms)) ? '—' : `${Math.round(Number(ms))} ms`
   return (
     <span
       className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ring-1 tabular-nums ${colors[tone]} ${className}`}
     >
-      {label}
+      {formatDuration(ms)}
     </span>
   )
 }

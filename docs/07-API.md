@@ -340,6 +340,7 @@ _Auto-generated on 2026-08-06 by `scripts/sync_docs_from_code.py`. Do not hand-e
 | `auth_bp` | `/api` |
 | `parsing_bp` | `/api` |
 | `admin_bp` | `/api/admin` |
+| `developer_bp` | `/api/admin/developer` |
 | `applications_bp` | `/api/applications` |
 | `candidate_bp` | `/api/candidate` |
 | `feedback_bp` | `/api/feedback` |
@@ -359,6 +360,13 @@ _Auto-generated on 2026-08-06 by `scripts/sync_docs_from_code.py`. Do not hand-e
 | `GET` | `/api/admin/bulk-parse/progress/<job_id>` | `admin_bp` | `app/domains/administration/api/admin.py` |
 | `POST` | `/api/admin/bulk-parse/start/<job_id>` | `admin_bp` | `app/domains/administration/api/admin.py` |
 | `POST` | `/api/admin/bulk-parse/upload` | `admin_bp` | `app/domains/administration/api/admin.py` |
+| `DELETE` | `/api/admin/developer/performance/clear` | `developer_bp` | `app/domains/administration/api/developer.py` |
+| `POST` | `/api/admin/developer/performance/clear` | `developer_bp` | `app/domains/administration/api/developer.py` |
+| `GET` | `/api/admin/developer/performance/export` | `developer_bp` | `app/domains/administration/api/developer.py` |
+| `GET` | `/api/admin/developer/performance/recent` | `developer_bp` | `app/domains/administration/api/developer.py` |
+| `GET` | `/api/admin/developer/performance/request/<path:request_id>` | `developer_bp` | `app/domains/administration/api/developer.py` |
+| `GET` | `/api/admin/developer/performance/stats` | `developer_bp` | `app/domains/administration/api/developer.py` |
+| `GET` | `/api/admin/developer/status` | `developer_bp` | `app/domains/administration/api/developer.py` |
 | `GET` | `/api/admin/job-matches` | `admin_bp` | `app/domains/administration/api/admin.py` |
 | `POST` | `/api/applications/ats/result` | `applications_bp` | `app/domains/recruitment/api/applications.py` |
 | `GET` | `/api/candidate/profile/<string:candidate_id>` | `candidate_bp` | `app/domains/candidate/api/routes.py` |
@@ -442,11 +450,12 @@ _Auto-generated on 2026-08-06 by `scripts/sync_docs_from_code.py`. Do not hand-e
 | `POST` | `/api/support/submit` | `support_bp` | `app/domains/support/api/routes.py` |
 | `POST` | `/api/verify-otp` | `auth_bp` | `app/domains/identity/api/hr_auth.py` |
 
-_Route count: 87. If a route is missing, ensure it uses `@blueprint.route` / `.get` / `.post` and the blueprint is registered in `create_app.py`._
+_Route count: 94. If a route is missing, ensure it uses `@blueprint.route` / `.get` / `.post` and the blueprint is registered in `create_app.py`._
 <!-- END:GENERATED-API-ROUTES -->
 Prefix: `/api/admin/developer` — **requires `DEVELOPER_MODE=true`** and `HEAD_HR` (`developer:performance`). Otherwise 404 / 403.
 | GET | `/api/admin/developer/status` | SPA flag (`enabled` only for Head HR when mode on) |
-| GET | `/api/admin/developer/performance/recent` | Latest timing sessions (filterable) |
+| GET | `/api/admin/developer/performance/recent` | Latest timing sessions (filterable; Resume vs Bulk separated) |
+| POST / DELETE | `/api/admin/developer/performance/clear` | Wipe in-memory recent timing sessions |
 | GET | `/api/admin/developer/performance/request/<id>` | Full breakdown for one request |
 | GET | `/api/admin/developer/performance/stats` | Averages, p95, slowest/fastest, chart series |
 | GET | `/api/admin/developer/performance/export` | CSV export of timing events |

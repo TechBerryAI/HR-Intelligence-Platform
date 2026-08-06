@@ -84,6 +84,21 @@ class TimingCollectorTests(unittest.TestCase):
         self.assertIsNone(col.get_session("x"))
         self.assertEqual(col.list_recent(), [])
 
+    def test_clear_wipes_sessions(self):
+        rid = "clear-me"
+        self.collector.begin_session(
+            request_id=rid,
+            started_at="2026-08-05T12:00:00+00:00",
+            path="/api/parse/resume",
+            method="POST",
+        )
+        self.collector.record(self._event(rid, "extract_text", 10))
+        self.collector.end_session(rid, wall_duration_ms=10)
+        self.assertEqual(len(self.collector.list_recent()), 1)
+        self.collector.clear()
+        self.assertEqual(self.collector.list_recent(), [])
+        self.assertEqual(self.collector.list_recent_summaries(), [])
+
 
 class TimingDecoratorTests(unittest.TestCase):
     def setUp(self):
@@ -211,6 +226,81 @@ class TimingDecoratorTests(unittest.TestCase):
         text_step = next(c for c in checklist if c["key"] == "text")
         self.assertEqual(text_step["duration_ms"], 800)
         self.assertEqual(text_step["status"], "completed")
+
+    def test_bulk_parse_uses_resume_checklist(self):
+        from app.core.request_context import start_request_context, set_timing_context
+        from app.core.timing_collector import TimingCollector, record_pipeline_stage
+
+        col = TimingCollector()
+        # Patch singleton used by record_pipeline_stage
+        import app.core.timing_collector as tc
+
+        prev = tc.timing_collector
+        tc.timing_collector = col
+        try:
+            ctx = start_request_context(
+                path="/api/admin/bulk-parse/alice.pdf", method="WORKER"
+            )
+            col.begin_session(
+                request_id=ctx.request_id,
+                started_at=ctx.started_at_iso,
+                path=ctx.path,
+                method=ctx.method,
+                job_id="job-bulk-1",
+            )
+            record_pipeline_stage("cache", "skipped")
+            record_pipeline_stage("text", "completed", duration_ms=50)
+            record_pipeline_stage("sections", "completed", duration_ms=5)
+            record_pipeline_stage("deterministic", "completed", duration_ms=20)
+            record_pipeline_stage("semantic", "skipped")
+            record_pipeline_stage("knowledge", "completed", duration_ms=4)
+            record_pipeline_stage("validate", "completed", duration_ms=2)
+            record_pipeline_stage("persist", "completed", duration_ms=1)
+            col.end_session(ctx.request_id, wall_duration_ms=90)
+            sess = col.get_session(ctx.request_id)
+            self.assertEqual(sess.kind, "bulk_parse")
+            checklist = sess.parse_checklist()
+            names = [c["name"] for c in checklist if not c.get("detail")]
+            self.assertEqual(
+                names,
+                [
+                    "Cache Check",
+                    "Store Raw File",
+                    "Extract Text",
+                    "Layout Analysis",
+                    "Section Detection",
+                    "Deterministic Parse",
+                    "Semantic Enrichment (LLM)",
+                    "Knowledge Enrichment",
+                    "Validation",
+                    "Save Parsed Result",
+                ],
+            )
+            text_step = next(c for c in checklist if c["key"] == "text")
+            self.assertEqual(text_step["duration_ms"], 50)
+            cache_step = next(c for c in checklist if c["key"] == "cache")
+            self.assertEqual(cache_step["status"], "skipped")
+
+            # Resume filter must not include bulk; Bulk filter gets one grouped row
+            resume_rows = col.list_recent_summaries(limit=20, kind="resume_parse")
+            self.assertEqual(resume_rows, [])
+            bulk_rows = col.list_recent_summaries(limit=20, kind="bulk_parse")
+            self.assertEqual(len(bulk_rows), 1)
+            self.assertEqual(bulk_rows[0]["kind"], "bulk_parse")
+            self.assertTrue(bulk_rows[0]["is_bulk_group"])
+            self.assertEqual(bulk_rows[0]["resume_count"], 1)
+            self.assertEqual(len(bulk_rows[0].get("files") or []), 1)
+
+            detail = col.get_bulk_detail("job-bulk-1")
+            self.assertIsNotNone(detail)
+            self.assertEqual(len(detail["files"]), 1)
+            self.assertTrue(detail["files"][0]["parse_steps"])
+            names = [c["name"] for c in detail["files"][0]["parse_steps"] if not c.get("detail")]
+            self.assertIn("Extract Text", names)
+            self.assertIn("Deterministic Parse", names)
+        finally:
+            tc.timing_collector = prev
+            set_timing_context(None)
 
 
 if __name__ == "__main__":

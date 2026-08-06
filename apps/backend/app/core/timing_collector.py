@@ -137,6 +137,7 @@ LLM_FUNCTIONS: frozenset[str] = frozenset(
 KIND_MARKERS: dict[str, tuple[str, ...]] = {
     "resume_parse": ("_run_resume", "enrich_resume_semantic", "run_document_intelligence", "text", "deterministic"),
     "jd_parse": ("_run_jd", "enrich_jd_semantic", "text", "deterministic", "coverage"),
+    "bulk_parse": ("text", "deterministic", "sections", "extract_text", "parse_resume_text_via_engine"),
     "ats": ("match_candidate_to_job", "_internal_match"),
     "apply": ("public_apply_to_job", "_persist_application_atomic"),
 }
@@ -191,6 +192,8 @@ class TimingSession:
     finished_at: Optional[str] = None
 
     def to_summary(self) -> dict[str, Any]:
+        # Re-resolve so path-based bulk vs single resume stays accurate in filters
+        kind = _classify_session(self)
         return {
             "request_id": self.request_id,
             "started_at": self.started_at,
@@ -202,9 +205,11 @@ class TimingSession:
             "job_id": self.job_id,
             "status": self.status,
             "total_duration_ms": round(self.total_duration_ms, 2),
-            "kind": self.kind,
+            "kind": kind,
             "event_count": len(self.events),
             "stages": self.stage_timeline(),
+            "is_bulk_group": False,
+            "resume_count": None,
         }
 
     def to_detail(self) -> dict[str, Any]:
@@ -223,12 +228,18 @@ class TimingSession:
         Always returns every canonical step so the UI can show:
         Cache Check … 12 ms, Semantic Enrichment … skipped, etc.
         """
-        kind = self.kind if self.kind in ("resume_parse", "jd_parse") else _classify_session(self)
+        kind = (
+            self.kind
+            if self.kind in ("resume_parse", "jd_parse", "bulk_parse")
+            else _classify_session(self)
+        )
         path = (self.path or "").lower()
         names = {e.function for e in self.events}
 
         # Prefer path / function signals so resume never accidentally uses JD list
-        if "/parse/jd" in path or "_run_jd" in names or "enrich_jd_semantic" in names:
+        if "/bulk-parse" in path or "bulk_parse" in path:
+            kind = "bulk_parse"
+        elif "/parse/jd" in path or "_run_jd" in names or "enrich_jd_semantic" in names:
             kind = "jd_parse"
         elif (
             "/parse/resume" in path
@@ -236,7 +247,7 @@ class TimingSession:
             or "enrich_resume_semantic" in names
         ):
             kind = "resume_parse"
-        elif kind not in ("resume_parse", "jd_parse"):
+        elif kind not in ("resume_parse", "jd_parse", "bulk_parse"):
             if "coverage" in names:
                 kind = "jd_parse"
             elif names & ENGINE_STAGES or names & set(FUNCTION_TO_STEP_KEY):
@@ -244,6 +255,7 @@ class TimingSession:
             else:
                 return []
 
+        # Bulk resume uses the same step checklist as single-file resume parse
         template = JD_PIPELINE_STEPS if kind == "jd_parse" else RESUME_PIPELINE_STEPS
 
         # Best event per engine key
@@ -293,7 +305,9 @@ class TimingSession:
                     "step": idx,
                     "key": key,
                     "name": name,
-                    "duration_ms": round(ev.duration_ms, 2),
+                    "duration_ms": None
+                    if status == "skipped"
+                    else round(ev.duration_ms, 2),
                     "status": status,
                     "success": ev.success,
                     "function": ev.function,
@@ -478,11 +492,14 @@ class TimingCollector:
         self._order: deque[str] = deque(maxlen=self._max)
         self._open: dict[str, TimingSession] = {}
 
-    def clear(self) -> None:
+    def clear(self) -> int:
+        """Remove all stored / in-flight timing sessions. Returns how many were dropped."""
         with self._lock:
+            removed = len(self._sessions) + len(self._open)
             self._sessions.clear()
             self._order.clear()
             self._open.clear()
+            return removed
 
     def begin_session(
         self,
@@ -492,6 +509,7 @@ class TimingCollector:
         path: str = "",
         method: str = "",
         user_id: Optional[str] = None,
+        job_id: Optional[str] = None,
     ) -> None:
         if not is_developer_mode_enabled():
             return
@@ -502,6 +520,7 @@ class TimingCollector:
                 path=path,
                 method=method,
                 user_id=user_id,
+                job_id=str(job_id) if job_id else None,
             )
             self._open[request_id] = session
 
@@ -608,6 +627,8 @@ class TimingCollector:
                 continue
             if status and s.status != status:
                 continue
+            # Finalize kind before filtering so open/legacy sessions match UI filters
+            s.kind = _classify_session(s)
             if kind and s.kind != kind:
                 continue
             if function_name:
@@ -618,9 +639,6 @@ class TimingCollector:
                 continue
             if date_to and s.started_at > date_to:
                 continue
-            # Finalize kind for open sessions so the UI can label them
-            if not s.kind or s.kind == "other":
-                s.kind = _classify_session(s)
             if s.total_duration_ms <= 0 and s.events:
                 s.total_duration_ms = max(e.duration_ms for e in s.events)
             out.append(s)
@@ -734,6 +752,234 @@ class TimingCollector:
             },
         }
 
+    def list_recent_summaries(self, *, limit: int = 50, **filters) -> list[dict[str, Any]]:
+        """
+        Recent sessions for the dashboard.
+
+        - Single resume parse → ``resume_parse`` rows (Resume filter)
+        - Bulk worker files → one ``bulk_parse`` row per job (Bulk filter)
+        Kind filter is applied after grouping so Resume never includes bulk jobs.
+        """
+        kind_filter = (filters.get("kind") or "").strip() or None
+        # Fetch without kind so bulk grouping still works when filtering by kind
+        fetch_filters = {k: v for k, v in filters.items() if k != "kind"}
+        raw = self.list_recent(limit=max(limit * 4, 80), **fetch_filters)
+
+        by_job: dict[str, list[TimingSession]] = {}
+        for s in raw:
+            kind = _classify_session(s)
+            s.kind = kind
+            if kind == "bulk_parse":
+                jid = str(s.job_id or s.request_id)
+                by_job.setdefault(jid, []).append(s)
+
+        seen_jobs: set[str] = set()
+        out: list[dict[str, Any]] = []
+        for s in raw:
+            kind = _classify_session(s)
+            s.kind = kind
+            if kind == "bulk_parse":
+                jid = str(s.job_id or s.request_id)
+                if jid in seen_jobs:
+                    continue
+                seen_jobs.add(jid)
+                kids = by_job.get(jid) or [s]
+                if s.job_id:
+                    kids = self._bulk_sessions_for_job(str(s.job_id)) or kids
+                summary = _bulk_group_summary(str(s.job_id or jid), kids)
+            else:
+                # Never surface bulk worker files under Resume / JD / Apply
+                summary = s.to_summary()
+            if kind_filter and summary.get("kind") != kind_filter:
+                continue
+            out.append(summary)
+            if len(out) >= limit:
+                break
+        return out
+
+    def _bulk_sessions_for_job(self, job_id: str) -> list[TimingSession]:
+        jid = str(job_id)
+        with self._lock:
+            found = [
+                s
+                for s in list(self._sessions.values()) + list(self._open.values())
+                if (s.kind == "bulk_parse" or _classify_session(s) == "bulk_parse")
+                and str(s.job_id or "") == jid
+                and s.events
+            ]
+        found.sort(key=lambda s: s.started_at or "", reverse=True)
+        return found
+
+    def get_bulk_detail(self, job_id: str) -> Optional[dict[str, Any]]:
+        kids = self._bulk_sessions_for_job(job_id)
+        if not kids:
+            # Synthetic group key when a bulk file had no job_id (request_id used)
+            sess = self.get_session(job_id)
+            if sess is not None and _classify_session(sess) == "bulk_parse":
+                kids = [sess]
+        if not kids:
+            return None
+        return _bulk_group_detail(str(job_id), kids)
+
+    def get_session_or_bulk(self, request_id: str) -> Optional[dict[str, Any]]:
+        rid = (request_id or "").strip()
+        if rid.startswith("bulk:"):
+            return self.get_bulk_detail(rid[5:])
+        session = self.get_session(rid)
+        if session is None:
+            return None
+        return session.to_detail()
+
+
+def _filename_from_bulk_path(path: str) -> str:
+    p = (path or "").rstrip("/")
+    if "/bulk-parse/" in p:
+        return p.split("/bulk-parse/", 1)[-1] or "resume"
+    return p.split("/")[-1] or "resume"
+
+
+def _bulk_group_summary(job_id: str, kids: list[TimingSession]) -> dict[str, Any]:
+    kids = sorted(kids, key=lambda s: s.started_at or "")
+    total_ms = sum(float(s.total_duration_ms or 0) for s in kids)
+    ok = sum(1 for s in kids if s.status != "error")
+    failed = sum(1 for s in kids if s.status == "error")
+    started = kids[0].started_at if kids else None
+    finished = None
+    for s in kids:
+        if s.finished_at:
+            finished = s.finished_at
+    return {
+        "request_id": f"bulk:{job_id}",
+        "started_at": started,
+        "finished_at": finished,
+        "path": f"/api/admin/bulk-parse/job/{job_id}",
+        "method": "WORKER",
+        "user_id": kids[0].user_id if kids else None,
+        "candidate_id": None,
+        "job_id": job_id,
+        "status": "error" if failed and not ok else ("ok" if failed == 0 else "ok"),
+        "total_duration_ms": round(total_ms, 2),
+        "kind": "bulk_parse",
+        "event_count": sum(len(s.events) for s in kids),
+        "stages": [],
+        "resume_count": len(kids),
+        "success_count": ok,
+        "failed_count": failed,
+        "is_bulk_group": True,
+        # Lightweight file list for sidebar expand (no full step payloads)
+        "files": [
+            {
+                "request_id": s.request_id,
+                "filename": _filename_from_bulk_path(s.path),
+                "total_duration_ms": round(float(s.total_duration_ms or 0), 2),
+                "status": s.status,
+            }
+            for s in kids
+        ],
+    }
+
+
+def _bulk_group_detail(job_id: str, kids: list[TimingSession]) -> dict[str, Any]:
+    summary = _bulk_group_summary(job_id, kids)
+    # Aggregate checklist: average duration for completed steps; skipped if all skipped
+    templates = list(RESUME_PIPELINE_STEPS)
+    by_key: dict[str, list[dict[str, Any]]] = {k: [] for k, _ in templates}
+    for s in kids:
+        for row in s.parse_checklist():
+            key = row.get("key")
+            if key in by_key and not row.get("detail"):
+                by_key[key].append(row)
+
+    parse_steps: list[dict[str, Any]] = []
+    for idx, (key, name) in enumerate(templates, start=1):
+        rows = by_key.get(key) or []
+        if not rows:
+            parse_steps.append(
+                {
+                    "step": idx,
+                    "key": key,
+                    "name": name,
+                    "duration_ms": None,
+                    "status": "not_run",
+                    "success": None,
+                    "function": key,
+                }
+            )
+            continue
+        skipped = all((r.get("status") or "") == "skipped" for r in rows)
+        failed = any((r.get("status") or "") == "failed" for r in rows)
+        completed = [
+            r
+            for r in rows
+            if (r.get("status") or "") == "completed" and r.get("duration_ms") is not None
+        ]
+        if skipped and not completed:
+            parse_steps.append(
+                {
+                    "step": idx,
+                    "key": key,
+                    "name": name,
+                    "duration_ms": None,
+                    "status": "skipped",
+                    "success": True,
+                    "function": key,
+                }
+            )
+        elif failed and not completed:
+            parse_steps.append(
+                {
+                    "step": idx,
+                    "key": key,
+                    "name": name,
+                    "duration_ms": None,
+                    "status": "failed",
+                    "success": False,
+                    "function": key,
+                }
+            )
+        else:
+            avg = (
+                sum(float(r["duration_ms"]) for r in completed) / len(completed)
+                if completed
+                else None
+            )
+            parse_steps.append(
+                {
+                    "step": idx,
+                    "key": key,
+                    "name": name,
+                    "duration_ms": round(avg, 2) if avg is not None else None,
+                    "status": "completed" if avg is not None else "not_run",
+                    "success": True,
+                    "function": key,
+                }
+            )
+
+    files = []
+    for s in sorted(kids, key=lambda x: x.started_at or ""):
+        files.append(
+            {
+                "request_id": s.request_id,
+                "filename": _filename_from_bulk_path(s.path),
+                "total_duration_ms": round(float(s.total_duration_ms or 0), 2),
+                "status": s.status,
+                "started_at": s.started_at,
+                # Per-resume checklist — same shape as a single resume_parse detail
+                "parse_steps": s.parse_checklist(),
+                "kind": "resume_parse",
+            }
+        )
+
+    detail = dict(summary)
+    detail["events"] = []
+    detail["timeline"] = []
+    detail["functions"] = []
+    detail["breakdown"] = {}
+    detail["parse_steps"] = parse_steps
+    detail["files"] = files
+    detail["resume_count"] = len(kids)
+    return detail
+
 
 def _classify_session(session: TimingSession) -> str:
     names = {e.function for e in session.events}
@@ -742,6 +988,8 @@ def _classify_session(session: TimingSession) -> str:
         return "apply"
     if "match_candidate_to_job" in names or "_internal_match" in names:
         return "ats"
+    if "/bulk-parse" in path or path.startswith("bulk:") or "bulk_parse" in path:
+        return "bulk_parse"
     # Resume before JD-by-engine-stages: path/functions are authoritative
     if "/parse/resume" in path or "_run_resume" in names or "enrich_resume_semantic" in names:
         return "resume_parse"
@@ -756,6 +1004,42 @@ def _classify_session(session: TimingSession) -> str:
     if "extract_text" in names or "text" in names:
         return "jd_parse" if "jd" in path else "resume_parse"
     return "other"
+
+
+def record_pipeline_stage(
+    stage: str,
+    outcome: str,
+    *,
+    duration_ms: float = 0.0,
+    module: str = "app.core.timing_collector",
+    depth: int = 2,
+) -> None:
+    """
+    Record one Document Intelligence / bulk checklist stage when Developer Mode is on
+    and a timing request context is bound. No-op otherwise.
+    """
+    try:
+        from app.core.developer_mode import is_developer_mode_enabled
+        from app.core.request_context import get_timing_context
+
+        if not is_developer_mode_enabled() or not stage or get_timing_context() is None:
+            return
+        status = (outcome or "completed").lower()
+        if status not in ("completed", "failed", "skipped"):
+            status = "completed"
+        timing_collector.record(
+            make_timing_event(
+                function=stage,
+                module=module,
+                duration_ms=max(0.0, float(duration_ms)),
+                success=status != "failed",
+                exception_name="StageFailed" if status == "failed" else None,
+                depth=depth,
+                outcome=status,
+            )
+        )
+    except Exception:
+        pass
 
 
 # Process-wide singleton
