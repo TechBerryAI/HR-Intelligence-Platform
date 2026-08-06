@@ -47,6 +47,7 @@ def build_status(company_key: str) -> dict:
             'provider': pid,
             'name': settings.get('displayName') or pid.replace('_', ' ').title(),
             'builtin': False,
+            'logoUrl': settings.get('logoUrl') or None,
             'status': row.get('status') or 'disconnected',
             'enabled': bool(row.get('enabled')),
             'autoPublish': bool(row.get('auto_publish')),

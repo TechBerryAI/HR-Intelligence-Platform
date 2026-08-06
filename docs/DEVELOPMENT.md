@@ -118,6 +118,24 @@ Optional integration vars (see `apps/backend/.env.example`):
 - `INTEGRATION_RETRY_BASE_SECONDS` — default `1.0`
 - `INTEGRATION_WORKER_MAX_WORKERS` — default `4`
 
+### Media volume (`MEDIA_ROOT`)
+
+Durable product files (parse uploads, feedback screenshots, bulk staging, landing hero MP4) live **outside the git tree**:
+
+| Key | Purpose |
+|-----|---------|
+| `MEDIA_ROOT` | Absolute path to media volume (prod). Default when unset: `<repo>/.media` (gitignored) |
+| `VITE_HERO_VIDEO_URL` | Optional CDN/HTTPS override for landing video; else `/api/media/public/hero-video` |
+
+```bash
+# Seed hero video from a one-time copy (or place website-hero.mp4 under MEDIA_ROOT/public/)
+python scripts/ensure_media_assets.py
+```
+
+- Apply resumes remain Postgres `BYTEA` (`candidate_profiles.resume`).
+- Head HR PDF reports stay client-side downloads (not stored on the server).
+- `raw_files.storage_url` uses opaque keys `media:uploads/...` (not `file://` absolute paths).
+
 ## Where to put new code
 
 | I am building… | Put it in… |

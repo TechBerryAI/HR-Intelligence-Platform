@@ -61,7 +61,7 @@ flowchart TB
 | App | Monolith API + SPA | Modular services only if scale demands |
 | AI | In-process pipelines + `ai/` runtime | Stronger evaluation, embeddings, copilot |
 | Tenancy | Role-scoped single deployment | Explicit org tenancy |
-| Storage | DB-centric files | Object storage for resumes |
+| Storage | `MEDIA_ROOT` volume + DB metadata / resume BYTEA | S3-compatible behind same storage helper |
 
 ---
 
@@ -128,9 +128,13 @@ flowchart LR
 | LLM | `app/integrations/openai/llm_service.py` |
 | ATS | `app/domains/recruitment/services/ats_service.py` |
 | Job-board integrations | `app/domains/integrations/` (provider plugins, queue, REST `/api/integrations`) |
+| Media volume | `app/core/media_storage.py` + `GET /api/media/public/hero-video` (`MEDIA_ROOT`) |
 
-**Current:** Built-in adapters — LinkedIn and Naukri only (staging external IDs `LI-…` / `NK-…` until partner APIs). Custom platforms via Settings → **Add platform** (name, API Base URL, endpoint paths, credentials); `GenericHttpProvider` performs real HTTP test/publish/update/close/sync. Synced board applications land in `external_applications` (not forced into HCIP `applications` yet). Auto-sync background tick for HTTP providers with `auto_sync`.  
-**Future:** Official OAuth SDKs for LinkedIn/Naukri; map `external_applications` into ATS when email/job match rules exist.
+**Media (Current):** Parse uploads, feedback screenshots, bulk staging, and the landing hero MP4 live under configurable **`MEDIA_ROOT`** (default `<repo>/.media`, gitignored). DB stores opaque keys (`media:uploads/...`) or resume **BYTEA**. Frontend uses `/api/media/public/hero-video` or `VITE_HERO_VIDEO_URL` — not files under `frontend/public/`.  
+**Media (Future):** S3-compatible backend behind the same helper; optional migration of apply-resume BYTEA to object keys.
+
+**Current:** Built-in adapters — LinkedIn and Naukri only (staging external IDs `LI-…` / `NK-…` until partner APIs). Brand icons for builtins are **inline SVG / react-icons in the frontend** (no local PNG assets, no DB blobs). Custom platforms via Settings → **Add platform** (name, API Base URL, optional HTTPS `logoUrl`, endpoint paths, credentials); `GenericHttpProvider` performs real HTTP test/publish/update/close/sync. Synced board applications land in `external_applications` (not forced into HCIP `applications` yet). Auto-sync background tick for HTTP providers with `auto_sync`.  
+**Future:** Replace provider classes with official APIs + OAuth; controllers, schema, and job workflow stay unchanged.
 
 ---
 

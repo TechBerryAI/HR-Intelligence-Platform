@@ -137,7 +137,6 @@ def create_app() -> Flask:
     from app.database.connection.db import init_db  # noqa: E402
     from app.domains.administration.api.admin import admin_bp  # noqa: E402
     from app.domains.administration.api.developer import developer_bp  # noqa: E402
-    from app.domains.integrations.api.routes import integrations_bp  # noqa: E402
     from app.domains.administration.api.head_hr import head_hr_bp  # noqa: E402
     from app.domains.candidate.api.routes import candidate_bp  # noqa: E402
     from app.domains.employee.api.feedback import feedback_bp  # noqa: E402
@@ -147,6 +146,9 @@ def create_app() -> Flask:
     from app.domains.recruitment.api.jobs import jobs_bp  # noqa: E402
     from app.domains.recruitment.api.parsing import parsing_bp  # noqa: E402
     from app.domains.support.api.routes import support_bp  # noqa: E402
+    from app.domains.support.api.media import media_bp  # noqa: E402
+    from app.domains.integrations.api.routes import integrations_bp  # noqa: E402
+
 
     # Developer Mode: correlate @timing events per HTTP request (no-op when disabled)
     @app.before_request
@@ -238,6 +240,7 @@ def create_app() -> Flask:
             "endpoints": [
                 "/health", "/api", "/api/jobs", "/api/candidate",
                 "/api/applications", "/api/sessions", "/api/admin",
+                "/api/integrations",
             ],
         })
 
@@ -274,15 +277,20 @@ def create_app() -> Flask:
     app.register_blueprint(sessions_bp, url_prefix='/api/sessions')
     app.register_blueprint(parsing_bp, url_prefix='/api')
     app.register_blueprint(support_bp, url_prefix='/api/support')
+    app.register_blueprint(media_bp, url_prefix='/api/media')
     app.register_blueprint(feedback_bp, url_prefix='/api/feedback')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
     app.register_blueprint(developer_bp, url_prefix='/api/admin/developer')
-    app.register_blueprint(integrations_bp, url_prefix='/api/integrations')
     app.register_blueprint(head_hr_bp, url_prefix='/api/head-hr')
+    app.register_blueprint(integrations_bp, url_prefix='/api/integrations')
 
-    if app.config.get('DEVELOPER_MODE'):
-        print("[DEVELOPER MODE] Enabled — Admin performance collector active")
-
+    try:
+        from app.core import media_storage
+        root = media_storage.get_media_root()
+        media_storage.ensure_hero_video()
+        print(f"[MEDIA] MEDIA_ROOT={root}")
+    except Exception as e:
+        print(f"[MEDIA] Init warning: {e}")
 
     try:
         from app.domains.integrations.bootstrap import init_integrations
@@ -290,5 +298,8 @@ def create_app() -> Flask:
         print("[INTEGRATIONS] Framework initialized")
     except Exception as e:
         print(f"[INTEGRATIONS] Init warning: {e}")
+
+    if app.config.get('DEVELOPER_MODE'):
+        print("[DEVELOPER MODE] Enabled — Admin performance collector active")
 
     return app

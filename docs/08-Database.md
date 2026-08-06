@@ -41,7 +41,7 @@ PostgreSQL (psycopg-oriented helpers in the Flask app).
 Refresh the file list with `python scripts/sync_docs_from_code.py`.
 
 <!-- BEGIN:GENERATED-SCHEMA-FILES -->
-_Auto-generated on 2026-08-05 by `scripts/sync_docs_from_code.py`. Do not hand-edit this block._
+_Auto-generated on 2026-08-06 by `scripts/sync_docs_from_code.py`. Do not hand-edit this block._
 
 | File | Purpose (from filename / header) |
 |------|-----------------------------------|
@@ -172,9 +172,9 @@ Also: `hr_signup(role)` after RBAC cleanup migration.
 
 | Stage | Action |
 |-------|--------|
-| Now | Connection pooling; parse content-hash cache; bulk sessions for large ingest |
-| Next | Object storage for resume binaries; archive old `raw_files` |
-| Later | Read replicas; tenancy keys (`org_id`); partition high-volume telemetry |
+| Now | Connection pooling; parse content-hash cache; bulk sessions; `MEDIA_ROOT` volume for parse uploads / hero video / bulk / feedback |
+| Next | S3-compatible object storage behind `app.core.media_storage`; archive old `raw_files` |
+| Later | Read replicas; tenancy keys (`org_id`); optional move of apply-resume BYTEA to object keys |
 
 Ensure hot-path indexes remain for job applicant lists and apply duplicate checks.
 

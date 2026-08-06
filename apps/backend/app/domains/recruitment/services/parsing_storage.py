@@ -7,10 +7,12 @@ import uuid
 from typing import Dict, Any, Optional, Tuple
 
 from app.ai.toon.runtime import toon_dumps, toon_loads_flex
+from app.core import media_storage
 from app.core.timing import timing
 from datetime import datetime
 
-UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', './uploads')
+# Back-compat: callers/tests may read UPLOAD_FOLDER; maps to MEDIA_ROOT/uploads
+UPLOAD_FOLDER = str(media_storage.uploads_dir())
 
 
 def compute_file_hash(file_data: bytes) -> str:
@@ -22,24 +24,14 @@ def compute_file_hash(file_data: bytes) -> str:
 
 def save_file_to_storage(file_data: bytes, filename: str, uploader_id: str) -> str:
     """
-    Save file to local storage or S3
-    Returns storage URL
+    Save file under MEDIA_ROOT/uploads.
+    Returns opaque media key (media:uploads/...).
     """
-    # Create upload directory if it doesn't exist
-    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    
-    # Generate unique filename
     file_id = str(uuid.uuid4())
     extension = os.path.splitext(filename)[1]
     storage_filename = f"{uploader_id}_{file_id}{extension}"
-    
-    # Save file
-    file_path = os.path.join(UPLOAD_FOLDER, storage_filename)
-    with open(file_path, 'wb') as f:
-        f.write(file_data)
-    
-    # Return storage URL (local path for now, can be S3 URL in production)
-    return f"file://{os.path.abspath(file_path)}"
+    relative = f"uploads/{storage_filename}"
+    return media_storage.put(relative, file_data)
 
 
 def collect_toon_validation_issues(toon: Dict[str, Any], document_type: str) -> list[str]:

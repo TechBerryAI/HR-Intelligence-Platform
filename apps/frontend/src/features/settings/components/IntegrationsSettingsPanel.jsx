@@ -80,6 +80,7 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
   const [accessToken, setAccessToken] = useState('')
   const [refreshToken, setRefreshToken] = useState('')
   const [baseUrl, setBaseUrl] = useState(settings.baseUrl || '')
+  const [logoUrl, setLogoUrl] = useState(settings.logoUrl || item.logoUrl || '')
   const [epTest, setEpTest] = useState(endpoints.test || 'GET /health')
   const [epPublish, setEpPublish] = useState(endpoints.publish || 'POST /jobs')
   const [epUpdate, setEpUpdate] = useState(endpoints.update || 'PUT /jobs/{externalJobId}')
@@ -97,12 +98,13 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
     setAccessToken('')
     setRefreshToken('')
     setBaseUrl(settings.baseUrl || '')
+    setLogoUrl(settings.logoUrl || item.logoUrl || '')
     setEpTest(endpoints.test || 'GET /health')
     setEpPublish(endpoints.publish || 'POST /jobs')
     setEpUpdate(endpoints.update || 'PUT /jobs/{externalJobId}')
     setEpClose(endpoints.close || 'POST /jobs/{externalJobId}/close')
     setEpApps(endpoints.applications || 'GET /jobs/{externalJobId}/applications')
-  }, [item.id, cfg.enabled, cfg.autoPublish, cfg.autoSync, cfg.clientId, settings.baseUrl])
+  }, [item.id, item.logoUrl, cfg.enabled, cfg.autoPublish, cfg.autoSync, cfg.clientId, settings.baseUrl, settings.logoUrl])
 
   const statusOk = cfg.status === 'connected'
 
@@ -131,7 +133,10 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
           applications: epApps.trim(),
         },
       }
+      if (logoUrl.trim()) body.settings.logoUrl = logoUrl.trim()
+      else body.settings.logoUrl = ''
       body.baseUrl = baseUrl.trim()
+      body.logoUrl = logoUrl.trim()
     }
     return body
   }
@@ -219,7 +224,12 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
                 : 'h-11 w-11 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center overflow-hidden'
             }
           >
-            <ProviderBrandIcon provider={item.id} className="w-6 h-6" />
+            <ProviderBrandIcon
+              provider={item.id}
+              className="w-6 h-6"
+              logoUrl={settings.logoUrl || item.logoUrl}
+              title={item.name}
+            />
           </div>
           <div>
             <h3
@@ -288,6 +298,13 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
             onChange={(e) => setBaseUrl(e.target.value)}
             disabled={!canEdit}
             placeholder="https://api.example.com"
+          />
+          <PremiumInput
+            label="Logo URL (optional)"
+            value={logoUrl}
+            onChange={(e) => setLogoUrl(e.target.value)}
+            disabled={!canEdit}
+            placeholder="https://cdn.example.com/logo.png"
           />
           <PremiumInput
             label="Test endpoint"
@@ -418,6 +435,7 @@ function AddPlatformForm({ enterprise, onCancel, onCreated }) {
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
+  const [logoUrl, setLogoUrl] = useState('')
   const [epTest, setEpTest] = useState('GET /health')
   const [epPublish, setEpPublish] = useState('POST /jobs')
   const [epUpdate, setEpUpdate] = useState('PUT /jobs/{externalJobId}')
@@ -444,6 +462,14 @@ function AddPlatformForm({ enterprise, onCancel, onCreated }) {
       setError('Provide Access Token or Client ID + Client Secret')
       return
     }
+    if (baseUrl.trim() && !/^https:\/\//i.test(baseUrl.trim())) {
+      setError('API Base URL must start with https://')
+      return
+    }
+    if (logoUrl.trim() && !/^https:\/\//i.test(logoUrl.trim())) {
+      setError('Logo URL must be an https:// URL')
+      return
+    }
     setBusy(true)
     try {
       const body = {
@@ -467,6 +493,10 @@ function AddPlatformForm({ enterprise, onCancel, onCreated }) {
             applications: epApps.trim(),
           },
         },
+      }
+      if (logoUrl.trim()) {
+        body.logoUrl = logoUrl.trim()
+        body.settings.logoUrl = logoUrl.trim()
       }
       if (slug.trim()) body.provider = slug.trim().toLowerCase()
       if (clientSecret.trim()) body.clientSecret = clientSecret.trim()
@@ -512,6 +542,12 @@ function AddPlatformForm({ enterprise, onCancel, onCreated }) {
         value={baseUrl}
         onChange={(e) => setBaseUrl(e.target.value)}
         placeholder="https://api.example.com"
+      />
+      <PremiumInput
+        label="Logo URL (optional)"
+        value={logoUrl}
+        onChange={(e) => setLogoUrl(e.target.value)}
+        placeholder="https://cdn.example.com/logo.png"
       />
       <PremiumInput label="Test endpoint" value={epTest} onChange={(e) => setEpTest(e.target.value)} />
       <PremiumInput label="Publish endpoint" value={epPublish} onChange={(e) => setEpPublish(e.target.value)} />

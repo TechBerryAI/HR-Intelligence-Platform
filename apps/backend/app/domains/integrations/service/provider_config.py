@@ -66,6 +66,7 @@ def catalog_with_status(company_key: str) -> list[dict]:
             'idPrefix': (provider[:2] or 'XB').upper(),
             'builtin': False,
             'configured': True,
+            'logoUrl': settings.get('logoUrl') or None,
             'config': _row_public(row, provider),
         })
     return out
@@ -84,6 +85,20 @@ def get_provider_config(company_key: str, provider: str) -> dict | None:
     return _row_public(row, provider)
 
 
+def _normalize_logo_url(raw) -> str | None:
+    """HTTPS logo URL only; reject data:/http:/relative."""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return ''
+    from urllib.parse import urlparse
+    parsed = urlparse(s)
+    if parsed.scheme != 'https' or not parsed.netloc:
+        raise ValueError('logoUrl must be an https:// URL')
+    return s
+
+
 def _normalize_http_settings(data: dict, display_name: str | None = None) -> dict:
     settings = data.get('settings') or data.get('settings_json') or {}
     if not isinstance(settings, dict):
@@ -98,9 +113,16 @@ def _normalize_http_settings(data: dict, display_name: str | None = None) -> dic
         ('base_url', 'baseUrl'),
         ('authHeader', 'authHeader'),
         ('auth_header', 'authHeader'),
+        ('logoUrl', 'logoUrl'),
+        ('logo_url', 'logoUrl'),
     ):
-        if data.get(src):
+        if src in data and data.get(src) is not None:
             settings[dst] = data[src]
+    # Normalize / validate logoUrl (empty clears)
+    if 'logoUrl' in settings:
+        settings['logoUrl'] = _normalize_logo_url(settings.get('logoUrl'))
+        if settings['logoUrl'] == '':
+            settings.pop('logoUrl', None)
     endpoints = settings.get('endpoints') if isinstance(settings.get('endpoints'), dict) else {}
     endpoints = dict(endpoints)
     flat_eps = data.get('endpoints') if isinstance(data.get('endpoints'), dict) else {}

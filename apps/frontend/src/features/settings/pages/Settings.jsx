@@ -17,7 +17,7 @@ import { PASSWORD_RULES, isPasswordStrong } from '@/shared/utils/passwordValidat
  * When omitted, follows global Dark/Light toggle (`surfaceTheme`).
  */
 export default function Settings({ theme }) {
-  const { changePasswordHr } = useApp()
+  const { changePasswordHr, auth } = useApp()
   const { surfaceTheme } = useTheme()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = (searchParams.get('tab') || '').toLowerCase()
