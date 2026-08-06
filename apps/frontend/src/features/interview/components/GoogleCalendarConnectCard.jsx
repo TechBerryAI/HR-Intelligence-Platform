@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { FiCalendar, FiCheckCircle, FiLink, FiUnlink } from 'react-icons/fi'
+import { FiCalendar, FiCheckCircle, FiLink, FiXCircle } from 'react-icons/fi'
 import {
   disconnectGoogleCalendar,
   fetchGoogleCalendarStatus,
@@ -182,7 +182,7 @@ export default function GoogleCalendarConnectCard({ enterprise = false }) {
                 : 'inline-flex items-center gap-2 rounded-xl border border-red-200 px-3 py-2 text-sm text-red-600'
             }
           >
-            <FiUnlink className="h-4 w-4" />
+            <FiXCircle className="h-4 w-4" />
             Disconnect
           </button>
         )}
