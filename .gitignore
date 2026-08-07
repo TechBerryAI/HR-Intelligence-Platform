@@ -271,6 +271,12 @@ media/
 .media/
 **/.media/
 
+# Accidental CWD leftovers at repo root (canonical volume is .media/)
+/bulk_exports/
+/bulk_uploads/
+/feedback/
+/public/
+
 # Backend runtime uploads (resumes, feedback screenshots)
 backend/uploads/
 apps/backend/uploads/
@@ -289,7 +295,7 @@ data/sessions/
 *.session
 
 # Bulk parse staging + Excel exports (local runtime)
-# Worker writes under apps/data/ (Path parents[3] from bulk_parser.py), not apps/backend/data/
+# Canonical: MEDIA_ROOT (.media/bulk_*). Legacy paths below kept ignored.
 apps/data/bulk_uploads/
 apps/data/bulk_exports/
 apps/backend/data/bulk_uploads/

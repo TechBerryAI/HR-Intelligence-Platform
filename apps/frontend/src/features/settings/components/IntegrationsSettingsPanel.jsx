@@ -14,6 +14,7 @@ import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import { isHeadHr } from '@/core/permissions/rbac.js'
 import { useApp } from '@/core/context/AppContext.jsx'
 import ProviderBrandIcon from '@/features/integrations/components/ProviderBrandIcon.jsx'
+import GoogleCalendarConnectCard from '@/features/interview/components/GoogleCalendarConnectCard.jsx'
 import {
   fetchIntegrationProviders,
   saveProviderConfig,
@@ -633,7 +634,8 @@ export default function IntegrationsSettingsPanel({ enterprise = false }) {
               : 'text-sm text-slate-500 dark:text-slate-400'
           }
         >
-          LinkedIn and Naukri are built-in. Add any other job board with its API Base URL and endpoints.
+          LinkedIn and Naukri are built-in. Connect Google Calendar (your account) for interview scheduling after shortlist.
+          Add any other job board with its API Base URL and endpoints.
           {!canEdit && ' Only Head HR can edit provider settings.'}
         </p>
         {canEdit && !showAdd && (
@@ -667,6 +669,8 @@ export default function IntegrationsSettingsPanel({ enterprise = false }) {
         <p className={enterprise ? 'text-[var(--ei-text-muted)]' : 'text-slate-500'}>Loading…</p>
       )}
       {error && <p className={enterprise ? 'text-[#FF7B8E]' : 'text-red-600'}>{error}</p>}
+
+      <GoogleCalendarConnectCard enterprise={enterprise} />
 
       <div className="grid gap-4">
         {builtinCards.map((p) => (

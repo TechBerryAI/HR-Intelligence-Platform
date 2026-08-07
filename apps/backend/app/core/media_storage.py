@@ -30,15 +30,21 @@ def get_media_root() -> Path:
         # Fallback: UPLOAD_FOLDER parent if set to a non-package path, else repo/.media
         upload = (os.getenv('UPLOAD_FOLDER') or '').strip()
         if upload:
-            up = Path(upload).expanduser()
-            # If UPLOAD_FOLDER is still the legacy ./uploads under backend, ignore it
-            try:
-                if up.resolve() == (_BACKEND_DIR / 'uploads').resolve():
-                    root = (_REPO_ROOT / '.media').resolve()
-                else:
-                    root = up.resolve().parent if up.name == 'uploads' else up.resolve()
-            except OSError:
+            # Relative legacy defaults must not depend on process CWD
+            # (repo-root vs apps/backend would otherwise pick different roots).
+            norm = upload.replace('\\', '/').rstrip('/')
+            if norm in ('./uploads', 'uploads', 'backend/uploads', 'apps/backend/uploads'):
                 root = (_REPO_ROOT / '.media').resolve()
+            else:
+                up = Path(upload).expanduser()
+                try:
+                    resolved = up.resolve()
+                    if resolved == (_BACKEND_DIR / 'uploads').resolve():
+                        root = (_REPO_ROOT / '.media').resolve()
+                    else:
+                        root = resolved.parent if resolved.name == 'uploads' else resolved
+                except OSError:
+                    root = (_REPO_ROOT / '.media').resolve()
         else:
             root = (_REPO_ROOT / '.media').resolve()
     root.mkdir(parents=True, exist_ok=True)

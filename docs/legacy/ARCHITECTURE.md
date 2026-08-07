@@ -3060,16 +3060,17 @@ backend/llm_service.py
 |--------|--------|
 | **Engine** | PostgreSQL 12+ |
 | **Driver** | psycopg3 with connection pooling |
-| **Schema management** | Versioned SQL files in `backend/schema_pg/` |
+| **Schema management** | Consolidated SQL in `apps/backend/schema_pg/` applied by Alembic |
 | **Query pattern** | Raw SQL via helper functions (no ORM) |
 
-**Schema files:**
+**Schema files (Current):**
 
 | File | Contents |
 |------|----------|
-| `01_schema.sql` | Core tables (auth, jobs, profiles, applications, parsing) |
-| `02_seed.sql` | Seed data |
-| `03_employee_feedback.sql` | Feedback table |
+| `01_core.sql` | Core tables (auth, jobs, profiles, applications, parsing, feedback) |
+| `02_domain.sql` | Domain freeze, interviews/slots, RBAC cleanup, keywords, blobs |
+| `03_integrations.sql` | Job-board integrations, OAuth, site assets |
+| `04_seeds.sql` | Seed admin / CEO accounts |
 
 **Storage patterns:**
 

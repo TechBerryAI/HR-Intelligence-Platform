@@ -659,6 +659,9 @@ def update_application_status(job_id: str, candidate_id: str):
             'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
             (out['profile_update']['status_db'], _sl_val, app['id'])
         )
+        if action == 'shortlist':
+            from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
+            trigger_interview_scheduling(app['id'], recruiter_hrid=get_user_id(request.user))
         return jsonify({'status': 'ok', 'profile_update': out['profile_update']}), 200
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
@@ -1112,6 +1115,10 @@ def public_apply_to_job(job_id: str):
             ats_analysis_toon=ats_analysis_toon,
         )
         _apply_stage('persist', 'completed', (_time.perf_counter() - t_persist) * 1000.0)
+
+        if shortlisted and app_id:
+            from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
+            trigger_interview_scheduling(app_id, recruiter_hrid=job.get('posted_by'))
 
         return jsonify({
             'message': 'Application submitted successfully',
