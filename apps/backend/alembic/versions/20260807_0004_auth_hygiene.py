@@ -3,6 +3,9 @@
 Revision ID: 20260807_0004
 Revises: 20260807_0003
 Create Date: 2026-08-07
+
+All steps are guarded: DBs that never had ``hr_login`` (or already dropped it)
+must still advance this revision cleanly.
 """
 from typing import Sequence, Union
 
@@ -16,37 +19,77 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute(text('ALTER TABLE hr_login DROP COLUMN IF EXISTS password'))
+    # DROP COLUMN IF EXISTS only skips a missing *column* — not a missing *table*.
     op.execute(
         text(
             """
-            CREATE INDEX IF NOT EXISTS ix_login_history_attempted_at
-            ON login_history (attempted_at DESC)
+            DO $$
+            BEGIN
+                IF to_regclass('public.hr_login') IS NOT NULL THEN
+                    ALTER TABLE hr_login DROP COLUMN IF EXISTS password;
+                END IF;
+            END $$
             """
         )
     )
-    # Widen CID formatting (CID00000001 …) — existing CIDs unchanged
     op.execute(
         text(
             """
-            ALTER TABLE candidate_signup
-            ALTER COLUMN cid SET DEFAULT (
-                'CID' || LPAD(nextval('candidate_cid_seq')::text, 8, '0')
-            )
+            DO $$
+            BEGIN
+                IF to_regclass('public.login_history') IS NOT NULL THEN
+                    CREATE INDEX IF NOT EXISTS ix_login_history_attempted_at
+                        ON login_history (attempted_at DESC);
+                END IF;
+            END $$
             """
         )
     )
-    # Duplicate unique index on HRAuth.email (keep HRAuth_email_key)
+    op.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+                IF to_regclass('public.candidate_signup') IS NOT NULL
+                   AND to_regclass('public.candidate_signup_cid_seq') IS NOT NULL THEN
+                    ALTER TABLE candidate_signup
+                        ALTER COLUMN cid
+                        SET DEFAULT ('CID' || lpad(
+                            nextval('candidate_signup_cid_seq')::text, 5, '0'
+                        ));
+                END IF;
+            END $$
+            """
+        )
+    )
     op.execute(text('DROP INDEX IF EXISTS ix_hrauth_email'))
     op.execute(text('DROP INDEX IF EXISTS "IX_HRAuth_Email"'))
+    op.execute(
+        text(
+            """
+            DO $$
+            BEGIN
+                IF to_regclass('public."HRAuth"') IS NOT NULL THEN
+                    CREATE UNIQUE INDEX IF NOT EXISTS "IX_HRAuth_Email"
+                        ON "HRAuth" (email);
+                END IF;
+            END $$
+            """
+        )
+    )
 
 
 def downgrade() -> None:
     op.execute(
         text(
             """
-            ALTER TABLE hr_login
-            ADD COLUMN IF NOT EXISTS password VARCHAR(255) NOT NULL DEFAULT ''
+            DO $$
+            BEGIN
+                IF to_regclass('public.hr_login') IS NOT NULL THEN
+                    ALTER TABLE hr_login
+                        ADD COLUMN IF NOT EXISTS password TEXT;
+                END IF;
+            END $$
             """
         )
     )
@@ -54,15 +97,30 @@ def downgrade() -> None:
     op.execute(
         text(
             """
-            ALTER TABLE candidate_signup
-            ALTER COLUMN cid SET DEFAULT (
-                'CID' || LPAD(nextval('candidate_cid_seq')::text, 3, '0')
-            )
+            DO $$
+            BEGIN
+                IF to_regclass('public.candidate_signup') IS NOT NULL
+                   AND to_regclass('public.candidate_signup_cid_seq') IS NOT NULL THEN
+                    ALTER TABLE candidate_signup
+                        ALTER COLUMN cid
+                        SET DEFAULT ('CID' || lpad(
+                            nextval('candidate_signup_cid_seq')::text, 3, '0'
+                        ));
+                END IF;
+            END $$
             """
         )
     )
+    op.execute(text('DROP INDEX IF EXISTS "IX_HRAuth_Email"'))
     op.execute(
         text(
-            'CREATE UNIQUE INDEX IF NOT EXISTS ix_hrauth_email ON "HRAuth" (email)'
+            """
+            DO $$
+            BEGIN
+                IF to_regclass('public."HRAuth"') IS NOT NULL THEN
+                    CREATE INDEX IF NOT EXISTS ix_hrauth_email ON "HRAuth" (email);
+                END IF;
+            END $$
+            """
         )
     )

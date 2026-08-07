@@ -186,9 +186,15 @@ def init_db():
         traceback.print_exc()
         # Last-resort bootstrap for brand-new DBs if Alembic is unavailable
         try:
+            from alembic import command
+            from app.database.alembic_runner import _config
             from app.database.schema_apply import apply_consolidated_schema
 
             print('[DB] Falling back to direct schema_pg apply…')
             apply_consolidated_schema()
+            # Schema matches current code; avoid replaying the same broken mid-chain
+            # revision on every startup.
+            command.stamp(_config(), 'head')
+            print('[DB] Alembic stamped at head after schema_pg fallback')
         except Exception as e2:
             print(f'[DB] Schema fallback failed: {e2}')
