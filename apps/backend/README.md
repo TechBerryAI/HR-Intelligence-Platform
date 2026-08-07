@@ -55,22 +55,24 @@ python wsgi.py         # or: gunicorn -c gunicorn.conf.py wsgi:app
 
 Or from repo root: `node start.js`
 
-## Media & backups
+## Media storage
 
-Resumes/JDs are stored under durable `HCIP_DATA_HOME` (default: sibling folder `…/hcip-data/`), not inside the git tree. Backups run automatically when the app is up.
+Resumes/JDs are stored under durable `HCIP_DATA_HOME` (default: sibling folder `…/hcip-data/`), not inside the git tree. Postgres backups are owned by the DB team.
 
 **Command reference:** [docs/MEDIA_AND_BACKUPS.md](../../docs/MEDIA_AND_BACKUPS.md)
 
 ```bash
+# From repo root
+python scripts/ensure_media_assets.py --force
+
 cd apps/backend
-python -m app.database.scripts.backup_hcip --force
 python -m app.database.scripts.offload_blobs --verify-only --limit 200
 ```
 
 ## Related documentation
 
 - [Docs index](../../docs/README.md)
-- [Media & backups](../../docs/MEDIA_AND_BACKUPS.md)
+- [Media storage](../../docs/MEDIA_AND_BACKUPS.md)
 - [Development guide](../../docs/DEVELOPMENT.md)
 - [Alembic / schema](alembic/README.md)
 - [Database test script](../../scripts/database/test_db_connection.py)
