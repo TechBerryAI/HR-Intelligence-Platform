@@ -212,9 +212,9 @@ export default function ApplicationMatchPanel({ application, hideHeaderClose, jo
                 {recon?.note && (
                   <p className="mt-2 text-xs text-[var(--ei-text-muted)] leading-relaxed">{recon.note}</p>
                 )}
-                {displayMandatoryPct != null && Number(displayMandatoryPct) < 60 && (
+                {displayMandatoryPct != null && Number(displayMandatoryPct) < 40 && (
                   <p className="mt-1.5 text-xs text-[var(--ei-text-muted)]">
-                    Required threshold: 60% · Current mandatory skills match: {Number(displayMandatoryPct)}%
+                    Required threshold: 40% · Current mandatory skills match: {Number(displayMandatoryPct)}%
                     {missingMandatory.length > 0 ? ` · Missing: ${missingMandatory.join(', ')}` : ''}
                   </p>
                 )}

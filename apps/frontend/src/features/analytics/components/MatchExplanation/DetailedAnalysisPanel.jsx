@@ -197,7 +197,7 @@ export default function DetailedAnalysisPanel({
   const skills = board.skills || {}
   const gate = skills.gate || {}
   const gatePct = gate.mandatory_pct
-  const gateThreshold = gate.threshold || 60
+  const gateThreshold = gate.threshold || 40
 
   return (
     <div className={`space-y-5 text-sm ${bodyClass}`}>

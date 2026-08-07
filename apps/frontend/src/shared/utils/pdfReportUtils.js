@@ -641,15 +641,15 @@ export function generateApplicationMatchPdf(application, options = {}) {
   let verdictReason = decisionSummary || 'See detailed analysis below.'
   if (status === 'ats_failed') {
     verdictReason = application.ats_reasoning || 'ATS matching failed for this application.'
-  } else if (!decisionSummary && mandatoryPct != null && Number(mandatoryPct) < 60) {
+  } else if (!decisionSummary && mandatoryPct != null && Number(mandatoryPct) < 40) {
     const missing = (requirementAnalysis?.mandatory || [])
       .filter((r) => r.status === 'missing')
       .map((r) => r.skill)
       .slice(0, 5)
     const extra = missing.length ? ` Still missing: ${missing.join(', ')}.` : ''
-    verdictReason = `Rejected: only ${Number(mandatoryPct)}% of mandatory skills matched (need at least 60%).${extra}`
+    verdictReason = `Low match: only ${Number(mandatoryPct)}% of mandatory skills matched (need at least 40%).${extra}`
   } else if (!decisionSummary && verdict && /not a match/i.test(verdict) && score != null) {
-    verdictReason = `Rejected: overall score is ${score}%, below the required threshold for this role.`
+    verdictReason = `Low match: overall score is ${score}%, below the review floor for this role.`
   } else if (!decisionSummary && narrative) {
     verdictReason = narrative.split(/\n/)[0]?.trim().slice(0, 280) || verdictReason
   }

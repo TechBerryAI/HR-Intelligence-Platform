@@ -17,6 +17,8 @@ os.environ['ATS_API_URL'] = ''
 os.environ['ATS_API_KEY'] = ''
 os.environ['ATS_NARRATIVE_LLM'] = '0'
 os.environ['DOCUMENT_INTELLIGENCE_SEMANTIC_AI'] = 'false'
+os.environ['ATS_THRESHOLD'] = '80'
+os.environ['ATS_AUTO_SHORTLIST_MIN'] = '80'
 
 from app.domains.recruitment.services.ats_service import (
     _internal_match,
@@ -52,20 +54,20 @@ BASE_JD = {
 
 def test_excellent_match_strong_verdict():
     result = _internal_match(BASE_RESUME, BASE_JD)
-    assert result["overall_match_score"] >= 75
+    assert result["overall_match_score"] >= 80
     assert result["verdict"] == "Strong Match"
     assert result["mandatory_skills_match_pct"] >= MANDATORY_SKILLS_MIN_PCT
 
 
 def test_auto_shortlist_only_strong_match():
-    """≥75% Strong Match → shortlist; Potential Match must not auto-shortlist."""
+    """≥80% Strong Match → shortlist; Potential Match must not auto-shortlist."""
     from app.domains.recruitment.services.ats_service import match_candidate_to_job
     from app.domains.recruitment.api.applications import _shortlisted_from_decision
 
     ok, payload = match_candidate_to_job("c1", "j1", BASE_RESUME, BASE_JD)
     assert ok
     out = payload["json_output"]
-    assert out["overall_match_score"] >= 75
+    assert out["overall_match_score"] >= 80
     assert out["decision"] == "shortlist"
     assert out["match_tier"] == "strong_match"
     assert _shortlisted_from_decision(out["decision"]) is True
@@ -88,7 +90,7 @@ def test_good_match_potential_verdict():
     jd = {**BASE_JD, "preferred_skills": ["Kubernetes", "Terraform", "GraphQL"]}
     result = _internal_match(resume, jd)
     assert result["mandatory_skills_match_pct"] >= MANDATORY_SKILLS_MIN_PCT
-    assert result["overall_match_score"] >= 60
+    assert result["overall_match_score"] >= 40
     assert "Match" in result["verdict"]
 
 
@@ -110,7 +112,7 @@ def test_poor_match_not_a_match():
     jd = {**BASE_JD, "min_experience_years": 8}
     result = _internal_match(resume, jd)
     assert result["verdict"] == "Not a Match"
-    assert result["overall_match_score"] < 60
+    assert result["overall_match_score"] < 40
 
 
 def test_empty_mandatory_skills_no_auto_gate():
@@ -229,7 +231,7 @@ def test_gate_fail_explains_experience_vs_skills():
     assert expl["reconciliation"]
     assert "experience" in expl["reconciliation"].lower()
     assert "skills" in expl["reconciliation"].lower()
-    assert "rejected" in expl["primary_reason"].lower() or "reject" in expl["outcome"]
+    assert "low match" in expl["primary_reason"].lower() or "reject" in expl["outcome"]
 
 
 def test_reconcile_match_score_from_polluted_analysis():
@@ -248,7 +250,7 @@ def test_reconcile_match_score_from_polluted_analysis():
                     {"skill": "Azure Database for", "status": "missing"},
                 ],
                 "preferred": [],
-                "gate": {"passed": False, "mandatory_pct": 20, "threshold": 60, "mandatory_defined": True},
+                "gate": {"passed": False, "mandatory_pct": 20, "threshold": 40, "mandatory_defined": True},
             },
             "evaluation_report": {
                 "skills_analysis": {
