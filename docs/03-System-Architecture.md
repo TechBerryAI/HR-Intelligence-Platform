@@ -128,10 +128,10 @@ flowchart LR
 | LLM | `app/integrations/openai/llm_service.py` |
 | ATS | `app/domains/recruitment/services/ats_service.py` |
 | Job-board integrations | `app/domains/integrations/` (provider plugins, queue, REST `/api/integrations`) |
-| Media volume | `app/core/media_storage.py` + `GET /api/media/public/hero-video` (`MEDIA_ROOT`) |
+| Media volume | `app/core/media_storage.py` (`MEDIA_ROOT`) + `GET /api/media/public/hero-video` (`site_assets` BYTEA) |
 
-**Media (Current):** Parse uploads, feedback screenshots, bulk staging, and the landing hero MP4 live under configurable **`MEDIA_ROOT`** (default `<repo>/.media`, gitignored). DB stores opaque keys (`media:uploads/...`) or resume **BYTEA**. Frontend uses `/api/media/public/hero-video` or `VITE_HERO_VIDEO_URL` — not files under `frontend/public/`.  
-**Media (Future):** S3-compatible backend behind the same helper; optional migration of apply-resume BYTEA to object keys.
+**Media (Current):** Parse uploads / feedback / bulk staging use configurable **`MEDIA_ROOT`** (default `<repo>/.media`, gitignored). Landing hero MP4 is stored in Postgres **`site_assets.landing.hero_video` (BYTEA)** and streamed by `GET /api/media/public/hero-video` (disk under `MEDIA_ROOT` is seed/fallback only). Frontend uses that API path or optional `VITE_HERO_VIDEO_URL` — not files under `frontend/public/`.  
+**Media (Future):** S3-compatible backend / CDN for hero; optional migration of apply-resume BYTEA to object keys.
 
 **Current:** Built-in adapters — LinkedIn and Naukri only (staging external IDs `LI-…` / `NK-…` until partner APIs). Brand icons for builtins are **inline SVG / react-icons in the frontend** (no local PNG assets, no DB blobs). Custom platforms via Settings → **Add platform** (name, API Base URL, optional HTTPS `logoUrl`, endpoint paths, credentials); `GenericHttpProvider` performs real HTTP test/publish/update/close/sync. Synced board applications land in `external_applications` (not forced into HCIP `applications` yet). Auto-sync background tick for HTTP providers with `auto_sync`.  
 **Future:** Replace provider classes with official APIs + OAuth; controllers, schema, and job workflow stay unchanged.

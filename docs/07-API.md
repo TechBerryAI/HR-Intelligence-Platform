@@ -215,14 +215,14 @@ Prefix: `/api/integrations` (`integrations_bp`) — company-scoped via `company_
 
 ## Public media
 
-Prefix: `/api/media` (`media_bp`) — files from `MEDIA_ROOT` (not the git tree).
+Prefix: `/api/media` (`media_bp`)
 
 | Method | Path | Purpose | Auth |
 |--------|------|---------|------|
-| GET | `/api/media/public/hero-video` | Stream landing hero MP4 | None |
-| GET | `/api/media/health` | Media root + hero present | None |
+| GET | `/api/media/public/hero-video` | Stream landing hero MP4 from Postgres `site_assets.landing.hero_video` (BYTEA); disk under `MEDIA_ROOT` is seed/fallback only | None |
+| GET | `/api/media/health` | Media root + hero present (DB and/or disk) | None |
 
-Override landing URL with frontend `VITE_HERO_VIDEO_URL` (HTTPS CDN) without code changes.
+Override landing URL with frontend `VITE_HERO_VIDEO_URL` (HTTPS CDN) without code changes. Frontend default is `/api/media/public/hero-video` — not a file under `apps/frontend/public/`.
 
 ---
 
