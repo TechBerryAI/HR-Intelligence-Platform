@@ -10,6 +10,7 @@ def ensure_preferred_location_fallback(mapping_path: Path | None = None) -> bool
     """
     When preferred_location is empty, autofill preferredLocation from current location.
     Apply-form requires both fields; most resumes only state one location.
+    Already applied when VALIDATION_FIX_preferred_location_fallback is present.
     """
     path = mapping_path or (
         ROOT / 'apps/backend/app/ai/document_intelligence/mapping/resume_form.py'
@@ -19,9 +20,9 @@ def ensure_preferred_location_fallback(mapping_path: Path | None = None) -> bool
     if marker in text:
         return False
 
-    old = """    # preferredLocation: ONLY contact.preferred_location (no fallback to current)
-    pref = profile.contact.preferred_location.strip()
-    pref_ok = bool(pref)
+    old = """    # preferredLocation: only contact.preferred_location (no fallback to current)
+    pref = (profile.contact.preferred_location or '').strip()
+    pref_ok, pref_reason = validate_nonempty(pref, 'preferred_location')
     preferred_location = pref if pref_ok else ''
     traces.append(
         _trace(
@@ -30,7 +31,7 @@ def ensure_preferred_location_fallback(mapping_path: Path | None = None) -> bool
             source=_meta_source(profile, 'person.preferred_location', 'deterministic'),
             validator='validate_nonempty' if pref_ok else 'none',
             confidence=0.85 if pref_ok else 0.0,
-            reason='ok' if pref_ok else 'empty_no_fallback',
+            reason=pref_reason if pref_ok else 'empty',
 """
     new = """    # preferredLocation: preferred_location, else current location
     # VALIDATION_FIX_preferred_location_fallback
@@ -42,7 +43,7 @@ def ensure_preferred_location_fallback(mapping_path: Path | None = None) -> bool
     else:
         pref_source_path = 'contact.preferred_location'
         pref_reason = 'ok' if pref else 'empty'
-    pref_ok = bool(pref)
+    pref_ok, _ = validate_nonempty(pref, 'preferred_location')
     preferred_location = pref if pref_ok else ''
     traces.append(
         _trace(
@@ -51,7 +52,7 @@ def ensure_preferred_location_fallback(mapping_path: Path | None = None) -> bool
             source=_meta_source(profile, 'person.preferred_location', 'deterministic'),
             validator='validate_nonempty' if pref_ok else 'none',
             confidence=0.85 if pref_ok else 0.0,
-            reason=pref_reason,
+            reason=pref_reason if pref_ok else 'empty',
 """
     if old not in text:
         return False
