@@ -69,8 +69,11 @@ python -m app.database.scripts.offload_blobs --verify-only --limit 200
 
 ## Related documentation
 
-- [Docs index](../../docs/README.md)
+- [HCIP docs index](../../docs/README.md)
+- [API map](../../docs/07-API.md)
+- [System architecture](../../docs/03-System-Architecture.md)
 - [Media & backups](../../docs/MEDIA_AND_BACKUPS.md)
 - [Development guide](../../docs/DEVELOPMENT.md)
 - [Alembic / schema](alembic/README.md)
+- [Legacy engineering archive](../../docs/legacy/ENGINEERING.md#backend)
 - [Database test script](../../scripts/database/test_db_connection.py)

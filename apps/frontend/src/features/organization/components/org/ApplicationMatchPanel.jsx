@@ -33,7 +33,7 @@ function StatusDot({ status, shortlisted }) {
     ? 'bg-[#36D6A0]'
     : /reject|fail/i.test(String(status))
       ? 'bg-[#FF5D73]'
-      : 'bg-[var(--ei-btn-primary-from)]'
+      : 'bg-[#00A6FF]'
   return (
     <span className="inline-flex items-center gap-2 capitalize">
       <span className={`w-1.5 h-1.5 rounded-full ${tone}`} aria-hidden />

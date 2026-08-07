@@ -36,7 +36,7 @@ function Toggle({ checked, onChange, disabled, enterprise, label }) {
         className={`relative h-6 w-11 rounded-full transition-colors ${
           checked
             ? enterprise
-              ? 'bg-[var(--ei-btn-primary-from)]'
+              ? 'bg-[#00A6FF]'
               : 'bg-primary'
             : enterprise
               ? 'bg-[var(--ei-surface-hover)] ring-1 ring-[var(--ei-border-primary)]'

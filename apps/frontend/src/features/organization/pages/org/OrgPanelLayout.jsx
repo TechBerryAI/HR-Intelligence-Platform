@@ -68,7 +68,7 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
       }
     >
       <div className="flex items-center gap-3 px-5 py-5 border-b border-[var(--ei-border-primary)] shrink-0">
-        <div className="w-10 h-10 rounded-full bg-[var(--ei-btn-primary-from)] text-[var(--ei-btn-primary-text)] grid place-items-center flex-shrink-0 text-xs font-bold shadow-[0_8px_20px_var(--ei-btn-primary-shadow)]">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00A6FF] to-[#276DFF] text-white grid place-items-center flex-shrink-0 text-xs font-bold shadow-[0_0_20px_rgba(0,166,255,0.25)]">
           {initials}
         </div>
         <div className="min-w-0 flex-1">

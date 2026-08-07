@@ -1000,11 +1000,21 @@ def _build_recruiter_report(
 
 
 @timing
-def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
+def _internal_match(
+    parsed_resume: dict,
+    parsed_jd: dict,
+    *,
+    narrative_llm: bool | None = None,
+) -> dict:
     """
     Evaluate candidate (TOON resume) vs job (TOON JD). Deterministic, no inflation.
     Returns JSON with: overall_match_score, decision, verdict, evaluation_report, score_breakdown,
     key_strengths, key_gaps, final_reasoning; and mandatory_skills_match_pct for gating.
+
+    narrative_llm:
+      None → honor ATS_NARRATIVE_LLM env (default on)
+      False → skip blocking LLM narrative (apply submit path)
+      True → force LLM narrative attempt
     """
     cand_skills = _split_skill_list(parsed_resume.get("skills"))
 
@@ -1121,7 +1131,15 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
         decision_explanation,
     )
     llm_narrative = ""
-    if os.getenv("ATS_NARRATIVE_LLM", "1").strip().lower() not in ("0", "false", "no", "off"):
+    run_narrative = narrative_llm
+    if run_narrative is None:
+        run_narrative = os.getenv("ATS_NARRATIVE_LLM", "1").strip().lower() not in (
+            "0",
+            "false",
+            "no",
+            "off",
+        )
+    if run_narrative:
         llm_narrative = _optional_llm_narrative(
             {
                 "verdict": verdict,
@@ -1140,6 +1158,18 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
                 "decision_summary": decision_summary,
             }
         )
+    else:
+        try:
+            from app.core.timing_collector import record_pipeline_stage
+
+            record_pipeline_stage(
+                "_optional_llm_narrative",
+                "skipped",
+                duration_ms=0.0,
+                module="app.domains.recruitment.services.ats_service",
+            )
+        except Exception:
+            pass
     narrative = llm_narrative or deterministic_narrative
 
     evaluation_report = _build_recruiter_report(
@@ -1210,11 +1240,21 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
 
 
 @timing
-def match_candidate_to_job(candidate_id: str, job_id: str, parsed_resume: dict, parsed_jd: dict, apply_id: str = None):
+def match_candidate_to_job(
+    candidate_id: str,
+    job_id: str,
+    parsed_resume: dict,
+    parsed_jd: dict,
+    apply_id: str = None,
+    *,
+    narrative_llm: bool | None = None,
+):
     """
     Call HR-ATS-API /api/match when configured; otherwise run internal weighted matcher.
     Returns (success, result_or_error).
     result: dict with json_output (final_score or overall_match_score, decision, verdict, evaluation_report, rationale or final_reasoning), etc.
+
+    narrative_llm is honored only for the internal matcher (apply submit passes False).
     """
     if ATS_API_URL and ATS_API_KEY:
         parsed_resume_str = json.dumps(parsed_resume) if isinstance(parsed_resume, dict) else str(parsed_resume)
@@ -1229,8 +1269,18 @@ def match_candidate_to_job(candidate_id: str, job_id: str, parsed_resume: dict, 
         if apply_id:
             payload["apply_id"] = apply_id
         headers = {"Content-Type": "application/json", "x-api-key": ATS_API_KEY}
+        # Keep apply submit responsive — connect/read timeouts (was a single 60s that felt hung)
         try:
-            resp = requests.post(f"{ATS_API_URL}/api/match", json=payload, headers=headers, timeout=60)
+            ats_timeout = float(os.getenv("ATS_API_TIMEOUT_SEC", "25"))
+        except (TypeError, ValueError):
+            ats_timeout = 25.0
+        try:
+            resp = requests.post(
+                f"{ATS_API_URL}/api/match",
+                json=payload,
+                headers=headers,
+                timeout=(min(10.0, ats_timeout), ats_timeout),
+            )
             resp.raise_for_status()
             return True, resp.json()
         except requests.exceptions.Timeout:
@@ -1245,7 +1295,9 @@ def match_candidate_to_job(candidate_id: str, job_id: str, parsed_resume: dict, 
                     pass
             return False, {"error": err_msg}
 
-    json_output = _internal_match(parsed_resume, parsed_jd)
+    json_output = _internal_match(
+        parsed_resume, parsed_jd, narrative_llm=narrative_llm
+    )
     overall = float(json_output.get("overall_match_score") or 0)
     # Auto-shortlist only Strong Match (≥ AUTO_SHORTLIST_MIN, default 80%).
     # Potential Match (40–79%) stays for recruiter review — not auto-shortlisted.

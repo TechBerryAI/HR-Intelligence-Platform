@@ -1,5 +1,6 @@
 import json
 import re
+import time as _time
 from datetime import datetime
 from typing import Optional
 from flask import Blueprint, request, jsonify
@@ -36,6 +37,20 @@ from app.core.timing import timing
 
 jobs_bp = Blueprint('jobs', __name__)
 
+
+def _apply_stage(stage: str, outcome: str, duration_ms: float = 0.0) -> None:
+    """Record one public-apply checklist stage when Developer Mode is on."""
+    try:
+        from app.core.timing_collector import record_pipeline_stage
+
+        record_pipeline_stage(
+            stage,
+            outcome,
+            duration_ms=duration_ms,
+            module="app.domains.recruitment.api.jobs",
+        )
+    except Exception:
+        pass
 
 def _jobs_for_recruiter_company(user) -> list:
     """Recruiters see org/company postings, not only rows they personally posted."""
@@ -1004,6 +1019,7 @@ def public_apply_to_job(job_id: str):
     Creates/updates passwordless candidates, saves profile, runs ATS, persists application.
     """
     try:
+        t_validate = _time.perf_counter()
         is_multipart = request.content_type and 'multipart/form-data' in request.content_type
         if is_multipart:
             data = request.form.to_dict()
@@ -1027,6 +1043,7 @@ def public_apply_to_job(job_id: str):
         has_resume = bool(resume_binary and len(resume_binary) > 0)
         err = validate_public_apply_payload(data, has_resume)
         if err:
+            _apply_stage('validate', 'failed', (_time.perf_counter() - t_validate) * 1000.0)
             return jsonify({'error': err}), 400
 
         job = db_get(
@@ -1034,8 +1051,11 @@ def public_apply_to_job(job_id: str):
             (job_id,),
         )
         if not job:
+            _apply_stage('validate', 'failed', (_time.perf_counter() - t_validate) * 1000.0)
             return jsonify({'error': 'Job not found or not available for applications'}), 404
+        _apply_stage('validate', 'completed', (_time.perf_counter() - t_validate) * 1000.0)
 
+        t_upsert = _time.perf_counter()
         email = normalize_email(data.get('email'))
         full_name = (data.get('fullName') or '').strip()
         candidate_id = upsert_passwordless_candidate(full_name, email)
@@ -1045,19 +1065,27 @@ def public_apply_to_job(job_id: str):
             (candidate_id, job_id),
         )
         if existing:
+            _apply_stage('upsert_candidate', 'failed', (_time.perf_counter() - t_upsert) * 1000.0)
             return jsonify({'error': 'Applicant already applied'}), 400
+        _apply_stage('upsert_candidate', 'completed', (_time.perf_counter() - t_upsert) * 1000.0)
 
+        t_profile = _time.perf_counter()
         data = {**data, 'email': email, 'fullName': full_name, 'completed': True}
         save_candidate_profile(candidate_id, data, resume_binary, completed=True)
+        _apply_stage('save_profile', 'completed', (_time.perf_counter() - t_profile) * 1000.0)
 
+        t_link = _time.perf_counter()
         parsed_id = (data.get('parsedId') or data.get('parsed_id') or '').strip() or None
         public_uploader_id = (data.get('publicUploaderId') or data.get('public_uploader_id') or '').strip() or None
         parsed_resume_record = link_parsed_resume(parsed_id, candidate_id, public_uploader_id)
         if not parsed_resume_record:
+            _apply_stage('link_resume', 'failed', (_time.perf_counter() - t_link) * 1000.0)
             return jsonify({
                 'error': 'No parsed resume found. Please upload your resume and wait for AI parsing to finish.'
             }), 400
+        _apply_stage('link_resume', 'completed', (_time.perf_counter() - t_link) * 1000.0)
 
+        t_jd = _time.perf_counter()
         parsed_jd_record = db_get(
             """
             SELECT toon, confidence, id
@@ -1071,25 +1099,37 @@ def public_apply_to_job(job_id: str):
         if parsed_jd_record:
             parsed_jd = toon_loads_flex(parsed_jd_record['toon'])
             if not parsed_jd:
+                _apply_stage('load_jd', 'failed', (_time.perf_counter() - t_jd) * 1000.0)
                 return jsonify({'error': 'Invalid stored job description parsing data'}), 400
         else:
             parsed_jd = _jd_toon_from_job_row(job)
 
         parsed_resume = toon_loads_flex(parsed_resume_record['toon'])
         if not parsed_resume or not isinstance(parsed_resume, dict) or not isinstance(parsed_jd, dict):
+            _apply_stage('load_jd', 'failed', (_time.perf_counter() - t_jd) * 1000.0)
             return jsonify({'error': 'Resume or job description data is not in a valid format'}), 400
+        _apply_stage('load_jd', 'completed', (_time.perf_counter() - t_jd) * 1000.0)
 
+        # Apply submit must stay fast: use deterministic ATS narrative (no blocking LLM).
+        t_ats = _time.perf_counter()
         ats_success, ats_result = match_candidate_to_job(
-            candidate_id, job_id, parsed_resume, parsed_jd
+            candidate_id,
+            job_id,
+            parsed_resume,
+            parsed_jd,
+            narrative_llm=False,
         )
         if not ats_success or not ats_result:
+            _apply_stage('ats_match', 'failed', (_time.perf_counter() - t_ats) * 1000.0)
             err_msg = (
                 ats_result.get('error', 'Unknown ATS error')
                 if isinstance(ats_result, dict)
                 else str(ats_result)
             )
             return jsonify({'error': f'ATS matching failed: {err_msg}'}), 502
+        _apply_stage('ats_match', 'completed', (_time.perf_counter() - t_ats) * 1000.0)
 
+        t_persist = _time.perf_counter()
         final_score, shortlisted, rationale, ats_analysis_toon, status = _extract_ats_result(
             ats_result
         )
@@ -1104,6 +1144,7 @@ def public_apply_to_job(job_id: str):
             ats_reasoning=rationale,
             ats_analysis_toon=ats_analysis_toon,
         )
+        _apply_stage('persist', 'completed', (_time.perf_counter() - t_persist) * 1000.0)
 
         if shortlisted and app_id:
             from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling

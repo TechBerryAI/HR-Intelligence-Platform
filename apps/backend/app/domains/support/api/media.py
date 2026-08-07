@@ -12,10 +12,10 @@ media_bp = Blueprint('media', __name__)
 
 @media_bp.get('/public/hero-video')
 def hero_video():
-    """Stream landing hero MP4 from Postgres (no auth).
+    """Stream landing hero MP4 from Postgres ``site_assets`` BYTEA (no auth).
 
-    Seeded into ``site_assets`` from MEDIA_ROOT / legacy disk when missing.
-    Falls back to disk file if the DB row is unavailable.
+    Seeded into ``landing.hero_video`` from MEDIA_ROOT / legacy disk when missing.
+    Falls back to disk under MEDIA_ROOT if the DB row is unavailable.
     """
     packed = None
     try:

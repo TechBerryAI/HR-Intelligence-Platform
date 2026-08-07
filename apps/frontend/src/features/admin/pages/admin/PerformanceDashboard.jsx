@@ -53,6 +53,16 @@ const JD_STEPS = [
   { key: 'persist', name: 'Save Parsed Result' },
 ]
 
+const APPLY_STEPS = [
+  { key: 'validate', name: 'Validate Payload' },
+  { key: 'upsert_candidate', name: 'Create Candidate' },
+  { key: 'save_profile', name: 'Save Profile' },
+  { key: 'link_resume', name: 'Link Parsed Resume' },
+  { key: 'load_jd', name: 'Load Job Description' },
+  { key: 'ats_match', name: 'ATS Matching' },
+  { key: 'persist', name: 'Database Save' },
+]
+
 const STEP_ALIASES = {
   extract_text: 'text',
   store_raw_file: 'persist_raw',
@@ -60,6 +70,8 @@ const STEP_ALIASES = {
   enrich_jd_semantic: 'semantic',
   _call_section_llm: 'semantic',
   parse_via_runtime: 'semantic',
+  match_candidate_to_job: 'ats_match',
+  _persist_application_atomic: 'persist',
 }
 
 function formatTime(iso) {
@@ -132,15 +144,18 @@ function detectKind(detail) {
   if (
     detail.kind === 'jd_parse' ||
     detail.kind === 'resume_parse' ||
-    detail.kind === 'bulk_parse'
+    detail.kind === 'bulk_parse' ||
+    detail.kind === 'apply'
   ) {
     return detail.kind
   }
   const path = (detail.path || '').toLowerCase()
+  if (path.includes('/apply')) return 'apply'
   if (path.includes('/bulk-parse') || path.includes('bulk-parse')) return 'bulk_parse'
   if (path.includes('/parse/jd')) return 'jd_parse'
   if (path.includes('/parse/resume')) return 'resume_parse'
   const fns = new Set((detail.events || []).map((e) => e.function))
+  if (fns.has('public_apply_to_job') || fns.has('_persist_application_atomic')) return 'apply'
   if (fns.has('coverage') || fns.has('_run_jd') || fns.has('enrich_jd_semantic')) return 'jd_parse'
   if (
     fns.has('_run_resume') ||
@@ -158,9 +173,11 @@ function buildParseSteps(detail) {
   const template =
     kind === 'jd_parse'
       ? JD_STEPS
-      : kind === 'resume_parse' || kind === 'bulk_parse'
-        ? RESUME_STEPS
-        : null
+      : kind === 'apply'
+        ? APPLY_STEPS
+        : kind === 'resume_parse' || kind === 'bulk_parse'
+          ? RESUME_STEPS
+          : null
   if (!template) return detail?.parse_steps || []
 
   const fromApi = Array.isArray(detail?.parse_steps) ? detail.parse_steps : []
@@ -173,12 +190,29 @@ function buildParseSteps(detail) {
     let key = e.function
     if (STEP_ALIASES[key]) key = STEP_ALIASES[key]
     const existing = byKey.get(key)
-    if (!existing || (e.duration_ms != null && existing.duration_ms == null)) {
-      const status = e.outcome || (e.success === false ? 'failed' : 'completed')
+    const status = e.outcome || (e.success === false ? 'failed' : 'completed')
+    const nextMs = status === 'skipped' ? null : e.duration_ms
+    if (
+      existing &&
+      existing.status === 'completed' &&
+      Number(existing.duration_ms || 0) > 0 &&
+      status === 'completed' &&
+      Number(nextMs || 0) <= 0
+    ) {
+      // Keep the real measurement; ignore a later 0ms double-complete
+      continue
+    }
+    if (
+      !existing ||
+      (nextMs != null && existing.duration_ms == null) ||
+      (nextMs != null &&
+        existing.duration_ms != null &&
+        Number(nextMs) > Number(existing.duration_ms))
+    ) {
       byKey.set(key, {
         key,
         name: template.find((t) => t.key === key)?.name || e.stage || key,
-        duration_ms: status === 'skipped' ? null : e.duration_ms,
+        duration_ms: nextMs,
         status,
         success: e.success,
         function: e.function,
@@ -219,6 +253,41 @@ function buildParseSteps(detail) {
     }
   }
 
+  if (kind === 'apply') {
+    const score =
+      (detail?.events || []).find((e) => e.function === '_internal_match') ||
+      fromApi.find((s) => s.key === 'ats_score')
+    if (score) {
+      rows.push({
+        step: null,
+        key: 'ats_score',
+        name: 'ATS Score Computation',
+        duration_ms: score.duration_ms,
+        status: score.success === false ? 'failed' : score.status || score.outcome || 'completed',
+        success: score.success !== false,
+        function: '_internal_match',
+        detail: true,
+      })
+    }
+    const narr =
+      (detail?.events || []).find((e) => e.function === '_optional_llm_narrative') ||
+      fromApi.find((s) => s.key === 'ats_narrative')
+    if (narr) {
+      const status = narr.outcome || narr.status || (narr.success === false ? 'failed' : 'completed')
+      rows.push({
+        step: null,
+        key: 'ats_narrative',
+        name: 'ATS Narrative (LLM)',
+        duration_ms: status === 'skipped' ? null : narr.duration_ms,
+        status,
+        success: narr.success !== false,
+        function: '_optional_llm_narrative',
+        detail: true,
+      })
+    }
+    return rows
+  }
+
   const llm =
     (detail?.events || []).find((e) => e.function === 'parse_via_runtime') ||
     fromApi.find((s) => s.key === 'llm_inference')
@@ -249,7 +318,7 @@ function StepRow({ step, maxMs, isLast }) {
         <span
           className={`z-[1] flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold ${
             step.status === 'completed'
-              ? 'bg-[var(--ei-btn-primary-from)] text-[var(--ei-btn-primary-text)] shadow-[0_0_0_3px_var(--ei-btn-primary-shadow)]'
+              ? 'bg-[#00A6FF] text-white shadow-[0_0_0_3px_rgba(0,166,255,0.2)]'
               : step.status === 'failed'
                 ? 'bg-rose-500 text-white'
                 : isIdle
@@ -262,7 +331,7 @@ function StepRow({ step, maxMs, isLast }) {
         {!isLast ? (
           <span
             className={`w-px flex-1 min-h-[0.5rem] ${
-              step.status === 'completed' ? 'bg-[var(--ei-btn-primary-from)]/35' : 'bg-[var(--ei-border-primary)]'
+              step.status === 'completed' ? 'bg-[#00A6FF]/35' : 'bg-[var(--ei-border-primary)]'
             }`}
             aria-hidden
           />
@@ -272,7 +341,7 @@ function StepRow({ step, maxMs, isLast }) {
       <div
         className={`flex-1 min-w-0 mb-2 rounded-lg px-3 py-2.5 transition ${
           showTime
-            ? 'bg-[var(--ei-surface-hover)] ring-1 ring-[var(--ei-border-primary)]'
+            ? 'bg-[rgba(0,166,255,0.06)] ring-1 ring-[rgba(0,166,255,0.22)]'
             : step.status === 'failed'
               ? 'bg-[rgba(255,90,110,0.08)] ring-1 ring-[rgba(255,90,110,0.25)]'
               : 'bg-transparent'
@@ -310,7 +379,7 @@ function StepRow({ step, maxMs, isLast }) {
         {showTime ? (
           <div className="mt-2 h-1 rounded-full bg-[var(--ei-bg-primary)]/80 overflow-hidden">
             <div
-              className="h-full rounded-full bg-[var(--ei-btn-primary-from)]"
+              className="h-full rounded-full bg-gradient-to-r from-[#00A6FF] to-[#276DFF]"
               style={{ width: `${Math.max(pct, 4)}%` }}
             />
           </div>
@@ -484,7 +553,7 @@ function PipelineView({ detail }) {
         <div className="w-12 h-12 rounded-2xl bg-[rgba(0,166,255,0.1)] flex items-center justify-center mb-3">
           <FiClock className="w-6 h-6 text-[#00A6FF]" />
         </div>
-        <p className="text-sm font-medium text-[var(--ei-text-primary)]">Select a parse</p>
+        <p className="text-sm font-medium text-[var(--ei-text-primary)]">Select a request</p>
         <p className="text-xs text-[var(--ei-text-muted)] mt-1 max-w-xs">
           Choose a row on the left to see each pipeline step and how long it took.
         </p>
@@ -496,7 +565,7 @@ function PipelineView({ detail }) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center px-6">
         <p className="text-sm text-[var(--ei-text-muted)]">
-          No step timings for this request. Run a parse with Developer Mode on, then refresh.
+          No step timings for this request. Run a parse or apply with Developer Mode on, then refresh.
         </p>
       </div>
     )
@@ -833,7 +902,7 @@ function DashboardBody() {
             type="button"
             onClick={load}
             disabled={loading || clearing}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[var(--ei-btn-primary-from)] text-[var(--ei-btn-primary-text)] text-sm font-semibold hover:brightness-105 shadow-[0_8px_20px_var(--ei-btn-primary-shadow)] disabled:opacity-60"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#00A6FF] text-white text-sm font-semibold hover:bg-[#0090e0] shadow-[0_8px_24px_rgba(0,166,255,0.25)] disabled:opacity-60"
           >
             <FiRefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh

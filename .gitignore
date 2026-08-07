@@ -335,8 +335,3 @@ validation-report*.log
 *.field-accuracy*.json
 /tmp-*/
 /scratch/
-
-# Word lock / temp files
-~$*
-**/~$*
-

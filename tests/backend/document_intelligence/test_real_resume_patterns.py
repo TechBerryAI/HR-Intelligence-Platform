@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -364,3 +365,187 @@ def test_dash_role_company_dates_line_parses():
     assert e.start == '2024-09'
     assert e.is_current is True
     assert e.end == ''
+
+
+def test_contact_recall_labeled_email_phone_location():
+    """Labeled contact lines and broken email must fill apply Form DTO."""
+    text = """
+PRIYA SHARMA
+Location: Navi Mumbai, Maharashtra
+Mobile: 98 76 54 32 10
+E-mail: priya.sharma
+@gmail.com
+
+SUMMARY
+Software engineer with 3 years experience.
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text)
+    assert form.email.lower() == 'priya.sharma@gmail.com'
+    assert re.sub(r'\D', '', form.phone).endswith('9876543210') or '9876543210' in re.sub(
+        r'\D', '', form.phone
+    )
+    assert 'mumbai' in (form.currentLocation or '').lower()
+    assert form.preferredLocation == form.currentLocation
+
+
+def test_contact_recall_footer_email_when_header_thin():
+    text = """
+AMIT KUMAR
+Bangalore
+
+EXPERIENCE
+Engineer at Acme
+
+EDUCATION
+B.Tech Computer Science
+IIT Bombay
+
+Contact: amit.kumar@example.com | Phone: +91-9876543210
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text)
+    assert form.email == 'amit.kumar@example.com'
+    digits = re.sub(r'\D', '', form.phone or '')
+    assert digits.endswith('9876543210')
+    assert 'bangalore' in (form.currentLocation or '').lower()
+    assert form.preferredLocation == form.currentLocation
+
+
+def test_education_institution_then_degree_coalesce():
+    section = """
+S.K Somaiya College of Arts, Science and Commerce - Mumbai            Aug 2022 to April  2024
+Masters of Arts in Entertainment Media and Advertising
+
+The SIA College of Higher Education - Mumbai              June 2019 to June 2022
+Bachelors of Mass Media - Advertising
+"""
+    rows = coalesce_education(parse_education(section))
+    assert len(rows) >= 2
+    assert rows[0].institution
+    assert rows[0].degree
+    assert 'somaiya' in rows[0].institution.lower()
+    assert 'master' in rows[0].degree.lower()
+    assert rows[1].institution and rows[1].degree
+
+
+def test_education_rejects_duty_lines_and_no_placeholder_degree():
+    from app.ai.document_intelligence.canonical.from_toon import candidate_profile_from_toon
+    from app.ai.document_intelligence.mapping.resume_form import map_candidate_to_form
+
+    section = """
+Mumbai University
+Configured MySQL master-slave replication setup
+B.Tech Computer Science - IIT Bombay
+● Managed and optimized social media platforms
+"""
+    rows = coalesce_education(parse_education(section))
+    blobs = ' '.join(f'{r.degree} {r.institution}' for r in rows).lower()
+    assert 'configured' not in blobs
+    assert 'managed and optimized' not in blobs
+    assert any('b.tech' in (r.degree or '').lower() or 'tech' in (r.degree or '').lower() for r in rows)
+
+    # Institution-only with no degree evidence must not invent degree="Education"
+    toon = {
+        'type': 'resume',
+        'person': {
+            'name': 'Test User',
+            'email': 't@example.com',
+            'phone': '9999999999',
+            'location': 'Mumbai',
+            'preferred_location': '',
+        },
+        'skills': ['Python'],
+        'experience': [],
+        'education': [
+            {'degree': '', 'institution': 'Some University of Arts', 'field': '', 'gpa': '', 'from': '', 'to': ''},
+            {'degree': 'B.Tech', 'institution': 'IIT Bombay', 'field': '', 'gpa': '', 'from': '', 'to': ''},
+        ],
+        'certifications': [],
+        'summary': '',
+    }
+    form = map_candidate_to_form(candidate_profile_from_toon(toon))
+    assert all(e.degree.strip().lower() != 'education' for e in form.education)
+    assert any('iit' in (e.institution or '').lower() for e in form.education)
+
+
+def test_location_pipe_header_and_address_label():
+    text = """
+RIYA PATEL
+Thane, Mumbai | Mobile: 7016707933 | Email: riya@example.com
+
+SUMMARY
+Engineer
+
+EDUCATION
+B.Tech Computer Science - Mumbai University
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text)
+    assert form.currentLocation
+    assert 'thane' in form.currentLocation.lower() or 'mumbai' in form.currentLocation.lower()
+    assert form.preferredLocation == form.currentLocation
+
+    text2 = """
+KARAN MEHTA
+Address: Plot 12, Sector 5, Navi Mumbai, Maharashtra 400706
+Email: karan@example.com
+Phone: 9123456789
+
+SKILLS
+Python, SQL
+"""
+    profile2, form2, _ = parse_resume_text_to_canonical(text2)
+    loc = (form2.currentLocation or '').lower()
+    assert 'mumbai' in loc or 'navi' in loc
+    assert form2.preferredLocation == form2.currentLocation
+
+
+def test_internship_section_maps_to_experience():
+    text = """
+ANANYA SHAH
+ananya@example.com | 9876543210 | Pune
+
+SKILLS
+Python, SQL
+
+INTERNSHIP
+Software Intern - Acme Labs - (Jun 2023 - Aug 2023)
+● Built internal tools
+
+EDUCATION
+B.Tech Computer Science - Pune University
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text)
+    assert len(form.experiences) >= 1
+    roles = ' '.join(e.role for e in form.experiences).lower()
+    companies = ' '.join(e.company for e in form.experiences).lower()
+    assert 'intern' in roles or 'acme' in companies
+
+
+def test_resume_coverage_recovers_footer_phone():
+    from app.ai.document_intelligence.coverage.resume_coverage import recover_resume_profile_gaps
+    from app.ai.document_intelligence.models.candidate import (
+        CandidateProfile,
+        ContactInfo,
+        PersonalInfo,
+        SkillEntry,
+    )
+
+    profile = CandidateProfile(
+        personal=PersonalInfo(full_name='Test User'),
+        contact=ContactInfo(email='t@example.com', phone='', location=''),
+        skills=[SkillEntry(canonical='Python')],
+    )
+    text = """
+Test User
+t@example.com
+Location: Hyderabad
+
+Skills: Python
+
+Phone: +91-9988776655
+"""
+    updated, report = recover_resume_profile_gaps(profile, text)
+    assert updated.contact.phone
+    assert '9988776655' in re.sub(r'\D', '', updated.contact.phone)
+    assert updated.contact.location
+    assert 'hyderabad' in updated.contact.location.lower()
+    assert 'phone' in report.recovered_fields or 'location' in report.recovered_fields
