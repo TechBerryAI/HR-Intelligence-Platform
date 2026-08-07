@@ -120,19 +120,87 @@ def create_admin():
         return jsonify({'error': 'Failed to create admin'}), 500
 
 
-@head_hr_bp.delete('/admins/<hrid>')
+@head_hr_bp.route('/admins/<hrid>', methods=['PUT', 'DELETE', 'OPTIONS'])
+@allow_options_no_auth
 @authenticate_token
 @require_head_hr
-def delete_admin(hrid):
-    existing = db_get('SELECT hrid FROM hr_signup WHERE hrid = ?', (hrid,))
+def update_or_delete_admin(hrid):
+    """PUT: update admin. DELETE: remove admin. OPTIONS: CORS preflight."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    if is_read_only(request.user):
+        return jsonify({'error': 'Read-only access'}), 403
+
+    if request.method == 'DELETE':
+        existing = db_get('SELECT hrid FROM hr_signup WHERE hrid = ?', (hrid,))
+        if not existing:
+            return jsonify({'error': 'Admin not found'}), 404
+        try:
+            db_run('DELETE FROM hr_signup WHERE hrid = ?', (hrid,))
+            return jsonify({'message': f'Admin {hrid} deleted successfully'})
+        except Exception as e:
+            print(f'[HEAD HR] Error deleting admin {hrid}: {e}')
+            return jsonify({'error': 'Failed to delete admin'}), 500
+
+    # PUT — update
+    existing = db_get(
+        'SELECT hrid, full_name, email, company FROM hr_signup WHERE hrid = ?',
+        (hrid,),
+    )
     if not existing:
         return jsonify({'error': 'Admin not found'}), 404
+
+    data = request.get_json(force=True) or {}
+    full_name = (data.get('fullName') or data.get('full_name') or '').strip()
+    company = (data.get('company') or '').strip()
+    password = (data.get('password') or '').strip()
+
+    if not full_name:
+        return jsonify({'error': 'Full name is required'}), 400
+    if not company:
+        return jsonify({'error': 'Company is required'}), 400
+    if password and len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+
     try:
-        db_run('DELETE FROM hr_signup WHERE hrid = ?', (hrid,))
-        return jsonify({'message': f'Admin {hrid} deleted successfully'})
+        if password:
+            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            db_run(
+                'UPDATE hr_signup SET full_name = ?, company = ?, password = ? WHERE hrid = ?',
+                (full_name, company, password_hash, hrid),
+            )
+            try:
+                db_run(
+                    'UPDATE hr_auth SET full_name = ?, company = ?, password_hash = ? WHERE LOWER(email) = ?',
+                    (full_name, company, password_hash, (existing.get('email') or '').lower()),
+                )
+            except Exception:
+                pass
+        else:
+            db_run(
+                'UPDATE hr_signup SET full_name = ?, company = ? WHERE hrid = ?',
+                (full_name, company, hrid),
+            )
+            try:
+                db_run(
+                    'UPDATE hr_auth SET full_name = ?, company = ? WHERE LOWER(email) = ?',
+                    (full_name, company, (existing.get('email') or '').lower()),
+                )
+            except Exception:
+                pass
+
+        return jsonify({
+            'message': 'Admin updated successfully',
+            'admin': {
+                'hrid': hrid,
+                'full_name': full_name,
+                'email': existing.get('email'),
+                'company': company,
+            },
+        })
     except Exception as e:
-        print(f'[HEAD HR] Error deleting admin {hrid}: {e}')
-        return jsonify({'error': 'Failed to delete admin'}), 500
+        print(f'[HEAD HR] Error updating admin {hrid}: {e}')
+        return jsonify({'error': 'Failed to update admin'}), 500
 
 
 # ---------------------------------------------------------------------------

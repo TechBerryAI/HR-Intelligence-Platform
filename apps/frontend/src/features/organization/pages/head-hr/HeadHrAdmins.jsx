@@ -6,7 +6,7 @@ import { isHeadHr } from '@/core/permissions/rbac.js'
 import { useAsyncAction } from '@/shared/hooks/useAsyncAction.js'
 import HeadHrLayout from './HeadHrLayout.jsx'
 import PasswordInput from '@/shared/components/PasswordInput.jsx'
-import { FiTrash2, FiRefreshCw, FiSearch, FiDownload, FiPlus, FiArrowUp, FiArrowDown } from 'react-icons/fi'
+import { FiTrash2, FiRefreshCw, FiSearch, FiDownload, FiPlus, FiArrowUp, FiArrowDown, FiEdit2 } from 'react-icons/fi'
 import { Users } from 'lucide-react'
 import { generateAdminsPdf } from '@/shared/utils/pdfReportUtils.js'
 
@@ -36,6 +36,9 @@ export default function HeadHrAdmins() {
   const [showCreate, setShowCreate] = useState(false)
   const [createForm, setCreateForm] = useState({ email: '', fullName: '', company: '', password: '' })
   const [creating, setCreating] = useState(false)
+  const [editingAdmin, setEditingAdmin] = useState(null)
+  const [editForm, setEditForm] = useState({ fullName: '', company: '', password: '' })
+  const [editSaving, setEditSaving] = useState(false)
   const canManageAdmins = isHeadHr(auth)
   const [idOrder, setIdOrder] = useState('desc') // 'asc' | 'desc'
 
@@ -102,6 +105,54 @@ export default function HeadHrAdmins() {
     } finally {
       setDeleting(null)
       setConfirmDelete(null)
+    }
+  }
+
+  const openEditAdmin = (admin) => {
+    setEditingAdmin(admin)
+    setEditForm({
+      fullName: admin.full_name || '',
+      company: admin.company || '',
+      password: '',
+    })
+  }
+
+  const closeEditAdmin = () => {
+    setEditingAdmin(null)
+    setEditForm({ fullName: '', company: '', password: '' })
+  }
+
+  const handleEditAdmin = async (e) => {
+    e.preventDefault()
+    if (!editingAdmin?.hrid) return
+    if (!editForm.fullName?.trim() || !editForm.company?.trim()) {
+      showToast('Full name and company are required', 'error')
+      return
+    }
+    if (editForm.password && editForm.password.length < 6) {
+      showToast('Password must be at least 6 characters', 'error')
+      return
+    }
+    setEditSaving(true)
+    try {
+      const token = tokenService.getToken()
+      const body = {
+        fullName: editForm.fullName.trim(),
+        company: editForm.company.trim(),
+      }
+      if (editForm.password) body.password = editForm.password
+      await apiRequest(`/api/head-hr/admins/${encodeURIComponent(editingAdmin.hrid)}`, {
+        method: 'PUT',
+        token,
+        body,
+      })
+      closeEditAdmin()
+      load()
+      showToast('Admin updated successfully')
+    } catch (err) {
+      showToast(err?.message || 'Failed to update admin', 'error')
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -200,6 +251,78 @@ export default function HeadHrAdmins() {
                   className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-colors"
                 >
                   {creating ? 'Creating…' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit admin modal */}
+      {editingAdmin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--ei-bg-secondary)] border border-[var(--ei-border-primary)] p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-[var(--ei-text-primary)]">Edit Admin</h3>
+            <p className="mt-1 text-sm text-[var(--ei-text-muted)]">
+              Update profile for {editingAdmin.email} ({editingAdmin.hrid}).
+            </p>
+            <form onSubmit={handleEditAdmin} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-[var(--ei-text-muted)] mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editingAdmin.email || ''}
+                  disabled
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] text-[var(--ei-text-muted)] opacity-70 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--ei-text-muted)] mb-1">Full name</label>
+                <input
+                  type="text"
+                  value={editForm.fullName}
+                  onChange={(e) => setEditForm((f) => ({ ...f, fullName: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] text-[var(--ei-text-primary)] placeholder:text-[var(--ei-text-placeholder)] focus:outline-none focus:border-white/40 text-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--ei-text-muted)] mb-1">Company</label>
+                <input
+                  type="text"
+                  value={editForm.company}
+                  onChange={(e) => setEditForm((f) => ({ ...f, company: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] text-[var(--ei-text-primary)] placeholder:text-[var(--ei-text-placeholder)] focus:outline-none focus:border-white/40 text-sm"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-[var(--ei-text-muted)] mb-1">
+                  New password (optional)
+                </label>
+                <PasswordInput
+                  value={editForm.password}
+                  onChange={(e) => setEditForm((f) => ({ ...f, password: e.target.value }))}
+                  className="px-3 py-2 rounded-lg bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] text-[var(--ei-text-primary)] placeholder:text-[var(--ei-text-placeholder)] focus:outline-none focus:border-white/40 text-sm"
+                  placeholder="Leave blank to keep current"
+                  minLength={6}
+                />
+              </div>
+              <div className="flex gap-3 justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={closeEditAdmin}
+                  disabled={editSaving}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--ei-text-secondary)] bg-[var(--ei-surface-hover)] hover:bg-[var(--ei-surface-hover)] border border-[var(--ei-border-primary)] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSaving}
+                  className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+                >
+                  {editSaving ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </form>
@@ -330,13 +453,23 @@ export default function HeadHrAdmins() {
                     <td className="org-td-secondary">{admin.company || '—'}</td>
                     <td className="org-td-muted">{formatDate(admin.created_at)}</td>
                     {canManageAdmins && (
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => setConfirmDelete(admin)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 border border-red-200 dark:border-red-500/30 hover:border-red-300 dark:hover:border-red-500/50 transition-all"
-                        >
-                          <FiTrash2 className="w-3.5 h-3.5" /> Delete
-                        </button>
+                      <td className="px-4 py-3 text-right whitespace-nowrap w-[1%]">
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEditAdmin(admin)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)] border border-[var(--ei-border-primary)] transition-all"
+                          >
+                            <FiEdit2 className="w-3.5 h-3.5" /> Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDelete(admin)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 border border-red-200 dark:border-red-500/30 hover:border-red-300 dark:hover:border-red-500/50 transition-all"
+                          >
+                            <FiTrash2 className="w-3.5 h-3.5" /> Delete
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
