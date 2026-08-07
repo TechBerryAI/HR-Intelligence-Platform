@@ -609,7 +609,11 @@ def record_profile_viewed(job_id: str, candidate_id: str):
 @authenticate_token
 @require_recruiter
 def update_application_status(job_id: str, candidate_id: str):
-    """Shortlist or reject candidate. Body: { "action": "shortlist" | "reject" }."""
+    """Shortlist or reject candidate. Body: { "action": "shortlist" | "reject" }.
+
+    Shortlist: send SHORTLISTED email + interview scheduling.
+    Reject: update DB only (no email) so candidates stay available for future roles.
+    """
     try:
         data = request.get_json(force=True) or {}
         action = (data.get('action') or '').strip().lower()
@@ -621,16 +625,33 @@ def update_application_status(job_id: str, candidate_id: str):
         app = db_get('SELECT id FROM applications WHERE job_id = ? AND candidate_id = ?', (job_id, candidate_id))
         if not app:
             return jsonify({'error': 'Application not found'}), 404
+
+        from app.common.application_status import STATUS_REJECTED
+
+        if action == 'reject':
+            _sl_val = False if BACKEND == 'postgresql' else 0
+            db_run(
+                'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
+                (STATUS_REJECTED, _sl_val, app['id'])
+            )
+            return jsonify({
+                'status': 'ok',
+                'profile_update': {
+                    'status': 'rejected',
+                    'status_db': STATUS_REJECTED,
+                    'status_label': 'Not Shortlisted',
+                },
+            }), 200
+
         profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
         signup = db_get('SELECT email FROM candidate_signup WHERE cid = ?', (candidate_id,))
         app['full_name'] = (profile or {}).get('full_name') or ''
         app['email'] = (profile or {}).get('email') or (signup or {}).get('email') or ''
         if not app['email']:
             return jsonify({'error': 'Candidate email not found; cannot send notification'}), 400
-        hr_action = 'SHORTLISTED' if action == 'shortlist' else 'NOT_SHORTLISTED'
         ts = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
         out = _send_notification(
-            hr_action=hr_action,
+            hr_action='SHORTLISTED',
             candidate_name=app.get('full_name') or '',
             candidate_email=app.get('email') or '',
             job_title=job.get('title') or '',
@@ -638,15 +659,13 @@ def update_application_status(job_id: str, candidate_id: str):
             application_id=app['id'],
             timestamp=ts,
         )
-        _sl = action == 'shortlist'
-        _sl_val = _sl if BACKEND == 'postgresql' else (1 if _sl else 0)
+        _sl_val = True if BACKEND == 'postgresql' else 1
         db_run(
             'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
             (out['profile_update']['status_db'], _sl_val, app['id'])
         )
-        if action == 'shortlist':
-            from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
-            trigger_interview_scheduling(app['id'], recruiter_hrid=get_user_id(request.user))
+        from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
+        trigger_interview_scheduling(app['id'], recruiter_hrid=get_user_id(request.user))
         return jsonify({'status': 'ok', 'profile_update': out['profile_update']}), 200
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
@@ -1077,6 +1096,23 @@ def public_apply_to_job(job_id: str):
 
         if shortlisted and app_id:
             from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
+            from app.domains.recruitment.services.notifications import send_and_get_output
+            profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
+            signup = db_get('SELECT email FROM candidate_signup WHERE cid = ?', (candidate_id,))
+            candidate_email = (profile or {}).get('email') or (signup or {}).get('email') or email or ''
+            if candidate_email:
+                try:
+                    send_and_get_output(
+                        hr_action='SHORTLISTED',
+                        candidate_name=(profile or {}).get('full_name') or full_name or '',
+                        candidate_email=candidate_email,
+                        job_title=job.get('title') or '',
+                        company_name=job.get('company') or '',
+                        application_id=app_id,
+                        timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+                    )
+                except Exception as notify_err:
+                    print(f"[PUBLIC_APPLY] SHORTLISTED notification failed: {notify_err}")
             trigger_interview_scheduling(app_id, recruiter_hrid=job.get('posted_by'))
 
         return jsonify({

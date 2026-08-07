@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
@@ -12,6 +12,31 @@ function formatDate(ts) {
   return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
+const SCORE_FILTERS = [
+  { id: 'all', label: 'All', min: 0, max: 100 },
+  { id: '80+', label: '80% and above', min: 80, max: 100 },
+  { id: '70-80', label: '70-80%', min: 70, max: 80 },
+  { id: '60-70', label: '60-70%', min: 60, max: 70 },
+  { id: '50-60', label: '50-60%', min: 50, max: 60 },
+  { id: '40-50', label: '40-50%', min: 40, max: 50 },
+  { id: 'below-40', label: '40% and below', min: 0, max: 40 },
+]
+
+function getApplicantScore(app) {
+  const { score } = getApplicationDisplayMatch(app)
+  if (score != null && Number.isFinite(Number(score))) return Number(score)
+  const fallback = app.match_score ?? app.matchScore ?? app.score
+  return fallback != null && Number.isFinite(Number(fallback)) ? Number(fallback) : null
+}
+
+function scoreMatchesFilter(score, filter) {
+  if (filter.id === 'all') return true
+  if (score == null || !Number.isFinite(score)) return false
+  if (filter.id === '80+') return score >= 80 && score <= 100
+  if (filter.id === 'below-40') return score >= 0 && score < 40
+  return score >= filter.min && score < filter.max
+}
+
 export default function HeadHrJobDetail() {
   const { jdid } = useParams()
   const navigate = useNavigate()
@@ -22,6 +47,7 @@ export default function HeadHrJobDetail() {
   const [applicants, setApplicants] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [selectedFilter, setSelectedFilter] = useState('all')
 
   useEffect(() => {
     let cancelled = false
@@ -40,6 +66,7 @@ export default function HeadHrJobDetail() {
             (a) => String(a.job_id || a.jobId) === String(jdid),
           )
           setApplicants(forJob)
+          setSelectedFilter('all')
         }
       } catch (err) {
         if (!cancelled) setError(err?.message || 'Failed to load job')
@@ -50,6 +77,36 @@ export default function HeadHrJobDetail() {
     load()
     return () => { cancelled = true }
   }, [jdid])
+
+  const filterCounts = useMemo(() => {
+    const counts = {}
+    for (const filter of SCORE_FILTERS) {
+      counts[filter.id] = applicants.filter((app) => scoreMatchesFilter(getApplicantScore(app), filter)).length
+    }
+    return counts
+  }, [applicants])
+
+  const visibleFilters = useMemo(
+    () => SCORE_FILTERS.filter((f) => f.id === 'all' || (filterCounts[f.id] || 0) > 0),
+    [filterCounts],
+  )
+
+  useEffect(() => {
+    if (!visibleFilters.some((f) => f.id === selectedFilter)) {
+      setSelectedFilter('all')
+    }
+  }, [visibleFilters, selectedFilter])
+
+  const filteredApplicants = useMemo(() => {
+    const filter = SCORE_FILTERS.find((f) => f.id === selectedFilter) || SCORE_FILTERS[0]
+    return applicants
+      .filter((app) => scoreMatchesFilter(getApplicantScore(app), filter))
+      .sort((a, b) => {
+        const scoreA = getApplicantScore(a) ?? -1
+        const scoreB = getApplicantScore(b) ?? -1
+        return scoreB - scoreA
+      })
+  }, [applicants, selectedFilter])
 
   if (loading) {
     return (
@@ -219,60 +276,87 @@ export default function HeadHrJobDetail() {
                 <FiUsers className="w-4 h-4" /> Applied candidates
               </h2>
               <span className="text-xs text-[var(--ei-text-muted)]">
-                {applicants.length} applicant{applicants.length === 1 ? '' : 's'}
+                {filteredApplicants.length} of {applicants.length} applicant{applicants.length === 1 ? '' : 's'}
               </span>
             </div>
             {applicants.length === 0 ? (
               <p className="text-sm text-[var(--ei-text-muted)] py-4">No applications for this job yet.</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--ei-border-primary)] text-left">
-                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Candidate</th>
-                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Email</th>
-                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Match</th>
-                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Status</th>
-                      <th className="pb-2.5 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Applied</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--ei-border-primary)]">
-                    {applicants.map((app) => {
-                      const { score } = getApplicationDisplayMatch(app)
-                      const status = String(app.status || 'applied').toLowerCase()
+              <>
+                {visibleFilters.length > 1 && (
+                  <div className="flex flex-wrap gap-2 mb-4" role="tablist" aria-label="Filter by match score">
+                    {visibleFilters.map((filter) => {
+                      const count = filterCounts[filter.id] || 0
+                      const active = selectedFilter === filter.id
                       return (
-                        <tr
-                          key={app.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => openCandidate(app.candidate_id)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault()
-                              openCandidate(app.candidate_id)
-                            }
-                          }}
-                          className="cursor-pointer transition-colors duration-[180ms] hover:bg-[var(--ei-surface-hover)] focus:outline-none focus-visible:bg-[var(--ei-surface-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#3AA9FF]/35"
+                        <button
+                          key={filter.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={active}
+                          onClick={() => setSelectedFilter(filter.id)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors duration-[180ms] ${
+                            active
+                              ? 'bg-[var(--ei-surface-hover)] border-[var(--ei-border-strong,var(--ei-border-primary))] text-[var(--ei-text-primary)]'
+                              : 'bg-transparent border-[var(--ei-border-primary)] text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)]'
+                          }`}
                         >
-                          <td className="py-3 pr-3 text-[var(--ei-text-primary)] font-medium">{app.candidate_name || app.candidate_id}</td>
-                          <td className="py-3 pr-3 text-[var(--ei-text-secondary)]">{app.candidate_email || '—'}</td>
-                          <td className="py-3 pr-3 tabular-nums font-semibold">
-                            {score != null ? (
-                              <span className={score >= 60 ? 'text-[var(--ei-tone-success)]' : 'text-[var(--ei-tone-warning)]'}>{score}%</span>
-                            ) : (
-                              <span className="text-[var(--ei-text-muted)]">—</span>
-                            )}
-                          </td>
-                          <td className="py-3 pr-3 capitalize text-[var(--ei-text-secondary)]">
-                            {app.shortlisted ? 'Shortlisted' : status === 'ats_failed' ? 'ATS failed' : status}
-                          </td>
-                          <td className="py-3 text-[var(--ei-text-muted)]">{formatDate(app.applied_at)}</td>
-                        </tr>
+                          {filter.label}
+                          <span className="tabular-nums opacity-80">({count})</span>
+                        </button>
                       )
                     })}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[var(--ei-border-primary)] text-left">
+                        <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Candidate</th>
+                        <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Email</th>
+                        <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Match</th>
+                        <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Status</th>
+                        <th className="pb-2.5 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Applied</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--ei-border-primary)]">
+                      {filteredApplicants.map((app) => {
+                        const score = getApplicantScore(app)
+                        const status = String(app.status || 'applied').toLowerCase()
+                        return (
+                          <tr
+                            key={app.id}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => openCandidate(app.candidate_id)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                openCandidate(app.candidate_id)
+                              }
+                            }}
+                            className="cursor-pointer transition-colors duration-[180ms] hover:bg-[var(--ei-surface-hover)] focus:outline-none focus-visible:bg-[var(--ei-surface-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#3AA9FF]/35"
+                          >
+                            <td className="py-3 pr-3 text-[var(--ei-text-primary)] font-medium">{app.candidate_name || app.candidate_id}</td>
+                            <td className="py-3 pr-3 text-[var(--ei-text-secondary)]">{app.candidate_email || '—'}</td>
+                            <td className="py-3 pr-3 tabular-nums font-semibold">
+                              {score != null ? (
+                                <span className={score >= 80 ? 'text-[var(--ei-tone-success)]' : 'text-[var(--ei-tone-warning)]'}>{Math.round(score)}%</span>
+                              ) : (
+                                <span className="text-[var(--ei-text-muted)]">—</span>
+                              )}
+                            </td>
+                            <td className="py-3 pr-3 capitalize text-[var(--ei-text-secondary)]">
+                              {app.shortlisted ? 'Shortlisted' : status === 'ats_failed' ? 'ATS failed' : status}
+                            </td>
+                            <td className="py-3 text-[var(--ei-text-muted)]">{formatDate(app.applied_at)}</td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}

@@ -141,7 +141,7 @@ function filterRequirementRows(rows) {
 export function getRequirementAnalysis(jsonOut = {}) {
   const skillsAnalysis = jsonOut?.evaluation_report?.skills_analysis ?? {}
   const storedPct = jsonOut?.mandatory_skills_match_pct ?? skillsAnalysis?.mandatory_skills_match_pct
-  const threshold = 60
+  const threshold = 40
 
   const existing = jsonOut?.requirement_analysis
   let mandatory = []
@@ -425,7 +425,7 @@ export function getComparisonBoard(jsonOut = {}, { score } = {}) {
   }))
 
   const gate = req.gate || {}
-  const gateFailed = Boolean(gate.mandatory_defined) && Number(gate.mandatory_pct) < (gate.threshold || 60)
+  const gateFailed = Boolean(gate.mandatory_defined) && Number(gate.mandatory_pct) < (gate.threshold || 40)
   const matchedCount = skillRows.filter((r) => r.status === 'match').length
   const missingCount = skillRows.filter((r) => r.status === 'missing').length
 
@@ -554,12 +554,12 @@ export function reconcileMatchScores(jsonOut = {}, { storedScore } = {}) {
 
   const overall = Math.round((skillsScore * 0.6 + exp * 0.25 + edu * 0.1 + loc * 0.05) * 10) / 10
   const gate = req.gate || {}
-  const gateFailed = Boolean(gate.mandatory_defined) && Number(gate.mandatory_pct) < (gate.threshold || 60)
+  const gateFailed = Boolean(gate.mandatory_defined) && Number(gate.mandatory_pct) < (gate.threshold || 40)
 
   let verdict = 'Not a Match'
   if (!gateFailed) {
-    if (overall >= 75) verdict = 'Strong Match'
-    else if (overall >= 60) verdict = 'Potential Match (Recruiter Review)'
+    if (overall >= 80) verdict = 'Strong Match'
+    else if (overall >= 40) verdict = 'Potential Match (Recruiter Review)'
   }
 
   if (!adjusted && Number.isFinite(originalOverall) && Math.abs(overall - originalOverall) < 1) {
@@ -707,7 +707,7 @@ export function getDecisionExplanation(jsonOut = {}, { score } = {}) {
     const req = getRequirementAnalysis(jsonOut)
     const matched = (req.mandatory || []).filter((r) => r.status === 'matched').map((r) => r.skill)
     const missing = (req.mandatory || []).filter((r) => r.status === 'missing').map((r) => r.skill)
-    const gateFailed = req.gate?.mandatory_defined && Number(req.gate?.mandatory_pct) < (req.gate?.threshold || 60)
+    const gateFailed = req.gate?.mandatory_defined && Number(req.gate?.mandatory_pct) < (req.gate?.threshold || 40)
     const baseReasons = Array.isArray(existing.category_reasons) && existing.category_reasons.length
       ? existing.category_reasons
       : (Array.isArray(jsonOut?.category_reasons) && jsonOut.category_reasons.length
@@ -731,7 +731,7 @@ export function getDecisionExplanation(jsonOut = {}, { score } = {}) {
       preferred_matched: (req.preferred || []).filter((r) => r.status === 'matched').map((r) => r.skill),
       preferred_missing: (req.preferred || []).filter((r) => r.status === 'missing').map((r) => r.skill),
       mandatory_match_pct: req.gate?.mandatory_pct ?? existing.skills_evidence?.mandatory_match_pct,
-      gate_threshold: req.gate?.threshold || 60,
+      gate_threshold: req.gate?.threshold || 40,
       gate_passed: !gateFailed,
       comparisons: [
         ...matched.map((s) => ({ skill: s, status: 'present', present: true, needed: true })),
@@ -755,10 +755,10 @@ export function getDecisionExplanation(jsonOut = {}, { score } = {}) {
   const overall = score != null ? score : Number(jsonOut?.overall_match_score ?? jsonOut?.final_score ?? 0)
   const missing = (req.mandatory || []).filter((r) => r.status === 'missing').map((r) => r.skill)
   const matched = (req.mandatory || []).filter((r) => r.status === 'matched').map((r) => r.skill)
-  const gateFailed = gate.mandatory_defined && Number(gate.mandatory_pct) < (gate.threshold || 60)
+  const gateFailed = gate.mandatory_defined && Number(gate.mandatory_pct) < (gate.threshold || 40)
 
   let outcome = 'reject'
-  let outcome_label = 'Not selected'
+  let outcome_label = 'Low match'
   if (/strong match/i.test(verdict)) {
     outcome = 'shortlist'
     outcome_label = 'Auto-shortlist'
@@ -772,11 +772,11 @@ export function getDecisionExplanation(jsonOut = {}, { score } = {}) {
   if (gateFailed) {
     primary_reason = primary_reason || (
       missing.length
-        ? `Rejected: only ${gate.mandatory_pct}% of mandatory skills matched (need at least ${gate.threshold || 60}%). Still missing: ${missing.slice(0, 5).join(', ')}.`
-        : `Rejected: mandatory skills match is ${gate.mandatory_pct}% (below the ${gate.threshold || 60}% minimum).`
+        ? `Low match: only ${gate.mandatory_pct}% of mandatory skills matched (need at least ${gate.threshold || 40}%). Still missing: ${missing.slice(0, 5).join(', ')}.`
+        : `Low match: mandatory skills match is ${gate.mandatory_pct}% (below the ${gate.threshold || 40}% minimum).`
     )
     what_happened.push(
-      `The mandatory skills gate failed at ${gate.mandatory_pct}% (need ${gate.threshold || 60}%), so the candidate is rejected even if experience or education look strong.`,
+      `The mandatory skills gate is below ${gate.threshold || 40}% (${gate.mandatory_pct}%), so overall fit is treated as a low match even if experience or education look strong.`,
     )
     if (missing.length) {
       what_happened.push(`Missing mandatory skills that drove this decision: ${missing.slice(0, 8).join(', ')}.`)
@@ -791,8 +791,8 @@ export function getDecisionExplanation(jsonOut = {}, { score } = {}) {
     primary_reason = primary_reason || `Hold for recruiter review at ${overall}%.`
     what_happened.push(`Gate passed but overall score ${overall}% is below the auto-shortlist bar.`)
   } else {
-    primary_reason = primary_reason || `Rejected: overall score ${overall}% is below the match floor.`
-    what_happened.push(`Overall score ${overall}% did not meet the minimum match threshold.`)
+    primary_reason = primary_reason || `Low match: overall score ${overall}% is below the review floor.`
+    what_happened.push(`Overall score ${overall}% is below the 40% review floor.`)
   }
 
   const expScore = Number(breakdown.experience)
@@ -801,14 +801,14 @@ export function getDecisionExplanation(jsonOut = {}, { score } = {}) {
     reconciliation =
       `Experience scored ${expScore}% because the resume title/domain aligns with the role. ` +
       `That does not replace the skills checklist — mandatory skills still only matched ` +
-      `${gate.mandatory_pct}%, so the gate fails and the candidate is not selected.`
+      `${gate.mandatory_pct}%, so the gate fails and the candidate is treated as a low match.`
   }
 
   const score_math = jsonOut?.score_math || buildScoreMathFromBreakdown(jsonOut, overall)
   const next_step = {
     shortlist: 'Move this candidate to the next hiring stage.',
     review: 'Review the missing skills below, then decide to shortlist or reject.',
-    reject: 'Do not shortlist on ATS rules alone. Override only with clear hiring context outside this comparison.',
+    reject: 'Keep in the talent pool for future roles, or shortlist only with clear hiring context.',
   }[outcome]
 
   const category_reasons = refreshSkillsCategory(
@@ -835,10 +835,10 @@ export function getDecisionExplanation(jsonOut = {}, { score } = {}) {
     primary_reason,
     what_happened,
     rules_applied: [
-      'A candidate must have most mandatory skills (at least 60%) or they are not selected.',
-      'Strong overall fit (75%+) with the skills gate passed → auto-shortlist.',
-      'Decent overall fit (60–74%) with the skills gate passed → recruiter review.',
-      'Below 60% overall, or skills gate failed → not a match.',
+      'A candidate must have most mandatory skills (at least 40%) or they are a low match.',
+      'Strong overall fit (80%+) with the skills gate passed → auto-shortlist.',
+      'Overall fit (40–79%) with the skills gate passed → recruiter review.',
+      'Below 40% overall, or skills gate failed → low match (talent pool).',
     ],
     score_math,
     category_reasons,
@@ -848,7 +848,7 @@ export function getDecisionExplanation(jsonOut = {}, { score } = {}) {
       preferred_matched: (req.preferred || []).filter((r) => r.status === 'matched').map((r) => r.skill),
       preferred_missing: (req.preferred || []).filter((r) => r.status === 'missing').map((r) => r.skill),
       mandatory_match_pct: gate.mandatory_pct,
-      gate_threshold: gate.threshold || 60,
+      gate_threshold: gate.threshold || 40,
       gate_passed: !gateFailed,
       comparisons: [
         ...matched.map((s) => ({ skill: s, status: 'present', present: true, needed: true })),
@@ -1041,12 +1041,12 @@ export function getDecisionSummary(jsonOut = {}, { score, status, atsReasoning }
   const mandatoryPct = req.gate?.mandatory_pct ?? jsonOut?.mandatory_skills_match_pct
   const verdict = (jsonOut?.verdict || '').trim()
 
-  if (mandatoryPct != null && Number(mandatoryPct) < 60) {
+  if (mandatoryPct != null && Number(mandatoryPct) < 40) {
     const extra = missing.length ? ` Still missing: ${missing.join(', ')}.` : ''
-    return `Rejected: only ${Number(mandatoryPct)}% of mandatory skills matched (need at least 60%).${extra}`
+    return `Low match: only ${Number(mandatoryPct)}% of mandatory skills matched (need at least 40%).${extra}`
   }
   if (verdict && /not a match/i.test(verdict) && score != null) {
-    return `Rejected: overall score is ${score}%, below the required threshold for this role.`
+    return `Low match: overall score is ${score}%, below the review floor for this role.`
   }
   if (verdict && /strong match/i.test(verdict) && score != null) {
     return `Selected for auto-shortlist at ${score}%. Candidate meets or exceeds key requirements.`

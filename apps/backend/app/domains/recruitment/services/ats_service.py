@@ -9,9 +9,9 @@ REFACTORED MODEL (technical roles):
 - Location / Availability: 5%
 Total = 100%
 
-Mandatory Skills Gate: If Mandatory Skills Match % < 60%, candidate is AUTO-DISQUALIFIED (Not a Match).
-Shortlisting: 75-100% Strong Match → auto-shortlist; 60-74% Potential Match → recruiter review (not auto-shortlisted);
-              <60% or mandatory<60% → Not a Match.
+Mandatory Skills Gate: If Mandatory Skills Match % < 40%, candidate is Not a Match (quiet talent pool).
+Shortlisting: 80-100% Strong Match → auto-shortlist; 40-79% Potential Match → recruiter review (not auto-shortlisted);
+              <40% or mandatory<40% → Not a Match (kept as Applied for talent pool; not auto-Rejected).
 """
 import os
 import json
@@ -23,7 +23,7 @@ from app.core.timing import timing
 ATS_API_URL = (os.getenv('ATS_API_URL') or '').rstrip('/')
 ATS_API_KEY = os.getenv('ATS_API_KEY', '')
 # Auto-shortlist threshold: overall match score must be ≥ this value (Strong Match).
-ATS_THRESHOLD = int(os.getenv('ATS_THRESHOLD', '75'))
+ATS_THRESHOLD = int(os.getenv('ATS_THRESHOLD', '80'))
 
 # ---------------------------------------------------------------------------
 # Weights (technical roles) - total 100%
@@ -39,10 +39,10 @@ WEIGHT_LOCATION = 0.05
 WEIGHT_SKILLS = WEIGHT_SKILLS_TOTAL
 
 # Thresholds
-MANDATORY_SKILLS_MIN_PCT = 60.0   # Below this → auto Not a Match
-VERDICT_STRONG_MIN = 75.0         # 75–100% → Strong Match (auto-shortlist)
-VERDICT_POTENTIAL_MIN = 60.0      # 60–74% → Potential Match (recruiter review, NOT auto-shortlisted)
-# Below 60% or mandatory < 60% → Not a Match
+MANDATORY_SKILLS_MIN_PCT = 40.0   # Below this → Not a Match (talent pool)
+VERDICT_STRONG_MIN = 80.0         # 80–100% → Strong Match (auto-shortlist)
+VERDICT_POTENTIAL_MIN = 40.0      # 40–79% → Potential Match (recruiter review, NOT auto-shortlisted)
+# Below 40% or mandatory < 40% → Not a Match (quiet talent pool)
 AUTO_SHORTLIST_MIN = float(os.getenv('ATS_AUTO_SHORTLIST_MIN', str(VERDICT_STRONG_MIN)))
 
 # Cap: no category above 50% when direct evidence is missing
@@ -203,12 +203,12 @@ def _build_decision_summary(
         missing_preview = ", ".join(missing_mand[:5])
         if missing_preview:
             return (
-                f"Rejected: only {gate.get('mandatory_pct')}% of mandatory skills matched "
+                f"Low match: only {gate.get('mandatory_pct')}% of mandatory skills matched "
                 f"(need at least {gate.get('threshold')}%). Still missing: {missing_preview}."
             )
         return (
-            f"Rejected: mandatory skills match is {gate.get('mandatory_pct')}% "
-            f"(below the {gate.get('threshold')}% minimum). Auto-disqualified regardless of other scores."
+            f"Low match: mandatory skills match is {gate.get('mandatory_pct')}% "
+            f"(below the {gate.get('threshold')}% minimum)."
         )
     if verdict == "Strong Match":
         matched_preview = ", ".join(matched_mand[:5]) or "required skills"
@@ -229,7 +229,7 @@ def _build_decision_summary(
     )
     gap_note = f" Main gaps: {gaps}." if gaps else ""
     return (
-        f"Rejected: overall score {overall}% is below the {VERDICT_POTENTIAL_MIN}% match floor.{gap_note}"
+        f"Low match: overall score {overall}% is below the {VERDICT_POTENTIAL_MIN}% review floor.{gap_note}"
     )
 
 
@@ -277,7 +277,7 @@ def _build_category_reasons(
             f"Missing: {', '.join(missing_mand[:8])}. "
             f"That is a {mand_pct}% mandatory match"
             + (
-                f" (below the {MANDATORY_SKILLS_MIN_PCT}% minimum, so auto-reject)."
+                f" (below the {MANDATORY_SKILLS_MIN_PCT}% minimum)."
                 if (mand_pct or 0) < MANDATORY_SKILLS_MIN_PCT
                 else "."
             )
@@ -565,10 +565,10 @@ def _build_decision_explanation(
     )
 
     rules = [
-        "A candidate must have most mandatory skills (at least 60%) or they are not selected.",
-        "Strong overall fit (75%+) with the skills gate passed → auto-shortlist.",
-        "Decent overall fit (60–74%) with the skills gate passed → recruiter review.",
-        "Below 60% overall, or skills gate failed → not a match.",
+        f"A candidate must have most mandatory skills (at least {int(MANDATORY_SKILLS_MIN_PCT)}%) or they are a low match.",
+        f"Strong overall fit ({int(VERDICT_STRONG_MIN)}%+) with the skills gate passed → auto-shortlist.",
+        f"Overall fit ({int(VERDICT_POTENTIAL_MIN)}–{int(VERDICT_STRONG_MIN) - 1}%) with the skills gate passed → recruiter review.",
+        f"Below {int(VERDICT_POTENTIAL_MIN)}% overall, or skills gate failed → low match (talent pool).",
     ]
 
     what_happened = []
@@ -954,7 +954,8 @@ def _compute_location_score(parsed_resume: dict, parsed_jd: dict) -> float:
 def _verdict_from_score(overall: float, mandatory_skills_match_pct: float, mandatory_skills_defined: bool) -> str:
     """
     Verdict: Strong Match / Potential Match (Recruiter Review) / Not a Match.
-    Mandatory skills < 60% → Not a Match regardless of overall.
+    Mandatory skills < MANDATORY_SKILLS_MIN_PCT → Not a Match regardless of overall.
+    Not a Match stays Applied (talent pool); it does not auto-Reject the application.
     """
     if mandatory_skills_defined and mandatory_skills_match_pct < MANDATORY_SKILLS_MIN_PCT:
         return "Not a Match"
@@ -1246,8 +1247,8 @@ def match_candidate_to_job(candidate_id: str, job_id: str, parsed_resume: dict, 
 
     json_output = _internal_match(parsed_resume, parsed_jd)
     overall = float(json_output.get("overall_match_score") or 0)
-    # Auto-shortlist only Strong Match (≥ AUTO_SHORTLIST_MIN, default 75%).
-    # Potential Match (60–74%) stays for recruiter review — not auto-shortlisted.
+    # Auto-shortlist only Strong Match (≥ AUTO_SHORTLIST_MIN, default 80%).
+    # Potential Match (40–79%) stays for recruiter review — not auto-shortlisted.
     auto_shortlist = (
         json_output["decision"] == "strong_match"
         and overall >= AUTO_SHORTLIST_MIN
