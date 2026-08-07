@@ -181,12 +181,15 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 ├── packages/             # Shared path helpers (knowledge)
 ├── ai/                   # AI platform (runtime, providers, capabilities, dataset, toon)
 └── docs/
-    ├── README.md            # Documentation index
-    ├── DEVELOPMENT.md       # Local setup
-    ├── MEDIA_AND_BACKUPS.md # Durable media + backup commands
-    ├── ARCHITECTURE.md      # Product & system architecture
-    ├── ENGINEERING.md       # APIs, backend, frontend
-    └── HISTORY.md           # Sprint freeze / migration history
+    ├── README.md
+    ├── WORKFLOWS.md
+    ├── DEVELOPMENT.md
+    ├── MEDIA_AND_BACKUPS.md
+    ├── DOCUMENT_INTELLIGENCE.md
+    ├── AI_WORKFLOW.md
+    ├── AI_DATA_PIPELINE.md
+    ├── ADRS.md
+    └── user-manual/         # Word/PDF + screenshots (only subfolder)
 ```
 
 ---
@@ -203,7 +206,7 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 | Admin | `/api/admin` | `POST /bulk-parse/upload`, `GET /bulk-parse/progress/:id`, `GET /job-matches` |
 | Head of HR | `/api/head-hr` | `GET /stats`, `GET /admins`, `GET /candidates`, `GET /jobs`, `GET /applications` |
 
-For full route details, inspect Flask blueprints under `apps/backend/` (see [docs/ENGINEERING.md](docs/ENGINEERING.md) for narrative).
+For full route details, inspect Flask blueprints under `apps/backend/` (see [docs/WORKFLOWS.md](docs/WORKFLOWS.md)).
 
 ---
 
