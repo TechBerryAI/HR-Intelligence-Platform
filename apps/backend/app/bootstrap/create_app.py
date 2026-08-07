@@ -290,13 +290,25 @@ def create_app() -> Flask:
 
     try:
         from app.core import media_storage, site_assets
+        from app.core.data_home import ensure_data_layout
+        layout = ensure_data_layout()
         root = media_storage.get_media_root()
         media_storage.ensure_hero_video()
         hero = site_assets.ensure_hero_video_in_db()
         size = int(hero.get('byte_size') or 0) if hero else 0
-        print(f"[MEDIA] MEDIA_ROOT={root} hero_db_bytes={size}")
+        print(
+            f"[MEDIA] DATA_HOME={layout['data_home']} "
+            f"MEDIA_ROOT={root} BACKUPS={layout['backups']} "
+            f"hero_db_bytes={size}"
+        )
     except Exception as e:
         print(f"[MEDIA] Init warning: {e}")
+
+    try:
+        from app.core.backup_scheduler import start_backup_scheduler
+        start_backup_scheduler()
+    except Exception as e:
+        print(f"[backup] scheduler warning: {e}")
 
     try:
         from app.domains.integrations.bootstrap import init_integrations

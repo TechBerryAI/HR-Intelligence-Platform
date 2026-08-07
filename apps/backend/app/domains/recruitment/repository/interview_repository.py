@@ -204,7 +204,7 @@ def get_application_context(application_id: int) -> dict | None:
         FROM applications a
         JOIN jobs j ON j.jdid = a.job_id
         LEFT JOIN candidate_profiles cp ON cp.candidate_id = a.candidate_id
-        LEFT JOIN candidate_signup cs ON cs.cid = a.candidate_id
+        LEFT JOIN candidates cs ON cs.cid = a.candidate_id
         LEFT JOIN hr_signup hr ON hr.hrid = j.posted_by
         WHERE a.id = ?
         ''',

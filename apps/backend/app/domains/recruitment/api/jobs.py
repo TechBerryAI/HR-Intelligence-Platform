@@ -373,7 +373,7 @@ def get_job_applications(job_id: str):
                 cs.name as candidate_name
             FROM applications a
             INNER JOIN candidate_profiles cp ON a.candidate_id = cp.candidate_id
-            LEFT JOIN candidate_signup cs ON a.candidate_id = cs.cid
+            LEFT JOIN candidates cs ON a.candidate_id = cs.cid
             LEFT JOIN matches m ON m.id = a.latest_match_id
             WHERE a.job_id = ?
             ORDER BY COALESCE(m.matching_percentage, a.matching_percentage) DESC NULLS LAST,
@@ -586,7 +586,7 @@ def record_profile_viewed(job_id: str, candidate_id: str):
                 }
             }), 200
         profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
-        signup = db_get('SELECT email FROM candidate_signup WHERE cid = ?', (candidate_id,))
+        signup = db_get('SELECT email FROM candidates WHERE cid = ?', (candidate_id,))
         app['full_name'] = (profile or {}).get('full_name') or ''
         app['email'] = (profile or {}).get('email') or (signup or {}).get('email') or ''
         ts = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -655,7 +655,7 @@ def update_application_status(job_id: str, candidate_id: str):
             }), 200
 
         profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
-        signup = db_get('SELECT email FROM candidate_signup WHERE cid = ?', (candidate_id,))
+        signup = db_get('SELECT email FROM candidates WHERE cid = ?', (candidate_id,))
         app['full_name'] = (profile or {}).get('full_name') or ''
         app['email'] = (profile or {}).get('email') or (signup or {}).get('email') or ''
         if not app['email']:
@@ -1001,7 +1001,7 @@ def _parse_json_field(raw, default=None):
 def public_apply_to_job(job_id: str):
     """
     Public apply (no account): multipart form with profile fields + resume.
-    Creates/updates passwordless candidate_signup, saves profile, runs ATS, persists application.
+    Creates/updates passwordless candidates, saves profile, runs ATS, persists application.
     """
     try:
         is_multipart = request.content_type and 'multipart/form-data' in request.content_type
@@ -1109,7 +1109,7 @@ def public_apply_to_job(job_id: str):
             from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
             from app.domains.recruitment.services.notifications import send_and_get_output
             profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
-            signup = db_get('SELECT email FROM candidate_signup WHERE cid = ?', (candidate_id,))
+            signup = db_get('SELECT email FROM candidates WHERE cid = ?', (candidate_id,))
             candidate_email = (profile or {}).get('email') or (signup or {}).get('email') or email or ''
             if candidate_email:
                 try:

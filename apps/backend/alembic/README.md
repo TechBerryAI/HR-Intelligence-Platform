@@ -50,16 +50,22 @@ alembic upgrade head
 | `20260807_0008` | Platform scaffold (later dropped — was empty) |
 | `20260807_0009` | Drop unused scaffold tables; keep `organizations` only |
 | `20260807_0010` | Drop offers/events; merge hr_login→login_history; HRAuth→hr_signup |
+| `20260807_0011` | Rename `candidate_signup`→`candidates`; login_history HR-only |
+| `20260807_0012` | `site_assets.content_sha256` for media-volume checksum verify |
 
 Fresh empty DB: apply `schema_pg` via baseline `20260806_0001` (or `python -c` schema_apply), then `alembic upgrade head`.
 
 
-## Blob offload
+## Catalog + media volume
 
-New uploads write bytes to `MEDIA_ROOT` (S3-swappable via `media_storage`).  
-Legacy `raw_files.file_data` / profile BYTEA can be migrated with:
+Postgres = catalog (hashes, keys). Durable bytes + backups: see **[docs/MEDIA_AND_BACKUPS.md](../../../docs/MEDIA_AND_BACKUPS.md)**.
 
 ```bash
 cd apps/backend
+alembic upgrade head
 python -m app.database.scripts.offload_blobs --limit 100
+python -m app.database.scripts.offload_blobs --normalize-keys --limit 300
+python -m app.database.scripts.offload_blobs --clear-pg --limit 100  # after verify
+python -m app.database.scripts.offload_blobs --verify-only
+python -m app.database.scripts.backup_hcip --force
 ```

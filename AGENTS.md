@@ -4,6 +4,7 @@
 
 - End-user manuals: `docs/user-manual/` (Word/PDF with live screenshots).
 - Local setup: `docs/DEVELOPMENT.md`.
+- Media + backups (commands): `docs/MEDIA_AND_BACKUPS.md`.
 - Docs index: `docs/README.md`.
 - Prefer live code over `docs/ARCHITECTURE.md` / `docs/ENGINEERING.md` when they disagree.
 

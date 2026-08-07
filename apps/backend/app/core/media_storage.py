@@ -1,11 +1,20 @@
 """Configurable media volume storage (outside the git tree).
 
-Files live under MEDIA_ROOT. Postgres / callers store opaque keys like
-``media:uploads/{name}`` or relative paths under that root — never absolute
+Catalog model
+-------------
+Postgres holds the source of truth for *what* exists (id, mime, size,
+``file_hash`` / ``content_sha256``, ``storage_url``). Bytes live under
+``MEDIA_ROOT``. Keys look like ``media:uploads/{name}`` — never absolute
 repo paths. Swap this module later for S3 without changing callers.
+
+Integrity
+---------
+Writes verify the on-disk SHA-256 matches the payload before returning.
+Reads can require an expected digest via ``read_verified``.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 from pathlib import Path
@@ -21,34 +30,100 @@ HERO_VIDEO_REL = 'public/website-hero.mp4'
 HERO_VIDEO_KEY = f'{KEY_PREFIX}{HERO_VIDEO_REL}'
 
 
+class MediaIntegrityError(Exception):
+    """On-disk bytes do not match the catalog checksum."""
+
+
+def sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def sha256_file(path: Path, *, chunk_size: int = 1024 * 1024) -> str:
+    h = hashlib.sha256()
+    with open(path, 'rb') as fh:
+        while True:
+            chunk = fh.read(chunk_size)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def get_media_root() -> Path:
-    """Resolve MEDIA_ROOT. Prefer env; else <repo>/.media (gitignored)."""
+    """Resolve MEDIA_ROOT.
+
+    Prefer ``MEDIA_ROOT`` env; else durable ``{HCIP_DATA_HOME}/media``
+    (outside the project). Legacy ``<repo>/.media`` is copied once if needed.
+    """
+    from app.core.data_home import get_media_root_default
+
     raw = (os.getenv('MEDIA_ROOT') or '').strip()
     if raw:
         root = Path(raw).expanduser().resolve()
     else:
-        # Fallback: UPLOAD_FOLDER parent if set to a non-package path, else repo/.media
         upload = (os.getenv('UPLOAD_FOLDER') or '').strip()
         if upload:
-            # Relative legacy defaults must not depend on process CWD
-            # (repo-root vs apps/backend would otherwise pick different roots).
             norm = upload.replace('\\', '/').rstrip('/')
             if norm in ('./uploads', 'uploads', 'backend/uploads', 'apps/backend/uploads'):
-                root = (_REPO_ROOT / '.media').resolve()
+                root = get_media_root_default()
             else:
                 up = Path(upload).expanduser()
                 try:
                     resolved = up.resolve()
                     if resolved == (_BACKEND_DIR / 'uploads').resolve():
-                        root = (_REPO_ROOT / '.media').resolve()
+                        root = get_media_root_default()
                     else:
                         root = resolved.parent if resolved.name == 'uploads' else resolved
                 except OSError:
-                    root = (_REPO_ROOT / '.media').resolve()
+                    root = get_media_root_default()
         else:
-            root = (_REPO_ROOT / '.media').resolve()
+            root = get_media_root_default()
     root.mkdir(parents=True, exist_ok=True)
+    _maybe_migrate_legacy_repo_media(root)
     return root
+
+
+def _maybe_migrate_legacy_repo_media(new_root: Path) -> None:
+    """One-time copy from <repo>/.media into the durable media root."""
+    legacy = (_REPO_ROOT / '.media').resolve()
+    try:
+        if not legacy.is_dir() or legacy == new_root.resolve():
+            return
+    except OSError:
+        return
+    marker = new_root / '.migrated_from_repo_dot_media'
+    if marker.is_file():
+        return
+    try:
+        has_payload = any(
+            p.is_file()
+            for p in legacy.rglob('*')
+            if p.is_file() and not p.name.startswith('.')
+        )
+    except OSError:
+        return
+    if not has_payload:
+        marker.write_text('empty-legacy\n', encoding='utf-8')
+        return
+    print(f'[MEDIA] Migrating legacy {legacy} → {new_root} (one-time copy)')
+    for src in legacy.rglob('*'):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(legacy)
+        dest = new_root / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.is_file() and dest.stat().st_size == src.stat().st_size:
+            continue
+        shutil.copy2(src, dest)
+    marker.write_text(f'from={legacy}\n', encoding='utf-8')
+    readme = legacy / 'MOVED.txt'
+    if not readme.is_file():
+        readme.write_text(
+            f'Media files were copied to durable MEDIA_ROOT:\n  {new_root}\n'
+            'Safe to delete this .media folder after verifying the app.\n',
+            encoding='utf-8',
+        )
+    print(f'[MEDIA] Migration complete → {new_root}')
 
 
 def uploads_dir() -> Path:
@@ -102,18 +177,36 @@ def key_to_relative(key_or_url: str) -> str | None:
     if raw.startswith('file://'):
         parsed = urlparse(raw)
         path = unquote(parsed.path)
-        # Windows file:///C:/... → path may start with /
+        # Windows file:///C:/... or file://C:\... → strip leading slash before drive
+        if len(path) >= 3 and path[0] == '/' and path[2] == ':':
+            path = path[1:]
+        path = path.replace('\\', '/')
         p = Path(path)
         try:
             root = get_media_root()
             return str(p.resolve().relative_to(root)).replace('\\', '/')
         except Exception:
-            # Legacy abs path under old uploads/
-            try:
-                legacy = (_BACKEND_DIR / 'uploads').resolve()
-                return f"uploads/{p.resolve().relative_to(legacy)}".replace('\\', '/')
-            except Exception:
-                return None
+            pass
+        # Legacy abs path under old uploads/ (Linux or Windows)
+        try:
+            legacy = (_BACKEND_DIR / 'uploads').resolve()
+            resolved = p if p.is_absolute() else Path(path)
+            # Match by basename under legacy uploads when path is a foreign Windows path
+            name = resolved.name
+            candidate = legacy / name
+            if candidate.is_file():
+                return f'uploads/{name}'
+            return f"uploads/{resolved.resolve().relative_to(legacy)}".replace('\\', '/')
+        except Exception:
+            name = Path(path.replace('\\', '/')).name
+            if name:
+                candidate = (_BACKEND_DIR / 'uploads' / name).resolve()
+                if candidate.is_file():
+                    return f'uploads/{name}'
+                media_candidate = get_media_root() / 'uploads' / name
+                if media_candidate.is_file():
+                    return f'uploads/{name}'
+            return None
     # Bare relative path
     if not raw.startswith('/') and '://' not in raw:
         return _normalize_rel(raw)
@@ -131,20 +224,50 @@ def get_path(key_or_url: str) -> Path:
     return path
 
 
-def put(relative_key: str, data: bytes) -> str:
-    """Write bytes; return opaque ``media:...`` key."""
+def put(relative_key: str, data: bytes, *, verify: bool = True) -> str:
+    """Write bytes; return opaque ``media:...`` key.
+
+    When ``verify`` is True (default), re-hash the on-disk file and raise
+    ``MediaIntegrityError`` if it does not match the payload SHA-256.
+    """
+    if not isinstance(data, (bytes, bytearray, memoryview)):
+        raise TypeError('data must be bytes')
+    payload = bytes(data)
+    expected = sha256_hex(payload)
     rel = _normalize_rel(relative_key)
     path = get_media_root() / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(data)
+    path.write_bytes(payload)
+    if verify:
+        actual = sha256_file(path)
+        if actual != expected:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise MediaIntegrityError(
+                f'Write verify failed for {rel}: expected {expected}, got {actual}'
+            )
     return to_storage_key(rel)
 
 
-def put_file(relative_key: str, source: Path | str) -> str:
+def put_file(relative_key: str, source: Path | str, *, verify: bool = True) -> str:
     rel = _normalize_rel(relative_key)
     dest = get_media_root() / rel
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(str(source), str(dest))
+    src = Path(source)
+    expected = sha256_file(src) if verify else None
+    shutil.copy2(str(src), str(dest))
+    if verify and expected is not None:
+        actual = sha256_file(dest)
+        if actual != expected:
+            try:
+                dest.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise MediaIntegrityError(
+                f'Copy verify failed for {rel}: expected {expected}, got {actual}'
+            )
     return to_storage_key(rel)
 
 
@@ -153,6 +276,39 @@ def open_stream(key_or_url: str) -> BinaryIO:
     if not path.is_file():
         raise FileNotFoundError(path)
     return open(path, 'rb')
+
+
+def read_bytes(key_or_url: str) -> bytes:
+    path = get_path(key_or_url)
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    return path.read_bytes()
+
+
+def verify(key_or_url: str, expected_sha256: str) -> bool:
+    """Return True when on-disk SHA-256 matches ``expected_sha256``."""
+    expected = (expected_sha256 or '').strip().lower()
+    if not expected or len(expected) != 64:
+        return False
+    try:
+        path = get_path(key_or_url)
+        if not path.is_file():
+            return False
+        return sha256_file(path) == expected
+    except (FileNotFoundError, ValueError, OSError):
+        return False
+
+
+def read_verified(key_or_url: str, expected_sha256: str) -> bytes:
+    """Read bytes and require SHA-256 match; raise ``MediaIntegrityError`` on mismatch."""
+    expected = (expected_sha256 or '').strip().lower()
+    data = read_bytes(key_or_url)
+    actual = sha256_hex(data)
+    if not expected or actual != expected:
+        raise MediaIntegrityError(
+            f'Checksum mismatch for {key_or_url!r}: expected {expected or "(missing)"}, got {actual}'
+        )
+    return data
 
 
 def exists(key_or_url: str) -> bool:

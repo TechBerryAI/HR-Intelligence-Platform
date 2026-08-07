@@ -150,7 +150,7 @@ def list_candidates():
                   COUNT(a.id)::int AS application_count,
                   MAX(a.applied_at) AS last_applied_at,
                   STRING_AGG(DISTINCT j.title, ', ') AS jobs_applied
-           FROM candidate_signup cs
+           FROM candidates cs
            INNER JOIN applications a ON a.candidate_id = cs.cid
            LEFT JOIN candidate_profiles cp ON cp.candidate_id = cs.cid
            LEFT JOIN jobs j ON j.jdid = a.job_id
@@ -174,7 +174,7 @@ def _head_hr_profile_payload(cid):
                CASE WHEN cp.resume IS NOT NULL THEN 1 ELSE 0 END as has_resume,
                cs.name AS signup_name, cs.created_at AS signup_created_at
         FROM candidate_profiles cp
-        LEFT JOIN candidate_signup cs ON cs.cid = cp.candidate_id
+        LEFT JOIN candidates cs ON cs.cid = cp.candidate_id
         WHERE cp.candidate_id = ?
         ''',
         (cid,),
@@ -233,7 +233,7 @@ def get_candidate(cid):
     """Return full candidate profile for Head HR detail view."""
     payload = _head_hr_profile_payload(cid)
     if not payload:
-        signup = db_get('SELECT cid, name, email, created_at FROM candidate_signup WHERE cid = ?', (cid,))
+        signup = db_get('SELECT cid, name, email, created_at FROM candidates WHERE cid = ?', (cid,))
         if not signup:
             return jsonify({'error': 'Candidate not found'}), 404
         return jsonify({
@@ -302,11 +302,11 @@ def get_candidate_resume(cid):
 @authenticate_token
 @require_head_hr
 def delete_candidate(cid):
-    existing = db_get('SELECT cid FROM candidate_signup WHERE cid = ?', (cid,))
+    existing = db_get('SELECT cid FROM candidates WHERE cid = ?', (cid,))
     if not existing:
         return jsonify({'error': 'Candidate not found'}), 404
     try:
-        db_run('DELETE FROM candidate_signup WHERE cid = ?', (cid,))
+        db_run('DELETE FROM candidates WHERE cid = ?', (cid,))
         return jsonify({'message': f'Candidate {cid} deleted successfully'})
     except Exception as e:
         print(f'[HEAD HR] Error deleting candidate {cid}: {e}')
@@ -400,7 +400,7 @@ def list_applications():
                   h.full_name AS hr_name
            FROM applications a
            LEFT JOIN matches m ON m.id = a.latest_match_id
-           LEFT JOIN candidate_signup cs ON cs.cid = a.candidate_id
+           LEFT JOIN candidates cs ON cs.cid = a.candidate_id
            LEFT JOIN jobs j ON j.jdid = a.job_id
            LEFT JOIN hr_signup h ON h.hrid = j.posted_by
            ORDER BY a.applied_at DESC''',
@@ -452,7 +452,7 @@ def get_application(app_id):
                   h.full_name AS hr_name
            FROM applications a
            LEFT JOIN matches m ON m.id = a.latest_match_id
-           LEFT JOIN candidate_signup cs ON cs.cid = a.candidate_id
+           LEFT JOIN candidates cs ON cs.cid = a.candidate_id
            LEFT JOIN jobs j ON j.jdid = a.job_id
            LEFT JOIN hr_signup h ON h.hrid = j.posted_by
            WHERE a.id = ?''',

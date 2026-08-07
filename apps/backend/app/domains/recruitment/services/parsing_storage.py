@@ -24,18 +24,14 @@ def compute_file_hash(file_data: bytes) -> str:
 
 def save_file_to_storage(file_data: bytes, filename: str, uploader_id: str) -> str:
     """
-    Durable object/media store under MEDIA_ROOT (S3-swappable later).
-    Returns opaque media key (media:uploads/...).
+    Durable media volume under MEDIA_ROOT (S3-swappable later).
+    Writes are SHA-256 verified on disk before the key is returned.
     """
     file_id = str(uuid.uuid4())
     extension = os.path.splitext(filename)[1]
     storage_filename = f"{uploader_id}_{file_id}{extension}"
     relative = f"uploads/{storage_filename}"
-    try:
-        return media_storage.put(relative, file_data)
-    except Exception:
-        # Callers must still persist metadata; bytes may be retried later
-        return f"media:{relative}"
+    return media_storage.put(relative, file_data, verify=True)
 
 
 def _as_bytes(value) -> bytes | None:
@@ -52,26 +48,45 @@ def _as_bytes(value) -> bytes | None:
 
 def load_raw_file_bytes(raw_file_id: str) -> bytes | None:
     """
-    Load original upload bytes. Prefers media/object storage via storage_url;
-    falls back to legacy Postgres raw_files.file_data.
+    Load original upload bytes.
+
+    Prefers MEDIA_ROOT via ``storage_url``, verifying ``file_hash`` from the
+    catalog. Falls back to legacy ``raw_files.file_data`` BYTEA only when media
+    is missing or fails verification (migration window).
     """
     from app.database.connection.db import db_get
 
     row = db_get(
-        'SELECT file_data, storage_url, storage_backend FROM raw_files WHERE id = ?',
+        """
+        SELECT file_data, storage_url, storage_backend, file_hash
+        FROM raw_files WHERE id = ?
+        """,
         (raw_file_id,),
     )
     if not row:
         return None
+    expected = (row.get('file_hash') or '').strip().lower()
     storage_url = row.get('storage_url')
     if storage_url:
         try:
-            if media_storage.exists(storage_url):
-                with media_storage.open_stream(storage_url) as fh:
-                    return fh.read()
-        except Exception:
-            pass
-    return _as_bytes(row.get('file_data'))
+            if expected:
+                return media_storage.read_verified(storage_url, expected)
+            return media_storage.read_bytes(storage_url)
+        except media_storage.MediaIntegrityError as exc:
+            print(f'[media] checksum mismatch raw_files.id={raw_file_id}: {exc}')
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            print(f'[media] miss raw_files.id={raw_file_id} key={storage_url!r}: {exc}')
+
+    blob = _as_bytes(row.get('file_data'))
+    if blob is None:
+        return None
+    if expected and compute_file_hash(blob) != expected:
+        print(
+            f'[media] BYTEA checksum mismatch raw_files.id={raw_file_id} '
+            f'(catalog={expected})'
+        )
+        return None
+    return blob
 
 
 @timing
@@ -84,11 +99,9 @@ def store_raw_file(
     db_conn
 ) -> Dict[str, Any]:
     """
-    Store raw file metadata in Postgres; bytes in media/object storage.
-    ``file_data`` BYTEA is left NULL for new rows (offload path).
-    
-    Returns:
-        Dict with raw_file record data
+    Catalog in Postgres; bytes on MEDIA_ROOT with checksum verification.
+
+    ``file_data`` BYTEA is left NULL for new rows.
     """
     from app.database.connection.db import db_get, db_run
     
@@ -100,7 +113,7 @@ def store_raw_file(
     # Check for duplicate
     existing = db_get(
         """
-        SELECT id, storage_url, created_at, file_data, storage_backend
+        SELECT id, storage_url, created_at, file_data, storage_backend, file_hash
         FROM raw_files 
         WHERE file_hash = ? AND uploader_id = ?
         """,
@@ -108,8 +121,9 @@ def store_raw_file(
     )
     
     if existing:
-        # Ensure media copy exists for legacy postgres-only rows
-        if not existing.get('storage_url') or not media_storage.exists(existing.get('storage_url') or ''):
+        storage_url = existing.get('storage_url') or ''
+        media_ok = bool(storage_url) and media_storage.verify(storage_url, file_hash)
+        if not media_ok:
             storage_url = save_file_to_storage(payload, filename, uploader_id)
             db_run(
                 """
@@ -122,12 +136,14 @@ def store_raw_file(
             return {
                 'id': existing['id'],
                 'storage_url': storage_url,
+                'file_hash': file_hash,
                 'is_duplicate': True,
                 'created_at': existing['created_at'],
             }
         return {
             'id': existing['id'],
-            'storage_url': existing['storage_url'],
+            'storage_url': storage_url,
+            'file_hash': file_hash,
             'is_duplicate': True,
             'created_at': existing['created_at']
         }
@@ -148,6 +164,7 @@ def store_raw_file(
     return {
         'id': raw_file_id,
         'storage_url': storage_url,
+        'file_hash': file_hash,
         'is_duplicate': False,
         'created_at': datetime.utcnow().isoformat()
     }

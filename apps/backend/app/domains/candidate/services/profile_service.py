@@ -1,4 +1,4 @@
-"""Shared candidate identity + profile persistence (passwordless public apply)."""
+"""Shared applicant identity + profile persistence (public job apply — no candidate accounts)."""
 from __future__ import annotations
 
 import re
@@ -58,42 +58,34 @@ def validate_public_apply_payload(data: dict, has_resume: bool) -> str | None:
 
 def upsert_passwordless_candidate(name: str, email: str) -> str:
     """
-    Find or create candidate_signup by email with no password.
+    Find or create applicant (candidates) by email — no password / no login.
     Returns cid.
     """
     email_norm = normalize_email(email)
     existing = db_get(
-        "SELECT cid, name FROM candidate_signup WHERE LOWER(TRIM(email)) = ?",
+        "SELECT cid, name FROM candidates WHERE LOWER(TRIM(email)) = ?",
         (email_norm,),
     )
     if existing:
         cid = existing["cid"]
         if name and name.strip() and name.strip() != (existing.get("name") or ""):
             db_run(
-                "UPDATE candidate_signup SET name = ? WHERE cid = ?",
+                "UPDATE candidates SET name = ? WHERE cid = ?",
                 (name.strip(), cid),
             )
         return cid
 
     db_run(
-        "INSERT INTO candidate_signup (name, email) VALUES (?, ?)",
+        "INSERT INTO candidates (name, email) VALUES (?, ?)",
         (name.strip(), email_norm),
     )
     row = db_get(
-        "SELECT cid FROM candidate_signup WHERE LOWER(TRIM(email)) = ?",
+        "SELECT cid FROM candidates WHERE LOWER(TRIM(email)) = ?",
         (email_norm,),
     )
     if not row:
-        raise RuntimeError("Failed to create candidate_signup")
+        raise RuntimeError("Failed to create candidates row")
     return row["cid"]
-
-
-def _resume_param(resume_binary: bytes | None):
-    if resume_binary is None:
-        return None
-    if BACKEND == "postgresql":
-        return resume_binary
-    return __import__("pyodbc").Binary(resume_binary)
 
 
 def save_candidate_profile(
@@ -134,18 +126,17 @@ def save_candidate_profile(
 
     linked_raw_id = resume_raw_file_id
     if resume_binary is not None and len(resume_binary) > 0 and not linked_raw_id:
-        try:
-            stored = store_raw_file(
-                candidate_id,
-                'candidate',
-                resume_binary,
-                'resume.pdf',
-                'application/pdf',
-                None,
-            )
-            linked_raw_id = stored.get('id')
-        except Exception as exc:
-            print(f"[profile] resume media store failed, falling back to BYTEA: {exc}")
+        stored = store_raw_file(
+            candidate_id,
+            'candidate',
+            resume_binary,
+            'resume.pdf',
+            'application/pdf',
+            None,
+        )
+        linked_raw_id = stored.get('id')
+        if not linked_raw_id:
+            raise RuntimeError('resume catalog store did not return raw_file id')
 
     if existing:
         if linked_raw_id:
@@ -175,36 +166,6 @@ def save_candidate_profile(
                     current_location,
                     preferred_location,
                     linked_raw_id,
-                    completed_val,
-                    candidate_id,
-                ),
-            )
-        elif resume_binary is not None and len(resume_binary) > 0:
-            db_run(
-                f"""
-                UPDATE candidate_profiles SET
-                  full_name = ?, email = ?, phone = ?,
-                  experience_level = ?, serving_notice = ?, notice_period = ?, last_working_day = ?,
-                  linkedin_url = ?, portfolio_url = ?,
-                  current_location = ?, preferred_location = ?,
-                  resume = ?,
-                  completed = ?,
-                  updated_at = {NOW_SQL}
-                WHERE candidate_id = ?
-                """,
-                (
-                    full_name,
-                    email,
-                    phone,
-                    experience_level,
-                    serving_notice,
-                    notice_period,
-                    last_working_day,
-                    linkedin_url,
-                    portfolio_url,
-                    current_location,
-                    preferred_location,
-                    _resume_param(resume_binary),
                     completed_val,
                     candidate_id,
                 ),
@@ -262,9 +223,7 @@ def save_candidate_profile(
                 portfolio_url,
                 current_location,
                 preferred_location,
-                None if linked_raw_id else (
-                    _resume_param(resume_binary) if resume_binary else None
-                ),
+                None,  # resume BYTEA retired for new writes — use resume_raw_file_id
                 linked_raw_id,
                 completed_val,
             ),

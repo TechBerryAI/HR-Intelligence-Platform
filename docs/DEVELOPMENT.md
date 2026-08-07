@@ -157,37 +157,18 @@ Recruiter connect UI: **Settings → Integrations → Google Calendar**.
 
 **Future:** interview reminder workers (hooks stubbed as `on_invite_sent` / `on_interview_scheduled`).
 
-### Media (`MEDIA_ROOT` + Postgres site assets)
+### Media + automatic backups
 
-**Current**
+Durable files and backups live **outside** the project (`…/hcip-data/`). Full command reference (backup, offload, restore, env keys):
 
-| Asset | Storage | Served by |
-|-------|---------|-----------|
-| Parse uploads (resume/JD originals) | Postgres `raw_files.file_data` (`BYTEA`) — durable | `load_raw_file_bytes(id)`; disk `.media/uploads` is optional cache |
-| Apply-path candidate resume | Postgres `candidate_profiles.resume` (`BYTEA`) | HR download endpoints |
-| Feedback screenshots, bulk staging | Disk volume `MEDIA_ROOT` (default `<repo>/.media`) | Internal keys `media:…` |
-| Landing / home hero MP4 | Postgres `site_assets` (`BYTEA`) | `GET /api/media/public/hero-video` |
+→ **[MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md)**
 
-| Key | Purpose |
-|-----|---------|
-| `MEDIA_ROOT` | Absolute path to media volume (prod). Default when unset: `<repo>/.media` |
-| `VITE_HERO_VIDEO_URL` | Optional CDN/HTTPS override for landing video; else `/api/media/public/hero-video` |
+Quick force backup:
 
 ```bash
-# Create dirs, copy disk seed if needed, upsert hero into site_assets
-python scripts/ensure_media_assets.py
-# Re-read disk and overwrite DB row:
-python scripts/ensure_media_assets.py --force
+cd apps/backend
+python -m app.database.scripts.backup_hcip --force
 ```
-
-Place `website-hero.mp4` under `MEDIA_ROOT/public/` before the first seed (or keep the existing `.media/public/website-hero.mp4`). After seed, the Home page loads the video from the API/DB — it is **not** a frontend `public/` static file.
-
-- Apply resumes remain Postgres `BYTEA` (`candidate_profiles.resume`).
-- Parsed resume/JD originals are also Postgres `BYTEA` (`raw_files.file_data`). Backfill legacy disk-only rows: `python scripts/backfill_raw_file_blobs.py`.
-- Head HR PDF reports stay client-side downloads (not stored on the server).
-- `raw_files.storage_url` may still point at optional disk cache keys `media:uploads/...`.
-
-**Future:** optional object storage (S3) behind the same media keys; CDN for hero delivery.
 
 ## Where to put new code
 

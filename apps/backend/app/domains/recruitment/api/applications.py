@@ -433,7 +433,7 @@ def receive_ats_result():
             from app.domains.recruitment.services.notifications import send_and_get_output
             job_row = db_get('SELECT title, company, posted_by FROM jobs WHERE jdid = ?', (job_id,))
             profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
-            signup = db_get('SELECT email FROM candidate_signup WHERE cid = ?', (candidate_id,))
+            signup = db_get('SELECT email FROM candidates WHERE cid = ?', (candidate_id,))
             candidate_email = (profile or {}).get('email') or (signup or {}).get('email') or ''
             if candidate_email:
                 try:

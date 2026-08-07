@@ -10,6 +10,7 @@ End-user manuals and local engineering notes for the HR Intelligence Platform.
 |-------------|-----------|
 | **End user / trainer** | [user-manual/HR_Intelligence_Platform_User_Manual.docx](user-manual/HR_Intelligence_Platform_User_Manual.docx) / [PDF](user-manual/HR_Intelligence_Platform_User_Manual.pdf) |
 | **Engineer (local setup)** | [DEVELOPMENT.md](DEVELOPMENT.md) · root [README.md](../README.md) |
+| **Media files & backups** | [MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md) ← commands cheat sheet |
 | **Deep architecture (archive)** | [ARCHITECTURE.md](ARCHITECTURE.md) · [ENGINEERING.md](ENGINEERING.md) |
 | **Sprint / migration history** | [HISTORY.md](HISTORY.md) |
 | **Document intelligence notes** | [document_intelligence/](document_intelligence/) |
@@ -22,6 +23,7 @@ End-user manuals and local engineering notes for the HR Intelligence Platform.
 docs/
   README.md                 ← you are here
   DEVELOPMENT.md            ← local setup
+  MEDIA_AND_BACKUPS.md      ← durable media + backup commands
   user-manual/              ← screenshot manuals (Word + PDF)
   ARCHITECTURE.md           ← historical deep dive (optional)
   ENGINEERING.md            ← historical API/module narrative (optional)
