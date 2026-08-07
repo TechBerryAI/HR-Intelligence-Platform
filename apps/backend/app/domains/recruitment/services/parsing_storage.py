@@ -24,8 +24,7 @@ def compute_file_hash(file_data: bytes) -> str:
 
 def save_file_to_storage(file_data: bytes, filename: str, uploader_id: str) -> str:
     """
-    Optional local cache under MEDIA_ROOT/uploads.
-    Durable copy lives in raw_files.file_data (Postgres).
+    Durable object/media store under MEDIA_ROOT (S3-swappable later).
     Returns opaque media key (media:uploads/...).
     """
     file_id = str(uuid.uuid4())
@@ -35,7 +34,7 @@ def save_file_to_storage(file_data: bytes, filename: str, uploader_id: str) -> s
     try:
         return media_storage.put(relative, file_data)
     except Exception:
-        # Disk cache must never block durable DB storage
+        # Callers must still persist metadata; bytes may be retried later
         return f"media:{relative}"
 
 
@@ -53,30 +52,26 @@ def _as_bytes(value) -> bytes | None:
 
 def load_raw_file_bytes(raw_file_id: str) -> bytes | None:
     """
-    Load original upload bytes. Prefers Postgres raw_files.file_data;
-    falls back to disk cache via storage_url for legacy rows.
+    Load original upload bytes. Prefers media/object storage via storage_url;
+    falls back to legacy Postgres raw_files.file_data.
     """
     from app.database.connection.db import db_get
 
     row = db_get(
-        'SELECT file_data, storage_url FROM raw_files WHERE id = ?',
+        'SELECT file_data, storage_url, storage_backend FROM raw_files WHERE id = ?',
         (raw_file_id,),
     )
     if not row:
         return None
-    blob = _as_bytes(row.get('file_data'))
-    if blob:
-        return blob
     storage_url = row.get('storage_url')
-    if not storage_url:
-        return None
-    try:
-        if media_storage.exists(storage_url):
-            with media_storage.open_stream(storage_url) as fh:
-                return fh.read()
-    except Exception:
-        return None
-    return None
+    if storage_url:
+        try:
+            if media_storage.exists(storage_url):
+                with media_storage.open_stream(storage_url) as fh:
+                    return fh.read()
+        except Exception:
+            pass
+    return _as_bytes(row.get('file_data'))
 
 
 @timing
@@ -89,8 +84,8 @@ def store_raw_file(
     db_conn
 ) -> Dict[str, Any]:
     """
-    Store raw file metadata + original bytes in Postgres (durable).
-    Also writes an optional disk cache key in storage_url.
+    Store raw file metadata in Postgres; bytes in media/object storage.
+    ``file_data`` BYTEA is left NULL for new rows (offload path).
     
     Returns:
         Dict with raw_file record data
@@ -105,7 +100,7 @@ def store_raw_file(
     # Check for duplicate
     existing = db_get(
         """
-        SELECT id, storage_url, created_at, file_data
+        SELECT id, storage_url, created_at, file_data, storage_backend
         FROM raw_files 
         WHERE file_hash = ? AND uploader_id = ?
         """,
@@ -113,12 +108,23 @@ def store_raw_file(
     )
     
     if existing:
-        # Backfill durable bytes if an older row only had disk storage
-        if not existing.get('file_data'):
+        # Ensure media copy exists for legacy postgres-only rows
+        if not existing.get('storage_url') or not media_storage.exists(existing.get('storage_url') or ''):
+            storage_url = save_file_to_storage(payload, filename, uploader_id)
             db_run(
-                'UPDATE raw_files SET file_data = ?, size_bytes = ? WHERE id = ?',
-                (payload, len(payload), existing['id']),
+                """
+                UPDATE raw_files
+                SET storage_url = ?, storage_backend = 'media', size_bytes = ?
+                WHERE id = ?
+                """,
+                (storage_url, len(payload), existing['id']),
             )
+            return {
+                'id': existing['id'],
+                'storage_url': storage_url,
+                'is_duplicate': True,
+                'created_at': existing['created_at'],
+            }
         return {
             'id': existing['id'],
             'storage_url': existing['storage_url'],
@@ -126,17 +132,17 @@ def store_raw_file(
             'created_at': existing['created_at']
         }
     
-    # Optional disk cache + durable DB blob
     storage_url = save_file_to_storage(payload, filename, uploader_id)
     
     raw_file_id = str(uuid.uuid4())
     db_run(
         """
         INSERT INTO raw_files 
-        (id, uploader_id, uploader_role, original_filename, storage_url, mime_type, file_hash, size_bytes, file_data)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, uploader_id, uploader_role, original_filename, storage_url, mime_type,
+         file_hash, size_bytes, file_data, storage_backend)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'media')
         """,
-        (raw_file_id, uploader_id, uploader_role, filename, storage_url, mime_type, file_hash, len(payload), payload)
+        (raw_file_id, uploader_id, uploader_role, filename, storage_url, mime_type, file_hash, len(payload))
     )
     
     return {

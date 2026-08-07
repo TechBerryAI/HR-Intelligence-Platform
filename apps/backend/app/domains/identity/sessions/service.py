@@ -20,13 +20,21 @@ def deactivate_all_user_sessions(user_id, user_type: str) -> Dict:
 
 
 def get_user_sessions(user_id, user_type: str) -> List[Dict]:
+    """Successful logins for this user (from login_history — hr_login merged away)."""
     audit_type = audit_user_type(user_type)
-    if audit_type == 'HR':
-        return db_all(
-            "SELECT hrid, email, logged_in_at FROM hr_login WHERE hrid = ? ORDER BY logged_in_at DESC",
-            (user_id,),
-        )
-    return []
+    if audit_type != 'HR' or not user_id:
+        return []
+    return db_all(
+        """
+        SELECT user_id AS hrid, email, attempted_at AS logged_in_at,
+               ip_address, user_agent
+        FROM login_history
+        WHERE user_id = ? AND user_type = 'HR' AND status = 'success'
+        ORDER BY attempted_at DESC
+        LIMIT 100
+        """,
+        (user_id,),
+    )
 
 
 def record_login_attempt(
@@ -36,13 +44,24 @@ def record_login_attempt(
     ip_address: Optional[str] = None,
     user_agent: Optional[str] = None,
     failure_reason: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict:
     db_run(
         """
-        INSERT INTO login_history (email, user_type, ip_address, user_agent, status, failure_reason)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO login_history (
+            email, user_type, ip_address, user_agent, status, failure_reason, user_id
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (email, audit_user_type(user_type), ip_address, user_agent, status, failure_reason),
+        (
+            email,
+            audit_user_type(user_type),
+            ip_address,
+            user_agent,
+            status,
+            failure_reason,
+            user_id,
+        ),
     )
     return {"success": True}
 

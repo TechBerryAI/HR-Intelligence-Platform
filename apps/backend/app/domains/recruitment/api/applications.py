@@ -392,13 +392,37 @@ def receive_ats_result():
             """
             UPDATE applications
             SET match_score = ?,
+                matching_percentage = ?,
                 shortlisted = ?,
                 ats_reasoning = ?,
                 ats_analysis = ?,
                 status = ?
             WHERE candidate_id = ? AND job_id = ?
             """,
-            (match_score, _shortlisted_val, reasoning, analysis_toon, new_status, candidate_id, job_id)
+            (
+                match_score,
+                match_score,
+                _shortlisted_val,
+                reasoning,
+                analysis_toon,
+                new_status,
+                candidate_id,
+                job_id,
+            ),
+        )
+        # Keep matches SoT in sync when latest_match_id is set
+        db_run(
+            """
+            UPDATE matches m
+            SET match_score = ?,
+                matching_percentage = ?,
+                rationale = ?,
+                analysis_toon = ?
+            FROM applications a
+            WHERE a.candidate_id = ? AND a.job_id = ?
+              AND a.latest_match_id = m.id
+            """,
+            (match_score, match_score, reasoning, analysis_toon, candidate_id, job_id),
         )
         
         print(f"[ATS_RESULT] Successfully updated application with detailed analysis. New status: {new_status}")

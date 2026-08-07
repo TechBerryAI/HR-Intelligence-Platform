@@ -14,8 +14,21 @@ def resolve_company_for_user(user: dict | None) -> tuple[str | None, str | None]
     if not company:
         uid = get_user_id(user)
         if uid:
-            row = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (uid,))
+            row = db_get(
+                'SELECT company, organization_id FROM hr_signup WHERE hrid = ?',
+                (uid,),
+            )
             company = ((row or {}).get('company') or '').strip()
+            if row and not row.get('organization_id') and company:
+                try:
+                    from app.domains.identity.services.organizations import (
+                        attach_organization_id,
+                        ensure_organization,
+                    )
+                    org_id = ensure_organization(company)
+                    attach_organization_id('hr_signup', 'hrid', uid, org_id)
+                except Exception:
+                    pass
     if not company:
         return None, None
     return normalize_company(company), company
