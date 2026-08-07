@@ -96,7 +96,9 @@ def store_raw_file(
     file_data: bytes,
     filename: str,
     mime_type: str,
-    db_conn
+    db_conn,
+    *,
+    bulk_session_id: str | None = None,
 ) -> Dict[str, Any]:
     """
     Catalog in Postgres; bytes on MEDIA_ROOT with checksum verification.
@@ -133,33 +135,59 @@ def store_raw_file(
                 """,
                 (storage_url, len(payload), existing['id']),
             )
-            return {
-                'id': existing['id'],
-                'storage_url': storage_url,
-                'file_hash': file_hash,
-                'is_duplicate': True,
-                'created_at': existing['created_at'],
-            }
+        if bulk_session_id:
+            try:
+                db_run(
+                    'UPDATE raw_files SET bulk_session_id = COALESCE(bulk_session_id, ?) WHERE id = ?',
+                    (bulk_session_id, existing['id']),
+                )
+            except Exception:
+                pass
         return {
             'id': existing['id'],
             'storage_url': storage_url,
             'file_hash': file_hash,
             'is_duplicate': True,
-            'created_at': existing['created_at']
+            'created_at': existing['created_at'],
         }
     
     storage_url = save_file_to_storage(payload, filename, uploader_id)
     
     raw_file_id = str(uuid.uuid4())
-    db_run(
-        """
-        INSERT INTO raw_files 
-        (id, uploader_id, uploader_role, original_filename, storage_url, mime_type,
-         file_hash, size_bytes, file_data, storage_backend)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'media')
-        """,
-        (raw_file_id, uploader_id, uploader_role, filename, storage_url, mime_type, file_hash, len(payload))
-    )
+    if bulk_session_id:
+        try:
+            db_run(
+                """
+                INSERT INTO raw_files 
+                (id, uploader_id, uploader_role, original_filename, storage_url, mime_type,
+                 file_hash, size_bytes, file_data, storage_backend, bulk_session_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'media', ?)
+                """,
+                (
+                    raw_file_id, uploader_id, uploader_role, filename, storage_url,
+                    mime_type, file_hash, len(payload), bulk_session_id,
+                ),
+            )
+        except Exception:
+            db_run(
+                """
+                INSERT INTO raw_files 
+                (id, uploader_id, uploader_role, original_filename, storage_url, mime_type,
+                 file_hash, size_bytes, file_data, storage_backend)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'media')
+                """,
+                (raw_file_id, uploader_id, uploader_role, filename, storage_url, mime_type, file_hash, len(payload))
+            )
+    else:
+        db_run(
+            """
+            INSERT INTO raw_files 
+            (id, uploader_id, uploader_role, original_filename, storage_url, mime_type,
+             file_hash, size_bytes, file_data, storage_backend)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'media')
+            """,
+            (raw_file_id, uploader_id, uploader_role, filename, storage_url, mime_type, file_hash, len(payload))
+        )
     
     return {
         'id': raw_file_id,
@@ -302,7 +330,9 @@ def store_parsed_resume(
     toon: Dict[str, Any],
     full_text: str,
     confidence: float,
-    model_version: str
+    model_version: str,
+    *,
+    bulk_session_id: str | None = None,
 ) -> str:
     """
     Store parsed resume in database
@@ -315,6 +345,23 @@ def store_parsed_resume(
     parsed_id = str(uuid.uuid4())
     toon_text = toon_dumps(toon)
     
+    if bulk_session_id:
+        try:
+            db_run(
+                """
+                INSERT INTO parsed_resumes 
+                (id, raw_file_id, candidate_id, toon, full_text, confidence, model_version, bulk_session_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    parsed_id, raw_file_id, candidate_id, toon_text, full_text,
+                    confidence, model_version, bulk_session_id,
+                ),
+            )
+            return parsed_id
+        except Exception:
+            pass
+
     db_run(
         """
         INSERT INTO parsed_resumes 

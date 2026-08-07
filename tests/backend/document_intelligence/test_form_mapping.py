@@ -175,12 +175,14 @@ def test_invalid_email_does_not_autofill():
     assert form.email == ''
 
 
-def test_preferred_location_has_no_fallback_to_current():
+def test_preferred_location_falls_back_to_current():
     toon = dict(SAMPLE_RESUME_TOON)
     toon['person'] = dict(toon['person'], preferred_location='')
     form = map_candidate_to_form(candidate_profile_from_toon(toon))
-    assert form.preferredLocation == ''
     assert form.currentLocation == 'Austin, TX'
+    assert form.preferredLocation == 'Austin, TX'
+    pref_trace = next(t for t in form.trace if t.form_field == 'preferredLocation')
+    assert pref_trace.reason == 'fallback_current_location'
 
 
 def test_portfolio_does_not_fallback_to_github():
