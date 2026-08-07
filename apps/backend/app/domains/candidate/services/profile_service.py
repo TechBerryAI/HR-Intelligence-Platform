@@ -102,8 +102,16 @@ def save_candidate_profile(
     resume_binary: bytes | None = None,
     *,
     completed: bool = True,
+    resume_raw_file_id: str | None = None,
 ) -> None:
-    """Upsert candidate_profiles and replace education/certifications/experiences."""
+    """Upsert candidate_profiles and replace education/certifications/experiences.
+
+    Prefer ``resume_raw_file_id`` (object/media store) over BYTEA ``resume``.
+    When only ``resume_binary`` is provided, bytes are stored via raw_files/media
+    and ``resume`` BYTEA is left NULL for new writes.
+    """
+    from app.domains.recruitment.services.parsing_storage import store_raw_file
+
     existing = db_get(
         "SELECT candidate_id FROM candidate_profiles WHERE candidate_id = ?",
         (candidate_id,),
@@ -124,8 +132,54 @@ def save_candidate_profile(
     current_location = (data.get("currentLocation") or "").strip() or None
     preferred_location = (data.get("preferredLocation") or "").strip() or None
 
+    linked_raw_id = resume_raw_file_id
+    if resume_binary is not None and len(resume_binary) > 0 and not linked_raw_id:
+        try:
+            stored = store_raw_file(
+                candidate_id,
+                'candidate',
+                resume_binary,
+                'resume.pdf',
+                'application/pdf',
+                None,
+            )
+            linked_raw_id = stored.get('id')
+        except Exception as exc:
+            print(f"[profile] resume media store failed, falling back to BYTEA: {exc}")
+
     if existing:
-        if resume_binary is not None and len(resume_binary) > 0:
+        if linked_raw_id:
+            db_run(
+                f"""
+                UPDATE candidate_profiles SET
+                  full_name = ?, email = ?, phone = ?,
+                  experience_level = ?, serving_notice = ?, notice_period = ?, last_working_day = ?,
+                  linkedin_url = ?, portfolio_url = ?,
+                  current_location = ?, preferred_location = ?,
+                  resume_raw_file_id = ?,
+                  resume = NULL,
+                  completed = ?,
+                  updated_at = {NOW_SQL}
+                WHERE candidate_id = ?
+                """,
+                (
+                    full_name,
+                    email,
+                    phone,
+                    experience_level,
+                    serving_notice,
+                    notice_period,
+                    last_working_day,
+                    linkedin_url,
+                    portfolio_url,
+                    current_location,
+                    preferred_location,
+                    linked_raw_id,
+                    completed_val,
+                    candidate_id,
+                ),
+            )
+        elif resume_binary is not None and len(resume_binary) > 0:
             db_run(
                 f"""
                 UPDATE candidate_profiles SET
@@ -191,9 +245,9 @@ def save_candidate_profile(
               experience_level, serving_notice, notice_period, last_working_day,
               linkedin_url, portfolio_url,
               current_location, preferred_location,
-              resume,
+              resume, resume_raw_file_id,
               completed
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 candidate_id,
@@ -208,7 +262,10 @@ def save_candidate_profile(
                 portfolio_url,
                 current_location,
                 preferred_location,
-                _resume_param(resume_binary) if resume_binary else None,
+                None if linked_raw_id else (
+                    _resume_param(resume_binary) if resume_binary else None
+                ),
+                linked_raw_id,
                 completed_val,
             ),
         )

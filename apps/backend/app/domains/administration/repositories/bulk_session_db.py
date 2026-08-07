@@ -130,6 +130,8 @@ def update_file_status(
     status: str,
     error_message: str | None = None,
     processing_time_ms: int | None = None,
+    raw_file_id: str | None = None,
+    parsed_resume_id: str | None = None,
 ) -> None:
     try:
         if status == 'Failed':
@@ -137,22 +139,69 @@ def update_file_status(
                 """
                 UPDATE bulk_parse_files
                 SET status = ?, error_message = ?, processing_time_ms = ?,
-                    retry_count = retry_count + 1, updated_at = NOW()
+                    retry_count = retry_count + 1, updated_at = NOW(),
+                    raw_file_id = COALESCE(?, raw_file_id),
+                    parsed_resume_id = COALESCE(?, parsed_resume_id)
                 WHERE session_id = ? AND original_filename = ?
                 """,
-                (status, error_message, processing_time_ms, session_id, filename),
+                (
+                    status,
+                    error_message,
+                    processing_time_ms,
+                    raw_file_id,
+                    parsed_resume_id,
+                    session_id,
+                    filename,
+                ),
             )
         else:
             db_run(
                 """
                 UPDATE bulk_parse_files
-                SET status = ?, error_message = ?, processing_time_ms = ?, updated_at = NOW()
+                SET status = ?, error_message = ?, processing_time_ms = ?, updated_at = NOW(),
+                    raw_file_id = COALESCE(?, raw_file_id),
+                    parsed_resume_id = COALESCE(?, parsed_resume_id)
                 WHERE session_id = ? AND original_filename = ?
                 """,
-                (status, error_message, processing_time_ms, session_id, filename),
+                (
+                    status,
+                    error_message,
+                    processing_time_ms,
+                    raw_file_id,
+                    parsed_resume_id,
+                    session_id,
+                    filename,
+                ),
             )
     except Exception as e:
         print(f"[bulk_session_db] update_file_status failed: {e}")
+
+
+def link_session_file(
+    session_id: str,
+    filename: str,
+    *,
+    raw_file_id: str | None = None,
+    parsed_resume_id: str | None = None,
+) -> None:
+    """Attach raw/parsed FKs for a bulk_parse_files row."""
+    if not session_id or not filename:
+        return
+    if not raw_file_id and not parsed_resume_id:
+        return
+    try:
+        db_run(
+            """
+            UPDATE bulk_parse_files
+            SET raw_file_id = COALESCE(?, raw_file_id),
+                parsed_resume_id = COALESCE(?, parsed_resume_id),
+                updated_at = NOW()
+            WHERE session_id = ? AND original_filename = ?
+            """,
+            (raw_file_id, parsed_resume_id, session_id, filename),
+        )
+    except Exception as e:
+        print(f"[bulk_session_db] link_session_file failed: {e}")
 
 
 def update_session_progress(

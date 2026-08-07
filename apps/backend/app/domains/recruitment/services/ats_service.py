@@ -1522,7 +1522,7 @@ def reconcile_match_score_from_analysis(ats_analysis, stored_score=None) -> dict
 def sync_application_match_score(application_id, ats_analysis, stored_score=None, *, persist=True) -> dict:
     """
     Reconcile score from ats_analysis and optionally persist to applications
-    so every API surface (job candidates table, detail, reports) stays synced.
+    and the linked matches row (latest_match_id) so every API surface stays synced.
     """
     recon = reconcile_match_score_from_analysis(ats_analysis, stored_score)
     if not persist or not recon.get("adjusted") or application_id is None:
@@ -1530,7 +1530,7 @@ def sync_application_match_score(application_id, ats_analysis, stored_score=None
 
     try:
         from app.ai.toon.runtime import toon_dumps
-        from app.database.connection.db import db_run
+        from app.database.connection.db import db_get, db_run
 
         analysis_toon = toon_dumps(recon["ats_analysis"]) if isinstance(recon.get("ats_analysis"), dict) else None
         new_score = float(recon["match_score"])
@@ -1555,6 +1555,30 @@ def sync_application_match_score(application_id, ats_analysis, stored_score=None
                 """,
                 (new_score, new_score, application_id),
             )
+        app = db_get(
+            'SELECT latest_match_id FROM applications WHERE id = ?',
+            (application_id,),
+        )
+        match_id = (app or {}).get('latest_match_id')
+        if match_id:
+            if analysis_toon is not None:
+                db_run(
+                    """
+                    UPDATE matches
+                    SET match_score = ?, matching_percentage = ?, analysis_toon = ?
+                    WHERE id = ?
+                    """,
+                    (new_score, new_score, analysis_toon, match_id),
+                )
+            else:
+                db_run(
+                    """
+                    UPDATE matches
+                    SET match_score = ?, matching_percentage = ?
+                    WHERE id = ?
+                    """,
+                    (new_score, new_score, match_id),
+                )
         recon["persisted"] = True
     except Exception as exc:
         recon["persisted"] = False

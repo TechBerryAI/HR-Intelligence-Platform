@@ -33,7 +33,10 @@ def allow_options_no_auth(f):
 @require_analytics_read
 def get_stats():
     # Match Admins page: every hr_signup row (including CEO / Head HR / recruiters).
-    total_admins = db_get('SELECT COUNT(*) AS cnt FROM hr_signup', ())
+    total_admins = db_get(
+        "SELECT COUNT(*) AS cnt FROM hr_signup WHERE COALESCE(account_status, 'active') = 'active'",
+        (),
+    )
     # Match jobs "Candidates" meaning: people who actually applied (not orphan signup rows
     # left by parse harness / abandoned apply drafts).
     total_candidates = db_get(
@@ -62,7 +65,9 @@ def get_stats():
 @require_analytics_read
 def list_admins():
     rows = db_all(
-        'SELECT hrid, full_name, email, company, created_at FROM hr_signup ORDER BY created_at DESC',
+        '''SELECT hrid, full_name, email, company, created_at FROM hr_signup
+           WHERE COALESCE(account_status, 'active') = 'active'
+           ORDER BY created_at DESC''',
         (),
     )
     return jsonify({'admins': rows})
@@ -100,7 +105,10 @@ def create_admin():
         next_num = int(row['maxn']) + 1 if row and row.get('maxn') is not None else 1
         hrid = f"HRID{next_num:03d}"
         db_run(
-            'INSERT INTO hr_signup (hrid, full_name, email, company, password) VALUES (?, ?, ?, ?, ?)',
+            """
+            INSERT INTO hr_signup (hrid, full_name, email, company, password, account_status)
+            VALUES (?, ?, ?, ?, ?, 'active')
+            """,
             (hrid, full_name, email, company or '-', password_hash),
         )
         return jsonify({
@@ -383,11 +391,15 @@ def job_detail_or_delete(jdid):
 def list_applications():
     rows = db_all(
         '''SELECT a.id, a.candidate_id, a.job_id, a.status,
-                  a.applied_at, a.match_score, a.shortlisted, a.ats_analysis,
+                  a.applied_at,
+                  COALESCE(m.match_score, a.match_score) AS match_score,
+                  a.shortlisted,
+                  COALESCE(m.analysis_toon, a.ats_analysis) AS ats_analysis,
                   cs.name AS candidate_name, cs.email AS candidate_email,
                   j.title AS job_title, j.company AS job_company,
                   h.full_name AS hr_name
            FROM applications a
+           LEFT JOIN matches m ON m.id = a.latest_match_id
            LEFT JOIN candidate_signup cs ON cs.cid = a.candidate_id
            LEFT JOIN jobs j ON j.jdid = a.job_id
            LEFT JOIN hr_signup h ON h.hrid = j.posted_by
@@ -430,12 +442,16 @@ def get_application(app_id):
     """Return one application with full ATS analysis for Head HR detail view."""
     row = db_get(
         '''SELECT a.id, a.candidate_id, a.job_id, a.status,
-                  a.applied_at, a.match_score, a.shortlisted,
-                  a.ats_reasoning, a.ats_analysis,
+                  a.applied_at,
+                  COALESCE(m.match_score, a.match_score) AS match_score,
+                  a.shortlisted,
+                  COALESCE(m.rationale, a.ats_reasoning) AS ats_reasoning,
+                  COALESCE(m.analysis_toon, a.ats_analysis) AS ats_analysis,
                   cs.name AS candidate_name, cs.email AS candidate_email,
                   j.title AS job_title, j.company AS job_company,
                   h.full_name AS hr_name
            FROM applications a
+           LEFT JOIN matches m ON m.id = a.latest_match_id
            LEFT JOIN candidate_signup cs ON cs.cid = a.candidate_id
            LEFT JOIN jobs j ON j.jdid = a.job_id
            LEFT JOIN hr_signup h ON h.hrid = j.posted_by

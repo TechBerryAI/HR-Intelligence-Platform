@@ -1,8 +1,6 @@
-"""Postgres-backed public site assets (landing hero video, etc.).
+"""Public site assets — metadata in Postgres, bytes in media/object storage.
 
-**Current:** binary rows in ``site_assets`` (BYTEA). Seeded once from MEDIA_ROOT
-or a legacy filesystem path when missing. The home page streams via
-``GET /api/media/public/hero-video``.
+Legacy BYTEA ``data`` is still read as fallback during the offload window.
 """
 from __future__ import annotations
 
@@ -17,9 +15,15 @@ HERO_CONTENT_TYPE = 'video/mp4'
 
 
 def get_asset(asset_key: str, *, include_data: bool = True) -> dict | None:
-    cols = 'asset_key, filename, content_type, byte_size, created_at, updated_at'
+    cols = (
+        'asset_key, filename, content_type, byte_size, storage_url, '
+        'storage_backend, created_at, updated_at'
+    )
     if include_data:
-        cols = 'asset_key, filename, content_type, data, byte_size, created_at, updated_at'
+        cols = (
+            'asset_key, filename, content_type, data, byte_size, storage_url, '
+            'storage_backend, created_at, updated_at'
+        )
     row = db_get(
         f"""
         SELECT {cols}
@@ -39,18 +43,25 @@ def put_asset(
     filename: str,
 ) -> None:
     blob = bytes(data or b'')
+    relative = f'public/site_assets/{asset_key.replace(".", "_")}_{filename}'
+    storage_url = media_storage.put(relative, blob)
     db_run(
         """
-        INSERT INTO site_assets (asset_key, filename, content_type, data, byte_size, updated_at)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT INTO site_assets (
+            asset_key, filename, content_type, data, byte_size,
+            storage_url, storage_backend, updated_at
+        )
+        VALUES (?, ?, ?, NULL, ?, ?, 'media', CURRENT_TIMESTAMP)
         ON CONFLICT (asset_key) DO UPDATE SET
             filename = EXCLUDED.filename,
             content_type = EXCLUDED.content_type,
-            data = EXCLUDED.data,
+            data = NULL,
             byte_size = EXCLUDED.byte_size,
+            storage_url = EXCLUDED.storage_url,
+            storage_backend = 'media',
             updated_at = CURRENT_TIMESTAMP
         """,
-        (asset_key, filename, content_type, blob, len(blob)),
+        (asset_key, filename, content_type, len(blob), storage_url),
     )
 
 
@@ -63,7 +74,7 @@ def _read_seed_bytes() -> bytes | None:
 
 
 def ensure_hero_video_in_db(*, force_refresh: bool = False) -> dict | None:
-    """Ensure ``landing.hero_video`` exists in Postgres; seed from disk if needed."""
+    """Ensure ``landing.hero_video`` exists; seed from disk if needed."""
     if not force_refresh:
         existing = get_asset(HERO_ASSET_KEY, include_data=False)
         if existing and int(existing.get('byte_size') or 0) > 0:
@@ -87,9 +98,15 @@ def hero_video_bytes() -> tuple[bytes, str, str, dict] | None:
     """Return (data, content_type, filename, meta) for the landing hero, or None."""
     ensure_hero_video_in_db()
     row = get_asset(HERO_ASSET_KEY, include_data=True)
-    if not row or row.get('data') is None:
+    if not row:
         return None
-    data = bytes(row['data'])
+    data = b''
+    storage_url = row.get('storage_url')
+    if storage_url and media_storage.exists(storage_url):
+        with media_storage.open_stream(storage_url) as fh:
+            data = fh.read()
+    elif row.get('data') is not None:
+        data = bytes(row['data'])
     if not data:
         return None
     return (

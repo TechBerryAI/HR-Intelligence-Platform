@@ -341,7 +341,7 @@ def get_job_applications(job_id: str):
             # Return 200 with empty list so UI shows "No candidates" instead of errors; avoids 404 in terminal
             return jsonify({'applications': []}), 200
 
-        # Get applications with candidate details (include ATS: match_score, shortlisted, ats_reasoning, ats_analysis)
+        # Get applications with candidate details (ATS scores from matches via latest_match_id)
         applications = db_all(
             '''
             SELECT 
@@ -350,11 +350,11 @@ def get_job_applications(job_id: str):
                 a.job_id,
                 a.status,
                 a.applied_at,
-                a.matching_percentage,
-                a.match_score,
+                COALESCE(m.matching_percentage, a.matching_percentage) AS matching_percentage,
+                COALESCE(m.match_score, a.match_score) AS match_score,
                 a.shortlisted,
-                a.ats_reasoning,
-                a.ats_analysis,
+                COALESCE(m.rationale, a.ats_reasoning) AS ats_reasoning,
+                COALESCE(m.analysis_toon, a.ats_analysis) AS ats_analysis,
                 cp.full_name,
                 cp.email,
                 cp.phone,
@@ -366,13 +366,18 @@ def get_job_applications(job_id: str):
                 cp.last_working_day,
                 cp.linkedin_url,
                 cp.portfolio_url,
-                CASE WHEN cp.resume IS NOT NULL THEN 1 ELSE 0 END as has_resume,
+                CASE
+                    WHEN cp.resume IS NOT NULL OR cp.resume_raw_file_id IS NOT NULL THEN 1
+                    ELSE 0
+                END as has_resume,
                 cs.name as candidate_name
             FROM applications a
             INNER JOIN candidate_profiles cp ON a.candidate_id = cp.candidate_id
             LEFT JOIN candidate_signup cs ON a.candidate_id = cs.cid
+            LEFT JOIN matches m ON m.id = a.latest_match_id
             WHERE a.job_id = ?
-            ORDER BY a.matching_percentage DESC, a.applied_at DESC
+            ORDER BY COALESCE(m.matching_percentage, a.matching_percentage) DESC NULLS LAST,
+                     a.applied_at DESC
             ''',
             (job_id,)
         )
@@ -511,20 +516,27 @@ def get_candidate_resume(job_id: str, candidate_id: str):
         if not application:
             return jsonify({'error': 'Application not found'}), 404
         
-        # Get resume
+        # Get resume (prefer media via resume_raw_file_id, fallback BYTEA)
         profile = db_get(
             '''
-            SELECT resume
+            SELECT resume, resume_raw_file_id
             FROM candidate_profiles
             WHERE candidate_id = ?
             ''',
             (candidate_id,)
         )
-        if not profile or not profile.get('resume'):
+        if not profile:
             return jsonify({'error': 'Resume not found'}), 404
-        
+
         from flask import Response
-        resume_data = _resume_bytes(profile.get('resume'))
+        from app.domains.recruitment.services.parsing_storage import load_raw_file_bytes
+
+        resume_data = None
+        raw_id = profile.get('resume_raw_file_id')
+        if raw_id:
+            resume_data = load_raw_file_bytes(str(raw_id))
+        if not resume_data:
+            resume_data = _resume_bytes(profile.get('resume'))
         if resume_data:
             return Response(
                 resume_data,
@@ -538,8 +550,7 @@ def get_candidate_resume(job_id: str, candidate_id: str):
                     'Expires': '0'
                 }
             )
-        else:
-            return jsonify({'error': 'Invalid resume data'}), 500
+        return jsonify({'error': 'Resume not found'}), 404
     except Exception as e:
         print(f"Error in get_candidate_resume: {e}")
         import traceback
@@ -906,12 +917,12 @@ def update_job(job_id: str):
             if new_jdid != job_id:
                 # Update applications table
                 db_run('UPDATE applications SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
-                # saved_jobs table was removed in migrations; skip if present
-                if BACKEND != "postgresql":
-                    try:
-                        db_run('UPDATE saved_jobs SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
-                    except Exception:
-                        pass
+                db_run('UPDATE matches SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
+                db_run('UPDATE parsed_jds SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
+                db_run(
+                    'UPDATE external_jobs SET job_id = ? WHERE job_id = ?',
+                    (new_jdid, job_id),
+                )
 
         # Update job with new jdid if it changed
         db_run(

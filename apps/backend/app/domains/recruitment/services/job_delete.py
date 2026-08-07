@@ -1,8 +1,8 @@
 """Cascade-delete a job and dependent recruitment rows.
 
-`applications.job_id` and `matches.job_id` are NO ACTION, so a bare
-`DELETE FROM jobs` fails when applicants or matches exist. Child rows of
-applications (interviews, offers) cascade from applications.
+``applications.job_id`` and ``matches.job_id`` are NO ACTION, so a bare
+``DELETE FROM jobs`` fails when applicants or matches exist. Child rows of
+applications (e.g. interviews) cascade from applications.
 """
 from __future__ import annotations
 
