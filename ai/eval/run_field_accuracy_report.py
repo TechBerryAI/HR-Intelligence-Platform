@@ -3,7 +3,7 @@
 Field-by-field accuracy + latency report for Document Intelligence Engine.
 
 Parses gold lake source.txt → Form DTO / Canonical and compares to expected_*.
-Writes docs/document_intelligence/ACCURACY_REPORT.md and LATENCY_REPORT.md
+Writes ai/eval/reports/ACCURACY_REPORT.md and LATENCY_REPORT.md
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from app.ai.document_intelligence.pipeline import (  # noqa: E402
 from app.ai.parser.engine.hardware import detect_hardware_profile  # noqa: E402
 
 LAKE = ROOT / 'ai' / 'dataset' / 'lake' / 'benchmark' / 'parsing' / 'v1'
-DOCS = ROOT / 'docs' / 'document_intelligence'
+DOCS = ROOT / 'ai' / 'eval' / 'reports'
 
 
 def _norm(v):
@@ -160,6 +160,7 @@ def main() -> None:
 Notes: In-memory text path (source.txt), deterministic section parsers, LLM skipped when coverage gate passes.
 """
 
+    DOCS.mkdir(parents=True, exist_ok=True)
     (DOCS / 'ACCURACY_REPORT.md').write_text(accuracy_md, encoding='utf-8')
     (DOCS / 'LATENCY_REPORT.md').write_text(latency_md, encoding='utf-8')
     print(accuracy_md)

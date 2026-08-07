@@ -37,9 +37,15 @@ app/ai/document_intelligence/
 - Parse APIs: `domains/recruitment/api/parsing.py`
 - Frontend: `takeResumeFormDTO` / `takeJDFormDTO` in `parsingApi.js`
 
-## Acceptance
+## Eval / gold lake
 
-- [ACCURACY_REPORT.md](./ACCURACY_REPORT.md)
-- [LATENCY_REPORT.md](./LATENCY_REPORT.md)
-- Gold lake: `ai/dataset/lake/benchmark/parsing/v1` (`source.txt`, `expected_canonical.json`, `expected_form.json`, `expected_frontend_fields.json`)
-- Eval: `ai/eval/run_field_accuracy_report.py`, `ai/eval/upgrade_gold_canonical.py`
+- Gold lake: `ai/dataset/lake/benchmark/parsing/v1`
+- Regenerate / report (writes `ai/eval/reports/`):
+
+```bash
+python3 ai/eval/upgrade_gold_canonical.py
+python3 ai/eval/run_field_accuracy_report.py
+pytest tests/backend/document_intelligence/ -q
+```
+
+See also: [WORKFLOWS.md](WORKFLOWS.md).

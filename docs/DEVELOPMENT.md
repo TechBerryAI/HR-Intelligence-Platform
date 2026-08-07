@@ -218,11 +218,12 @@ Run all AI tests: `cd ai && pytest`
 | Topic | Document |
 |-------|----------|
 | Docs index | [README.md](README.md) |
+| Unique workflows | [WORKFLOWS.md](WORKFLOWS.md) |
 | User manuals (screenshots) | [user-manual/README.md](user-manual/README.md) |
-| Architecture / engineering archive (optional) | [ARCHITECTURE.md](ARCHITECTURE.md) · [ENGINEERING.md](ENGINEERING.md) |
+| Document intelligence | [DOCUMENT_INTELLIGENCE.md](DOCUMENT_INTELLIGENCE.md) |
+| AI workflows / ADRs | [AI_WORKFLOW.md](AI_WORKFLOW.md) · [AI_DATA_PIPELINE.md](AI_DATA_PIPELINE.md) · [ADRS.md](ADRS.md) |
 | AI platform overview | [ai/README.md](../ai/README.md) |
 | TOON ontology | [ai/toon/README.md](../ai/toon/README.md) |
-| Data pipeline | [ai/docs/DATA_PIPELINE.md](../ai/docs/DATA_PIPELINE.md) |
 | Contributing | [CONTRIBUTING.md](../CONTRIBUTING.md) |
 
 ## Troubleshooting

@@ -1,6 +1,6 @@
 # Documentation
 
-End-user manuals and local engineering notes for the HR Intelligence Platform.
+Single entry point for HR Intelligence Platform docs. Prefer live code when docs disagree.
 
 ---
 
@@ -8,12 +8,12 @@ End-user manuals and local engineering notes for the HR Intelligence Platform.
 
 | If you are… | Read this |
 |-------------|-----------|
-| **End user / trainer** | [user-manual/HR_Intelligence_Platform_User_Manual.docx](user-manual/HR_Intelligence_Platform_User_Manual.docx) / [PDF](user-manual/HR_Intelligence_Platform_User_Manual.pdf) |
+| **End user / trainer** | [user-manual/](user-manual/README.md) (Word/PDF) |
 | **Engineer (local setup)** | [DEVELOPMENT.md](DEVELOPMENT.md) · root [README.md](../README.md) |
-| **Media files & backups** | [MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md) ← commands cheat sheet |
-| **Deep architecture (archive)** | [ARCHITECTURE.md](ARCHITECTURE.md) · [ENGINEERING.md](ENGINEERING.md) |
-| **Sprint / migration history** | [HISTORY.md](HISTORY.md) |
-| **Document intelligence notes** | [document_intelligence/](document_intelligence/) |
+| **Workflows** | [WORKFLOWS.md](WORKFLOWS.md) |
+| **Media & backups** | [MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md) |
+| **Document intelligence** | [DOCUMENT_INTELLIGENCE.md](DOCUMENT_INTELLIGENCE.md) |
+| **AI workflows** | [AI_WORKFLOW.md](AI_WORKFLOW.md) · [AI_DATA_PIPELINE.md](AI_DATA_PIPELINE.md) · [ADRS.md](ADRS.md) |
 
 ---
 
@@ -21,19 +21,20 @@ End-user manuals and local engineering notes for the HR Intelligence Platform.
 
 ```text
 docs/
-  README.md                 ← you are here
-  DEVELOPMENT.md            ← local setup
-  MEDIA_AND_BACKUPS.md      ← durable media + backup commands
-  user-manual/              ← screenshot manuals (Word + PDF)
-  ARCHITECTURE.md           ← historical deep dive (optional)
-  ENGINEERING.md            ← historical API/module narrative (optional)
-  HISTORY.md                ← sprint / migration notes (optional)
-  document_intelligence/    ← parsing / DI notes
+  README.md
+  WORKFLOWS.md
+  DEVELOPMENT.md
+  MEDIA_AND_BACKUPS.md
+  DOCUMENT_INTELLIGENCE.md
+  AI_WORKFLOW.md
+  AI_DATA_PIPELINE.md
+  ADRS.md
+  user-manual/          ← only subfolder (Word/PDF + screenshots + build scripts)
 ```
 
 ---
 
-## User manual (primary)
+## User manual
 
 | Format | File |
 |--------|------|
@@ -46,10 +47,6 @@ Regenerate: [user-manual/README.md](user-manual/README.md).
 
 ## Runtime source of truth
 
-For APIs, schema, and behavior, prefer the live code:
-
 1. `apps/backend/app/bootstrap/create_app.py` and domain routes  
 2. `apps/backend/schema_pg/`  
-3. `apps/frontend/src/`  
-
-Narrative archives under `ARCHITECTURE.md` / `ENGINEERING.md` are optional reading when they disagree with code.
+3. `apps/frontend/src/`

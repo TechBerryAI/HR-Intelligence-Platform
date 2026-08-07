@@ -63,7 +63,7 @@ When adding or changing a major component:
 
 ## AI platform conventions
 
-See [ai/docs/CONVENTIONS.md](ai/docs/CONVENTIONS.md) and [ai/docs/AI_ENGINEERING.md](ai/docs/AI_ENGINEERING.md).
+See [docs/AI_WORKFLOW.md](docs/AI_WORKFLOW.md), [docs/ADRS.md](docs/ADRS.md), and [ai/README.md](ai/README.md).
 
 Key rules:
 
@@ -73,7 +73,7 @@ Key rules:
 
 ## Architecture decisions
 
-Significant AI platform decisions require an ADR in `ai/docs/adr/`. See [ai/docs/adr/README.md](ai/docs/adr/README.md).
+Significant AI platform decisions go in [docs/ADRS.md](docs/ADRS.md).
 
 ## Security
 
