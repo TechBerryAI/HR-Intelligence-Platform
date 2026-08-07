@@ -122,18 +122,30 @@ def hrms_feedback_html(
     return _wrap_content("HRMS Feedback", content, preheader=f"{feedback_type} – {module or 'General'}")
 
 
-def otp_html(otp: str, user_type: str = "User") -> str:
+def otp_html(otp: str, user_type: str = "User", *, purpose: str = "verification", minutes: int = 5) -> str:
     """OTP verification email."""
     greeting = "HR" if user_type.lower() == "hr" else "Candidate"
+    if purpose == "password_reset":
+        title = "Password reset code"
+        lead = (
+            f"Dear {_escape(greeting)}, use the code below to reset your HR Intelligence password. "
+            f"It expires in <strong>{minutes} minutes</strong>."
+        )
+    else:
+        title = "Your verification code"
+        lead = (
+            f"Dear {_escape(greeting)}, use the code below to complete your verification. "
+            f"It expires in <strong>{minutes} minutes</strong>."
+        )
     content = f"""
-    <h2 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 700; color: #0f172a;">Your verification code</h2>
-    <p style="margin: 0 0 24px 0; color: #64748b;">Dear {_escape(greeting)}, use the code below to complete your verification. It expires in <strong>5 minutes</strong>.</p>
+    <h2 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 700; color: #0f172a;">{title}</h2>
+    <p style="margin: 0 0 24px 0; color: #64748b;">{lead}</p>
     <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; font-size: 28px; font-weight: 700; letter-spacing: 8px; text-align: center; padding: 20px 24px; border-radius: 10px; margin-bottom: 24px;">
       {_escape(otp)}
     </div>
     <p style="margin: 0; font-size: 13px; color: #94a3b8;">If you did not request this code, please ignore this email.</p>
     """
-    return _wrap_content("Your verification code", content, preheader=f"Your OTP is {otp}")
+    return _wrap_content(title, content, preheader=f"Your OTP is {otp}")
 
 
 def welcome_hr_html(full_name: str) -> str:

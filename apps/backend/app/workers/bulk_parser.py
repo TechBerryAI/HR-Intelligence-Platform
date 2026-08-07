@@ -34,8 +34,6 @@ EXCEL_HEADERS = [
     'Phone',
     'LinkedIn',
     'GitHub',
-    'Current Location',
-    'Preferred Location',
     'Summary',
     'Skills',
     'Experience',
@@ -223,8 +221,8 @@ def _skill_to_str(s: Any) -> str:
     return _as_text(s)
 
 
-def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
-    """Flatten one TOON resume to a row dict for Excel; prefer Form DTO for location/education."""
+def _flatten_toon(toon: dict, filename: str) -> dict:
+    """Flatten one TOON resume to a row dict for Excel."""
     if not isinstance(toon, dict):
         toon = {}
     person = toon.get('person') or {}
@@ -260,48 +258,22 @@ def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
             exp_parts.append(chunk)
 
     edu_parts = []
-    # Prefer Form DTO education (includes mapper heals / grounding filters)
-    form_edu = None
-    if form is not None:
-        form_edu = getattr(form, 'education', None)
-        if form_edu is None and isinstance(form, dict):
-            form_edu = form.get('education')
-    if form_edu:
-        for e in list(form_edu)[:15]:
-            if hasattr(e, 'degree'):
-                degree = _as_text(getattr(e, 'degree', ''))
-                inst = _as_text(getattr(e, 'institution', ''))
-                year = _as_text(getattr(e, 'endMonth', '') or getattr(e, 'startMonth', ''))
-            elif isinstance(e, dict):
-                degree = _as_text(e.get('degree'))
-                inst = _as_text(e.get('institution'))
-                year = _as_text(e.get('endMonth') or e.get('startMonth') or e.get('to'))
-            else:
-                continue
-            chunk = degree
-            if inst:
-                chunk = f'{chunk} - {inst}' if chunk else inst
-            if year:
-                chunk = f'{chunk} [{year}]' if chunk else year
-            if chunk:
-                edu_parts.append(chunk)
-    if not edu_parts:
-        for e in edu[:15]:
-            if not isinstance(e, dict):
-                continue
-            degree = _as_text(e.get('degree'))
-            inst = _as_text(e.get('institution'))
-            field = _as_text(e.get('field'))
-            year = _as_text(e.get('year') or e.get('to') or e.get('from'))
-            chunk = degree
-            if field:
-                chunk = f'{chunk} ({field})' if chunk else field
-            if inst:
-                chunk = f'{chunk} - {inst}' if chunk else inst
-            if year:
-                chunk = f'{chunk} [{year}]' if chunk else year
-            if chunk:
-                edu_parts.append(chunk)
+    for e in edu[:15]:
+        if not isinstance(e, dict):
+            continue
+        degree = _as_text(e.get('degree'))
+        inst = _as_text(e.get('institution'))
+        field = _as_text(e.get('field'))
+        year = _as_text(e.get('year') or e.get('to') or e.get('from'))
+        chunk = degree
+        if field:
+            chunk = f'{chunk} ({field})' if chunk else field
+        if inst:
+            chunk = f'{chunk} - {inst}' if chunk else inst
+        if year:
+            chunk = f'{chunk} [{year}]' if chunk else year
+        if chunk:
+            edu_parts.append(chunk)
 
     skill_strs = [_skill_to_str(s) for s in skills[:50]]
     skill_strs = [s for s in skill_strs if s]
@@ -314,23 +286,6 @@ def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
     else:
         years_out = years
 
-    current_location = _as_text(
-        person.get('location') or person.get('current_location')
-    )
-    preferred_location = _as_text(person.get('preferred_location')) or current_location
-    if form is not None:
-        form_cur = getattr(form, 'currentLocation', None)
-        form_pref = getattr(form, 'preferredLocation', None)
-        if form_cur is None and isinstance(form, dict):
-            form_cur = form.get('currentLocation')
-            form_pref = form.get('preferredLocation')
-        if form_cur:
-            current_location = _as_text(form_cur)
-        if form_pref:
-            preferred_location = _as_text(form_pref)
-        elif current_location:
-            preferred_location = current_location
-
     return {
         'Filename': filename,
         'Name': _as_text(person.get('name')),
@@ -338,8 +293,6 @@ def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
         'Phone': _normalize_phone(person.get('phone')),
         'LinkedIn': _as_text(person.get('linkedin')),
         'GitHub': _as_text(person.get('github')),
-        'Current Location': current_location,
-        'Preferred Location': preferred_location,
         'Summary': _as_text(toon.get('summary'))[:2000],
         'Skills': ', '.join(skill_strs)[:4000],
         'Experience': '; '.join(exp_parts)[:8000],
@@ -444,143 +397,36 @@ def _process_one_file(args: tuple) -> tuple[str, dict | None, bool, str, str]:
     ctx, wall_start = _bulk_timing_begin(filename, job_id=job_id)
     failed = True
     try:
-        result = _process_one_file_inner(filename, path, job_id=job_id)
+        result = _process_one_file_inner(filename, path)
         failed = bool(result[2])
         return result
     finally:
         _bulk_timing_end(ctx, wall_start, failed=failed)
 
 
-def _maybe_enhance_layout(raw_text: str) -> tuple[str, str]:
-    """Apply resume layout structuring when enabled. Returns (text, stage_outcome)."""
-    try:
-        from app.ai.parser.layout.detector import enhance_resume_text, is_layout_enabled
-
-        if not is_layout_enabled():
-            return raw_text, 'skipped'
-        structured = enhance_resume_text(raw_text)
-        if structured and len(structured.strip()) >= BULK_MIN_TEXT_CHARS:
-            return structured, 'completed'
-        return raw_text, 'completed'
-    except Exception as e:
-        print(f"[local_bulk_parser] layout enhance failed: {e}")
-        return raw_text, 'failed'
-
-
-def _persist_bulk_parse(
-    *,
-    job_id: str | None,
-    filename: str,
-    file_data: bytes,
-    raw_text: str,
-    toon: dict,
-    confidence: float = 0.75,
-) -> None:
-    """Store successful bulk parse into raw_files + parsed_resumes for cache reuse."""
-    if not job_id or not isinstance(toon, dict):
-        return
-    try:
-        from app.database.connection.db import db_run
-        from app.domains.recruitment.services.parsing_storage import (
-            store_parsed_resume,
-            store_raw_file,
-        )
-
-        mime = 'application/pdf'
-        low = filename.lower()
-        if low.endswith('.docx'):
-            mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        elif low.endswith('.doc'):
-            mime = 'application/msword'
-
-        uploader_id = f'bulk:{job_id}'
-        cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v6-jd-coverage')
-        model_version = f'bulk+{cache_tag}+canonical'
-        raw = store_raw_file(
-            uploader_id,
-            'admin',
-            file_data,
-            filename,
-            mime,
-            None,
-            bulk_session_id=job_id,
-        )
-        parsed_id = store_parsed_resume(
-            raw['id'],
-            None,
-            toon,
-            raw_text,
-            confidence,
-            model_version,
-            bulk_session_id=job_id,
-        )
-        # Ensure linkage even if older DB rows lack column on insert path
-        try:
-            db_run(
-                'UPDATE raw_files SET bulk_session_id = ? WHERE id = ? AND bulk_session_id IS NULL',
-                (job_id, raw['id']),
-            )
-            db_run(
-                'UPDATE parsed_resumes SET bulk_session_id = ? WHERE id = ? AND bulk_session_id IS NULL',
-                (job_id, parsed_id),
-            )
-        except Exception:
-            pass
-    except Exception as e:
-        print(f"[local_bulk_parser] persist cache failed for {filename}: {e}")
-
-
-def _process_one_file_inner(
-    filename: str,
-    path: Path,
-    *,
-    job_id: str | None = None,
-) -> tuple[str, dict | None, bool, str, str]:
+def _process_one_file_inner(filename: str, path: Path) -> tuple[str, dict | None, bool, str, str]:
     from app.ai.parser.text_extraction import extract_text
     from app.domains.recruitment.services.parsing_storage import validate_toon_format_bulk
 
     try:
-        # Bulk text path: skip parse-cache lookup for throughput; layout when enabled
+        # Bulk text path: no parse-cache / layout / separate raw-store step
         _bulk_stage("cache", "skipped")
+        _bulk_stage("persist_raw", "skipped")
+        _bulk_stage("layout", "skipped")
 
         data = path.read_bytes()
         last_extract_err = None
         raw_text = ""
         t_text = time.perf_counter()
-        _IMAGE_EXTS = ('pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp')
-        ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
         try:
             raw_text = extract_text(data, filename) or ""
         except Exception as extract_err:
             raw_text = ""
             last_extract_err = str(extract_err)[:200]
 
-        if raw_text and '\x00' in raw_text:
-            raw_text = raw_text.replace('\x00', '')
-
-        def _looks_like_garbage_extract(s: str) -> bool:
-            t = (s or '').strip()
-            if len(t) < BULK_MIN_TEXT_CHARS:
-                return True
-            if len(t) > 400:
-                return False
-            alnum = sum(1 for c in t if c.isalnum())
-            ratio = alnum / max(len(t), 1)
-            has_token = bool(
-                re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', t)
-                or re.search(r'\b[6-9]\d{9}\b|\+\d[\d\s\-()]{8,}\d', t)
-                or re.search(r'(?i)\b(?:experience|education|skills|summary)\b', t)
-            )
-            return ratio < 0.35 and not has_token
-
-        if (
-            (len(raw_text.strip()) < BULK_MIN_TEXT_CHARS or _looks_like_garbage_extract(raw_text))
-            and ext in _IMAGE_EXTS
-        ):
+        if len(raw_text.strip()) < BULK_MIN_TEXT_CHARS and filename.lower().endswith(".pdf"):
             try:
                 raw_text = extract_text(data, filename, dpi=BULK_OCR_RETRY_DPI) or ""
-                if raw_text and '\x00' in raw_text:
-                    raw_text = raw_text.replace('\x00', '')
                 last_extract_err = None
             except Exception as retry_err:
                 last_extract_err = str(retry_err)[:200]
@@ -588,8 +434,6 @@ def _process_one_file_inner(
         text_ms = (time.perf_counter() - t_text) * 1000.0
         if not raw_text or len(raw_text.strip()) < BULK_MIN_TEXT_CHARS:
             _bulk_stage("text", "failed", text_ms)
-            _bulk_stage("persist_raw", "skipped")
-            _bulk_stage("layout", "skipped")
             detail = last_extract_err or "insufficient text after OCR"
             low = (detail or "").lower()
             if "legacy .doc" in low or (
@@ -612,21 +456,13 @@ def _process_one_file_inner(
 
         _bulk_stage("text", "completed", text_ms)
 
-        t_layout = time.perf_counter()
-        raw_text, layout_outcome = _maybe_enhance_layout(raw_text)
-        _bulk_stage(
-            "layout",
-            layout_outcome,
-            (time.perf_counter() - t_layout) * 1000.0,
-        )
-
         # --- Intelligence Engine text path (shared with single-file parse) ---
         if BULK_SKIP_LLM_WHEN_DETERMINISTIC:
             try:
                 from app.ai.parser.engine import parse_resume_text_via_engine
                 from app.ai.parser.deterministic_resume import score_resume_toon
 
-                det_toon, source, eng_notes, form_dto = parse_resume_text_via_engine(
+                det_toon, source, eng_notes = parse_resume_text_via_engine(
                     raw_text,
                     allow_llm=False,
                     skip_llm_when_deterministic=True,
@@ -644,7 +480,7 @@ def _process_one_file_inner(
                     )
                     if accept:
                         t_persist = time.perf_counter()
-                        row = _flatten_toon(det_toon, filename, form=form_dto)
+                        row = _flatten_toon(det_toon, filename)
                         note_bits = [f"source=engine:{source}", f"conf={conf:.2f}"]
                         note_bits.extend(eng_notes[:4])
                         if missing:
@@ -653,19 +489,6 @@ def _process_one_file_inner(
                             note_bits.append(notes)
                         row["ParseStatus"] = "ok" if parse_status == "ok" else parse_status
                         row["ParseNotes"] = "; ".join(note_bits)[:2000]
-                        _persist_bulk_parse(
-                            job_id=job_id,
-                            filename=filename,
-                            file_data=data,
-                            raw_text=raw_text,
-                            toon=det_toon,
-                            confidence=float(conf or 0.75),
-                        )
-                        _bulk_stage(
-                            "persist_raw",
-                            "completed" if job_id else "skipped",
-                            0.0,
-                        )
                         _bulk_stage(
                             "persist",
                             "completed",
@@ -695,7 +518,7 @@ def _process_one_file_inner(
             try:
                 from app.ai.parser.engine import parse_resume_text_via_engine
 
-                toon, source, eng_notes, form_dto = parse_resume_text_via_engine(
+                toon, source, eng_notes = parse_resume_text_via_engine(
                     raw_text,
                     allow_llm=True,
                     skip_llm_when_deterministic=False,
@@ -715,26 +538,13 @@ def _process_one_file_inner(
                 )
                 if accept:
                     t_persist = time.perf_counter()
-                    row = _flatten_toon(toon, filename, form=form_dto)
+                    row = _flatten_toon(toon, filename)
                     note_bits = [f"source=engine:{source}", f"status={parse_status}"]
                     note_bits.extend(eng_notes[:4])
                     if notes:
                         note_bits.append(notes)
                     row["ParseStatus"] = parse_status
                     row["ParseNotes"] = "; ".join(note_bits)[:2000]
-                    _persist_bulk_parse(
-                        job_id=job_id,
-                        filename=filename,
-                        file_data=data,
-                        raw_text=raw_text,
-                        toon=toon,
-                        confidence=0.7,
-                    )
-                    _bulk_stage(
-                        "persist_raw",
-                        "completed" if job_id else "skipped",
-                        0.0,
-                    )
                     _bulk_stage(
                         "persist",
                         "completed",

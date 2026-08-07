@@ -35,7 +35,7 @@ B.Tech Computer Science, State University, 2019
 def test_parse_resume_text_via_engine_deterministic():
     from app.ai.parser.engine import parse_resume_text_via_engine
 
-    toon, source, notes, form = parse_resume_text_via_engine(
+    toon, source, notes = parse_resume_text_via_engine(
         SAMPLE,
         allow_llm=False,
         skip_llm_when_deterministic=True,
@@ -46,8 +46,6 @@ def test_parse_resume_text_via_engine_deterministic():
     assert 'jane.doe' in str(person.get('email') or '').lower()
     assert source in ('deterministic', 'text-fallback')
     assert any('sections=' in n or n == 'parsers=resume_from_text' for n in notes)
-    assert form is not None
-    assert getattr(form, 'email', None) or (isinstance(form, dict) and form.get('email'))
 
 
 def test_apply_hardware_sets_ollama_model_when_unset(monkeypatch):

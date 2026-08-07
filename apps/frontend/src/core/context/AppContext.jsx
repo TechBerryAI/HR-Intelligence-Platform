@@ -202,6 +202,19 @@ export function AppProvider({ children }) {
     }
   }
 
+  const resendHrPasswordOtp = async (email) => {
+    if (!email) return { ok: false, message: 'Email is required' }
+    try {
+      const data = await apiRequest('/api/forgot-password/resend-otp', {
+        method: 'POST',
+        body: { email },
+      })
+      return { ok: true, data }
+    } catch (err) {
+      return { ok: false, message: err?.message || 'Failed to resend OTP' }
+    }
+  }
+
   const verifyHrPasswordOtp = async ({ email, otp }) => {
     try {
       const data = await apiRequest('/api/forgot-password/verify-otp', {
@@ -543,6 +556,7 @@ export function AppProvider({ children }) {
     verifyHROTP,
     resendHROTP,
     requestHrPasswordReset,
+    resendHrPasswordOtp,
     verifyHrPasswordOtp,
     resetHrPassword,
     changePasswordHr,

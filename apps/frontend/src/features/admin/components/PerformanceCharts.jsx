@@ -7,22 +7,14 @@ function durationTone(ms) {
   return 'red'
 }
 
-/** Format wall time: ms under 1s, sec at 1s+. Sub-ms completed steps show as `<1 ms` (not `0 ms`). */
+/** Format wall time: ms under 1s, sec at 1s+. */
 export function formatDuration(ms) {
   if (ms == null || Number.isNaN(Number(ms))) return '—'
   const n = Number(ms)
-  if (n < 0) return '—'
   if (n >= 1000) {
     const sec = n / 1000
     const rounded = sec >= 10 ? sec.toFixed(1) : sec.toFixed(2)
     return `${rounded} sec`
-  }
-  // Fast pipeline stages often finish under 1ms; Math.round made those look like "0 ms"
-  if (n > 0 && n < 1) return '<1 ms'
-  if (n === 0) return '<1 ms'
-  if (n < 10) {
-    const oneDecimal = Math.round(n * 10) / 10
-    return Number.isInteger(oneDecimal) ? `${oneDecimal} ms` : `${oneDecimal.toFixed(1)} ms`
   }
   return `${Math.round(n)} ms`
 }

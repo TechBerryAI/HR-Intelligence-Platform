@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import re
 from typing import Any, Optional
 
 from app.ai.document_intelligence.knowledge import (
@@ -146,15 +145,13 @@ def _emit(
         if status_l not in ('completed', 'failed', 'skipped'):
             return
         elapsed = take_pipeline_stage_elapsed_ms(stage)
-        # Missing start mark → unknown duration. Still record outcome for the checklist;
-        # the UI formats measured 0 / sub-ms as "<1 ms" (never a misleading "0 ms").
         if elapsed is None:
             elapsed = 0.0
         timing_collector.record(
             make_timing_event(
                 function=stage,
                 module='app.ai.document_intelligence.pipeline',
-                duration_ms=max(0.0, float(elapsed)),
+                duration_ms=elapsed,
                 success=status_l != 'failed',
                 exception_name='StageFailed' if status_l == 'failed' else None,
                 depth=2,
@@ -301,13 +298,6 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
         module='app.ai.document_intelligence.pipeline',
     )
 
-    from app.ai.document_intelligence.coverage import (
-        recover_resume_profile_gaps,
-        resume_has_recoverable_gaps,
-    )
-
-    profile, _ = recover_resume_profile_gaps(profile, text)
-
     t0 = _time.perf_counter()
     profile = apply_knowledge_to_candidate(profile)
     knowledge_ms = (_time.perf_counter() - t0) * 1000.0
@@ -321,7 +311,6 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
             allow_experience_fill=bool(profile.experience),
         )
         profile = sanitize_candidate_profile(profile)
-        profile, _ = recover_resume_profile_gaps(profile, text)
         record_pipeline_stage(
             'semantic',
             'completed',
@@ -335,7 +324,7 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
         # Gate: only call AI if critical gaps (fresher OK with education+skills)
         has_id = bool(profile.personal.full_name and profile.contact.email)
         has_body = bool(profile.skills and (profile.experience or profile.education))
-        if not (has_id and has_body) or resume_has_recoverable_gaps(profile, text):
+        if not (has_id and has_body):
             t0 = _time.perf_counter()
             unresolved = unresolved_semantic_text(sections, 'resume') or text
             profile = enrich_resume_semantic(
@@ -344,7 +333,6 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
                 allow_experience_fill=bool(profile.experience),
             )
             profile = sanitize_candidate_profile(profile)
-            profile, _ = recover_resume_profile_gaps(profile, text)
             record_pipeline_stage(
                 'semantic',
                 'completed',
@@ -484,76 +472,38 @@ def _run_resume(
 
     from app.ai.parser.text_extraction import extract_text
 
-    # Time text and layout separately (layout must not include extract_text wall time)
+    _emit(parse_job_id, 'layout', 'started', 'Layout + text extraction', on_stage=on_stage)
     _emit(parse_job_id, 'text', 'started', on_stage=on_stage)
-    text_done_msg = ''
-    extract_err: Exception | None = None
     try:
         raw_text = extract_text(file_data, filename)
     except Exception as e:
-        extract_err = e
-        raw_text = ''
+        _emit(parse_job_id, 'text', 'failed', str(e), on_stage=on_stage)
+        return {'status': 'error', 'error': f'Text extraction failed: {str(e)}'}, 400
 
-    # VALIDATION_FIX_nul_strip — PostgreSQL text columns reject NUL bytes
+    # PostgreSQL text columns reject NUL bytes from some PDF/DOCX extractors
     if raw_text and '\x00' in raw_text:
         raw_text = raw_text.replace('\x00', '')
 
     text_length = len(raw_text.strip()) if raw_text else 0
-    _IMAGE_EXTS = ('pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp')
-
-    def _looks_like_garbage_extract(s: str) -> bool:
-        """Narrow heuristic: enough chars but almost no signal (bad OCR)."""
-        t = (s or '').strip()
-        if len(t) < 30:
-            return True
-        if len(t) > 400:
-            return False
-        alnum = sum(1 for c in t if c.isalnum())
-        ratio = alnum / max(len(t), 1)
-        has_token = bool(
-            re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', t)
-            or re.search(r'\b[6-9]\d{9}\b|\+\d[\d\s\-()]{8,}\d', t)
-            or re.search(r'(?i)\b(?:experience|education|skills|summary)\b', t)
-        )
-        return ratio < 0.35 and not has_token
-
-    # VALIDATION_FIX_ocr_dpi_retry — thin, failed, or garbage extract on scan-friendly formats
-    needs_dpi_retry = filename.lower().rsplit('.', 1)[-1] in _IMAGE_EXTS and (
-        extract_err is not None
-        or not raw_text
-        or text_length < 30
-        or _looks_like_garbage_extract(raw_text)
-    )
-    if needs_dpi_retry:
+    # VALIDATION_FIX_ocr_dpi_retry
+    if (not raw_text or text_length < 30) and filename.lower().rsplit('.', 1)[-1] in (
+        'pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp',
+    ):
         try:
             raw_text = extract_text(file_data, filename, dpi=300) or ''
             if raw_text and '\x00' in raw_text:
                 raw_text = raw_text.replace('\x00', '')
             text_length = len(raw_text.strip()) if raw_text else 0
-            text_done_msg = f'OCR DPI retry → {text_length} chars'
-            extract_err = None
+            _emit(parse_job_id, 'text', 'completed', f'OCR DPI retry → {text_length} chars', on_stage=on_stage)
         except Exception as retry_err:
-            if extract_err is not None and (not raw_text or text_length < 30):
-                _emit(parse_job_id, 'text', 'failed', f'DPI retry: {retry_err}', on_stage=on_stage)
-                return {'status': 'error', 'error': f'Text extraction failed: {retry_err}'}, 400
-
-    if extract_err is not None and (not raw_text or text_length < 30):
-        _emit(parse_job_id, 'text', 'failed', str(extract_err), on_stage=on_stage)
-        return {'status': 'error', 'error': f'Text extraction failed: {str(extract_err)}'}, 400
+            _emit(parse_job_id, 'text', 'failed', f'DPI retry: {retry_err}', on_stage=on_stage)
 
     if not raw_text or text_length < 30:
         error_msg = 'Could not extract sufficient text from document'
         _emit(parse_job_id, 'text', 'failed', error_msg, on_stage=on_stage)
         return {'status': 'error', 'error': error_msg}, 400
-    _emit(
-        parse_job_id,
-        'text',
-        'completed',
-        text_done_msg or f'Extracted {text_length} chars',
-        on_stage=on_stage,
-    )
+    _emit(parse_job_id, 'text', 'completed', f'Extracted {text_length} chars', on_stage=on_stage)
 
-    _emit(parse_job_id, 'layout', 'started', 'Layout analysis', on_stage=on_stage)
     try:
         from app.ai.parser.layout.detector import enhance_resume_text, is_layout_enabled
 
@@ -589,31 +539,12 @@ def _run_resume(
     )
     _emit(parse_job_id, 'deterministic', 'completed', on_stage=on_stage)
 
-    from app.ai.document_intelligence.coverage import recover_resume_profile_gaps
-
-    profile, _cov = recover_resume_profile_gaps(profile, raw_text)
-
     used_llm = False
     has_id = bool(profile.personal.full_name and profile.contact.email)
     has_body = bool(profile.skills and (profile.experience or profile.education))
     _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
     if _SKIP_LLM and has_id and has_body:
-        # Still allow residual LLM when coverage gaps remain with source evidence
-        from app.ai.document_intelligence.coverage import resume_has_recoverable_gaps
-
-        if resume_has_recoverable_gaps(profile, raw_text):
-            unresolved = unresolved_semantic_text(sections, 'resume') or raw_text
-            profile = enrich_resume_semantic(
-                profile,
-                unresolved_text=unresolved,
-                allow_experience_fill=bool(profile.experience),
-            )
-            profile = sanitize_candidate_profile(profile)
-            profile, _cov = recover_resume_profile_gaps(profile, raw_text)
-            used_llm = True
-            _emit(parse_job_id, 'semantic', 'completed', 'Coverage gaps', on_stage=on_stage)
-        else:
-            _emit(parse_job_id, 'semantic', 'skipped', 'Deterministic coverage sufficient', on_stage=on_stage)
+        _emit(parse_job_id, 'semantic', 'skipped', 'Deterministic coverage sufficient', on_stage=on_stage)
     else:
         unresolved = unresolved_semantic_text(sections, 'resume') or raw_text
         profile = enrich_resume_semantic(
@@ -622,7 +553,6 @@ def _run_resume(
             allow_experience_fill=bool(profile.experience),
         )
         profile = sanitize_candidate_profile(profile)
-        profile, _cov = recover_resume_profile_gaps(profile, raw_text)
         used_llm = True
         _emit(parse_job_id, 'semantic', 'completed', on_stage=on_stage)
 
@@ -790,13 +720,6 @@ def _run_jd(
 
     _emit(parse_job_id, 'coverage', 'started', on_stage=on_stage)
     profile, coverage = recover_jd_profile_gaps(profile, raw_text)
-    _emit(
-        parse_job_id,
-        'coverage',
-        'completed',
-        f'recovered={len(coverage.recovered_fields)} missing_evidence={len(coverage.missing_with_evidence)}',
-        on_stage=on_stage,
-    )
 
     used_llm = False
     _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
@@ -817,6 +740,13 @@ def _run_jd(
     profile, coverage = recover_jd_profile_gaps(profile, raw_text)
     toon = job_to_toon(profile)
     missing_ev = coverage.missing_with_evidence
+    _emit(
+        parse_job_id,
+        'coverage',
+        'completed',
+        f'recovered={len(coverage.recovered_fields)} missing_evidence={len(missing_ev)}',
+        on_stage=on_stage,
+    )
     form = map_job_to_form(profile, coverage=coverage.as_dicts(), raw_text=raw_text)
 
     _emit(parse_job_id, 'validate', 'started', on_stage=on_stage)

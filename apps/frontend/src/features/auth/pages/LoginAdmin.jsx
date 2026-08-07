@@ -94,7 +94,15 @@ export default function LoginAdmin() {
             />
           </div>
           <div className="w-full">
-            <label className="mb-1.5 block text-sm font-medium text-[var(--ei-text-label)]">Password</label>
+            <div className="mb-1.5 flex items-center justify-between gap-3">
+              <label className="block text-sm font-medium text-[var(--ei-text-label)]">Password</label>
+              <Link
+                to="/forgot-password/admin"
+                className="text-sm font-medium text-[#55B9FF] transition-colors hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
             <PasswordInput
               className="input-premium h-12 min-h-[3rem] text-base"
               placeholder="••••••••"

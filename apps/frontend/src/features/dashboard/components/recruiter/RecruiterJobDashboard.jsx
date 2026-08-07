@@ -464,7 +464,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                 icon={FiEye}
                 disabled={isSubmitting}
                 onClick={() => setShowPreview(true)}
-                className={embedded ? '!bg-gradient-to-br !from-[#00A6FF] !to-[#276DFF] !shadow-[0_8px_24px_rgba(0,166,255,0.2)] rounded-xl min-h-[46px]' : ''}
+                className={embedded ? '!bg-[var(--ei-btn-primary-from)] !text-[var(--ei-btn-primary-text)] !shadow-[0_8px_20px_var(--ei-btn-primary-shadow)] rounded-xl min-h-[46px]' : ''}
               >
                 Preview Post
               </PremiumButton>
@@ -473,7 +473,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                 variant="primary"
                 loading={isSubmitting}
                 disabled={isSubmitting}
-                className={embedded ? '!bg-gradient-to-br !from-[#00A6FF] !to-[#276DFF] !shadow-[0_8px_24px_rgba(0,166,255,0.2)] rounded-xl min-h-[46px]' : ''}
+                className={embedded ? '!bg-[var(--ei-btn-primary-from)] !text-[var(--ei-btn-primary-text)] !shadow-[0_8px_20px_var(--ei-btn-primary-shadow)] rounded-xl min-h-[46px]' : ''}
               >
                 {isSubmitting ? 'Posting...' : 'Post Job'}
               </PremiumButton>
@@ -964,7 +964,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                     const form = document.getElementById('recruiter-job-form')
                     form?.requestSubmit()
                   }}
-                  className={`sm:min-w-[140px] ${embedded ? '!bg-gradient-to-br !from-[#00A6FF] !to-[#276DFF] !shadow-[0_8px_24px_rgba(0,166,255,0.2)] rounded-xl min-h-[46px]' : 'rounded-xl min-h-[46px]'}`}
+                  className={`sm:min-w-[140px] ${embedded ? '!bg-[var(--ei-btn-primary-from)] !text-[var(--ei-btn-primary-text)] !shadow-[0_8px_20px_var(--ei-btn-primary-shadow)] rounded-xl min-h-[46px]' : 'rounded-xl min-h-[46px]'}`}
                 >
                   Post Job
                 </PremiumButton>

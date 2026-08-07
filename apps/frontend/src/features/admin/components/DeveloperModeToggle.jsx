@@ -78,7 +78,7 @@ export default function DeveloperModeToggle({ enterprise = false }) {
             onClick={() => setToggle(!preference)}
             className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 disabled:opacity-40 disabled:cursor-not-allowed ${
               preference && backendAvailable
-                ? 'bg-[#00A6FF]'
+                ? 'bg-[var(--ei-btn-primary-from)]'
                 : enterprise
                   ? 'bg-[var(--ei-surface-hover)] ring-1 ring-[var(--ei-border-primary)]'
                   : 'bg-slate-300 dark:bg-slate-600'

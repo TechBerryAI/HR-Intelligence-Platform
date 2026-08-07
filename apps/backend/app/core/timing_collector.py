@@ -58,24 +58,9 @@ JD_PIPELINE_STEPS: tuple[tuple[str, str], ...] = (
     ("persist", "Save Parsed Result"),
 )
 
-# Public apply submit checklist (parse already done client-side before submit)
-APPLY_PIPELINE_STEPS: tuple[tuple[str, str], ...] = (
-    ("validate", "Validate Payload"),
-    ("upsert_candidate", "Create Candidate"),
-    ("save_profile", "Save Profile"),
-    ("link_resume", "Link Parsed Resume"),
-    ("load_jd", "Load Job Description"),
-    ("ats_match", "ATS Matching"),
-    ("persist", "Database Save"),
-)
-
-APPLY_STEP_LABELS: dict[str, str] = {k: v for k, v in APPLY_PIPELINE_STEPS}
-APPLY_STAGES: frozenset[str] = frozenset(APPLY_STEP_LABELS.keys())
-
 # Display / classification helpers — product labels for timed functions + DI stages
 STAGE_LABELS: dict[str, str] = {
     **{k: v for k, v in ENGINE_STEP_LABELS.items()},
-    **APPLY_STEP_LABELS,
     "extract_text": "Extract Text",
     "parse_via_runtime": "LLM Inference (AI Runtime)",
     "_call_section_llm": "LLM Call (Semantic)",
@@ -85,7 +70,7 @@ STAGE_LABELS: dict[str, str] = {
     "run_document_intelligence": "Document Intelligence (total)",
     "_run_resume": "Resume Parsing (total)",
     "_run_jd": "JD Parsing (total)",
-    "match_candidate_to_job": "ATS Matching",
+    "match_candidate_to_job": "ATS Matching (total)",
     "_internal_match": "ATS Score Computation",
     "_optional_llm_narrative": "ATS Narrative (LLM)",
     "_persist_application_atomic": "Database Save",
@@ -97,14 +82,12 @@ PIPELINE_ORDER: tuple[str, ...] = tuple(
     dict.fromkeys(
         [name for _, name in RESUME_PIPELINE_STEPS]
         + [name for _, name in JD_PIPELINE_STEPS]
-        + [name for _, name in APPLY_PIPELINE_STEPS]
         + [
             "LLM Call (Semantic)",
             "LLM Inference (AI Runtime)",
             "Resume Parsing (total)",
             "JD Parsing (total)",
             "Document Intelligence (total)",
-            "ATS Matching",
             "ATS Matching (total)",
             "ATS Score Computation",
             "ATS Narrative (LLM)",
@@ -120,7 +103,6 @@ WRAPPER_STAGES: frozenset[str] = frozenset(
         "JD Parsing (total)",
         "Document Intelligence (total)",
         "Public Apply (total)",
-        "ATS Matching",
         "ATS Matching (total)",
     }
 )
@@ -128,12 +110,10 @@ WRAPPER_STAGES: frozenset[str] = frozenset(
 STAGE_GROUP: dict[str, str] = {
     **{name: "Parsing" for _, name in RESUME_PIPELINE_STEPS},
     **{name: "Parsing" for _, name in JD_PIPELINE_STEPS},
-    **{name: "Apply" for _, name in APPLY_PIPELINE_STEPS},
     "Semantic Enrichment (LLM)": "LLM",
     "LLM Call (Semantic)": "LLM",
     "LLM Inference (AI Runtime)": "LLM",
     "ATS Narrative (LLM)": "LLM",
-    "ATS Matching": "ATS Matching",
     "ATS Matching (total)": "ATS Matching",
     "ATS Score Computation": "ATS Matching",
     "Database Save": "Persist",
@@ -172,9 +152,6 @@ FUNCTION_TO_STEP_KEY: dict[str, str] = {
     "enrich_jd_semantic": "semantic",
     "_call_section_llm": "semantic",
     "parse_via_runtime": "semantic",
-    # Apply submit
-    "match_candidate_to_job": "ats_match",
-    "_persist_application_atomic": "persist",
 }
 
 
@@ -246,23 +223,21 @@ class TimingSession:
 
     def parse_checklist(self) -> list[dict[str, Any]]:
         """
-        Full resume/JD/apply step list with timing for every stage.
+        Full resume/JD step list with timing for every stage.
 
         Always returns every canonical step so the UI can show:
         Cache Check … 12 ms, Semantic Enrichment … skipped, etc.
         """
         kind = (
             self.kind
-            if self.kind in ("resume_parse", "jd_parse", "bulk_parse", "apply")
+            if self.kind in ("resume_parse", "jd_parse", "bulk_parse")
             else _classify_session(self)
         )
         path = (self.path or "").lower()
         names = {e.function for e in self.events}
 
         # Prefer path / function signals so resume never accidentally uses JD list
-        if "public_apply_to_job" in names or "/apply" in path:
-            kind = "apply"
-        elif "/bulk-parse" in path or "bulk_parse" in path:
+        if "/bulk-parse" in path or "bulk_parse" in path:
             kind = "bulk_parse"
         elif "/parse/jd" in path or "_run_jd" in names or "enrich_jd_semantic" in names:
             kind = "jd_parse"
@@ -272,7 +247,7 @@ class TimingSession:
             or "enrich_resume_semantic" in names
         ):
             kind = "resume_parse"
-        elif kind not in ("resume_parse", "jd_parse", "bulk_parse", "apply"):
+        elif kind not in ("resume_parse", "jd_parse", "bulk_parse"):
             if "coverage" in names:
                 kind = "jd_parse"
             elif names & ENGINE_STAGES or names & set(FUNCTION_TO_STEP_KEY):
@@ -280,12 +255,8 @@ class TimingSession:
             else:
                 return []
 
-        if kind == "apply":
-            return self._apply_checklist()
-
         # Bulk resume uses the same step checklist as single-file resume parse
         template = JD_PIPELINE_STEPS if kind == "jd_parse" else RESUME_PIPELINE_STEPS
-        allowed_keys = ENGINE_STAGES
 
         # Best event per engine key
         by_key: dict[str, TimingEvent] = {}
@@ -294,28 +265,19 @@ class TimingSession:
             if key in FUNCTION_TO_STEP_KEY:
                 mapped = FUNCTION_TO_STEP_KEY[key]
                 # Keep engine-stage event preferred over aliased @timing
-                if key in allowed_keys:
+                if key in ENGINE_STAGES:
                     pass  # key already engine stage
                 else:
                     key = mapped
-            if key not in allowed_keys:
+            if key not in ENGINE_STAGES:
                 continue
             prev = by_key.get(key)
             if prev is None:
                 by_key[key] = ev
-            elif ev.function in allowed_keys and prev.function not in allowed_keys:
+            elif ev.function in ENGINE_STAGES and prev.function not in ENGINE_STAGES:
                 by_key[key] = ev
-            elif prev.function in allowed_keys and ev.function not in allowed_keys:
-                # Keep engine-stage row; only replace if aliased timing is clearly longer
-                if ev.duration_ms > prev.duration_ms and prev.duration_ms <= 0:
-                    by_key[key] = ev
-            elif ev.duration_ms > prev.duration_ms:
-                # Prefer the longer measured duration (avoids a later 0ms double-complete winning)
-                by_key[key] = ev
-            elif (
-                ev.duration_ms == prev.duration_ms
-                and ev.function in allowed_keys
-                and prev.function not in allowed_keys
+            elif ev.duration_ms >= prev.duration_ms and (
+                ev.function in ENGINE_STAGES or prev.function not in ENGINE_STAGES
             ):
                 by_key[key] = ev
 
@@ -345,7 +307,7 @@ class TimingSession:
                     "name": name,
                     "duration_ms": None
                     if status == "skipped"
-                    else round(ev.duration_ms, 3),
+                    else round(ev.duration_ms, 2),
                     "status": status,
                     "success": ev.success,
                     "function": ev.function,
@@ -360,101 +322,10 @@ class TimingSession:
                     "step": None,
                     "key": "llm_inference",
                     "name": "↳ LLM Inference (AI Runtime)",
-                    "duration_ms": round(llm_ev.duration_ms, 3),
+                    "duration_ms": round(llm_ev.duration_ms, 2),
                     "status": "completed" if llm_ev.success else "failed",
                     "success": llm_ev.success,
                     "function": "parse_via_runtime",
-                    "detail": True,
-                }
-            )
-        return rows
-
-    def _apply_checklist(self) -> list[dict[str, Any]]:
-        """Ordered apply-submit steps + optional ATS score / narrative detail rows."""
-        by_key: dict[str, TimingEvent] = {}
-        for ev in self.events:
-            key = ev.function
-            if key in FUNCTION_TO_STEP_KEY:
-                mapped = FUNCTION_TO_STEP_KEY[key]
-                if key not in APPLY_STAGES:
-                    key = mapped
-            if key not in APPLY_STAGES:
-                continue
-            prev = by_key.get(key)
-            if prev is None or ev.duration_ms > prev.duration_ms:
-                by_key[key] = ev
-            elif (
-                prev.duration_ms <= 0
-                and ev.duration_ms >= 0
-                and ev.function in APPLY_STAGES
-            ):
-                by_key[key] = ev
-
-        rows: list[dict[str, Any]] = []
-        for idx, (key, name) in enumerate(APPLY_PIPELINE_STEPS, start=1):
-            ev = by_key.get(key)
-            if ev is None:
-                rows.append(
-                    {
-                        "step": idx,
-                        "key": key,
-                        "name": name,
-                        "duration_ms": None,
-                        "status": "not_run",
-                        "success": None,
-                        "function": key,
-                    }
-                )
-                continue
-            status = (ev.outcome or "completed").lower()
-            if not ev.success:
-                status = "failed"
-            rows.append(
-                {
-                    "step": idx,
-                    "key": key,
-                    "name": name,
-                    "duration_ms": None
-                    if status == "skipped"
-                    else round(ev.duration_ms, 3),
-                    "status": status,
-                    "success": ev.success,
-                    "function": ev.function,
-                }
-            )
-
-        score_ev = next((e for e in self.events if e.function == "_internal_match"), None)
-        if score_ev is not None:
-            rows.append(
-                {
-                    "step": None,
-                    "key": "ats_score",
-                    "name": "↳ ATS Score Computation",
-                    "duration_ms": round(score_ev.duration_ms, 3),
-                    "status": "completed" if score_ev.success else "failed",
-                    "success": score_ev.success,
-                    "function": "_internal_match",
-                    "detail": True,
-                }
-            )
-        narr_ev = next(
-            (e for e in self.events if e.function == "_optional_llm_narrative"), None
-        )
-        if narr_ev is not None:
-            status = (narr_ev.outcome or "completed").lower()
-            if not narr_ev.success:
-                status = "failed"
-            rows.append(
-                {
-                    "step": None,
-                    "key": "ats_narrative",
-                    "name": "↳ ATS Narrative (LLM)",
-                    "duration_ms": None
-                    if status == "skipped"
-                    else round(narr_ev.duration_ms, 3),
-                    "status": status,
-                    "success": narr_ev.success,
-                    "function": "_optional_llm_narrative",
                     "detail": True,
                 }
             )
@@ -1195,7 +1066,7 @@ def make_timing_event(
         timestamp=datetime.now(timezone.utc).isoformat(),
         function=short,
         module=module,
-        duration_ms=round(duration_ms, 3),
+        duration_ms=round(duration_ms, 2),
         success=success,
         exception_name=exception_name,
         user_id=ctx.user_id if ctx else None,

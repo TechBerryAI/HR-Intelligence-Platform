@@ -72,11 +72,18 @@ def normalize_phone(phone: Optional[str]) -> Optional[str]:
     return digits_only if digits_only else None
 
 
-def send_email_otp(recipient: str, otp: str, user_type: str = "Candidate") -> bool:
+def send_email_otp(
+    recipient: str,
+    otp: str,
+    user_type: str = "Candidate",
+    *,
+    purpose: str = "verification",
+    minutes: int = 5,
+) -> bool:
     if not recipient:
         return False
     try:
-        print(f"[SEND_EMAIL_OTP] Called with recipient={recipient}, otp={otp}, user_type={user_type}")
+        print(f"[SEND_EMAIL_OTP] Called with recipient={recipient}, otp={otp}, user_type={user_type}, purpose={purpose}")
         cfg = current_app.config if current_app else {}
         suppress_send = cfg.get('MAIL_SUPPRESS_SEND')
         missing_creds = not cfg.get('MAIL_USERNAME') or not cfg.get('MAIL_PASSWORD')
@@ -86,16 +93,21 @@ def send_email_otp(recipient: str, otp: str, user_type: str = "Candidate") -> bo
             else:
                 print(f"[SEND_EMAIL_OTP] Dev mode - OTP for {recipient}: {otp}")
             return True
-        subject = "Your HR Intelligence OTP"
+        if purpose == "password_reset":
+            subject = "Your HR Intelligence password reset OTP"
+            action = "reset your password"
+        else:
+            subject = "Your HR Intelligence OTP"
+            action = "complete verification"
         greeting = "Dear HR," if user_type.lower() == "hr" else "Dear Candidate,"
         body = (
             f"{greeting}\n\n"
             f"Your One-Time Password (OTP) is: {otp}\n"
-            f"This code is valid for 5 minutes.\n\n"
+            f"Use this code to {action}. This code is valid for {minutes} minutes.\n\n"
             f"If you did not request this OTP, please ignore this email.\n\n"
             f"Regards,\nHR Intelligence Team"
         )
-        html = otp_html(otp, user_type)
+        html = otp_html(otp, user_type, purpose=purpose, minutes=minutes)
         print(f"[SEND_EMAIL_OTP] Sending email to {recipient} with OTP: {otp}")
         ok = send_notification_email(recipient, subject, body, html=html)
         if ok:

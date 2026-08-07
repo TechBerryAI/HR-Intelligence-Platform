@@ -18,18 +18,18 @@ def parse_resume_text_via_engine(
     *,
     allow_llm: bool = True,
     skip_llm_when_deterministic: bool | None = None,
-) -> tuple[dict[str, Any], str, list[str], Any]:
+) -> tuple[dict[str, Any], str, list[str]]:
     """
     Run the core resume intelligence stages on already-extracted text.
 
-    Returns (toon, source_tag, stage_notes, form_dto_or_none).
+    Returns (toon, source_tag, stage_notes).
     source_tag: deterministic | llm | text-fallback
     """
     apply_hardware_env()
     notes: list[str] = ['canonical_pipeline']
     text = (raw_text or '').strip()
     if not text:
-        return {}, 'empty', ['empty_text'], None
+        return {}, 'empty', ['empty_text']
 
     # Temporarily honor skip/allow via env for nested parse
     prev = os.environ.get('RESUME_SKIP_LLM_WHEN_DETERMINISTIC')
@@ -50,7 +50,7 @@ def parse_resume_text_via_engine(
         # Keep engine.parsers façade reachable for audit/integration tests.
         from app.ai.parser.engine.parsers import parse_resume_from_text  # noqa: F401
 
-        profile, form, toon = parse_resume_text_to_canonical(text)
+        profile, _form, toon = parse_resume_text_to_canonical(text)
         has_id = bool(profile.personal.full_name and profile.contact.email)
         has_body = bool(profile.skills and (profile.experience or profile.education))
         tag = 'deterministic' if (has_id and has_body) else 'llm'
@@ -59,7 +59,7 @@ def parse_resume_text_via_engine(
         notes.append(f'exp={len(profile.experience)}')
         notes.append(f'sections=canonical')
         notes.append('parsers=resume_from_text')
-        return toon if isinstance(toon, dict) else {}, tag, notes, form
+        return toon if isinstance(toon, dict) else {}, tag, notes
     finally:
         if prev is None:
             os.environ.pop('RESUME_SKIP_LLM_WHEN_DETERMINISTIC', None)

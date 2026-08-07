@@ -56,7 +56,6 @@ SECTION_HEADERS = frozenset({
     'languages', 'awards', 'interests',
     'references', 'contact', 'resume', 'curriculum vitae', 'cv', 'about me',
     'work history', 'qualifications', 'achievements',
-    'internship', 'internships', 'industrial training', 'summer internship',
     'academic details', 'academic background', 'academics',
     'educational qualifications', 'educational background',
     'personal details', 'personal information', 'biodata', 'bio data', 'contact details',
@@ -831,28 +830,18 @@ def extract_location_from_text(text: str) -> str:
         return s
 
     patterns = [
-        r'(?i)(?:location|current\s*location|address|city|based\s*in|place|residing\s+(?:in|at))\s*[:\-–—]?\s*([^\n]+)',
+        r'(?i)(?:location|current\s*location|address|city|based\s*in|place)\s*[:\-]\s*([^\n]+)',
         r'(?i)\b(remote|hybrid|work\s+from\s+home|wfh)\b',
         r'\b([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*),\s*([A-Z]{2})\b',
-        # City, State/Region (India-style): Thane, Mumbai / Pune, Maharashtra
-        r'(?i)\b([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*),\s*'
-        r'([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*)\b',
-        # Pipe header: City | phone | email
-        r'(?im)^([A-Za-z][A-Za-z .,]{2,40})\s*[|•·]\s*(?:mobile|phone|tel|\+?\d)',
         # Emoji / pin style: 📍 Nagpur, Maharashtra, India
         r'(?:📍|📌)\s*([^\n]+)',
     ]
     for pat in patterns:
-        m = re.search(pat, text[:1500])
+        m = re.search(pat, text[:1200])
         if not m:
             continue
         if m.lastindex and m.lastindex >= 2 and '([A-Z]{2})' in pat:
             loc = f'{m.group(1)}, {m.group(2)}'
-        elif m.lastindex and m.lastindex >= 2 and 'Maharashtra' not in pat and '|' not in pat:
-            # City, Region — keep both if short
-            loc = f'{m.group(1)}, {m.group(2)}'
-            if len(loc) > 60:
-                loc = m.group(1)
         else:
             loc = m.group(1).strip().strip('.,;:')
         cleaned = _clean_loc(loc)
@@ -895,8 +884,7 @@ def extract_experience_from_text(text: str, max_items: int = 10) -> list[dict[st
     # Require section header at line start so mid-sentence "experience" (e.g. objective) is ignored.
     block_match = re.search(
         r'(?i)(?:^|\n)\s*(?:\*\*)?(?:work\s+experience|professional\s+experience|experience|'
-        r'employment|work\s+history|internships?|industrial\s+training|summer\s+internship)'
-        r'(?:\*\*)?\s*:?\s*'
+        r'employment|work\s+history)(?:\*\*)?\s*:?\s*'
         r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:education|academic\s+background|skills|skill\s*sets?|'
         r'technical\s+skills?|projects?|certifications?|'
         r'personal\s+details|personal\s+information|biodata|declaration)\b|\Z)',

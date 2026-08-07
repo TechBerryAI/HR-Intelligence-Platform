@@ -44,13 +44,10 @@ class TimingCollectorTests(unittest.TestCase):
         )
 
     def test_session_grouping_and_stats(self):
-        from datetime import datetime, timezone
-
         rid = "abc123"
-        now = datetime.now(timezone.utc).isoformat()
         self.collector.begin_session(
             request_id=rid,
-            started_at=now,
+            started_at="2026-08-05T12:00:00+00:00",
             path="/api/parse/resume",
             method="POST",
         )
@@ -301,130 +298,6 @@ class TimingDecoratorTests(unittest.TestCase):
             names = [c["name"] for c in detail["files"][0]["parse_steps"] if not c.get("detail")]
             self.assertIn("Extract Text", names)
             self.assertIn("Deterministic Parse", names)
-        finally:
-            tc.timing_collector = prev
-            set_timing_context(None)
-
-    def test_zero_ms_double_complete_does_not_clobber_real_duration(self):
-        """A later 0ms engine complete must not replace a real measurement."""
-        from app.core.timing_collector import TimingCollector, TimingEvent
-
-        col = TimingCollector(max_sessions=10)
-        rid = "resume-zero"
-        col.begin_session(
-            request_id=rid,
-            started_at="2026-08-05T12:00:00+00:00",
-            path="/api/parse/resume",
-            method="POST",
-        )
-        col.record(
-            TimingEvent(
-                request_id=rid,
-                timestamp="2026-08-05T12:00:01+00:00",
-                function="sections",
-                module="pipeline",
-                duration_ms=2.4,
-                success=True,
-                depth=2,
-                stage="sections",
-                outcome="completed",
-            )
-        )
-        col.record(
-            TimingEvent(
-                request_id=rid,
-                timestamp="2026-08-05T12:00:01+00:00",
-                function="sections",
-                module="pipeline",
-                duration_ms=0.0,
-                success=True,
-                depth=2,
-                stage="sections",
-                outcome="completed",
-            )
-        )
-        col.end_session(rid, wall_duration_ms=100)
-        step = next(c for c in col.get_session(rid).parse_checklist() if c["key"] == "sections")
-        self.assertEqual(step["status"], "completed")
-        self.assertAlmostEqual(step["duration_ms"], 2.4, places=2)
-
-    def test_pipeline_stage_start_elapsed_ms(self):
-        from app.core.request_context import (
-            mark_pipeline_stage_start,
-            start_request_context,
-            take_pipeline_stage_elapsed_ms,
-            set_timing_context,
-        )
-
-        ctx = start_request_context(path="/api/parse/resume", method="POST")
-        try:
-            mark_pipeline_stage_start("sections")
-            import time as _time
-
-            _time.sleep(0.01)
-            elapsed = take_pipeline_stage_elapsed_ms("sections")
-            self.assertIsNotNone(elapsed)
-            self.assertGreaterEqual(elapsed, 8.0)
-            self.assertIsNone(take_pipeline_stage_elapsed_ms("sections"))
-        finally:
-            set_timing_context(None)
-
-    def test_apply_checklist_shows_submit_steps(self):
-        from app.core.request_context import start_request_context, set_timing_context
-        from app.core.timing_collector import TimingCollector, TimingEvent, record_pipeline_stage
-        import app.core.timing_collector as tc
-
-        col = TimingCollector()
-        prev = tc.timing_collector
-        tc.timing_collector = col
-        try:
-            ctx = start_request_context(path="/api/jobs/J1/apply", method="POST")
-            col.begin_session(
-                request_id=ctx.request_id,
-                started_at=ctx.started_at_iso,
-                path=ctx.path,
-                method=ctx.method,
-                job_id="J1",
-            )
-            record_pipeline_stage("validate", "completed", duration_ms=3)
-            record_pipeline_stage("upsert_candidate", "completed", duration_ms=12)
-            record_pipeline_stage("save_profile", "completed", duration_ms=40)
-            record_pipeline_stage("link_resume", "completed", duration_ms=5)
-            record_pipeline_stage("load_jd", "completed", duration_ms=8)
-            record_pipeline_stage("ats_match", "completed", duration_ms=120)
-            record_pipeline_stage("persist", "completed", duration_ms=15)
-            col.record(
-                TimingEvent(
-                    request_id=ctx.request_id,
-                    timestamp=ctx.started_at_iso,
-                    function="public_apply_to_job",
-                    module="jobs",
-                    duration_ms=210,
-                    success=True,
-                    depth=1,
-                    stage="Public Apply (total)",
-                )
-            )
-            col.end_session(ctx.request_id, wall_duration_ms=220)
-            sess = col.get_session(ctx.request_id)
-            self.assertEqual(sess.kind, "apply")
-            checklist = sess.parse_checklist()
-            names = [c["name"] for c in checklist if not c.get("detail")]
-            self.assertEqual(
-                names,
-                [
-                    "Validate Payload",
-                    "Create Candidate",
-                    "Save Profile",
-                    "Link Parsed Resume",
-                    "Load Job Description",
-                    "ATS Matching",
-                    "Database Save",
-                ],
-            )
-            ats = next(c for c in checklist if c["key"] == "ats_match")
-            self.assertEqual(ats["duration_ms"], 120)
-            self.assertEqual(ats["status"], "completed")
         finally:
             tc.timing_collector = prev
             set_timing_context(None)

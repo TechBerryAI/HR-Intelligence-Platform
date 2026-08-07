@@ -130,9 +130,7 @@ python scripts/ensure_media_assets.py --force   # re-seed hero from disk
 
 ### 5) Offload legacy Postgres BYTEA → media (one-time / ongoing)
 
-New parse uploads already prefer media keys. Use this for old rows still holding `raw_files.file_data` / profile `resume` BYTEA.
-
-**Landing hero (`site_assets.landing.hero_video`) stays in Postgres BYTEA** and is served by `GET /api/media/public/hero-video`. Do not treat hero offload as the primary delivery path; re-seed with `ensure_media_assets.py` if needed.
+New uploads already write to media. Use this for old rows still holding `file_data` / profile `resume` BYTEA:
 
 ```bash
 cd apps/backend

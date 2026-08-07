@@ -81,7 +81,7 @@ const faqs = [
       {
         question: 'I forgot my password. What should I do?',
         answer:
-          'Click on "Login" and then "Forgot Password". Enter your email address and follow the instructions sent to your email to reset your password.',
+          'Open Login → HR / Admin Login, then click Forgot password. Enter your work email and we send a 6-digit OTP. Verify the OTP, set a new password, then sign in again.',
       },
       {
         question: 'Is my data secure?',

@@ -21,18 +21,23 @@
   --ei-surface-input: rgba(255, 255, 255, 0.035);
   --ei-border-primary: rgba(255, 255, 255, 0.08);
   --ei-border-hover: rgba(255, 255, 255, 0.14);
-  --ei-border-focus: #3aa9ff;
+  --ei-border-focus: #9aafc0;
   --ei-text-primary: #f5f7fa;
   --ei-text-secondary: #a0abb6;
   --ei-text-muted: #71808e;
   --ei-text-label: #dce3ea;
   --ei-text-placeholder: #6f7d89;
-  --ei-accent-blue: #00a6ff;
-  --ei-accent-blue-2: #276dff;
+  --ei-accent-blue: #8fa3b8;
+  --ei-accent-blue-2: #6b7f94;
   --ei-accent-purple: #7957ff;
   --ei-accent-green: #36d6a0;
   --ei-accent-red: #ff6685;
   --ei-accent-teal: #2dd4bf;
+  /* Primary CTAs — pearl (dark) / slate (light); not neon blue */
+  --ei-btn-primary-from: #e8eef4;
+  --ei-btn-primary-to: #f5f7fa;
+  --ei-btn-primary-text: #0b1118;
+  --ei-btn-primary-shadow: rgba(0, 0, 0, 0.28);
   /* Semantic tones (match analysis badges / chips — readable on both themes) */
   --ei-tone-success: #67dfb4;
   --ei-tone-success-bg: rgba(55, 214, 160, 0.12);
@@ -43,9 +48,9 @@
   --ei-tone-warning: #f5b94c;
   --ei-tone-warning-bg: rgba(245, 185, 76, 0.14);
   --ei-tone-warning-border: rgba(245, 185, 76, 0.28);
-  --ei-tone-info: #5cbcff;
-  --ei-tone-info-bg: rgba(0, 166, 255, 0.12);
-  --ei-tone-info-border: rgba(0, 166, 255, 0.28);
+  --ei-tone-info: #9aafc0;
+  --ei-tone-info-bg: rgba(143, 163, 184, 0.12);
+  --ei-tone-info-border: rgba(143, 163, 184, 0.28);
   --ei-radius-sm: 10px;
   --ei-radius-md: 14px;
   --ei-radius-lg: 20px;
@@ -292,17 +297,17 @@ h1, h2, h3, h4, h5, h6 {
     min-height: 46px;
     padding: 0.625rem 1.25rem;
     border-radius: 12px;
-    background: linear-gradient(135deg, var(--ei-accent-blue), var(--ei-accent-blue-2));
-    color: #fff;
+    background: linear-gradient(180deg, var(--ei-btn-primary-to), var(--ei-btn-primary-from));
+    color: var(--ei-btn-primary-text);
     font-weight: 600;
-    border: none;
-    box-shadow: 0 8px 24px rgba(0, 166, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 20px var(--ei-btn-primary-shadow);
     transition: var(--ei-transition);
   }
 
   .org-btn-primary:hover:not(:disabled) {
     transform: translateY(-1px);
-    filter: brightness(1.05);
+    filter: brightness(1.04);
   }
 
   .org-account-pill {
@@ -581,8 +586,10 @@ h1, h2, h3, h4, h5, h6 {
 
   .org-shell button.bg-primary,
   .org-shell .bg-primary:not(.org-nav-item) {
-    background-image: linear-gradient(135deg, var(--ei-accent-blue), var(--ei-accent-blue-2));
-    background-color: transparent;
+    background-image: linear-gradient(180deg, var(--ei-btn-primary-to), var(--ei-btn-primary-from));
+    background-color: var(--ei-btn-primary-from);
+    color: var(--ei-btn-primary-text);
+    box-shadow: 0 8px 20px var(--ei-btn-primary-shadow);
   }
 
   .org-shell .shadow-card,
@@ -1014,6 +1021,10 @@ html[data-theme="light"] {
   --ei-tone-info: #0369a1;
   --ei-tone-info-bg: rgba(14, 165, 233, 0.1);
   --ei-tone-info-border: rgba(3, 105, 161, 0.28);
+  --ei-btn-primary-from: #0f172a;
+  --ei-btn-primary-to: #1e293b;
+  --ei-btn-primary-text: #f8fafc;
+  --ei-btn-primary-shadow: rgba(15, 23, 42, 0.22);
 }
 
 html[data-theme="light"] .org-shell {
