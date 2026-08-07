@@ -24,23 +24,29 @@ def upgrade() -> None:
     # --- offers ---
     op.execute(text('DROP TABLE IF EXISTS offers CASCADE'))
 
-    # --- provider_events → sync_logs ---
+    # --- provider_events → sync_logs (skip if source table never existed) ---
     op.execute(
         text(
             """
-            INSERT INTO sync_logs (
-                company_key, provider, operation, job_id,
-                request_payload, status, created_at
-            )
-            SELECT
-                COALESCE(company_key, 'unknown'),
-                COALESCE(provider, 'system'),
-                COALESCE(event_type, 'provider_event'),
-                job_id,
-                payload,
-                COALESCE(status, 'dispatched'),
-                created_at
-            FROM provider_events
+            DO $$
+            BEGIN
+                IF to_regclass('public.provider_events') IS NOT NULL
+                   AND to_regclass('public.sync_logs') IS NOT NULL THEN
+                    INSERT INTO sync_logs (
+                        company_key, provider, operation, job_id,
+                        request_payload, status, created_at
+                    )
+                    SELECT
+                        COALESCE(company_key, 'unknown'),
+                        COALESCE(provider, 'system'),
+                        COALESCE(event_type, 'provider_event'),
+                        job_id,
+                        payload,
+                        COALESCE(status, 'dispatched'),
+                        created_at
+                    FROM provider_events;
+                END IF;
+            END $$
             """
         )
     )
@@ -50,19 +56,25 @@ def upgrade() -> None:
     op.execute(
         text(
             """
-            INSERT INTO sync_logs (
-                company_key, provider, operation,
-                request_payload, response_payload, status, created_at
-            )
-            SELECT
-                COALESCE(company_key, 'unknown'),
-                provider,
-                COALESCE(event_type, 'webhook'),
-                payload,
-                headers_json,
-                CASE WHEN processed THEN 'completed' ELSE 'pending' END,
-                created_at
-            FROM webhook_events
+            DO $$
+            BEGIN
+                IF to_regclass('public.webhook_events') IS NOT NULL
+                   AND to_regclass('public.sync_logs') IS NOT NULL THEN
+                    INSERT INTO sync_logs (
+                        company_key, provider, operation,
+                        request_payload, response_payload, status, created_at
+                    )
+                    SELECT
+                        COALESCE(company_key, 'unknown'),
+                        provider,
+                        COALESCE(event_type, 'webhook'),
+                        payload,
+                        headers_json,
+                        CASE WHEN processed THEN 'completed' ELSE 'pending' END,
+                        created_at
+                    FROM webhook_events;
+                END IF;
+            END $$
             """
         )
     )
@@ -72,17 +84,23 @@ def upgrade() -> None:
     op.execute(
         text(
             """
-            INSERT INTO login_history (email, user_type, status, attempted_at, user_id)
-            SELECT l.email, 'HR', 'success', l.logged_in_at, l.hrid
-            FROM hr_login l
-            WHERE NOT EXISTS (
-                SELECT 1 FROM login_history h
-                WHERE h.email = l.email
-                  AND h.user_type = 'HR'
-                  AND h.status = 'success'
-                  AND h.user_id = l.hrid
-                  AND h.attempted_at = l.logged_in_at
-            )
+            DO $$
+            BEGIN
+                IF to_regclass('public.hr_login') IS NOT NULL
+                   AND to_regclass('public.login_history') IS NOT NULL THEN
+                    INSERT INTO login_history (email, user_type, status, attempted_at, user_id)
+                    SELECT l.email, 'HR', 'success', l.logged_in_at, l.hrid
+                    FROM hr_login l
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM login_history h
+                        WHERE h.email = l.email
+                          AND h.user_type = 'HR'
+                          AND h.status = 'success'
+                          AND h.user_id = l.hrid
+                          AND h.attempted_at = l.logged_in_at
+                    );
+                END IF;
+            END $$
             """
         )
     )
@@ -124,52 +142,52 @@ def upgrade() -> None:
         )
     )
 
-    # Migrate unverified HRAuth rows into pending hr_signup
+    # Migrate unverified HRAuth rows into pending hr_signup (legacy table may be absent)
     op.execute(
         text(
             """
-            INSERT INTO hr_signup (
-                hrid, full_name, email, company, password, role,
-                account_status, otp, otp_expiry, created_at, updated_at
-            )
-            SELECT
-                'HRID' || LPAD((
-                    COALESCE((
-                        SELECT MAX(CAST(SUBSTRING(hrid FROM 5) AS INTEGER))
-                        FROM hr_signup WHERE hrid ~ '^HRID[0-9]+$'
-                    ), 0) + ROW_NUMBER() OVER (ORDER BY a.id)
-                )::text, 3, '0'),
-                a.full_name,
-                a.email,
-                a.company,
-                a.password_hash,
-                'RECRUITER',
-                'pending',
-                a.otp,
-                a.otp_expiry,
-                a.created_at,
-                a.updated_at
-            FROM "HRAuth" a
-            WHERE COALESCE(a.is_verified, false) = false
-              AND NOT EXISTS (
-                  SELECT 1 FROM hr_signup s
-                  WHERE LOWER(TRIM(s.email)) = LOWER(TRIM(a.email))
-              )
-            """
-        )
-    )
-    # Copy in-flight OTP from verified HRAuth onto matching active signup (password-reset)
-    op.execute(
-        text(
-            """
-            UPDATE hr_signup s
-            SET otp = a.otp,
-                otp_expiry = a.otp_expiry
-            FROM "HRAuth" a
-            WHERE LOWER(TRIM(s.email)) = LOWER(TRIM(a.email))
-              AND COALESCE(a.is_verified, false) = true
-              AND a.otp IS NOT NULL
-              AND s.otp IS NULL
+            DO $$
+            BEGIN
+                IF to_regclass('public."HRAuth"') IS NOT NULL
+                   AND to_regclass('public.hr_signup') IS NOT NULL THEN
+                    INSERT INTO hr_signup (
+                        hrid, full_name, email, company, password, role,
+                        account_status, otp, otp_expiry, created_at, updated_at
+                    )
+                    SELECT
+                        'HRID' || LPAD((
+                            COALESCE((
+                                SELECT MAX(CAST(SUBSTRING(hrid FROM 5) AS INTEGER))
+                                FROM hr_signup WHERE hrid ~ '^HRID[0-9]+$'
+                            ), 0) + ROW_NUMBER() OVER (ORDER BY a.id)
+                        )::text, 3, '0'),
+                        a.full_name,
+                        a.email,
+                        a.company,
+                        a.password_hash,
+                        'RECRUITER',
+                        'pending',
+                        a.otp,
+                        a.otp_expiry,
+                        a.created_at,
+                        a.updated_at
+                    FROM "HRAuth" a
+                    WHERE COALESCE(a.is_verified, false) = false
+                      AND NOT EXISTS (
+                          SELECT 1 FROM hr_signup s
+                          WHERE LOWER(TRIM(s.email)) = LOWER(TRIM(a.email))
+                      );
+
+                    UPDATE hr_signup s
+                    SET otp = a.otp,
+                        otp_expiry = a.otp_expiry
+                    FROM "HRAuth" a
+                    WHERE LOWER(TRIM(s.email)) = LOWER(TRIM(a.email))
+                      AND COALESCE(a.is_verified, false) = true
+                      AND a.otp IS NOT NULL
+                      AND s.otp IS NULL;
+                END IF;
+            END $$
             """
         )
     )
