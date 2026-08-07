@@ -5,7 +5,7 @@
 - **Index:** `docs/README.md` — flat markdown under `docs/` (only subfolder: `user-manual/`).
 - **Workflows:** `docs/WORKFLOWS.md`
 - **Setup:** `docs/DEVELOPMENT.md`
-- **Media + backups:** `docs/MEDIA_AND_BACKUPS.md`
+- **Media storage:** `docs/MEDIA_AND_BACKUPS.md`
 - **Document intelligence:** `docs/DOCUMENT_INTELLIGENCE.md`
 - **AI:** `docs/AI_WORKFLOW.md`, `docs/AI_DATA_PIPELINE.md`, `docs/ADRS.md`
 - **End-user manuals:** `docs/user-manual/`

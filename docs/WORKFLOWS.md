@@ -17,9 +17,9 @@ Details: [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ---
 
-## Media & backups
+## Media storage
 
-Hero video, resume/JD blobs, and volume backups:
+Hero video and resume/JD blobs:
 
 → **[MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md)**
 

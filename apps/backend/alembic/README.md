@@ -58,7 +58,7 @@ Fresh empty DB: apply `schema_pg` via baseline `20260806_0001` (or `python -c` s
 
 ## Catalog + media volume
 
-Postgres = catalog (hashes, keys). Durable bytes + backups: see **[docs/MEDIA_AND_BACKUPS.md](../../../docs/MEDIA_AND_BACKUPS.md)**.
+Postgres = catalog (hashes, keys). Durable bytes: see **[docs/MEDIA_AND_BACKUPS.md](../../../docs/MEDIA_AND_BACKUPS.md)**.
 
 ```bash
 cd apps/backend
@@ -67,5 +67,4 @@ python -m app.database.scripts.offload_blobs --limit 100
 python -m app.database.scripts.offload_blobs --normalize-keys --limit 300
 python -m app.database.scripts.offload_blobs --clear-pg --limit 100  # after verify
 python -m app.database.scripts.offload_blobs --verify-only
-python -m app.database.scripts.backup_hcip --force
 ```

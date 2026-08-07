@@ -42,7 +42,7 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
 - **Frontend:** Single-page app; single AppContext for auth, jobs, applicant state; role-based route guards (Recruiter, Candidate, Head of HR, CEO).
 - **Backend:** Monolithic Flask app; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, head-hr. Connection-pooled PostgreSQL; raw SQL via `db_run`/`db_get`/`db_all`.
 
-Docs: **[docs/README.md](docs/README.md)** · setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** · **media & backups:** **[docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md)** · user manuals: **[docs/user-manual/](docs/user-manual/README.md)**.
+Docs: **[docs/README.md](docs/README.md)** · setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** · **media storage:** **[docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md)** · user manuals: **[docs/user-manual/](docs/user-manual/README.md)**.
 
 ---
 
@@ -246,9 +246,9 @@ Electron opens a window that loads the app and uses OS folder dialogs.
 
 ---
 
-## Media storage & backups (keep this)
+## Media storage (keep this)
 
-Resumes/JDs live in a durable folder **outside** the repo (`…/Projects/hcip-data/`), with automatic Postgres + media backups.
+Resumes/JDs live in a durable folder **outside** the repo (`…/Projects/hcip-data/`). Postgres backups are owned by the DB team.
 
 **Full command reference:** **[docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md)**
 
@@ -257,17 +257,14 @@ Quick commands:
 ```bash
 cd apps/backend
 
-# Force a full backup now (DB + media → hcip-data/backups/)
-python -m app.database.scripts.backup_hcip --force
+# Seed hero video / ensure media dirs
+python ../../scripts/ensure_media_assets.py --force
 
 # Verify media files match DB checksums
 python -m app.database.scripts.offload_blobs --verify-only --limit 200
-
-# Optional: daily cron if the app is not always running
-bash ../../scripts/install_hcip_backup_cron.sh
 ```
 
-Do **not** delete `D:/Projects/hcip-data` (or your `HCIP_DATA_HOME`) — that is the live media + backup store.
+Do **not** delete `D:/Projects/hcip-data` (or your `HCIP_DATA_HOME`) — that is the live media store.
 
 ---
 
@@ -279,7 +276,7 @@ Do **not** delete `D:/Projects/hcip-data` (or your `HCIP_DATA_HOME`) — that is
 - **Email not sending:** Set `MAIL_SUPPRESS_SEND=true` in `apps/backend/.env` for testing.
 - **Other device cannot reach API:** Leave `VITE_API_URL` empty and open the Vite URL (`http://<host-ip>:5173`), not a hardcoded `localhost` API URL. Ensure firewall allows port 5173.
 
-More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · media/backups: [docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md).
+More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · media: [docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md).
 
 ---
 

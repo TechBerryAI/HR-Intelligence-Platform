@@ -298,17 +298,10 @@ def create_app() -> Flask:
         size = int(hero.get('byte_size') or 0) if hero else 0
         print(
             f"[MEDIA] DATA_HOME={layout['data_home']} "
-            f"MEDIA_ROOT={root} BACKUPS={layout['backups']} "
-            f"hero_db_bytes={size}"
+            f"MEDIA_ROOT={root} hero_db_bytes={size}"
         )
     except Exception as e:
         print(f"[MEDIA] Init warning: {e}")
-
-    try:
-        from app.core.backup_scheduler import start_backup_scheduler
-        start_backup_scheduler()
-    except Exception as e:
-        print(f"[backup] scheduler warning: {e}")
 
     try:
         from app.domains.integrations.bootstrap import init_integrations

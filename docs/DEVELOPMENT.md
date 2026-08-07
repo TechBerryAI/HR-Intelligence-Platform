@@ -157,17 +157,15 @@ Recruiter connect UI: **Settings → Integrations → Google Calendar**.
 
 **Future:** interview reminder workers (hooks stubbed as `on_invite_sent` / `on_interview_scheduled`).
 
-### Media + automatic backups
+### Media storage
 
-Durable files and backups live **outside** the project (`…/hcip-data/`). Full command reference (backup, offload, restore, env keys):
+Durable files live **outside** the project (`…/hcip-data/`). Postgres backups are owned by the DB team. Full command reference (seed, offload, env keys):
 
 → **[MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md)**
 
-Quick force backup:
-
 ```bash
-cd apps/backend
-python -m app.database.scripts.backup_hcip --force
+# From repo root — seed hero / ensure media dirs
+python scripts/ensure_media_assets.py --force
 ```
 
 ## Where to put new code

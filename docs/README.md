@@ -11,7 +11,7 @@ Single entry point for HR Intelligence Platform docs. Prefer live code when docs
 | **End user / trainer** | [user-manual/](user-manual/README.md) (Word/PDF) |
 | **Engineer (local setup)** | [DEVELOPMENT.md](DEVELOPMENT.md) · root [README.md](../README.md) |
 | **Workflows** | [WORKFLOWS.md](WORKFLOWS.md) |
-| **Media & backups** | [MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md) |
+| **Media storage** | [MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md) |
 | **Document intelligence** | [DOCUMENT_INTELLIGENCE.md](DOCUMENT_INTELLIGENCE.md) |
 | **AI workflows** | [AI_WORKFLOW.md](AI_WORKFLOW.md) · [AI_DATA_PIPELINE.md](AI_DATA_PIPELINE.md) · [ADRS.md](ADRS.md) |
 
