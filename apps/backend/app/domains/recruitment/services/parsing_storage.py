@@ -409,13 +409,17 @@ def _cache_model_acceptable(model_version: str | None) -> bool:
     """
     Skip stale cache entries from pre-canonical / broken parsers.
     Require DOCUMENT_INTELLIGENCE_CACHE_TAG (default 'canonical') in model_version.
+    Bulk-seeded parses (model_version bulk+...) never feed single-parse cache.
     """
     import os
 
+    mv = str(model_version or '')
+    if mv.lower().startswith('bulk+') or '+bulk' in mv.lower():
+        return False
     tag = (os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG') or 'canonical-v6-jd-coverage').strip()
     if not tag:
         return True
-    return tag.lower() in str(model_version or '').lower()
+    return tag.lower() in mv.lower()
 
 
 def get_cached_parsing_result(
@@ -424,7 +428,10 @@ def get_cached_parsing_result(
     document_type: str
 ) -> Optional[Dict[str, Any]]:
     """
-    Get cached parsing result if file was already processed
+    Get cached parsing result if file was already processed by single-file parse.
+
+    Bulk parse rows (bulk_session_id set) are never reused here — only single-parse
+    cache hits apply.
     
     Returns:
         Dict with parsed data or None if not found
@@ -432,17 +439,32 @@ def get_cached_parsing_result(
     from app.database.connection.db import db_get
     
     table = 'parsed_resumes' if document_type == 'resume' else 'parsed_jds'
-    
-    result = db_get(
-        f"""
-        SELECT p.id, p.toon, p.confidence, p.model_version, p.created_at, p.full_text, r.id as raw_file_id
-        FROM {table} p
-        INNER JOIN raw_files r ON p.raw_file_id = r.id
-        WHERE r.file_hash = ? AND r.uploader_id = ?
-        ORDER BY p.created_at DESC
-        """,
-        (file_hash, uploader_id)
-    )
+
+    def _fetch(bulk_guard: str):
+        return db_get(
+            f"""
+            SELECT p.id, p.toon, p.confidence, p.model_version, p.created_at, p.full_text, r.id as raw_file_id
+            FROM {table} p
+            INNER JOIN raw_files r ON p.raw_file_id = r.id
+            WHERE r.file_hash = ? AND r.uploader_id = ?{bulk_guard}
+            ORDER BY p.created_at DESC
+            """,
+            (file_hash, uploader_id),
+        )
+
+    bulk_guard = ''
+    if document_type == 'resume':
+        bulk_guard = (
+            ' AND p.bulk_session_id IS NULL'
+            ' AND r.bulk_session_id IS NULL'
+            " AND COALESCE(r.uploader_id, '') NOT LIKE 'bulk:%'"
+        )
+
+    try:
+        result = _fetch(bulk_guard)
+    except Exception:
+        # Older DBs without bulk_session_id — still reject bulk+ model_version below
+        result = _fetch('')
     
     if result and _cache_model_acceptable(result.get('model_version')):
         return {
@@ -463,30 +485,48 @@ def get_cached_parsing_result_by_hash(
     document_type: str,
 ) -> Optional[Dict[str, Any]]:
     """
-    Content-hash cache independent of uploader_id.
+    Content-hash cache independent of uploader_id (single-parse / apply only).
 
     Used for public resume apply (unique PUB* uploader each request) and
-    cross-uploader JD/resume reuse of identical bytes. Returns a TOON copy
-    reference; callers should treat parsed_id as shared read-only cache hit
-    metadata (is_duplicate=True). Does not expose other users' PII beyond
-    the parsed document content already derived from the same file bytes.
+    cross-uploader JD/resume reuse of identical bytes. Bulk parse results are
+    excluded so bulk → single re-parse always runs fresh.
+
+    Returns a TOON copy reference; callers should treat parsed_id as shared
+    read-only cache hit metadata (is_duplicate=True).
     """
     from app.database.connection.db import db_get
 
     table = 'parsed_resumes' if document_type == 'resume' else 'parsed_jds'
 
-    result = db_get(
-        f"""
-        SELECT p.id, p.toon, p.confidence, p.model_version, p.created_at, p.full_text, r.id as raw_file_id
-        FROM {table} p
-        INNER JOIN raw_files r ON p.raw_file_id = r.id
-        WHERE r.file_hash = ?
-        ORDER BY p.created_at DESC
-        """,
-        (file_hash,),
-    )
+    def _fetch(bulk_guard: str):
+        return db_get(
+            f"""
+            SELECT p.id, p.toon, p.confidence, p.model_version, p.created_at, p.full_text,
+                   r.id as raw_file_id, r.uploader_id
+            FROM {table} p
+            INNER JOIN raw_files r ON p.raw_file_id = r.id
+            WHERE r.file_hash = ?{bulk_guard}
+            ORDER BY p.created_at DESC
+            """,
+            (file_hash,),
+        )
+
+    bulk_guard = ''
+    if document_type == 'resume':
+        bulk_guard = (
+            ' AND p.bulk_session_id IS NULL'
+            ' AND r.bulk_session_id IS NULL'
+            " AND COALESCE(r.uploader_id, '') NOT LIKE 'bulk:%'"
+        )
+
+    try:
+        result = _fetch(bulk_guard)
+    except Exception:
+        result = _fetch('')
 
     if result and _cache_model_acceptable(result.get('model_version')):
+        if str(result.get('uploader_id') or '').startswith('bulk:'):
+            return None
         return {
             'parsed_id': result['id'],
             'raw_file_id': result['raw_file_id'],

@@ -476,58 +476,14 @@ def _persist_bulk_parse(
     toon: dict,
     confidence: float = 0.75,
 ) -> None:
-    """Store successful bulk parse into raw_files + parsed_resumes for cache reuse."""
-    if not job_id or not isinstance(toon, dict):
-        return
-    try:
-        from app.database.connection.db import db_run
-        from app.domains.recruitment.services.parsing_storage import (
-            store_parsed_resume,
-            store_raw_file,
-        )
+    """
+    Intentionally a no-op.
 
-        mime = 'application/pdf'
-        low = filename.lower()
-        if low.endswith('.docx'):
-            mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        elif low.endswith('.doc'):
-            mime = 'application/msword'
-
-        uploader_id = f'bulk:{job_id}'
-        cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v6-jd-coverage')
-        model_version = f'bulk+{cache_tag}+canonical'
-        raw = store_raw_file(
-            uploader_id,
-            'admin',
-            file_data,
-            filename,
-            mime,
-            None,
-            bulk_session_id=job_id,
-        )
-        parsed_id = store_parsed_resume(
-            raw['id'],
-            None,
-            toon,
-            raw_text,
-            confidence,
-            model_version,
-            bulk_session_id=job_id,
-        )
-        # Ensure linkage even if older DB rows lack column on insert path
-        try:
-            db_run(
-                'UPDATE raw_files SET bulk_session_id = ? WHERE id = ? AND bulk_session_id IS NULL',
-                (job_id, raw['id']),
-            )
-            db_run(
-                'UPDATE parsed_resumes SET bulk_session_id = ? WHERE id = ? AND bulk_session_id IS NULL',
-                (job_id, parsed_id),
-            )
-        except Exception:
-            pass
-    except Exception as e:
-        print(f"[local_bulk_parser] persist cache failed for {filename}: {e}")
+    Bulk must not write into raw_files/parsed_resumes used by single-file parse
+    cache. Single-resume / apply cache is populated only by the single-parse path.
+    Excel + bulk_parse_sessions remain the bulk outputs.
+    """
+    return
 
 
 def _process_one_file_inner(
@@ -663,7 +619,7 @@ def _process_one_file_inner(
                         )
                         _bulk_stage(
                             "persist_raw",
-                            "completed" if job_id else "skipped",
+                            "skipped",
                             0.0,
                         )
                         _bulk_stage(
@@ -732,7 +688,7 @@ def _process_one_file_inner(
                     )
                     _bulk_stage(
                         "persist_raw",
-                        "completed" if job_id else "skipped",
+                        "skipped",
                         0.0,
                     )
                     _bulk_stage(
