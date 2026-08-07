@@ -22,7 +22,7 @@ def semantic_ai_enabled() -> bool:
     return _ENABLED
 
 
-def _needs_resume_semantic(profile_dict: dict[str, Any]) -> bool:
+def _needs_resume_semantic(profile_dict: dict[str, Any], raw_text: str = '') -> bool:
     personal = profile_dict.get('personal') or {}
     contact = profile_dict.get('contact') or {}
     has_identity = bool(str(personal.get('full_name') or '').strip() and str(contact.get('email') or '').strip())
@@ -30,7 +30,22 @@ def _needs_resume_semantic(profile_dict: dict[str, Any]) -> bool:
     has_edu = bool(profile_dict.get('education'))
     has_skills = bool(profile_dict.get('skills'))
     # Skip AI when deterministic coverage is strong (fresher: education+skills OK)
-    return not (has_identity and has_skills and (has_exp or has_edu))
+    if not (has_identity and has_skills and (has_exp or has_edu)):
+        return True
+    # Still run residual LLM when contact/location/edu incomplete but source has evidence
+    if raw_text:
+        try:
+            from app.ai.document_intelligence.coverage.resume_coverage import (
+                resume_has_recoverable_gaps,
+            )
+            from app.ai.document_intelligence.models.candidate import CandidateProfile
+
+            profile = CandidateProfile.model_validate(profile_dict)
+            if resume_has_recoverable_gaps(profile, raw_text):
+                return True
+        except Exception:
+            pass
+    return False
 
 
 def _needs_jd_semantic(profile_dict: dict[str, Any]) -> bool:
@@ -121,7 +136,7 @@ def enrich_resume_semantic(
     if not semantic_ai_enabled() and not force:
         return profile
     data = profile.model_dump()
-    if not force and not _needs_resume_semantic(data):
+    if not force and not _needs_resume_semantic(data, unresolved_text or ''):
         return profile
     if not unresolved_text or len(unresolved_text.strip()) < 40:
         return profile

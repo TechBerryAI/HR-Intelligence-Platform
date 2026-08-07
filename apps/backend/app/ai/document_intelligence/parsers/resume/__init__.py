@@ -98,7 +98,9 @@ _EDU_DUTY_LINE = re.compile(
     r'(?i)^(?:'
     r'configured|setup|performed|effectively|responsible|worked|managed|developed|'
     r'implemented|maintained|monitoring|backup|restore|project\s+name|role\s*:|'
-    r'duration\s*:|organizational\s+experience'
+    r'duration\s*:|organizational\s+experience|executed|coordinated|facilitated|'
+    r'optimized|increased|engagement|responsibilities|client\s+name|technologies\s+used|'
+    r'resulting\s+in|drove\s+a|leading\s+to'
     r')\b'
 )
 _INSTITUTION_CUE = re.compile(
@@ -290,6 +292,36 @@ def coalesce_education(rows: list[EducationEntry]) -> list[EducationEntry]:
                 )
                 i += 2
                 continue
+            # institution-only + degree that also has institution text (prefer cur institution)
+            if cur_inst and not cur_deg and n_deg and n_inst and n_inst.lower() in cur_inst.lower():
+                merged.append(
+                    EducationEntry(
+                        degree=n_deg[:200],
+                        field=cur.field or nxt.field,
+                        institution=cur_inst[:200],
+                        gpa=cur.gpa or nxt.gpa,
+                        start=cur.start or nxt.start,
+                        end=cur.end or nxt.end,
+                    )
+                )
+                i += 2
+                continue
+        # Degree|Institution on a single orphan row
+        if cur_deg and not cur_inst and '|' in cur_deg:
+            left, _, right = cur_deg.partition('|')
+            if len(right.strip()) >= 3:
+                merged.append(
+                    EducationEntry(
+                        degree=left.strip()[:200],
+                        field=cur.field,
+                        institution=right.strip()[:200],
+                        gpa=cur.gpa,
+                        start=cur.start,
+                        end=cur.end,
+                    )
+                )
+                i += 1
+                continue
         if cur_inst or cur_deg:
             merged.append(cur)
         i += 1
@@ -323,9 +355,12 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
                 r'(?i)(?:^|\n)\s*(?:\*\*)?(?:education(?:al)?\s*(?:qualification|background|details)?s?'
                 r'|academic\s+(?:details|background|qualifications?)|academics|'
                 r'educational\s+(?:qualifications|background))(?:\*\*)?\s*:?\s*'
-                r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:experience|skills|projects?|certifications?|'
+                r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:experience|work\s+experience|professional\s+experience|'
+                r'employment|work\s+history|internships?|industrial\s+training|'
+                r'skills|skill\s*sets?|technical\s+skills?|projects?|certifications?|'
                 r'software\s+skills|languages?|awards?|declaration|personal\s+details|'
-                r'date\s+of\s+birth|dob|marital\s+status|location|address)\b|\Z)',
+                r'date\s+of\s+birth|dob|marital\s+status|location|address|summary|'
+                r'objective|achievements?)\b|\Z)',
                 full_text,
             )
             raw = (m.group(1) if m else '').strip()
@@ -554,15 +589,36 @@ def parse_personal(text: str, preamble: str, *, source_filename: str = '') -> Pe
 
 
 def parse_contact(text: str, preamble: str) -> ContactInfo:
+    """Prefer preamble+text; fill gaps from full text when header miss."""
     src = f'{preamble}\n{text}' if preamble else text
+    email = extract_email(src)
+    phone = extract_phone(src)
+    location = extract_simple_location(src)
+    linkedin = extract_linkedin(src)
+    github = extract_github(src)
+    portfolio = extract_portfolio(src)
+    # Header-only miss: retry missing fields on full document
+    if text and text.strip() and (not email or not phone or not location):
+        if not email:
+            email = extract_email(text) or email
+        if not phone:
+            phone = extract_phone(text) or phone
+        if not location:
+            location = extract_simple_location(text) or location
+        if not linkedin:
+            linkedin = extract_linkedin(text) or linkedin
+        if not github:
+            github = extract_github(text) or github
+        if not portfolio:
+            portfolio = extract_portfolio(text) or portfolio
     return ContactInfo(
-        email=extract_email(src),
-        phone=extract_phone(src),
-        location=extract_simple_location(src),
-        preferred_location='',
-        linkedin=extract_linkedin(src),
-        github=extract_github(src),
-        portfolio=extract_portfolio(src),
+        email=email,
+        phone=phone,
+        location=location,
+        preferred_location=location if location else '',
+        linkedin=linkedin,
+        github=github,
+        portfolio=portfolio,
     )
 
 
@@ -923,7 +979,16 @@ def parse_resume_from_sections(
             preamble = full_text[:800]
 
     exp_text = pick_section(
-        sections, 'Experience', 'Work Experience', 'Professional Experience', 'Employment', 'Work History',
+        sections,
+        'Experience',
+        'Work Experience',
+        'Professional Experience',
+        'Employment',
+        'Work History',
+        'Internship',
+        'Internships',
+        'Industrial Training',
+        'Summer Internship',
     )
     edu_text = pick_section(
         sections,

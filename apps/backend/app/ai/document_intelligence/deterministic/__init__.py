@@ -55,6 +55,14 @@ def extract_email(text: str) -> str:
         r'\1\2',
         healed,
     )
+    # Labeled email lines (common in headers / footers)
+    m_label = re.search(
+        r'(?i)(?:e[\-\s]?mail|mail\s*id|email\s*id)\s*[:.\-–—]?\s*'
+        r'([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})',
+        healed,
+    )
+    if m_label:
+        return m_label.group(1).strip()
     m = _EMAIL_RE.search(healed)
     if m:
         return m.group(0).strip()
@@ -190,6 +198,41 @@ def extract_simple_location(text: str) -> str:
     loc = extract_location_from_text(text or '')
     if loc:
         return loc
+    # Labeled location lines anywhere in the header/body
+    m_label = re.search(
+        r'(?i)(?:current\s+location|location|based\s+in|residing\s+(?:in|at)|address)\s*[:.\-–—]?\s*'
+        r'([A-Za-z][A-Za-z0-9 .,\-/()]{2,80})',
+        text or '',
+    )
+    if m_label:
+        candidate = m_label.group(1).strip().rstrip(',.;')
+        if candidate and '@' not in candidate and 'http' not in candidate.lower():
+            # Prefer city token when address is long
+            if len(candidate) > 50:
+                for city in (
+                    'Mumbai', 'Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
+                    'Pune', 'Thane', 'Navi Mumbai', 'Kolkata', 'Noida', 'Gurugram',
+                ):
+                    if city.lower() in candidate.lower():
+                        return city
+            return candidate
+    # Pipe-header city before phone/email
+    m_pipe = re.search(
+        r'(?im)^([A-Za-z][A-Za-z .,]{2,40})\s*[|•·]\s*(?:mobile|phone|tel|\+?\d|[a-z0-9._%+\-]+@)',
+        text or '',
+    )
+    if m_pipe:
+        cand = m_pipe.group(1).strip().strip(',')
+        if cand and '@' not in cand and len(cand) <= 60:
+            return cand
+    # City, State / City, Country unlabeled
+    m_cs = re.search(
+        r'(?im)^([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*),\s*'
+        r'([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*)\s*$',
+        '\n'.join((text or '').splitlines()[:15]),
+    )
+    if m_cs:
+        return f'{m_cs.group(1)}, {m_cs.group(2)}'.strip()[:80]
     # Preamble fallback: short city line between contact and sections
     # VALIDATION_FIX_location_cities
     cities = {
