@@ -42,7 +42,7 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
 - **Frontend:** Single-page app; single AppContext for auth, jobs, applicant state; role-based route guards (Recruiter, Candidate, Head of HR, CEO).
 - **Backend:** Monolithic Flask app; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, head-hr. Connection-pooled PostgreSQL; raw SQL via `db_run`/`db_get`/`db_all`.
 
-Detailed docs: **[docs/README.md](docs/README.md)** (HCIP `01`–`10`). Setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**. Legacy archive: **[docs/legacy/](docs/legacy/README.md)**.
+Detailed docs: **[docs/README.md](docs/README.md)** (HCIP `01`–`10`). Setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)**. Media & backups: **[docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md)**. Legacy archive: **[docs/legacy/](docs/legacy/README.md)**.
 
 ---
 
@@ -181,11 +181,11 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 ├── packages/             # Shared path helpers (knowledge)
 ├── ai/                   # AI platform (runtime, providers, capabilities, dataset, toon)
 └── docs/
-    ├── README.md            # Documentation index
+    ├── README.md            # Documentation index (HCIP 01–10)
+    ├── 01-…10-*.md          # Product SoT
     ├── DEVELOPMENT.md       # Local setup
-    ├── ARCHITECTURE.md      # Product & system architecture
-    ├── ENGINEERING.md       # APIs, backend, frontend
-    └── HISTORY.md           # Sprint freeze / migration history
+    ├── MEDIA_AND_BACKUPS.md # Durable media + backup commands
+    └── legacy/              # Archived narrative (optional)
 ```
 
 ---
@@ -242,6 +242,31 @@ Electron opens a window that loads the app and uses OS folder dialogs.
 
 ---
 
+## Media storage & backups (keep this)
+
+Resumes/JDs live in a durable folder **outside** the repo (`…/Projects/hcip-data/`), with automatic Postgres + media backups.
+
+**Full command reference:** **[docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md)**
+
+Quick commands:
+
+```bash
+cd apps/backend
+
+# Force a full backup now (DB + media → hcip-data/backups/)
+python -m app.database.scripts.backup_hcip --force
+
+# Verify media files match DB checksums
+python -m app.database.scripts.offload_blobs --verify-only --limit 200
+
+# Optional: daily cron if the app is not always running
+bash ../../scripts/install_hcip_backup_cron.sh
+```
+
+Do **not** delete `D:/Projects/hcip-data` (or your `HCIP_DATA_HOME`) — that is the live media + backup store.
+
+---
+
 ## Troubleshooting
 
 - **Env validation failed:** Run `cd backend && python env_validator.py`; fix `DATABASE_URL` or `POSTGRES_*` in `backend/.env`.
@@ -250,7 +275,7 @@ Electron opens a window that loads the app and uses OS folder dialogs.
 - **Email not sending:** Set `MAIL_SUPPRESS_SEND=true` in `apps/backend/.env` for testing.
 - **Other device cannot reach API:** Leave `VITE_API_URL` empty and open the Vite URL (`http://<host-ip>:5173`), not a hardcoded `localhost` API URL. Ensure firewall allows port 5173.
 
-More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [docs/07-API.md](docs/07-API.md).
+More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [docs/07-API.md](docs/07-API.md) · media/backups: [docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md).
 
 ---
 

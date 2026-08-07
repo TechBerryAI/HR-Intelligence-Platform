@@ -16,10 +16,16 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    from alembic import op
-    from app.database.schema_apply import apply_consolidated_schema
+    """No-op for already-provisioned DBs.
 
-    apply_consolidated_schema(op.get_bind())
+    Re-applying the full consolidated schema_pg inside Alembic's transaction
+    caused the entire upgrade chain to roll back (idempotent DDL + seeds).
+    Fresh installs should run ``apply_consolidated_schema`` once via
+    ``alembic upgrade 20260806_0001`` (baseline) or ``schema_apply`` manually,
+    then stamp ``20260806_0002`` and continue with incremental revisions.
+    """
+    # Intentionally empty — see module docstring / alembic README.
+    return
 
 
 def downgrade() -> None:

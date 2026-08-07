@@ -33,7 +33,10 @@ def allow_options_no_auth(f):
 @require_analytics_read
 def get_stats():
     # Match Admins page: every hr_signup row (including CEO / Head HR / recruiters).
-    total_admins = db_get('SELECT COUNT(*) AS cnt FROM hr_signup', ())
+    total_admins = db_get(
+        "SELECT COUNT(*) AS cnt FROM hr_signup WHERE COALESCE(account_status, 'active') = 'active'",
+        (),
+    )
     # Match jobs "Candidates" meaning: people who actually applied (not orphan signup rows
     # left by parse harness / abandoned apply drafts).
     total_candidates = db_get(
@@ -62,7 +65,9 @@ def get_stats():
 @require_analytics_read
 def list_admins():
     rows = db_all(
-        'SELECT hrid, full_name, email, company, created_at FROM hr_signup ORDER BY created_at DESC',
+        '''SELECT hrid, full_name, email, company, created_at FROM hr_signup
+           WHERE COALESCE(account_status, 'active') = 'active'
+           ORDER BY created_at DESC''',
         (),
     )
     return jsonify({'admins': rows})
@@ -100,7 +105,10 @@ def create_admin():
         next_num = int(row['maxn']) + 1 if row and row.get('maxn') is not None else 1
         hrid = f"HRID{next_num:03d}"
         db_run(
-            'INSERT INTO hr_signup (hrid, full_name, email, company, password) VALUES (?, ?, ?, ?, ?)',
+            """
+            INSERT INTO hr_signup (hrid, full_name, email, company, password, account_status)
+            VALUES (?, ?, ?, ?, ?, 'active')
+            """,
             (hrid, full_name, email, company or '-', password_hash),
         )
         return jsonify({
@@ -112,19 +120,87 @@ def create_admin():
         return jsonify({'error': 'Failed to create admin'}), 500
 
 
-@head_hr_bp.delete('/admins/<hrid>')
+@head_hr_bp.route('/admins/<hrid>', methods=['PUT', 'DELETE', 'OPTIONS'])
+@allow_options_no_auth
 @authenticate_token
 @require_head_hr
-def delete_admin(hrid):
-    existing = db_get('SELECT hrid FROM hr_signup WHERE hrid = ?', (hrid,))
+def update_or_delete_admin(hrid):
+    """PUT: update admin. DELETE: remove admin. OPTIONS: CORS preflight."""
+    if request.method == 'OPTIONS':
+        return '', 204
+    if is_read_only(request.user):
+        return jsonify({'error': 'Read-only access'}), 403
+
+    if request.method == 'DELETE':
+        existing = db_get('SELECT hrid FROM hr_signup WHERE hrid = ?', (hrid,))
+        if not existing:
+            return jsonify({'error': 'Admin not found'}), 404
+        try:
+            db_run('DELETE FROM hr_signup WHERE hrid = ?', (hrid,))
+            return jsonify({'message': f'Admin {hrid} deleted successfully'})
+        except Exception as e:
+            print(f'[HEAD HR] Error deleting admin {hrid}: {e}')
+            return jsonify({'error': 'Failed to delete admin'}), 500
+
+    # PUT — update
+    existing = db_get(
+        'SELECT hrid, full_name, email, company FROM hr_signup WHERE hrid = ?',
+        (hrid,),
+    )
     if not existing:
         return jsonify({'error': 'Admin not found'}), 404
+
+    data = request.get_json(force=True) or {}
+    full_name = (data.get('fullName') or data.get('full_name') or '').strip()
+    company = (data.get('company') or '').strip()
+    password = (data.get('password') or '').strip()
+
+    if not full_name:
+        return jsonify({'error': 'Full name is required'}), 400
+    if not company:
+        return jsonify({'error': 'Company is required'}), 400
+    if password and len(password) < 6:
+        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+
     try:
-        db_run('DELETE FROM hr_signup WHERE hrid = ?', (hrid,))
-        return jsonify({'message': f'Admin {hrid} deleted successfully'})
+        if password:
+            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            db_run(
+                'UPDATE hr_signup SET full_name = ?, company = ?, password = ? WHERE hrid = ?',
+                (full_name, company, password_hash, hrid),
+            )
+            try:
+                db_run(
+                    'UPDATE hr_auth SET full_name = ?, company = ?, password_hash = ? WHERE LOWER(email) = ?',
+                    (full_name, company, password_hash, (existing.get('email') or '').lower()),
+                )
+            except Exception:
+                pass
+        else:
+            db_run(
+                'UPDATE hr_signup SET full_name = ?, company = ? WHERE hrid = ?',
+                (full_name, company, hrid),
+            )
+            try:
+                db_run(
+                    'UPDATE hr_auth SET full_name = ?, company = ? WHERE LOWER(email) = ?',
+                    (full_name, company, (existing.get('email') or '').lower()),
+                )
+            except Exception:
+                pass
+
+        return jsonify({
+            'message': 'Admin updated successfully',
+            'admin': {
+                'hrid': hrid,
+                'full_name': full_name,
+                'email': existing.get('email'),
+                'company': company,
+            },
+        })
     except Exception as e:
-        print(f'[HEAD HR] Error deleting admin {hrid}: {e}')
-        return jsonify({'error': 'Failed to delete admin'}), 500
+        print(f'[HEAD HR] Error updating admin {hrid}: {e}')
+        return jsonify({'error': 'Failed to update admin'}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +218,7 @@ def list_candidates():
                   COUNT(a.id)::int AS application_count,
                   MAX(a.applied_at) AS last_applied_at,
                   STRING_AGG(DISTINCT j.title, ', ') AS jobs_applied
-           FROM candidate_signup cs
+           FROM candidates cs
            INNER JOIN applications a ON a.candidate_id = cs.cid
            LEFT JOIN candidate_profiles cp ON cp.candidate_id = cs.cid
            LEFT JOIN jobs j ON j.jdid = a.job_id
@@ -166,7 +242,7 @@ def _head_hr_profile_payload(cid):
                CASE WHEN cp.resume IS NOT NULL THEN 1 ELSE 0 END as has_resume,
                cs.name AS signup_name, cs.created_at AS signup_created_at
         FROM candidate_profiles cp
-        LEFT JOIN candidate_signup cs ON cs.cid = cp.candidate_id
+        LEFT JOIN candidates cs ON cs.cid = cp.candidate_id
         WHERE cp.candidate_id = ?
         ''',
         (cid,),
@@ -225,7 +301,7 @@ def get_candidate(cid):
     """Return full candidate profile for Head HR detail view."""
     payload = _head_hr_profile_payload(cid)
     if not payload:
-        signup = db_get('SELECT cid, name, email, created_at FROM candidate_signup WHERE cid = ?', (cid,))
+        signup = db_get('SELECT cid, name, email, created_at FROM candidates WHERE cid = ?', (cid,))
         if not signup:
             return jsonify({'error': 'Candidate not found'}), 404
         return jsonify({
@@ -294,11 +370,11 @@ def get_candidate_resume(cid):
 @authenticate_token
 @require_head_hr
 def delete_candidate(cid):
-    existing = db_get('SELECT cid FROM candidate_signup WHERE cid = ?', (cid,))
+    existing = db_get('SELECT cid FROM candidates WHERE cid = ?', (cid,))
     if not existing:
         return jsonify({'error': 'Candidate not found'}), 404
     try:
-        db_run('DELETE FROM candidate_signup WHERE cid = ?', (cid,))
+        db_run('DELETE FROM candidates WHERE cid = ?', (cid,))
         return jsonify({'message': f'Candidate {cid} deleted successfully'})
     except Exception as e:
         print(f'[HEAD HR] Error deleting candidate {cid}: {e}')
@@ -383,12 +459,16 @@ def job_detail_or_delete(jdid):
 def list_applications():
     rows = db_all(
         '''SELECT a.id, a.candidate_id, a.job_id, a.status,
-                  a.applied_at, a.match_score, a.shortlisted, a.ats_analysis,
+                  a.applied_at,
+                  COALESCE(m.match_score, a.match_score) AS match_score,
+                  a.shortlisted,
+                  COALESCE(m.analysis_toon, a.ats_analysis) AS ats_analysis,
                   cs.name AS candidate_name, cs.email AS candidate_email,
                   j.title AS job_title, j.company AS job_company,
                   h.full_name AS hr_name
            FROM applications a
-           LEFT JOIN candidate_signup cs ON cs.cid = a.candidate_id
+           LEFT JOIN matches m ON m.id = a.latest_match_id
+           LEFT JOIN candidates cs ON cs.cid = a.candidate_id
            LEFT JOIN jobs j ON j.jdid = a.job_id
            LEFT JOIN hr_signup h ON h.hrid = j.posted_by
            ORDER BY a.applied_at DESC''',
@@ -430,13 +510,17 @@ def get_application(app_id):
     """Return one application with full ATS analysis for Head HR detail view."""
     row = db_get(
         '''SELECT a.id, a.candidate_id, a.job_id, a.status,
-                  a.applied_at, a.match_score, a.shortlisted,
-                  a.ats_reasoning, a.ats_analysis,
+                  a.applied_at,
+                  COALESCE(m.match_score, a.match_score) AS match_score,
+                  a.shortlisted,
+                  COALESCE(m.rationale, a.ats_reasoning) AS ats_reasoning,
+                  COALESCE(m.analysis_toon, a.ats_analysis) AS ats_analysis,
                   cs.name AS candidate_name, cs.email AS candidate_email,
                   j.title AS job_title, j.company AS job_company,
                   h.full_name AS hr_name
            FROM applications a
-           LEFT JOIN candidate_signup cs ON cs.cid = a.candidate_id
+           LEFT JOIN matches m ON m.id = a.latest_match_id
+           LEFT JOIN candidates cs ON cs.cid = a.candidate_id
            LEFT JOIN jobs j ON j.jdid = a.job_id
            LEFT JOIN hr_signup h ON h.hrid = j.posted_by
            WHERE a.id = ?''',

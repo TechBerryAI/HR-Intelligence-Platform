@@ -34,7 +34,7 @@ class InProcessEventBus:
                 status='dispatched',
             )
         except Exception as exc:
-            logger.warning('[integrations] provider_events insert failed: %s', exc)
+            logger.warning('[integrations] sync_logs event insert failed: %s', exc)
 
         with self._lock:
             handlers = list(self._handlers.get(event.event_type, []))

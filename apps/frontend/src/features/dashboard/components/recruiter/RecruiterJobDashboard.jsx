@@ -505,14 +505,14 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                     transition={{ delay: index * 0.05 }}
                     className={`rounded-2xl p-6 border transition-all duration-[180ms] ${
                       embedded
-                        ? `org-glass-card ${isDisabled ? 'opacity-60 hover:transform-none' : ''}`
+                        ? `org-glass-card ${isDisabled ? 'hover:transform-none' : ''}`
                         : `bg-white dark:bg-slate-800/80 shadow-card dark:shadow-premium-dark ${
-                            isDisabled ? 'border-slate-200 dark:border-slate-700 opacity-60' : 'border-slate-200 dark:border-slate-700 hover:shadow-card-hover'
+                            isDisabled ? 'border-slate-200 dark:border-slate-700' : 'border-slate-200 dark:border-slate-700 hover:shadow-card-hover'
                           }`
                     }`}
                   >
                     <div className="flex items-start justify-between mb-4">
-                      <div className="flex-1">
+                      <div className={`flex-1 ${isDisabled ? 'opacity-60' : ''}`}>
                         <h4 className={`text-lg font-semibold ${isDisabled ? 'text-[var(--ei-text-muted)]' : embedded ? 'text-[var(--ei-text-primary)]' : 'text-slate-900 dark:text-[var(--ei-text-primary)]'}`}>
                           {job.title}
                         </h4>
@@ -521,44 +521,41 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2.5 shrink-0">
-                        <label
-                          className="inline-flex items-center cursor-pointer select-none"
-                          title={isDisabled ? 'Disabled — click to enable' : 'Enabled — click to disable'}
+                      <div className="flex flex-wrap items-center justify-end gap-2 shrink-0 max-w-[min(100%,28rem)]">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleEnabled(job, isDisabled)}
+                          disabled={togglingJobId === (job.id || job.jdid)}
+                          title={isDisabled ? 'Job is disabled — click to enable' : 'Job is enabled — click to disable'}
+                          aria-label={isDisabled ? 'Disabled — click to enable' : 'Enabled — click to disable'}
+                          aria-pressed={!isDisabled}
+                          className={`inline-flex items-center justify-center p-1.5 rounded-lg border transition-all disabled:opacity-60 ${
+                            !isDisabled
+                              ? 'border-[var(--ei-tone-success-border)] bg-[var(--ei-tone-success-bg)]'
+                              : 'border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]'
+                          }`}
                         >
-                          <span className="sr-only">{isDisabled ? 'Disabled' : 'Enabled'}</span>
-                          <input
-                            type="checkbox"
-                            className="sr-only"
-                            checked={!isDisabled}
-                            disabled={togglingJobId === (job.id || job.jdid)}
-                            onChange={(e) => handleToggleEnabled(job, e.target.checked)}
-                          />
                           <span
-                            className={`relative inline-block w-11 h-6 shrink-0 rounded-full transition-colors ${
+                            className={`relative inline-block w-10 h-5 shrink-0 rounded-full border ${
                               !isDisabled
-                                ? embedded
-                                  ? 'bg-emerald-500'
-                                  : 'bg-emerald-500'
-                                : embedded
-                                  ? 'bg-white/20'
-                                  : 'bg-slate-300 dark:bg-slate-600'
+                                ? 'bg-[var(--ei-tone-success)] border-[var(--ei-tone-success-border)]'
+                                : 'bg-slate-300 dark:bg-slate-600 border-[var(--ei-border-primary)]'
                             } ${togglingJobId === (job.id || job.jdid) ? 'opacity-60' : ''}`}
                             aria-hidden
                           >
                             <span
-                              className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                                !isDisabled ? 'translate-x-5' : 'translate-x-0'
+                              className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow border border-black/10 transition-transform ${
+                                !isDisabled ? 'left-[1.35rem]' : 'left-0.5'
                               }`}
                             />
                           </span>
-                        </label>
+                        </button>
                         <PremiumButton
                           variant="secondary"
                           size="sm"
                           icon={FiEdit2}
                           onClick={() => handleEditClick(job)}
-                          className={embedded ? '!bg-white/[0.05] !border-[var(--ei-border-primary)] !text-[var(--ei-text-primary)] hover:!bg-white/[0.09]' : ''}
+                          className={embedded ? '!bg-[var(--ei-surface-hover)] !border-[var(--ei-border-primary)] !text-[var(--ei-text-primary)] hover:!opacity-90' : ''}
                         >
                           Edit
                         </PremiumButton>
@@ -602,11 +599,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                         <button
                           type="button"
                           onClick={() => setConfirmDelete(job)}
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                            embedded
-                              ? 'text-red-400 hover:bg-red-500/10 border-red-500/30'
-                              : 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 border-red-200 dark:border-red-500/30'
-                          }`}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all border text-[var(--ei-tone-danger)] border-[var(--ei-tone-danger-border)] bg-[var(--ei-tone-danger-bg)] hover:opacity-90"
                         >
                           <FiTrash2 className="w-3.5 h-3.5" />
                           Delete

@@ -8,7 +8,6 @@ from app.ai.toon.runtime import toon_dumps
 from app.common.application_status import (
     STATUS_APPLIED,
     STATUS_SHORTLISTED,
-    STATUS_REJECTED,
     normalize_status,
 )
 from app.ai.parser.enrichment.jd_text_inference import (
@@ -40,7 +39,7 @@ def _apply_log_exception(exc: Exception):
 
 
 def _shortlisted_from_decision(decision: str) -> bool:
-    """Auto-shortlist only Strong Match / explicit shortlist (≥75%).
+    """Auto-shortlist only Strong Match / explicit shortlist (≥80%).
 
     Potential Match (partial_match) is recruiter-review only — do not auto-shortlist.
     """
@@ -302,7 +301,8 @@ def receive_ats_result():
     
     Updates the application record with detailed ATS analysis results.
     Stores structured matching data (skills, education, experience) in ats_analysis JSON field.
-    Also updates status to 'shortlisted' or 'rejected' based on shortlisted flag.
+    Also updates status to 'Shortlisted' when shortlisted; otherwise keeps Applied
+    (talent pool / recruiter review — not auto-Rejected).
     """
     try:
         # ========================================================================
@@ -374,10 +374,11 @@ def receive_ats_result():
             print(f"[ATS_RESULT] WARNING: Application not found for candidate {candidate_id}, job {job_id}")
             return jsonify({'error': 'Application not found'}), 404
         
-        # Determine new status based on shortlisted flag (canonical PostgreSQL values)
+        # Determine new status based on shortlisted flag (canonical PostgreSQL values).
+        # Non-shortlisted stays Applied (recruiter review / talent pool) — do not auto-Reject.
         new_status = normalize_status(application['status'])
         if normalize_status(application['status']) == STATUS_APPLIED:
-            new_status = STATUS_SHORTLISTED if shortlisted else STATUS_REJECTED
+            new_status = STATUS_SHORTLISTED if shortlisted else STATUS_APPLIED
         
         # ========================================================================
         # STORE DETAILED ATS ANALYSIS IN DATABASE
@@ -391,20 +392,62 @@ def receive_ats_result():
             """
             UPDATE applications
             SET match_score = ?,
+                matching_percentage = ?,
                 shortlisted = ?,
                 ats_reasoning = ?,
                 ats_analysis = ?,
                 status = ?
             WHERE candidate_id = ? AND job_id = ?
             """,
-            (match_score, _shortlisted_val, reasoning, analysis_toon, new_status, candidate_id, job_id)
+            (
+                match_score,
+                match_score,
+                _shortlisted_val,
+                reasoning,
+                analysis_toon,
+                new_status,
+                candidate_id,
+                job_id,
+            ),
+        )
+        # Keep matches SoT in sync when latest_match_id is set
+        db_run(
+            """
+            UPDATE matches m
+            SET match_score = ?,
+                matching_percentage = ?,
+                rationale = ?,
+                analysis_toon = ?
+            FROM applications a
+            WHERE a.candidate_id = ? AND a.job_id = ?
+              AND a.latest_match_id = m.id
+            """,
+            (match_score, match_score, reasoning, analysis_toon, candidate_id, job_id),
         )
         
         print(f"[ATS_RESULT] Successfully updated application with detailed analysis. New status: {new_status}")
 
         if new_status == STATUS_SHORTLISTED:
+            from datetime import datetime
             from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
-            job_row = db_get('SELECT posted_by FROM jobs WHERE jdid = ?', (job_id,))
+            from app.domains.recruitment.services.notifications import send_and_get_output
+            job_row = db_get('SELECT title, company, posted_by FROM jobs WHERE jdid = ?', (job_id,))
+            profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
+            signup = db_get('SELECT email FROM candidates WHERE cid = ?', (candidate_id,))
+            candidate_email = (profile or {}).get('email') or (signup or {}).get('email') or ''
+            if candidate_email:
+                try:
+                    send_and_get_output(
+                        hr_action='SHORTLISTED',
+                        candidate_name=(profile or {}).get('full_name') or '',
+                        candidate_email=candidate_email,
+                        job_title=(job_row or {}).get('title') or '',
+                        company_name=(job_row or {}).get('company') or '',
+                        application_id=application['id'],
+                        timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+                    )
+                except Exception as notify_err:
+                    print(f"[ATS_RESULT] SHORTLISTED notification failed: {notify_err}")
             trigger_interview_scheduling(
                 application['id'],
                 recruiter_hrid=(job_row or {}).get('posted_by'),

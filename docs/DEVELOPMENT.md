@@ -1,4 +1,4 @@
-# Development Guide
+﻿# Development Guide
 
 Local setup, workflows, and navigation for engineers new to the repository.
 
@@ -189,6 +189,18 @@ Place `website-hero.mp4` under `MEDIA_ROOT/public/` before the first seed (or ke
 
 **Future:** optional object storage (S3) behind the same media keys; CDN for hero delivery.
 
+### Durable media home + automatic backups (Current)
+
+Durable files and Postgres dumps can also live under `HCIP_DATA_HOME` (default sibling folder `…/hcip-data/`), outside the git tree. Full command reference (backup, offload, restore, env keys):
+
+→ **[MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md)**
+
+```bash
+cd apps/backend
+python -m app.database.scripts.backup_hcip --force
+python -m app.database.scripts.offload_blobs --verify-only --limit 200
+```
+
 ## Where to put new code
 
 | I am building… | Put it in… |
@@ -236,9 +248,9 @@ Run all AI tests: `cd ai && pytest`
 
 | Topic | Document |
 |-------|----------|
-| Docs index | [README.md](README.md) |
-| User manuals (screenshots) | [user-manual/README.md](user-manual/README.md) |
-| Architecture / engineering archive (optional) | [ARCHITECTURE.md](ARCHITECTURE.md) · [ENGINEERING.md](ENGINEERING.md) |
+| Docs index (HCIP `01`-`10`) | [README.md](README.md) |
+| Media & backups | [MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md) |
+| Legacy archive (optional) | [legacy/](legacy/README.md) |
 | AI platform overview | [ai/README.md](../ai/README.md) |
 | TOON ontology | [ai/toon/README.md](../ai/toon/README.md) |
 | Data pipeline | [ai/docs/DATA_PIPELINE.md](../ai/docs/DATA_PIPELINE.md) |

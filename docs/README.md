@@ -25,8 +25,10 @@ This repository’s **current product surface** is Recruitment Intelligence (job
 | Engineer joining the repo | [DEVELOPMENT.md](DEVELOPMENT.md) → [03-System-Architecture.md](03-System-Architecture.md) → [04-Workflow.md](04-Workflow.md) |
 | Working on apply / parse / match | [04-Workflow.md](04-Workflow.md) · [06-AI.md](06-AI.md) |
 | Designing future AI | [01-Product-Constitution.md](01-Product-Constitution.md) · [06-AI.md](06-AI.md) · [05-Ontology.md](05-Ontology.md) |
+| Media files & backups | [MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md) |
 | Security / compliance | [09-Security.md](09-Security.md) |
 | Planning releases | [10-Roadmap.md](10-Roadmap.md) |
+| Document intelligence notes | [document_intelligence/](document_intelligence/) |
 
 Local runbook: root [README.md](../README.md) · [DEVELOPMENT.md](DEVELOPMENT.md)
 
@@ -48,6 +50,8 @@ docs/
   09-Security.md
   10-Roadmap.md
   DEVELOPMENT.md                ← local setup
+  MEDIA_AND_BACKUPS.md          ← durable media + backup commands
+  document_intelligence/        ← parsing / DI notes
   legacy/                       ← archived narrative (optional reading)
 ```
 
@@ -106,6 +110,7 @@ Detail: [04-Workflow.md](04-Workflow.md)
 | 09 | [Security](09-Security.md) | Authentication, authorization, compliance |
 | 10 | [Roadmap](10-Roadmap.md) | Phases 1–10 |
 | — | [DEVELOPMENT.md](DEVELOPMENT.md) | Local setup |
+| — | [MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md) | Durable media + backup commands |
 
 ### Source-of-truth order
 

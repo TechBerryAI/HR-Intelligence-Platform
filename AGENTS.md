@@ -6,6 +6,9 @@
 - When changing APIs, schema, workflows, RBAC, or UI behavior, update matching docs (see `.cursor/rules/documentation-sync.mdc`).
 - After route or `schema_pg` changes, run: `python scripts/sync_docs_from_code.py`
 - Do not treat `docs/legacy/` as current product truth.
+- Local setup: `docs/DEVELOPMENT.md`.
+- Media + backups (commands): `docs/MEDIA_AND_BACKUPS.md`.
+- Docs index: `docs/README.md`.
 
 ## Code
 

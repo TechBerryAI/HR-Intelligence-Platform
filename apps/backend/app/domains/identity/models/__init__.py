@@ -48,7 +48,8 @@ Base = declarative_base()
 
 
 def init_models():
-    from . import hr_auth  # noqa: F401
+    # HRAuth ORM removed — identity uses hr_signup via raw SQL
+    pass
 
 
 @contextmanager

@@ -60,6 +60,49 @@ function validate(form, parseError = '') {
   return errors
 }
 
+/** Top-to-bottom order of required fields in the apply form. */
+const APPLY_FIELD_ORDER = [
+  'resume',
+  'fullName',
+  'email',
+  'phone',
+  'currentLocation',
+  'preferredLocation',
+  'experienceLevel',
+  'servingNotice',
+  'noticePeriod',
+  'lastWorkingDay',
+  'education',
+]
+
+const APPLY_FIELD_LABELS = {
+  resume: 'Resume',
+  fullName: 'Full name',
+  email: 'Email',
+  phone: 'Phone',
+  currentLocation: 'Current location',
+  preferredLocation: 'Preferred location',
+  experienceLevel: 'Experience level',
+  servingNotice: 'Serving notice',
+  noticePeriod: 'Serving period',
+  lastWorkingDay: 'Last working date',
+  education: 'Education',
+}
+
+function focusFirstApplyError(errs) {
+  const firstKey = APPLY_FIELD_ORDER.find((key) => errs[key])
+  if (!firstKey) return
+  const el = document.querySelector(`[data-apply-field="${firstKey}"]`)
+  if (!el) return
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  window.setTimeout(() => {
+    const focusable = el.querySelector('input:not([type="hidden"]), select, textarea, button, [tabindex]:not([tabindex="-1"])')
+    if (focusable && typeof focusable.focus === 'function') {
+      focusable.focus({ preventScroll: true })
+    }
+  }, 280)
+}
+
 export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
   const [form, setForm] = useState(initialForm)
   const [errors, setErrors] = useState({})
@@ -169,7 +212,16 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
     setSubmitError('')
     const errs = validate(form, parseError)
     setErrors(errs)
-    if (Object.keys(errs).length) return
+    if (Object.keys(errs).length) {
+      const missing = APPLY_FIELD_ORDER.filter((k) => errs[k]).map((k) => APPLY_FIELD_LABELS[k] || k)
+      setSubmitError(
+        missing.length
+          ? `Please complete required fields: ${missing.join(', ')}.`
+          : 'Please complete all required fields.'
+      )
+      requestAnimationFrame(() => focusFirstApplyError(errs))
+      return
+    }
 
     setSubmitting(true)
     try {
@@ -260,8 +312,10 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
             </div>
 
             <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-5 space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Resume (AI autofill)</label>
+              <div data-apply-field="resume">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Resume (AI autofill) <span className="text-[#FF6B81]">*</span>
+                </label>
                 <ResumeUploadWithParsing
                   publicMode
                   currentFileName={form.resumeFileName}
@@ -283,42 +337,57 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
               </div>
 
               <div className="grid sm:grid-cols-2 gap-4">
-                <PremiumInput
-                  label="Full name"
-                  icon={FiUser}
-                  value={form.fullName}
-                  onChange={(e) => setField('fullName', e.target.value)}
-                  error={errors.fullName}
-                />
-                <PremiumInput
-                  label="Email"
-                  icon={FiMail}
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setField('email', e.target.value)}
-                  error={errors.email}
-                />
-                <PremiumInput
-                  label="Phone"
-                  icon={FiPhone}
-                  value={form.phone}
-                  onChange={(e) => setField('phone', e.target.value)}
-                  error={errors.phone}
-                />
-                <PremiumInput
-                  label="Current location"
-                  icon={FiMapPin}
-                  value={form.currentLocation}
-                  onChange={(e) => setField('currentLocation', e.target.value)}
-                  error={errors.currentLocation}
-                />
-                <PremiumInput
-                  label="Preferred location"
-                  icon={FiMapPin}
-                  value={form.preferredLocation}
-                  onChange={(e) => setField('preferredLocation', e.target.value)}
-                  error={errors.preferredLocation}
-                />
+                <div data-apply-field="fullName">
+                  <PremiumInput
+                    label="Full name"
+                    icon={FiUser}
+                    value={form.fullName}
+                    onChange={(e) => setField('fullName', e.target.value)}
+                    error={errors.fullName}
+                    required
+                  />
+                </div>
+                <div data-apply-field="email">
+                  <PremiumInput
+                    label="Email"
+                    icon={FiMail}
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setField('email', e.target.value)}
+                    error={errors.email}
+                    required
+                  />
+                </div>
+                <div data-apply-field="phone">
+                  <PremiumInput
+                    label="Phone"
+                    icon={FiPhone}
+                    value={form.phone}
+                    onChange={(e) => setField('phone', e.target.value)}
+                    error={errors.phone}
+                    required
+                  />
+                </div>
+                <div data-apply-field="currentLocation">
+                  <PremiumInput
+                    label="Current location"
+                    icon={FiMapPin}
+                    value={form.currentLocation}
+                    onChange={(e) => setField('currentLocation', e.target.value)}
+                    error={errors.currentLocation}
+                    required
+                  />
+                </div>
+                <div data-apply-field="preferredLocation">
+                  <PremiumInput
+                    label="Preferred location"
+                    icon={FiMapPin}
+                    value={form.preferredLocation}
+                    onChange={(e) => setField('preferredLocation', e.target.value)}
+                    error={errors.preferredLocation}
+                    required
+                  />
+                </div>
                 <PremiumInput
                   label="LinkedIn URL"
                   icon={FiLink}
@@ -337,10 +406,12 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                   value={form.githubUrl || ''}
                   onChange={(e) => setField('githubUrl', e.target.value)}
                 />
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Experience level</label>
+                <div data-apply-field="experienceLevel">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Experience level <span className="text-[#FF6B81]">*</span>
+                  </label>
                   <select
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+                    className={`w-full rounded-xl border px-3 py-2.5 text-sm ${errors.experienceLevel ? 'border-red-500' : 'border-slate-200'}`}
                     value={form.experienceLevel}
                     onChange={(e) => setField('experienceLevel', e.target.value)}
                   >
@@ -354,10 +425,12 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
 
               {form.experienceLevel === 'experienced' && (
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Serving notice</label>
+                  <div data-apply-field="servingNotice">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Serving notice <span className="text-[#FF6B81]">*</span>
+                    </label>
                     <select
-                      className="premium-input w-full text-sm"
+                      className={`premium-input w-full text-sm ${errors.servingNotice ? 'border-red-500' : ''}`}
                       value={form.servingNotice}
                       onChange={(e) => {
                         const v = e.target.value
@@ -374,10 +447,12 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                     </select>
                     {errors.servingNotice && <p className="mt-1 text-sm text-red-600">{errors.servingNotice}</p>}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Serving period</label>
+                  <div data-apply-field="noticePeriod">
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      Serving period <span className="text-[#FF6B81]">*</span>
+                    </label>
                     <select
-                      className="premium-input w-full text-sm"
+                      className={`premium-input w-full text-sm ${errors.noticePeriod ? 'border-red-500' : ''}`}
                       value={form.noticePeriod}
                       onChange={(e) => setField('noticePeriod', e.target.value)}
                     >
@@ -389,11 +464,13 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                     {errors.noticePeriod && <p className="mt-1 text-sm text-red-600">{errors.noticePeriod}</p>}
                   </div>
                   {form.servingNotice === 'yes' && (
-                    <div className="sm:col-span-2">
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Last working date</label>
+                    <div className="sm:col-span-2" data-apply-field="lastWorkingDay">
+                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                        Last working date <span className="text-[#FF6B81]">*</span>
+                      </label>
                       <input
                         type="date"
-                        className="premium-input w-full text-sm text-slate-900"
+                        className={`premium-input w-full text-sm text-slate-900 ${errors.lastWorkingDay ? 'border-red-500' : ''}`}
                         value={form.lastWorkingDay || ''}
                         onChange={(e) => setField('lastWorkingDay', e.target.value)}
                       />
@@ -419,9 +496,11 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                 className="min-h-[80px] resize-y"
               />
 
-              <div>
+              <div data-apply-field="education">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-slate-800">Education</h3>
+                  <h3 className="text-sm font-semibold text-slate-800">
+                    Education <span className="text-[#FF6B81]">*</span>
+                  </h3>
                   <button type="button" className="text-sm text-accent-blue" onClick={() => addListItem('education', emptyEducation)}>
                     + Add
                   </button>

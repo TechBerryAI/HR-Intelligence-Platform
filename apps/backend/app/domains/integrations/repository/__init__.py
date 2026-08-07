@@ -428,15 +428,15 @@ def insert_provider_event(
     payload: Any = None,
     status: str = 'pending',
 ) -> int | None:
-    result = db_run(
-        '''
-        INSERT INTO provider_events (company_key, event_type, job_id, provider, payload, status)
-        VALUES (?, ?, ?, ?, ?::jsonb, ?)
-        RETURNING id
-        ''',
-        (company_key, event_type, job_id, provider, _json_dumps(payload), status),
+    """Persist domain events into sync_logs (provider_events table removed)."""
+    return insert_sync_log(
+        company_key or 'unknown',
+        provider or 'system',
+        event_type or 'provider_event',
+        status=status or 'dispatched',
+        job_id=job_id,
+        request_payload=payload,
     )
-    return result.get('lastID')
 
 
 def insert_webhook_event(
@@ -447,15 +447,15 @@ def insert_webhook_event(
     payload: Any = None,
     headers_json: Any = None,
 ) -> int | None:
-    result = db_run(
-        '''
-        INSERT INTO webhook_events (company_key, provider, event_type, payload, headers_json)
-        VALUES (?, ?, ?, ?::jsonb, ?::jsonb)
-        RETURNING id
-        ''',
-        (company_key, provider, event_type, _json_dumps(payload), _json_dumps(headers_json)),
+    """Persist webhooks into sync_logs (webhook_events table removed)."""
+    return insert_sync_log(
+        company_key or 'unknown',
+        provider,
+        event_type or 'webhook',
+        status='pending',
+        request_payload=payload,
+        response_payload=headers_json,
     )
-    return result.get('lastID')
 
 
 # ---------------------------------------------------------------------------

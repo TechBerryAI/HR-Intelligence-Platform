@@ -14,6 +14,12 @@ Root-level scripts that support local development, CI preflight, and database co
 | `../start-vm.js` | Full VM stack: DB (Hyper-V / Docker) + backend + frontend + Ollama |
 | `db-preflight.js` | PostgreSQL connectivity diagnostics (reads `apps/backend/.env`, WSL-aware) |
 | `database/test_db_connection.py` | Python DB connection test |
+| `ensure_media_assets.py` | Ensure durable media dirs + seed hero |
+| `install_hcip_backup_cron.sh` | Install daily cron for DB+media backup |
+| Backend module `python -m app.database.scripts.backup_hcip` | Manual / forced backup |
+| Backend module `python -m app.database.scripts.offload_blobs` | BYTEA → media + checksum verify |
+
+Full media/backup docs: **[docs/MEDIA_AND_BACKUPS.md](../docs/MEDIA_AND_BACKUPS.md)**.
 
 ## What belongs here?
 

@@ -43,14 +43,21 @@ const getScoreInfo = (score) => {
 // Score filter ranges
 const SCORE_FILTERS = [
   { id: 'all', label: 'All Candidates', min: 0, max: 100 },
-  { id: '80+', label: '> 80%', min: 80, max: 100 },
+  { id: '80+', label: '80% and above', min: 80, max: 100 },
   { id: '70-80', label: '70-80%', min: 70, max: 80 },
   { id: '60-70', label: '60-70%', min: 60, max: 70 },
   { id: '50-60', label: '50-60%', min: 50, max: 60 },
   { id: '40-50', label: '40-50%', min: 40, max: 50 },
-  { id: '30-40', label: '30-40%', min: 30, max: 40 },
-  { id: '<30', label: '< 30%', min: 0, max: 30 },
+  { id: 'below-40', label: '40% and below', min: 0, max: 40 },
 ]
+
+function scoreMatchesFilter(score, filter) {
+  if (filter.id === 'all') return true
+  if (!Number.isFinite(score)) return false
+  if (filter.id === '80+') return score >= 80 && score <= 100
+  if (filter.id === 'below-40') return score >= 0 && score < 40
+  return score >= filter.min && score < filter.max
+}
 
 export default function AppliedCandidates() {
   const { jobs, fetchApplicationsForJob, auth } = useApp()
@@ -111,6 +118,32 @@ export default function AppliedCandidates() {
     loadApplications()
   }, [selectedJobId, fetchApplicationsForJob])
 
+  useEffect(() => {
+    setSelectedFilter('all')
+  }, [selectedJobId])
+
+  const filterCounts = useMemo(() => {
+    const counts = {}
+    for (const filter of SCORE_FILTERS) {
+      counts[filter.id] = applications.filter((app) => {
+        const score = Number(getApplicationDisplayMatch(app).score ?? app.matchScore ?? app.score ?? 0)
+        return scoreMatchesFilter(score, filter)
+      }).length
+    }
+    return counts
+  }, [applications])
+
+  const visibleFilters = useMemo(
+    () => SCORE_FILTERS.filter((f) => f.id === 'all' || (filterCounts[f.id] || 0) > 0),
+    [filterCounts],
+  )
+
+  useEffect(() => {
+    if (!visibleFilters.some((f) => f.id === selectedFilter)) {
+      setSelectedFilter('all')
+    }
+  }, [visibleFilters, selectedFilter])
+
   // Filter and sort candidates
   const filteredCandidates = useMemo(() => {
     const filter = SCORE_FILTERS.find(f => f.id === selectedFilter)
@@ -118,25 +151,7 @@ export default function AppliedCandidates() {
 
     const filtered = applications.filter(app => {
       const score = Number(getApplicationDisplayMatch(app).score ?? app.matchScore ?? app.score ?? 0)
-      
-      // Handle "all" filter - include all scores
-      if (filter.id === 'all') {
-        return score >= filter.min && score <= filter.max
-      }
-      
-      // Handle "> 80%" filter - include 80 to 100 (inclusive)
-      if (filter.id === '80+') {
-        return score >= 80 && score <= 100
-      }
-      
-      // Handle "< 30%" filter - include 0 to 29 (exclusive of 30)
-      if (filter.id === '<30') {
-        return score >= 0 && score < 30
-      }
-      
-      // Handle range filters (e.g., "70-80%") - include min to max-1 to avoid overlap
-      // This means 70-79 for "70-80%", 60-69 for "60-70%", etc.
-      return score >= filter.min && score < filter.max
+      return scoreMatchesFilter(score, filter)
     })
 
     // Sort by score descending
@@ -401,14 +416,8 @@ export default function AppliedCandidates() {
                       onChange={(e) => setSelectedFilter(e.target.value)}
                       className={selectClass}
                     >
-                      {SCORE_FILTERS.map(filter => {
-                        const count = applications.filter(app => {
-                          const score = Number(getApplicationDisplayMatch(app).score ?? app.matchScore ?? app.score ?? 0)
-                          if (filter.id === 'all') return score >= filter.min && score <= filter.max
-                          if (filter.id === '80+') return score >= 80 && score <= 100
-                          if (filter.id === '<30') return score >= 0 && score < 30
-                          return score >= filter.min && score < filter.max
-                        }).length
+                      {visibleFilters.map(filter => {
+                        const count = filterCounts[filter.id] || 0
 
                         return (
                           <option

@@ -88,7 +88,7 @@ def _repair_orphan_stamp(connection) -> None:
         ),
         {'v': _BASELINE, 'old': current},
     )
-    connection.commit()
+    # Do not commit here — stay inside the Alembic migration transaction.
 
 
 def run_migrations_offline() -> None:
@@ -113,14 +113,20 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        _repair_orphan_stamp(connection)
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            transaction_per_migration=True,
         )
         with context.begin_transaction():
+            _repair_orphan_stamp(connection)
             context.run_migrations()
+        # Explicit commit for drivers that leave the connect() context uncommitted
+        try:
+            connection.commit()
+        except Exception:
+            pass
 
 
 if context.is_offline_mode():
