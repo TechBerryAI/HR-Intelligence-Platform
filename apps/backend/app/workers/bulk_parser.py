@@ -194,8 +194,16 @@ def _normalize_phone(phone: Any) -> str:
     if not s:
         return ''
     # Keep leading +, digits, spaces, dashes, parentheses
-    cleaned = re.sub(r'[^\d+\-\s().]', '', s)
-    return cleaned.strip()
+    cleaned = re.sub(r'[^\d+\-\s().]', '', s).strip()
+    try:
+        from app.ai.document_intelligence.validation import validate_phone
+
+        ok, _ = validate_phone(cleaned)
+        if not ok:
+            return ''
+    except Exception:
+        pass
+    return cleaned
 
 
 def _normalize_email(email: Any) -> str:
@@ -582,15 +590,26 @@ def _process_one_file_inner(
                 from app.ai.parser.engine import parse_resume_text_via_engine
                 from app.ai.parser.deterministic_resume import score_resume_toon
 
+                from app.ai.document_intelligence.coverage.resume_coverage import (
+                    has_experience_section_evidence,
+                )
+
                 det_toon, source, eng_notes, form_dto = parse_resume_text_via_engine(
                     raw_text,
                     allow_llm=False,
                     skip_llm_when_deterministic=True,
                 )
                 conf, missing, passes = score_resume_toon(
-                    det_toon if isinstance(det_toon, dict) else {}
+                    det_toon if isinstance(det_toon, dict) else {},
+                    source_text=raw_text,
                 )
-                if passes and isinstance(det_toon, dict):
+                # Do not skip LLM when experience section exists but Excel would lack Experience
+                exp_gap = (
+                    has_experience_section_evidence(raw_text)
+                    and isinstance(det_toon, dict)
+                    and not (det_toon.get("experience") or [])
+                )
+                if passes and isinstance(det_toon, dict) and not exp_gap:
                     t_val = time.perf_counter()
                     accept, notes, parse_status = validate_toon_format_bulk(det_toon, "resume")
                     _bulk_stage(
@@ -598,7 +617,8 @@ def _process_one_file_inner(
                         "completed" if accept else "failed",
                         (time.perf_counter() - t_val) * 1000.0,
                     )
-                    if accept:
+                    # Bulk-validate "partial" alone must not skip LLM when experience is weak
+                    if accept and parse_status == "ok":
                         t_persist = time.perf_counter()
                         row = _flatten_toon(det_toon, filename, form=form_dto)
                         note_bits = [f"source=engine:{source}", f"conf={conf:.2f}"]
@@ -607,7 +627,7 @@ def _process_one_file_inner(
                             note_bits.append("weak=" + ",".join(missing[:6]))
                         if notes:
                             note_bits.append(notes)
-                        row["ParseStatus"] = "ok" if parse_status == "ok" else parse_status
+                        row["ParseStatus"] = "ok"
                         row["ParseNotes"] = "; ".join(note_bits)[:2000]
                         _persist_bulk_parse(
                             job_id=job_id,
@@ -639,7 +659,7 @@ def _process_one_file_inner(
                                 row,
                                 False,
                                 f"Processing: {filename} (engine:{source})",
-                                parse_status if parse_status in ("ok", "partial") else "ok",
+                                "ok",
                             )
             except Exception as det_err:
                 print(f"[local_bulk_parser] engine det path failed for {filename}: {det_err}")
@@ -670,8 +690,23 @@ def _process_one_file_inner(
                     (time.perf_counter() - t_val) * 1000.0,
                 )
                 if accept:
+                    from app.ai.document_intelligence.coverage.resume_coverage import (
+                        has_experience_section_evidence,
+                    )
+
                     t_persist = time.perf_counter()
                     row = _flatten_toon(toon, filename, form=form_dto)
+                    # Honest status: section evidence but still empty Experience → partial
+                    if (
+                        has_experience_section_evidence(raw_text)
+                        and not (row.get("Experience") or "").strip()
+                        and (
+                            row.get("Name")
+                            or row.get("Email")
+                            or row.get("Phone")
+                        )
+                    ):
+                        parse_status = "partial"
                     note_bits = [f"source=engine:{source}", f"status={parse_status}"]
                     note_bits.extend(eng_notes[:4])
                     if notes:

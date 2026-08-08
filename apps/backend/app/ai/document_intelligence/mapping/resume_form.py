@@ -20,6 +20,7 @@ from app.ai.document_intelligence.models.form_dtos import (
 from app.ai.document_intelligence.validation.engine import (
     validate_email,
     validate_nonempty,
+    validate_location,
     validate_phone,
     validate_url,
 )
@@ -174,41 +175,51 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
         )
     )
 
-    loc_ok, loc_reason = validate_nonempty(profile.contact.location, 'location')
+    loc_ok, loc_reason = validate_location(profile.contact.location)
     current_location = (profile.contact.location if loc_ok else '').strip()
     current_location = re.sub(r'^[\-–—•·]+\s*', '', current_location).strip()
+    if current_location:
+        current_location = current_location.splitlines()[0].strip()
+        # "Hyderabad, India" — drop trailing bleed after country
+        current_location = re.split(r'(?i)(?<=\bIndia)\s+', current_location, maxsplit=1)[0].strip()
+        loc_ok, loc_reason = validate_location(current_location)
+    if current_location and not loc_ok:
+        current_location = ''
     if not current_location:
         loc_ok = False
-        loc_reason = 'empty'
+        loc_reason = loc_reason if loc_reason != 'ok' else 'empty'
     traces.append(
         _trace(
             'currentLocation',
             'contact.location',
             source=_meta_source(profile, 'person.location', 'deterministic'),
-            validator='validate_nonempty' if loc_ok else 'none',
+            validator='validate_location' if loc_ok else 'none',
             confidence=0.85 if loc_ok else 0.0,
-            reason=loc_reason if loc_ok else 'empty',
+            reason=loc_reason if loc_ok else (loc_reason or 'empty'),
         )
     )
 
     # preferredLocation: preferred_location, else current location
     # VALIDATION_FIX_preferred_location_fallback
     pref = (profile.contact.preferred_location or '').strip()
+    pref_ok, pref_loc_reason = validate_location(pref) if pref else (False, 'empty')
+    if not pref_ok:
+        pref = ''
     if not pref and current_location:
         pref = current_location
         pref_source_path = 'contact.location'
         pref_reason = 'fallback_current_location'
+        pref_ok = True
     else:
         pref_source_path = 'contact.preferred_location'
-        pref_reason = 'ok' if pref else 'empty'
-    pref_ok, _ = validate_nonempty(pref, 'preferred_location')
+        pref_reason = pref_loc_reason if pref else 'empty'
     preferred_location = pref if pref_ok else ''
     traces.append(
         _trace(
             'preferredLocation',
             pref_source_path,
             source=_meta_source(profile, 'person.preferred_location', 'deterministic'),
-            validator='validate_nonempty' if pref_ok else 'none',
+            validator='validate_location' if pref_ok else 'none',
             confidence=0.85 if pref_ok else 0.0,
             reason=pref_reason if pref_ok else 'empty',
         )

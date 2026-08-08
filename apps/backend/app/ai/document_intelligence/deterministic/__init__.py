@@ -70,8 +70,38 @@ def extract_email(text: str) -> str:
     return m.group(0).strip() if m else ''
 
 
+def _looks_like_year_digit_soup(digits: str) -> bool:
+    """True when digits are concatenated calendar years (e.g. 2026201820202025)."""
+    d = re.sub(r'\D', '', digits or '')
+    if len(d) < 12:
+        return False
+    years = re.findall(r'(?:19|20)\d{2}', d)
+    if len(years) >= 2 and ''.join(years) in d:
+        return True
+    # Long run made only of year-like chunks
+    if len(d) >= 12 and re.fullmatch(r'(?:(?:19|20)\d{2}){3,}', d):
+        return True
+    return False
+
+
+def _phone_candidate_ok(raw: str) -> bool:
+    digits = re.sub(r'\D', '', raw or '')
+    if not digits or _looks_like_year_digit_soup(digits):
+        return False
+    if len(digits) == 10 and digits[0] in '6789':
+        return True
+    if len(digits) == 12 and digits.startswith('91') and digits[2] in '6789':
+        return True
+    if len(digits) == 11 and digits.startswith('0'):
+        return True
+    # Keep short international with + but reject year soup lengths
+    if 7 <= len(digits) <= 13 and not re.search(r'(?:19|20)\d{2}(?:19|20)\d{2}', digits):
+        return True
+    return False
+
+
 def extract_phone(text: str) -> str:
-    # VALIDATION_FIX_whole_doc_phone_scan
+    # VALIDATION_FIX_whole_doc_phone_scan + year-soup rejection
     if not text:
         return ''
 
@@ -79,29 +109,39 @@ def extract_phone(text: str) -> str:
         # Collapse digit groups separated by spaces: "+91- 99 70 38 80 01" → "+91-9970388001"
         return re.sub(r'(?<=\d)\s+(?=\d)', '', blob or '')
 
-    # Prefer header/preamble, then fall back to whole document
-    for window in (text[:2500], text):
-        normalized = _normalize_phone_blob(window)
-        for pat in _PHONE_PATTERNS:
-            m = pat.search(normalized)
-            if m:
-                return m.group(0).strip()
-        for pat in _PHONE_PATTERNS:
-            m = pat.search(window)
-            if m:
-                return m.group(0).strip()
-    # Labeled phone lines anywhere in the doc
+    # Prefer labeled lines, then header, then whole document
     m2 = re.search(
         r'(?i)(?:phone|mobile|mob|cell|tel|contact(?:\s*no)?)\s*[:.\-–—]?\s*([+\d][\d\s().-]{7,}\d)',
         text,
     )
     if m2:
-        return _normalize_phone_blob(m2.group(1)).strip()
+        cand = _normalize_phone_blob(m2.group(1)).strip()
+        if _phone_candidate_ok(cand):
+            return cand
+    m_plus = re.search(r'(\+91[\s\-]?\d[\d\s\-]{8,12}\d)', text[:2500])
+    if m_plus:
+        cand = _normalize_phone_blob(m_plus.group(1)).strip()
+        if _phone_candidate_ok(cand):
+            return cand
+
+    for window in (text[:2500], text):
+        # Do not collapse spaces across the whole window (glues years into phone soup)
+        for pat in _PHONE_PATTERNS:
+            for m in pat.finditer(window):
+                cand = m.group(0).strip()
+                if _phone_candidate_ok(cand):
+                    return cand
+        normalized = _normalize_phone_blob(window)
+        for pat in _PHONE_PATTERNS:
+            for m in pat.finditer(normalized):
+                cand = m.group(0).strip()
+                if _phone_candidate_ok(cand):
+                    return cand
     # Spaced Indian mobiles: 99 70 38 80 01 or 99703 88001
     m3 = re.search(r'(?:\+91[\s\-]*)?([6-9](?:\s*\d){9})', text)
     if m3:
         digits = re.sub(r'\D', '', m3.group(1))
-        if len(digits) == 10:
+        if len(digits) == 10 and _phone_candidate_ok(digits):
             return digits
     return ''
 
@@ -193,29 +233,31 @@ def extract_date_range(line: str) -> Tuple[str, str]:
 
 
 def extract_simple_location(text: str) -> str:
-    from app.ai.parser.enrichment.resume_text_inference import extract_location_from_text
+    from app.ai.parser.enrichment.resume_text_inference import (
+        extract_location_from_text,
+        is_plausible_location_value,
+    )
 
     loc = extract_location_from_text(text or '')
-    if loc:
+    if loc and is_plausible_location_value(loc):
         return loc
-    # Labeled location lines anywhere in the header/body
+    # Labeled location lines — require delimiter to avoid prose captures
     m_label = re.search(
-        r'(?i)(?:current\s+location|location|based\s+in|residing\s+(?:in|at)|address)\s*[:.\-–—]?\s*'
+        r'(?i)(?:current\s+location|location|based\s+in|residing\s+(?:in|at)|address)\s*[:.\-–—]\s*'
         r'([A-Za-z][A-Za-z0-9 .,\-/()]{2,80})',
         text or '',
     )
     if m_label:
         candidate = m_label.group(1).strip().rstrip(',.;')
-        if candidate and '@' not in candidate and 'http' not in candidate.lower():
-            # Prefer city token when address is long
-            if len(candidate) > 50:
-                for city in (
-                    'Mumbai', 'Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
-                    'Pune', 'Thane', 'Navi Mumbai', 'Kolkata', 'Noida', 'Gurugram',
-                ):
-                    if city.lower() in candidate.lower():
-                        return city
+        if candidate and is_plausible_location_value(candidate):
             return candidate
+        if candidate and '@' not in candidate and 'http' not in candidate.lower():
+            for city in (
+                'Mumbai', 'Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
+                'Pune', 'Thane', 'Navi Mumbai', 'Kolkata', 'Noida', 'Gurugram',
+            ):
+                if city.lower() in candidate.lower():
+                    return city
     # Pipe-header city before phone/email
     m_pipe = re.search(
         r'(?im)^([A-Za-z][A-Za-z .,]{2,40})\s*[|•·]\s*(?:mobile|phone|tel|\+?\d|[a-z0-9._%+\-]+@)',
@@ -223,7 +265,7 @@ def extract_simple_location(text: str) -> str:
     )
     if m_pipe:
         cand = m_pipe.group(1).strip().strip(',')
-        if cand and '@' not in cand and len(cand) <= 60:
+        if cand and is_plausible_location_value(cand):
             return cand
     # City, State / City, Country unlabeled
     m_cs = re.search(
@@ -232,7 +274,9 @@ def extract_simple_location(text: str) -> str:
         '\n'.join((text or '').splitlines()[:15]),
     )
     if m_cs:
-        return f'{m_cs.group(1)}, {m_cs.group(2)}'.strip()[:80]
+        cand = f'{m_cs.group(1)}, {m_cs.group(2)}'.strip().splitlines()[0][:80]
+        if is_plausible_location_value(cand):
+            return cand
     # Preamble fallback: short city line between contact and sections
     # VALIDATION_FIX_location_cities
     cities = {

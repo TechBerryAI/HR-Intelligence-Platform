@@ -121,19 +121,33 @@ def _quality_experience(experience: Any) -> list[dict]:
         if not isinstance(exp, dict):
             continue
         title = str(exp.get('title') or exp.get('role') or '').strip()
-        if is_plausible_job_title(title):
+        company = str(exp.get('company') or '').strip()
+        if is_plausible_job_title(title) or re.search(r'(?i)\bintern\b', title):
+            out.append(exp)
+        elif company and (exp.get('from') or exp.get('start') or exp.get('to') or exp.get('end')):
+            # Dated company stub from date-first layouts
             out.append(exp)
     return out
 
 
-def score_resume_toon(toon: dict[str, Any]) -> tuple[float, list[str], bool]:
+def score_resume_toon(
+    toon: dict[str, Any],
+    *,
+    source_text: str | None = None,
+) -> tuple[float, list[str], bool]:
     """
     Score a resume TOON for deterministic acceptance.
 
     Returns (confidence 0..1, missing_field_keys, passes_gate).
     Gate: plausible name + (email or phone) + at least one of real skills / experience / education,
     and experience must not be biodata-polluted.
+    When source_text has an Experience/Internship section but quality experience is empty,
+    the gate fails so callers can run LLM (freshers with no section still pass).
     """
+    from app.ai.document_intelligence.coverage.resume_coverage import (
+        has_experience_section_evidence,
+    )
+    from app.ai.document_intelligence.validation import validate_email, validate_phone
     from app.ai.parser.enrichment.resume_text_inference import is_plausible_person_name
 
     if not isinstance(toon, dict):
@@ -141,8 +155,8 @@ def score_resume_toon(toon: dict[str, Any]) -> tuple[float, list[str], bool]:
 
     person = toon.get('person') if isinstance(toon.get('person'), dict) else {}
     has_name = is_plausible_person_name(person.get('name'))
-    has_email = _nonempty(person.get('email'))
-    has_phone = _nonempty(person.get('phone'))
+    has_email = validate_email(str(person.get('email') or ''))[0]
+    has_phone = validate_phone(str(person.get('phone') or ''))[0]
     has_contact = has_email or has_phone
     quality_skills = _quality_skills(toon.get('skills'))
     has_skills = len(quality_skills) > 0
@@ -153,6 +167,8 @@ def score_resume_toon(toon: dict[str, Any]) -> tuple[float, list[str], bool]:
     has_summary = _nonempty(toon.get('summary'))
     has_certs = _nonempty(toon.get('certifications'))
     exp_ok = experience_quality_ok(toon)
+    exp_section = bool(source_text and has_experience_section_evidence(source_text))
+    exp_gap = exp_section and not has_exp
 
     missing: list[str] = []
     if not has_name:
@@ -167,6 +183,8 @@ def score_resume_toon(toon: dict[str, Any]) -> tuple[float, list[str], bool]:
         missing.append('education')
     if not exp_ok:
         missing.append('experience.quality')
+    if exp_gap:
+        missing.append('experience.section_gap')
 
     score = 0.0
     if has_name:
@@ -190,6 +208,7 @@ def score_resume_toon(toon: dict[str, Any]) -> tuple[float, list[str], bool]:
         and has_contact
         and (has_skills or has_exp or has_edu)
         and exp_ok
+        and not exp_gap
         and score >= RESUME_DET_CONFIDENCE
     )
     return score, missing, passes
@@ -210,5 +229,5 @@ def parse_resume_deterministic(
         toon = {}
     if toon.get('type') != 'resume':
         toon['type'] = 'resume'
-    confidence, missing, passes = score_resume_toon(toon)
+    confidence, missing, passes = score_resume_toon(toon, source_text=raw_text or '')
     return toon, confidence, missing, passes
