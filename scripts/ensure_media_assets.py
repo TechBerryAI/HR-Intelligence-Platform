@@ -36,7 +36,8 @@ def main() -> int:
     else:
         print(
             'Warning: no disk hero at '
-            f'{root / media_storage.HERO_VIDEO_REL} — DB seed will fail unless already loaded'
+            f'{root / media_storage.HERO_VIDEO_REL} — '
+            'expected apps/frontend/public/videos/website-hero.mp4 in the repo'
         )
 
     row = site_assets.ensure_hero_video_in_db(force_refresh=force)

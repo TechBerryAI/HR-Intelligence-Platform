@@ -329,9 +329,9 @@ def resolve_url_for_api(key_or_url: str) -> str | None:
 
 
 def ensure_hero_video() -> Path | None:
-    """Ensure hero MP4 under MEDIA_ROOT; seed once from legacy frontend public/videos."""
+    """Ensure hero MP4 under MEDIA_ROOT; seed from committed frontend public/videos."""
     dest = get_media_root() / HERO_VIDEO_REL
-    if dest.is_file():
+    if dest.is_file() and dest.stat().st_size > 0:
         return dest
 
     candidates = [
@@ -339,11 +339,14 @@ def ensure_hero_video() -> Path | None:
         _BACKEND_DIR.parent / 'frontend' / 'public' / 'videos' / 'website-hero.mp4',
     ]
     for src in candidates:
-        if src.is_file():
+        if src.is_file() and src.stat().st_size > 0:
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dest)
             print(f'[MEDIA] Seeded hero video from {src} → {dest}')
             return dest
 
-    print(f'[MEDIA] Hero video missing at {dest} (place website-hero.mp4 under MEDIA_ROOT/public/)')
+    print(
+        f'[MEDIA] Hero video missing at {dest} '
+        '(expected apps/frontend/public/videos/website-hero.mp4 in repo)'
+    )
     return None

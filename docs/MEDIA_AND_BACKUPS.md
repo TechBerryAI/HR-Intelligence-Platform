@@ -99,30 +99,31 @@ Related revision: `20260807_0012` — `site_assets.content_sha256`.
 
 ## Landing hero video (VM / fresh clone)
 
-Hero is **not** in Git by default. Bytes live under `MEDIA_ROOT` (and a `site_assets` catalog row).
+The seed MP4 is **committed** at `apps/frontend/public/videos/website-hero.mp4`.
+On boot (and on `/api/media/public/hero-video` / health), the app copies it to
+`$MEDIA_ROOT/public/website-hero.mp4` and upserts the Postgres `site_assets`
+catalog row (`landing.hero_video`). Runtime bytes stay on `MEDIA_ROOT`; the
+catalog holds metadata + SHA-256 (not BYTEA).
 
-**Seed path the app looks for:**
+**Resolve order:**
 
-1. `$MEDIA_ROOT/public/website-hero.mp4`
-2. Else once from `apps/frontend/public/videos/website-hero.mp4` (if present)
+1. `$MEDIA_ROOT/public/website-hero.mp4` (canonical runtime file)
+2. Else copy from `apps/frontend/public/videos/website-hero.mp4` (in-repo seed)
+3. Upsert `site_assets` so `storage_url` points at that canonical file
 
 **On a VM after `git pull`:**
 
 ```bash
-# 1) Copy the MP4 onto the VM (scp / shared drive / etc.)
-mkdir -p "$HCIP_DATA_HOME/media/public"   # or rely on default …/hcip-data/media
-cp website-hero.mp4 "$HCIP_DATA_HOME/media/public/website-hero.mp4"
-
-# 2) Seed catalog + verify
+# Pull includes the seed; start the backend (auto-seeds) or run:
 cd /path/to/HR-Intelligence-Platform
-python scripts/ensure_media_assets.py --force
+python scripts/ensure_media_assets.py
 
-# 3) Health check
 curl -s http://localhost:<backend-port>/api/media/health
 # expect heroVideoDisk / heroVideoDb true
 ```
 
-Alternatively commit `apps/frontend/public/videos/website-hero.mp4` so every clone can auto-seed on app boot.
+Optional: `python scripts/ensure_media_assets.py --force` rewrites the catalog
+from the current disk/seed file.
 
 ---
 
