@@ -103,7 +103,7 @@ function focusFirstApplyError(errs) {
   }, 280)
 }
 
-export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
+export default function ApplyJobModal({ open, job, onClose, onSuccess, companySlug }) {
   const [form, setForm] = useState(initialForm)
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
@@ -247,10 +247,16 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
       if (form._publicUploaderId) fd.append('publicUploaderId', form._publicUploaderId)
       if (form.resumeFile) fd.append('resume', form.resumeFile)
 
-      const res = await fetch(`${BASE_URL}/api/jobs/${encodeURIComponent(job.id)}/apply`, {
-        method: 'POST',
-        body: fd,
-      })
+      const applyQs = companySlug
+        ? `?company=${encodeURIComponent(companySlug)}`
+        : ''
+      const res = await fetch(
+        `${BASE_URL}/api/jobs/${encodeURIComponent(job.id || job.jdid)}/apply${applyQs}`,
+        {
+          method: 'POST',
+          body: fd,
+        },
+      )
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         const raw = String(data.error || '')

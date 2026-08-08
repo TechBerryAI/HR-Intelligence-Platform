@@ -9,11 +9,7 @@ from app.domains.identity.authorization.rbac import (
     can_access_job,
     can_modify_job,
     is_read_only,
-    get_role,
     get_user_id,
-    ROLE_CEO,
-    ROLE_HEAD_HR,
-    ROLE_RECRUITER,
 )
 from app.ai.toon.runtime import toon_loads_flex
 from app.domains.candidate.services.profile_service import (
@@ -30,37 +26,30 @@ from app.domains.recruitment.api.applications import (
 )
 from app.domains.recruitment.services.job_delete import cascade_delete_job
 from app.domains.recruitment.services.ats_service import match_candidate_to_job, sync_application_match_score
-from app.domains.recruitment.services.company_scope import companies_related
+from app.domains.identity.services.organizations import (
+    attach_organization_id,
+    find_organization_by_slug,
+    get_organization,
+    require_organization_id,
+)
 from app.domains.integrations.events import emit_job_closed, emit_job_created, emit_job_updated
 from app.core.timing import timing
 
 jobs_bp = Blueprint('jobs', __name__)
 
 
-def _jobs_for_recruiter_company(user) -> list:
-    """Recruiters see org/company postings, not only rows they personally posted."""
-    uid = get_user_id(user)
-    hr_company = (user.get('company') or '').strip()
-    if not hr_company and uid:
-        row = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (uid,))
-        hr_company = ((row or {}).get('company') or '').strip()
-    jobs = db_all(
+def _jobs_for_organization(org_id: str) -> list:
+    """All jobs belonging to an organization."""
+    return db_all(
         '''
         SELECT j.*, hs.company as company_name
         FROM jobs j
         LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+        WHERE j.organization_id = ?
         ORDER BY j.posted_on DESC
-        '''
+        ''',
+        (org_id,),
     )
-    if not hr_company:
-        return [j for j in jobs if j.get('posted_by') == uid]
-    return [
-        j
-        for j in jobs
-        if j.get('posted_by') == uid
-        or companies_related(hr_company, j.get('company'))
-        or companies_related(hr_company, j.get('company_name'))
-    ]
 
 
 def _job_enabled_flag(job: dict) -> bool:
@@ -75,32 +64,28 @@ def _get_job_for_user(job_id, user, require_write=False):
     job = db_get('SELECT * FROM jobs WHERE jdid = ?', (job_id,))
     if not job:
         return None
+    org_id = job.get('organization_id')
     posted_by = job.get('posted_by')
     if require_write:
-        if can_modify_job(user, posted_by):
+        if can_modify_job(user, posted_by=posted_by, organization_id=org_id):
             return job
-        # Team/company fallback: allow same-org recruiters to manage this posting
-        if get_role(user) == ROLE_RECRUITER and not is_read_only(user):
-            uid = get_user_id(user)
-            row = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (uid,)) if uid else None
-            my_co = (user or {}).get('company') or (row or {}).get('company')
-            owner = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (posted_by,)) if posted_by else None
-            if companies_related(my_co, job.get('company')) or companies_related(
-                my_co, (owner or {}).get('company')
-            ):
-                return job
         return None
-    elif user and get_user_id(user):
-        if not can_access_job(user, posted_by):
-            # Same company fallback for read
-            if get_role(user) == ROLE_RECRUITER:
-                uid = get_user_id(user)
-                row = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (uid,)) if uid else None
-                my_co = (user or {}).get('company') or (row or {}).get('company')
-                if companies_related(my_co, job.get('company')):
-                    return job
+    if user and get_user_id(user):
+        if not can_access_job(user, posted_by=posted_by, organization_id=org_id):
             return None
     return job
+
+
+def _public_org_from_request():
+    """Resolve company slug from query (?company=)."""
+    slug = (request.args.get('company') or request.args.get('slug') or '').strip().lower()
+    return find_organization_by_slug(slug) if slug else None
+
+
+def _job_matches_public_org(job: dict, org: dict | None) -> bool:
+    if not job or not org:
+        return False
+    return str(job.get('organization_id') or '') == str(org.get('id') or '')
 
 
 def _normalize_keywords(value) -> Optional[str]:
@@ -257,19 +242,26 @@ def generate_jdid_from_title(title):
 @optional_authenticate_token
 def get_jobs_public():
     """
-    Public job board: always return enabled jobs (NULL enabled = visible).
-    Staff dashboards should use GET /api/jobs/all for org-scoped lists.
-    Auth is optional and does not change this listing.
+    Public job board: enabled jobs for one company slug (?company=slug).
+    Unscoped requests are rejected (no global scrape).
     """
     try:
+        org = _public_org_from_request()
+        if not org:
+            return jsonify({
+                'error': 'Company slug required',
+                'hint': 'Pass ?company=<slug> or browse GET /api/companies',
+            }), 400
         jobs = db_all(
             '''
             SELECT j.*, hs.company as company_name
             FROM jobs j
             LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-            WHERE (j.enabled = ''' + TRUE_SQL + ''' OR j.enabled IS NULL)
+            WHERE j.organization_id = ?
+              AND (j.enabled = ''' + TRUE_SQL + ''' OR j.enabled IS NULL)
             ORDER BY j.posted_on DESC
-            '''
+            ''',
+            (str(org['id']),),
         )
         formatted = [_serialize_job(j) for j in jobs]
         return jsonify(formatted)
@@ -281,21 +273,12 @@ def get_jobs_public():
 @authenticate_token
 @require_recruiter
 def get_jobs_all():
-    """Staff job list: CEO/Head HR see all; recruiters see company postings."""
+    """Staff job list: scoped to caller's organization."""
     try:
-        user = request.user
-        role = get_role(user)
-        if role in (ROLE_CEO, ROLE_HEAD_HR):
-            jobs = db_all(
-                '''
-                SELECT j.*, hs.company as company_name
-                FROM jobs j
-                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-                ORDER BY j.posted_on DESC
-                '''
-            )
-        else:
-            jobs = _jobs_for_recruiter_company(user)
+        org_id, err = require_organization_id(request.user)
+        if err:
+            return err
+        jobs = _jobs_for_organization(org_id)
         formatted = [_serialize_job(j) for j in jobs]
         return jsonify(formatted)
     except Exception:
@@ -305,7 +288,7 @@ def get_jobs_all():
 @jobs_bp.get('/<string:job_id>')
 @optional_authenticate_token
 def get_job(job_id: str):
-    """Get one job. HR sees only their own; candidates/public see enabled jobs only."""
+    """Get one job. Staff: same org only. Public: enabled + matching ?company=slug."""
     try:
         job = db_get(
             '''
@@ -319,11 +302,17 @@ def get_job(job_id: str):
             return jsonify({'error': 'Job not found'}), 404
         user = getattr(request, 'user', None)
         if user and get_user_id(user):
-            if not can_access_job(user, job.get('posted_by')):
+            if not can_access_job(
+                user,
+                posted_by=job.get('posted_by'),
+                organization_id=job.get('organization_id'),
+            ):
                 return jsonify({'error': 'Job not found or access denied'}), 404
         else:
-            # Candidate/public: only enabled jobs
-            if not job.get('enabled'):
+            org = _public_org_from_request()
+            if not org or not _job_matches_public_org(job, org):
+                return jsonify({'error': 'Job not found'}), 404
+            if not job.get('enabled') and job.get('enabled') is not None:
                 return jsonify({'error': 'Job not found'}), 404
         return jsonify(_serialize_job(job))
     except Exception:
@@ -751,13 +740,20 @@ def create_job():
             data.get('preferredSkills') or data.get('preferred_skills')
         )
         
-        # Company is always taken from the HR account
+        # Company + org always taken from the HR account
         hr_id = get_user_id(request.user)
-        if hr_id:
-            hr_profile = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (hr_id,))
+        org_id, err = require_organization_id(request.user)
+        if err:
+            return err
+        org = get_organization(org_id)
+        company = ((org or {}).get('name') or '').strip()
+        if hr_id and not company:
+            hr_profile = db_get(
+                'SELECT company, organization_id FROM hr_signup WHERE hrid = ?',
+                (hr_id,),
+            )
             if hr_profile and (hr_profile.get('company') or '').strip():
                 company = (hr_profile.get('company') or '').strip()
-            # else keep company from request only if HR has no company set (e.g. legacy)
         
         if not title or not company or not location or not description:
             missing_fields = []
@@ -782,10 +778,10 @@ def create_job():
         _enabled_val = True if BACKEND == 'postgresql' else 1
         result = db_run(
             '''
-            INSERT INTO jobs (jdid, title, company, location, salary, experience, description, keywords, posted_by, enabled, parsed_jd_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (jdid, title, company, location, salary, experience, description, keywords, posted_by, enabled, parsed_jd_id, organization_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
-            (jdid, title, company, location, salary, experience, description, keywords, hr_id, _enabled_val, parsed_jd_id)
+            (jdid, title, company, location, salary, experience, description, keywords, hr_id, _enabled_val, parsed_jd_id, org_id)
         )
         print(f"INSERT result: {result}")
         
@@ -796,6 +792,10 @@ def create_job():
         if not job:
             print("ERROR: Job created but could not be retrieved")
             return jsonify({'error': 'Job created but could not be retrieved'}), 500
+
+        if not job.get('organization_id'):
+            attach_organization_id('jobs', 'jdid', jdid, org_id)
+            job = db_get('SELECT * FROM jobs WHERE jdid = ?', (jdid,)) or job
 
         if parsed_jd_id:
             try:
@@ -1034,6 +1034,10 @@ def public_apply_to_job(job_id: str):
             (job_id,),
         )
         if not job:
+            return jsonify({'error': 'Job not found or not available for applications'}), 404
+
+        org = _public_org_from_request()
+        if not org or not _job_matches_public_org(job, org):
             return jsonify({'error': 'Job not found or not available for applications'}), 404
 
         email = normalize_email(data.get('email'))

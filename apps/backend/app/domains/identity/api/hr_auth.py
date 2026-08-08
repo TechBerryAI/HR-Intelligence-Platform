@@ -101,43 +101,18 @@ def hr_signup():
         if not is_valid_email(email):
             return jsonify({"error": "Please provide a valid email address"}), 400
 
-        existing = db_get(
-            'SELECT hrid, account_status FROM hr_signup WHERE LOWER(TRIM(email)) = ?',
-            (email,),
-        )
-        if existing and (existing.get('account_status') or 'active') == 'active':
-            return jsonify({"error": "Email already registered"}), 400
+        from app.domains.identity.services.organizations import organization_exists_for_name
 
-        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        otp = generate_otp()
-        expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
-
-        if existing and (existing.get('account_status') or '') == 'pending':
-            db_run(
-                """
-                UPDATE hr_signup SET
-                    full_name = ?, company = ?, password = ?,
-                    otp = ?, otp_expiry = ?, updated_at = NOW()
-                WHERE hrid = ?
-                """,
-                (full_name, company, password_hash, otp, expiry, existing['hrid']),
-            )
-        else:
-            hrid = _next_hrid()
-            db_run(
-                """
-                INSERT INTO hr_signup (
-                    hrid, full_name, email, company, password, role,
-                    account_status, otp, otp_expiry
-                ) VALUES (?, ?, ?, ?, ?, 'RECRUITER', 'pending', ?, ?)
-                """,
-                (hrid, full_name, email, company, password_hash, otp, expiry),
-            )
-            _attach_org(hrid, company)
-
-        if not send_email_otp(email, otp, user_type="HR"):
-            return jsonify({'error': 'Unable to send OTP. Please try again later.'}), 500
-        return jsonify({'message': 'OTP sent successfully. Please check your email.'}), 200
+        if organization_exists_for_name(company):
+            return jsonify({
+                "error": "This company already exists. Ask your Head of HR to create your account.",
+            }), 400
+        return jsonify({
+            "error": (
+                "New companies must be provisioned by a platform administrator. "
+                "Ask your Head of HR for an account."
+            ),
+        }), 400
     except Exception as e:
         print(f"Error in hr_signup: {type(e).__name__}: {e}")
         import traceback
@@ -397,7 +372,8 @@ def hr_login():
         email_clean = email.strip().lower()
         signup_data = db_get(
             """
-            SELECT hrid, email, password, full_name, company, role, account_status
+            SELECT hrid, email, password, full_name, company, role, account_status,
+                   organization_id
             FROM hr_signup WHERE LOWER(TRIM(email)) = ?
             """,
             (email_clean,),
@@ -461,8 +437,10 @@ def hr_login():
                 "hrId": user_id,
                 "email": signup_data['email'],
                 "fullName": signup_data['full_name'],
-                "company": signup_data['company'],
+                "company": identity.get('org_name') or signup_data['company'],
                 "role": role,
+                "organizationId": identity.get('organization_id'),
+                "orgSlug": identity.get('org_slug'),
             }
         })
     except Exception:
