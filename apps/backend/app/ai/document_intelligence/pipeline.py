@@ -305,8 +305,13 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
         recover_resume_profile_gaps,
         resume_has_recoverable_gaps,
     )
+    from app.ai.document_intelligence.coverage.resume_coverage import (
+        has_experience_section_evidence,
+    )
 
     profile, _ = recover_resume_profile_gaps(profile, text)
+    # Unlock LLM experience fill from section evidence, not only already-parsed rows
+    allow_experience_fill = bool(profile.experience) or has_experience_section_evidence(text)
 
     t0 = _time.perf_counter()
     profile = apply_knowledge_to_candidate(profile)
@@ -318,7 +323,7 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
         profile = enrich_resume_semantic(
             profile,
             unresolved_text=unresolved,
-            allow_experience_fill=bool(profile.experience),
+            allow_experience_fill=allow_experience_fill,
         )
         profile = sanitize_candidate_profile(profile)
         profile, _ = recover_resume_profile_gaps(profile, text)
@@ -335,13 +340,14 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
         # Gate: only call AI if critical gaps (fresher OK with education+skills)
         has_id = bool(profile.personal.full_name and profile.contact.email)
         has_body = bool(profile.skills and (profile.experience or profile.education))
-        if not (has_id and has_body) or resume_has_recoverable_gaps(profile, text):
+        exp_gap = allow_experience_fill and not profile.experience
+        if not (has_id and has_body) or resume_has_recoverable_gaps(profile, text) or exp_gap:
             t0 = _time.perf_counter()
             unresolved = unresolved_semantic_text(sections, 'resume') or text
             profile = enrich_resume_semantic(
                 profile,
                 unresolved_text=unresolved,
-                allow_experience_fill=bool(profile.experience),
+                allow_experience_fill=allow_experience_fill,
             )
             profile = sanitize_candidate_profile(profile)
             profile, _ = recover_resume_profile_gaps(profile, text)
@@ -590,14 +596,21 @@ def _run_resume(
     _emit(parse_job_id, 'deterministic', 'completed', on_stage=on_stage)
 
     from app.ai.document_intelligence.coverage import recover_resume_profile_gaps
+    from app.ai.document_intelligence.coverage.resume_coverage import (
+        has_experience_section_evidence,
+    )
 
     profile, _cov = recover_resume_profile_gaps(profile, raw_text)
+    allow_experience_fill = bool(profile.experience) or has_experience_section_evidence(
+        raw_text
+    )
 
     used_llm = False
     has_id = bool(profile.personal.full_name and profile.contact.email)
     has_body = bool(profile.skills and (profile.experience or profile.education))
+    exp_gap = allow_experience_fill and not profile.experience
     _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
-    if _SKIP_LLM and has_id and has_body:
+    if _SKIP_LLM and has_id and has_body and not exp_gap:
         # Still allow residual LLM when coverage gaps remain with source evidence
         from app.ai.document_intelligence.coverage import resume_has_recoverable_gaps
 
@@ -606,7 +619,7 @@ def _run_resume(
             profile = enrich_resume_semantic(
                 profile,
                 unresolved_text=unresolved,
-                allow_experience_fill=bool(profile.experience),
+                allow_experience_fill=allow_experience_fill,
             )
             profile = sanitize_candidate_profile(profile)
             profile, _cov = recover_resume_profile_gaps(profile, raw_text)
@@ -619,7 +632,7 @@ def _run_resume(
         profile = enrich_resume_semantic(
             profile,
             unresolved_text=unresolved,
-            allow_experience_fill=bool(profile.experience),
+            allow_experience_fill=allow_experience_fill,
         )
         profile = sanitize_candidate_profile(profile)
         profile, _cov = recover_resume_profile_gaps(profile, raw_text)

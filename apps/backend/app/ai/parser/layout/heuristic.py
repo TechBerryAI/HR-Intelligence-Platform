@@ -1,10 +1,17 @@
 """Heuristic document layout: section headers + reading-order OCR boxes."""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
 from app.ai.parser.enrichment.resume_text_inference import SECTION_HEADERS, is_section_header_line
+
+# VALIDATION_FIX_internship_section_aliases
+_EXP_HEADER_PREFIX = re.compile(
+    r'(?i)^(internship|internships|internship\s+experience|industrial\s+trainings?|'
+    r'summer\s+internship|trainings?|apprenticeship|internship\s*/\s*training)'
+)
 
 _HEADER_ALIASES = {
     'work experience': 'Experience',
@@ -13,9 +20,14 @@ _HEADER_ALIASES = {
     'work history': 'Experience',
     'internship': 'Experience',
     'internships': 'Experience',
+    'internship experience': 'Experience',
     'industrial training': 'Experience',
     'industrial trainings': 'Experience',
     'summer internship': 'Experience',
+    'trainings': 'Experience',
+    'training': 'Experience',
+    'apprenticeship': 'Experience',
+    'apprenticeships': 'Experience',
     'technical skills': 'Skills',
     'core skills': 'Skills',
     'key skills': 'Skills',
@@ -53,14 +65,19 @@ class LayoutRegion:
 def normalize_section_header(line: str) -> str | None:
     """Return canonical section title if line is a resume section header."""
     stripped = (line or '').strip().strip(':').strip('*').strip()
-    if not stripped or len(stripped) > 60:
+    if not stripped or len(stripped) > 80:
         return None
     low = stripped.lower()
     if low in _HEADER_ALIASES:
         return _HEADER_ALIASES[low]
+    # "Internship / Training Programm", "Internship Experience", etc.
+    if _EXP_HEADER_PREFIX.match(low) and len(low) <= 80:
+        return 'Experience'
     if low in SECTION_HEADERS:
         return stripped.title() if low not in ('cv', 'resume') else None
     if is_section_header_line(stripped):
+        if _EXP_HEADER_PREFIX.match(low):
+            return 'Experience'
         return _HEADER_ALIASES.get(low, stripped.title())
     return None
 

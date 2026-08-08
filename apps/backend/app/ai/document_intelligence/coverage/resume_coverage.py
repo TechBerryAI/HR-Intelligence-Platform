@@ -1,4 +1,4 @@
-"""Resume completeness coverage — recover contact/location/education from source only."""
+"""Resume completeness coverage — recover contact/location/education/experience from source only."""
 from __future__ import annotations
 
 import re
@@ -10,8 +10,26 @@ from app.ai.document_intelligence.deterministic import (
     extract_phone,
     extract_simple_location,
 )
-from app.ai.document_intelligence.models.candidate import CandidateProfile
-from app.ai.document_intelligence.parsers.resume import coalesce_education, parse_education
+from app.ai.document_intelligence.models.candidate import CandidateProfile, ExperienceEntry
+from app.ai.document_intelligence.parsers.resume import (
+    coalesce_education,
+    parse_education,
+    parse_experience,
+)
+from app.ai.document_intelligence.validation.engine import validate_phone
+
+# VALIDATION_FIX_experience_section_evidence
+_EXP_SECTION_RE = re.compile(
+    r'(?im)^(?:\*\*)?(?:work\s+experience|professional\s+experience|experience|'
+    r'employment|work\s+history|internships?|internship\s+experience|'
+    r'industrial\s+trainings?|summer\s+internship|internship\s*/\s*training|'
+    r'trainings?|apprenticeships?)\b'
+)
+
+
+def has_experience_section_evidence(text: str) -> bool:
+    """True when a Work/Internship/Experience section header exists in source."""
+    return bool(_EXP_SECTION_RE.search(text or ''))
 
 
 def _has_email_evidence(text: str) -> bool:
@@ -50,13 +68,35 @@ def _has_education_evidence(text: str) -> bool:
     )
 
 
+def _experience_section_text(text: str) -> str:
+    """Slice Experience/Internship body from raw text for grounded re-parse."""
+    m = re.search(
+        r'(?is)(?:^|\n)\s*(?:\*\*)?(?:work\s+experience|professional\s+experience|'
+        r'experience|employment|work\s+history|internships?|internship\s+experience|'
+        r'industrial\s+trainings?|summer\s+internship|internship\s*/\s*training[^\n]*|'
+        r'trainings?|apprenticeships?)\b[^\n]*\n'
+        r'(.*?)(?=\n\s*(?:\*\*)?(?:education|academic|skills|skill\s*sets?|'
+        r'technical\s+skills?|projects?|certifications?|personal\s+details|'
+        r'personal\s+information|biodata|declaration)\b|\Z)',
+        text or '',
+    )
+    return (m.group(1) if m else '').strip()
+
+
+def _is_plausible_location(value: str) -> bool:
+    """Reject skill/summary pollution that slipped into contact.location."""
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_location_value
+
+    return is_plausible_location_value(value)
+
+
 def recover_resume_profile_gaps(
     profile: CandidateProfile,
     raw_text: str,
 ) -> tuple[CandidateProfile, CoverageReport]:
     """
-    Fill empty contact/location/education fields only when evidence exists in source.
-    Never invents experience or names.
+    Fill empty contact/location/education/experience fields only when evidence exists.
+    Never invents names.
     """
     text = raw_text or ''
     data = profile.model_dump()
@@ -80,44 +120,67 @@ def recover_resume_profile_gaps(
     else:
         fields.append(FieldCoverage('email', 'missing_no_evidence', False))
 
-    # Phone
+    # Phone — drop year-soup / invalid phones then re-extract
     phone = str(contact.get('phone') or '').strip()
+    phone_ok = validate_phone(phone)[0] if phone else False
     phone_ev = _has_phone_evidence(text)
-    if phone:
+    if phone and phone_ok:
         fields.append(FieldCoverage('phone', 'filled', True))
     elif phone_ev:
         found = extract_phone(text)
-        if found:
+        if found and validate_phone(found)[0]:
             contact['phone'] = found
             recovered.append('phone')
             fields.append(FieldCoverage('phone', 'recovered', True, found[:40]))
+        elif phone and not phone_ok:
+            contact['phone'] = ''
+            fields.append(FieldCoverage('phone', 'missing_with_evidence', True))
         else:
             fields.append(FieldCoverage('phone', 'missing_with_evidence', True))
     else:
+        if phone and not phone_ok:
+            contact['phone'] = ''
         fields.append(FieldCoverage('phone', 'missing_no_evidence', False))
 
-    # Location
+    # Location — clear polluted values then re-extract
     loc = str(contact.get('location') or '').strip()
+    loc_ok = _is_plausible_location(loc) if loc else False
     loc_ev = _has_location_evidence(text)
-    if loc:
+    if loc and loc_ok:
         fields.append(FieldCoverage('location', 'filled', True))
     elif loc_ev:
+        if loc and not loc_ok:
+            contact['location'] = ''
+            if str(contact.get('preferred_location') or '').strip() == loc:
+                contact['preferred_location'] = ''
+            loc = ''
         found = extract_simple_location(text)
-        if found:
+        if found and _is_plausible_location(found):
             contact['location'] = found
-            if not str(contact.get('preferred_location') or '').strip():
+            if not str(contact.get('preferred_location') or '').strip() or not _is_plausible_location(
+                str(contact.get('preferred_location') or '')
+            ):
                 contact['preferred_location'] = found
             recovered.append('location')
             fields.append(FieldCoverage('location', 'recovered', True, found[:80]))
         else:
             fields.append(FieldCoverage('location', 'missing_with_evidence', True))
     else:
+        if loc and not loc_ok:
+            contact['location'] = ''
+            if str(contact.get('preferred_location') or '').strip() == loc:
+                contact['preferred_location'] = ''
         fields.append(FieldCoverage('location', 'missing_no_evidence', False))
 
     # Preferred location: mirror current when empty (grounded copy only)
+    pref = str(contact.get('preferred_location') or '').strip()
+    if pref and not _is_plausible_location(pref):
+        contact['preferred_location'] = ''
+        pref = ''
     if (
         str(contact.get('location') or '').strip()
-        and not str(contact.get('preferred_location') or '').strip()
+        and _is_plausible_location(str(contact.get('location') or ''))
+        and not pref
     ):
         contact['preferred_location'] = contact['location']
         recovered.append('preferred_location')
@@ -148,7 +211,6 @@ def recover_resume_profile_gaps(
                 FieldCoverage('education', 'recovered', True, f'{len(grounded)} rows')
             )
         elif grounded and not edu_complete:
-            # Merge: fill empty halves only
             if not edu_list:
                 data['education'] = [e.model_dump() for e in grounded]
                 recovered.append('education')
@@ -162,6 +224,46 @@ def recover_resume_profile_gaps(
     else:
         fields.append(FieldCoverage('education', 'missing_no_evidence', False))
 
+    # Experience: recover when section evidence exists but rows empty
+    exp_list = list(data.get('experience') or [])
+    exp_ev = has_experience_section_evidence(text)
+    if exp_list:
+        fields.append(FieldCoverage('experience', 'filled', True))
+    elif exp_ev:
+        section_body = _experience_section_text(text)
+        parsed_exp = parse_experience(section_body, text) if section_body else []
+        if not parsed_exp:
+            from app.ai.parser.enrichment.resume_text_inference import (
+                extract_experience_from_text,
+            )
+
+            loose = extract_experience_from_text(text)
+            parsed_exp = [
+                ExperienceEntry(
+                    company=str(e.get('company') or '')[:200],
+                    role=str(e.get('title') or e.get('role') or '')[:200],
+                    start=str(e.get('from') or e.get('start') or ''),
+                    end=str(e.get('to') or e.get('end') or ''),
+                    description=str(e.get('description') or '')[:2000],
+                )
+                for e in loose
+                if isinstance(e, dict)
+                and (
+                    str(e.get('title') or e.get('role') or '').strip()
+                    or str(e.get('company') or '').strip()
+                )
+            ]
+        if parsed_exp:
+            data['experience'] = [e.model_dump() for e in parsed_exp]
+            recovered.append('experience')
+            fields.append(
+                FieldCoverage('experience', 'recovered', True, f'{len(parsed_exp)} rows')
+            )
+        else:
+            fields.append(FieldCoverage('experience', 'missing_with_evidence', True))
+    else:
+        fields.append(FieldCoverage('experience', 'missing_no_evidence', False))
+
     report = CoverageReport(fields=fields)
     try:
         updated = CandidateProfile.model_validate(data)
@@ -171,18 +273,22 @@ def recover_resume_profile_gaps(
 
 
 def resume_has_recoverable_gaps(profile: CandidateProfile, raw_text: str) -> bool:
-    """True when contact/location/education incomplete but source has evidence."""
+    """True when contact/location/education/experience incomplete but source has evidence."""
     contact = profile.contact
     text = raw_text or ''
     if not (contact.email or '').strip() and _has_email_evidence(text):
         return True
-    if not (contact.phone or '').strip() and _has_phone_evidence(text):
+    phone = (contact.phone or '').strip()
+    if (not phone or not validate_phone(phone)[0]) and _has_phone_evidence(text):
         return True
-    if not (contact.location or '').strip() and _has_location_evidence(text):
+    loc = (contact.location or '').strip()
+    if (not loc or not _is_plausible_location(loc)) and _has_location_evidence(text):
         return True
     edu_ok = any(
         (e.degree or '').strip() and (e.institution or '').strip() for e in profile.education
     )
     if not edu_ok and _has_education_evidence(text):
+        return True
+    if not profile.experience and has_experience_section_evidence(text):
         return True
     return False

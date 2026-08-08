@@ -132,6 +132,8 @@ def unresolved_semantic_text(sections: list[SectionSpan], doc_type: str) -> str:
         keys = (
             'Experience',
             'Work Experience',
+            'Internship',
+            'Internships',
             'Summary',
             'Professional Summary',
             'Objective',
