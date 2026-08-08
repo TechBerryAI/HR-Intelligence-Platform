@@ -300,7 +300,18 @@ async function performRequest(url, method, body, token, headers, timeoutMs, alre
       }
     }
 
-    if (authFailure && sentAuth && !skipAuthHandler && !roleMismatch && typeof onUnauthorized === 'function') {
+    // Only logout if this request's bearer is still the active session token.
+    // Stale in-flight 401/403s from a previous session must not wipe a fresh login
+    // (common right after reconnecting Google Calendar or re-logging in).
+    const tokenStillCurrent = !bearer || bearer === tokenService.getToken();
+    if (
+      authFailure &&
+      sentAuth &&
+      tokenStillCurrent &&
+      !skipAuthHandler &&
+      !roleMismatch &&
+      typeof onUnauthorized === 'function'
+    ) {
       try { onUnauthorized(); } catch {}
     }
 
