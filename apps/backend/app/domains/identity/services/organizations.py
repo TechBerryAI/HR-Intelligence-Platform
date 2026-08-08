@@ -159,6 +159,38 @@ def list_companies_with_enabled_jobs() -> list[dict]:
     ]
 
 
+def resolve_public_organization(slug: str | None = None) -> dict | None:
+    """
+    Resolve the company for the public job board without prompting the user.
+
+    Order:
+      1. Explicit slug (?company= / path)
+      2. DEFAULT_PUBLIC_COMPANY_SLUG env
+      3. Sole organization that currently has enabled jobs
+    """
+    import os
+
+    explicit = (slug or '').strip().lower()
+    if explicit:
+        return find_organization_by_slug(explicit)
+
+    default_slug = (os.getenv('DEFAULT_PUBLIC_COMPANY_SLUG') or '').strip().lower()
+    if default_slug:
+        org = find_organization_by_slug(default_slug)
+        if org:
+            return org
+
+    companies = list_companies_with_enabled_jobs()
+    if len(companies) == 1:
+        return find_organization_by_slug(companies[0].get('slug'))
+    if len(companies) == 0:
+        # Fall back to sole organization row even if no enabled jobs yet
+        rows = db_all('SELECT id, name, slug FROM organizations ORDER BY created_at ASC LIMIT 2', ())
+        if rows and len(rows) == 1:
+            return dict(rows[0])
+    return None
+
+
 def enrich_signup_with_org(signup_data: dict | None) -> dict:
     """Ensure signup row dict has organization_id (lazy attach) and org slug/name."""
     if not signup_data:

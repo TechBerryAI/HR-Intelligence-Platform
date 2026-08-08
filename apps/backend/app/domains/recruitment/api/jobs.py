@@ -28,9 +28,9 @@ from app.domains.recruitment.services.job_delete import cascade_delete_job
 from app.domains.recruitment.services.ats_service import match_candidate_to_job, sync_application_match_score
 from app.domains.identity.services.organizations import (
     attach_organization_id,
-    find_organization_by_slug,
     get_organization,
     require_organization_id,
+    resolve_public_organization,
 )
 from app.domains.integrations.events import emit_job_closed, emit_job_created, emit_job_updated
 from app.core.timing import timing
@@ -77,9 +77,13 @@ def _get_job_for_user(job_id, user, require_write=False):
 
 
 def _public_org_from_request():
-    """Resolve company slug from query (?company=)."""
+    """
+    Resolve the public board company automatically.
+    Optional ?company= / ?slug= overrides; otherwise DEFAULT_PUBLIC_COMPANY_SLUG
+    or the sole org with jobs.
+    """
     slug = (request.args.get('company') or request.args.get('slug') or '').strip().lower()
-    return find_organization_by_slug(slug) if slug else None
+    return resolve_public_organization(slug or None)
 
 
 def _job_matches_public_org(job: dict, org: dict | None) -> bool:
@@ -242,15 +246,34 @@ def generate_jdid_from_title(title):
 @optional_authenticate_token
 def get_jobs_public():
     """
-    Public job board: enabled jobs for one company slug (?company=slug).
-    Unscoped requests are rejected (no global scrape).
+    Public job board: enabled jobs for the integrated/default company.
+    Staff dashboards use GET /api/jobs/all (org from login).
     """
     try:
+        user = getattr(request, 'user', None)
+        # Logged-in staff: show their own company's jobs on /jobs as well
+        if user and get_user_id(user):
+            org_id, err = require_organization_id(user)
+            if err:
+                return err
+            jobs = db_all(
+                '''
+                SELECT j.*, hs.company as company_name
+                FROM jobs j
+                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+                WHERE j.organization_id = ?
+                  AND (j.enabled = ''' + TRUE_SQL + ''' OR j.enabled IS NULL)
+                ORDER BY j.posted_on DESC
+                ''',
+                (org_id,),
+            )
+            return jsonify([_serialize_job(j) for j in jobs])
+
         org = _public_org_from_request()
         if not org:
             return jsonify({
-                'error': 'Company slug required',
-                'hint': 'Pass ?company=<slug> or browse GET /api/companies',
+                'error': 'No company configured for the public job board',
+                'hint': 'Set DEFAULT_PUBLIC_COMPANY_SLUG or ensure one organization has jobs',
             }), 400
         jobs = db_all(
             '''

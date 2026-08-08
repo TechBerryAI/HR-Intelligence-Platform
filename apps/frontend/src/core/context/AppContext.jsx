@@ -420,21 +420,17 @@ export function AppProvider({ children }) {
     }
   }
 
-  // Staff dashboard: GET /api/jobs/all (org-scoped). Public board fetches with company slug in Jobs.jsx.
+  // Staff: GET /api/jobs/all (login org). Public: GET /api/jobs (auto company).
   const fetchJobs = async () => {
     setJobsLoading(true)
     setJobsError('')
     try {
       const authToken = token || tokenService.getToken()
       const staff = Boolean(authToken) && isStaffRecruiter(auth)
-      if (!staff) {
-        // Public listings require /c/:slug/jobs — do not scrape the global board.
-        setJobs([])
-        return
-      }
-      const data = await apiRequest('/api/jobs/all', {
+      const path = staff ? '/api/jobs/all' : '/api/jobs'
+      const data = await apiRequest(path, {
         method: 'GET',
-        token: authToken,
+        ...(staff ? { token: authToken } : {}),
       })
       if (Array.isArray(data)) setJobs(data)
       else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)
