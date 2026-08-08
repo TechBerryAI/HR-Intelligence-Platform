@@ -29,7 +29,7 @@ python scripts/ensure_media_assets.py
 python scripts/ensure_media_assets.py --force
 ```
 
-Landing video is served from Postgres `site_assets` via `GET /api/media/public/hero-video` (optional `VITE_HERO_VIDEO_URL` CDN override).
+Landing video is streamed from `MEDIA_ROOT` (catalog in Postgres `site_assets`) via `GET /api/media/public/hero-video`. Seed file is in-repo at `apps/frontend/public/videos/website-hero.mp4` (optional `VITE_HERO_VIDEO_URL` CDN override).
 
 ---
 

@@ -9,9 +9,7 @@ import React, {
 import { useReducedMotion } from 'framer-motion'
 import gsap from 'gsap'
 import { FiZap } from 'react-icons/fi'
-import { HERO_VIDEO_SRC } from '../constants/heroVideo.js'
-
-const VIDEO_SRC = HERO_VIDEO_SRC
+import { HERO_VIDEO_SRC, heroVideoRetrySrc } from '../constants/heroVideo.js'
 
 /** Hotspots across the full-screen frame (normalized 0–1) */
 const MODULE_ZONES = [
@@ -46,8 +44,11 @@ const LandingInteractiveHero = forwardRef(function LandingInteractiveHero(
 
   const [hoverZone, setHoverZone] = useState(null)
   const [videoReady, setVideoReady] = useState(false)
+  const [videoFailed, setVideoFailed] = useState(false)
+  const [videoSrc, setVideoSrc] = useState(HERO_VIDEO_SRC)
   const [ripples, setRipples] = useState([])
   const [pointerInside, setPointerInside] = useState(false)
+  const videoRetryUsed = useRef(false)
 
   useImperativeHandle(ref, () => shellRef.current)
 
@@ -66,7 +67,7 @@ const LandingInteractiveHero = forwardRef(function LandingInteractiveHero(
 
   useEffect(() => {
     const video = videoRef.current
-    if (!video) return
+    if (!video || videoFailed) return
     video.muted = true
     video.playsInline = true
     video.setAttribute('playsinline', '')
@@ -77,16 +78,29 @@ const LandingInteractiveHero = forwardRef(function LandingInteractiveHero(
       video.play().catch(() => {})
     }
 
+    const onError = () => {
+      if (!videoRetryUsed.current) {
+        videoRetryUsed.current = true
+        setVideoReady(false)
+        setVideoSrc(heroVideoRetrySrc(HERO_VIDEO_SRC))
+        return
+      }
+      setVideoFailed(true)
+      setVideoReady(false)
+    }
+
     if (video.readyState >= 2) onReady()
     video.addEventListener('loadeddata', onReady)
     video.addEventListener('canplaythrough', onReady)
+    video.addEventListener('error', onError)
     video.play().catch(() => {})
 
     return () => {
       video.removeEventListener('loadeddata', onReady)
       video.removeEventListener('canplaythrough', onReady)
+      video.removeEventListener('error', onError)
     }
-  }, [])
+  }, [videoSrc, videoFailed])
 
   useEffect(() => {
     if (prefersReducedMotion || !videoWrapRef.current) return
@@ -211,17 +225,31 @@ const LandingInteractiveHero = forwardRef(function LandingInteractiveHero(
           className="absolute inset-0 will-change-transform overflow-hidden"
           style={{ transformStyle: 'preserve-3d' }}
         >
-          <video
-            ref={videoRef}
-            src={VIDEO_SRC}
-            autoPlay
-            loop
-            muted
-            playsInline
-            preload="auto"
-            className={`landing-hero-video transition-opacity duration-500 ${
-              videoReady ? 'opacity-100' : 'opacity-0'
+          {!videoFailed && (
+            <video
+              ref={videoRef}
+              key={videoSrc}
+              src={videoSrc}
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="auto"
+              className={`landing-hero-video transition-opacity duration-500 ${
+                videoReady ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+          )}
+          {/* Atmospheric fallback when the stream cannot load */}
+          <div
+            className={`absolute inset-0 pointer-events-none transition-opacity duration-500 ${
+              videoReady && !videoFailed ? 'opacity-0' : 'opacity-100'
             }`}
+            style={{
+              background:
+                'radial-gradient(ellipse 80% 60% at 50% 40%, rgba(14,165,233,0.18) 0%, transparent 55%), linear-gradient(160deg, #050a14 0%, #0a1628 45%, #071018 100%)',
+            }}
+            aria-hidden
           />
         </div>
 
