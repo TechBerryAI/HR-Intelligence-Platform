@@ -39,7 +39,8 @@ _SECTION_HEADERS = frozenset({
     'professional summary', 'work experience', 'contact',
 })
 _PROJECT_LIKE_EXP = re.compile(
-    r'(?i)\b(?:assignment|coursera|project|internship\s+project|fictional\s+brand)\b'
+    r'(?i)\b(?:assignment|coursera|internship\s+project|academic\s+project|'
+    r'fictional\s+brand)\b'
 )
 _SENTENCE_SKILL = re.compile(
     r'(?i)\b(?:developed|built|improved|responsible|worked|managed|led|created|'
@@ -69,8 +70,25 @@ def validate_phone(value: str) -> Tuple[bool, str]:
     digits = re.sub(r'\D', '', s)
     if len(digits) < 7 or len(digits) > 15:
         return False, 'phone_digit_count'
+    # Reject concatenated calendar years (e.g. 202620182020202)
+    years = re.findall(r'(?:19|20)\d{2}', digits)
+    if len(years) >= 2 and ''.join(years) in digits:
+        return False, 'phone_year_soup'
+    if len(digits) >= 12 and re.fullmatch(r'(?:(?:19|20)\d{2}){3,}', digits):
+        return False, 'phone_year_soup'
     if not _PHONE_RE.match(s):
         return False, 'phone_invalid'
+    return True, 'ok'
+
+
+def validate_location(value: str) -> Tuple[bool, str]:
+    s = (value or '').strip()
+    if not s:
+        return False, 'location_empty'
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_location_value
+
+    if not is_plausible_location_value(s):
+        return False, 'location_implausible'
     return True, 'ok'
 
 
