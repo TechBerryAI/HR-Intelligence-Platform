@@ -18,7 +18,14 @@ calendar_oauth_bp = Blueprint('calendar_oauth', __name__)
 @authenticate_token
 @require_recruiter
 def google_calendar_connect():
-    url, err = oauth_svc.start_oauth(request.user)
+    # Prefer the page the recruiter started from so post-Google redirect keeps the same
+    # browser origin (localhost vs LAN IP) and thus the same localStorage session.
+    return_to = request.args.get('returnTo') or request.args.get('return_to')
+    if not return_to:
+        origin = (request.headers.get('Origin') or '').rstrip('/')
+        if origin:
+            return_to = f'{origin}/settings'
+    url, err = oauth_svc.start_oauth(request.user, return_to=return_to)
     if err:
         return jsonify({'error': err}), 400
     return jsonify({'authUrl': url}), 200
