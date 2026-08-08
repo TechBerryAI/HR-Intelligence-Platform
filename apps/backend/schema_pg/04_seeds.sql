@@ -76,3 +76,65 @@ BEGIN
   END IF;
 END $$;
 -- <<< END 07_seed_ceo_account.sql
+
+-- Attach seed HEAD_HR / CEO to organizations from their company name (idempotent)
+DO $$
+DECLARE
+  head_email   text := COALESCE(NULLIF(current_setting('app.seed_head_hr_email', true), ''),
+                                'chetan.gore@techberryinfotech.com');
+  ceo_email    text := COALESCE(NULLIF(current_setting('app.seed_ceo_email', true), ''),
+                               'unmesh.tari@techberryinfotech.com');
+  org_uuid     uuid;
+  company_name text;
+  company_slug text;
+BEGIN
+  -- Prefer company from HEAD_HR row
+  SELECT company INTO company_name
+  FROM hr_signup
+  WHERE LOWER(TRIM(email)) = LOWER(TRIM(head_email))
+  LIMIT 1;
+
+  IF company_name IS NULL OR length(trim(company_name)) = 0 THEN
+    SELECT company INTO company_name
+    FROM hr_signup
+    WHERE LOWER(TRIM(email)) = LOWER(TRIM(ceo_email))
+    LIMIT 1;
+  END IF;
+
+  IF company_name IS NULL OR length(trim(company_name)) = 0 THEN
+    company_name := 'Techberry Infotech Pvt. Ltd.';
+  END IF;
+
+  company_slug := trim(both '-' from lower(regexp_replace(
+    regexp_replace(lower(company_name),
+      '( private limited| pvt\. ltd\.| pvt ltd\.| pvt\. ltd| pvt ltd| ltd\.| ltd| inc\.| inc| llc)$',
+      '', 'i'),
+    '[^a-z0-9]+', '-', 'g')));
+  IF company_slug IS NULL OR company_slug = '' THEN
+    company_slug := 'org';
+  END IF;
+
+  INSERT INTO organizations (name, slug)
+  VALUES (company_name, company_slug)
+  ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name
+  RETURNING id INTO org_uuid;
+
+  IF org_uuid IS NULL THEN
+    SELECT id INTO org_uuid FROM organizations WHERE slug = company_slug;
+  END IF;
+
+  IF org_uuid IS NOT NULL THEN
+    UPDATE hr_signup
+    SET organization_id = org_uuid,
+        company = COALESCE(NULLIF(trim(company), ''), company_name)
+    WHERE LOWER(TRIM(email)) IN (LOWER(TRIM(head_email)), LOWER(TRIM(ceo_email)))
+      AND (organization_id IS NULL OR organization_id = org_uuid);
+
+    UPDATE jobs j
+    SET organization_id = org_uuid
+    FROM hr_signup h
+    WHERE j.posted_by = h.hrid
+      AND h.organization_id = org_uuid
+      AND j.organization_id IS NULL;
+  END IF;
+END $$;

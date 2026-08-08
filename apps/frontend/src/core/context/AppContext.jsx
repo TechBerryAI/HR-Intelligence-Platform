@@ -175,7 +175,15 @@ export function AppProvider({ children }) {
         if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setUser(data.user)
         const role = data.user.role || 'RECRUITER'
-        const nextAuth = { isLoggedIn: true, role, email: data.user.email || email, fullName: data.user.fullName, company: data.user.company }
+        const nextAuth = {
+          isLoggedIn: true,
+          role,
+          email: data.user.email || email,
+          fullName: data.user.fullName,
+          company: data.user.company,
+          organizationId: data.user.organizationId || null,
+          orgSlug: data.user.orgSlug || null,
+        }
         setAuth(nextAuth)
         writeJson(STORAGE_KEYS.auth, nextAuth)
         return { ok: true, user: data.user }
@@ -412,17 +420,21 @@ export function AppProvider({ children }) {
     }
   }
 
-  // Public board: GET /api/jobs (enabled jobs). Staff dashboard: GET /api/jobs/all (company / org scope).
+  // Staff dashboard: GET /api/jobs/all (org-scoped). Public board fetches with company slug in Jobs.jsx.
   const fetchJobs = async () => {
     setJobsLoading(true)
     setJobsError('')
     try {
       const authToken = token || tokenService.getToken()
       const staff = Boolean(authToken) && isStaffRecruiter(auth)
-      const path = staff ? '/api/jobs/all' : '/api/jobs'
-      const data = await apiRequest(path, {
+      if (!staff) {
+        // Public listings require /c/:slug/jobs — do not scrape the global board.
+        setJobs([])
+        return
+      }
+      const data = await apiRequest('/api/jobs/all', {
         method: 'GET',
-        ...(staff ? { token: authToken } : {}),
+        token: authToken,
       })
       if (Array.isArray(data)) setJobs(data)
       else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)

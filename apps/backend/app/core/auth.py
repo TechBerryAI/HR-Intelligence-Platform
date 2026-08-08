@@ -32,12 +32,20 @@ def validate_password_strength(password):
 
 
 def build_jwt_payload(identity_dict, refresh=False):
-    """JWT claims: user_id, role, email, type, iat, exp."""
+    """JWT claims: user_id, role, email, organization_id (optional), type, iat, exp."""
     payload = {
         'user_id': identity_dict['user_id'],
         'role': identity_dict['role'],
         'email': identity_dict['email'],
     }
+    if identity_dict.get('organization_id'):
+        payload['organization_id'] = str(identity_dict['organization_id'])
+    if identity_dict.get('company'):
+        payload['company'] = identity_dict['company']
+    if identity_dict.get('org_slug'):
+        payload['org_slug'] = identity_dict['org_slug']
+    if identity_dict.get('org_name'):
+        payload['org_name'] = identity_dict['org_name']
     now = datetime.utcnow()
     payload['iat'] = now
     payload['type'] = 'refresh' if refresh else 'access'

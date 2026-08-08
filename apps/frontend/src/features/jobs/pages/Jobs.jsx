@@ -1,5 +1,5 @@
-import React, { useMemo, useEffect, useState, useRef } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
 import FilterBar from '@/shared/components/FilterBar.jsx'
 import JobCard from '@/shared/components/JobCard.jsx'
@@ -40,6 +40,7 @@ export default function Jobs() {
   const { surfaceTheme } = useTheme()
   const location = useLocation()
   const navigate = useNavigate()
+  const { companySlug: routeSlug } = useParams()
   const params = new URLSearchParams(location.search)
   const query = {
     keywords: params.get('q') || '',
@@ -54,12 +55,48 @@ export default function Jobs() {
   const [sortBy, setSortBy] = useState('relevance')
   const [sortOpen, setSortOpen] = useState(false)
   const sortRef = useRef(null)
+  const [companies, setCompanies] = useState([])
+  const [resolvedSlug, setResolvedSlug] = useState(
+    (routeSlug || params.get('company') || auth?.orgSlug || '').trim().toLowerCase(),
+  )
 
-  const fetchPublicJobs = async () => {
+  useEffect(() => {
+    const fromRoute = (routeSlug || '').trim().toLowerCase()
+    const fromQuery = (params.get('company') || '').trim().toLowerCase()
+    const fromAuth = (auth?.orgSlug || '').trim().toLowerCase()
+    setResolvedSlug(fromRoute || fromQuery || fromAuth || '')
+  }, [routeSlug, location.search, auth?.orgSlug])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const data = await apiRequest('/api/companies', { method: 'GET' })
+        const list = data?.companies || []
+        if (cancelled) return
+        setCompanies(list)
+        if (!resolvedSlug && list.length === 1 && list[0]?.slug) {
+          setResolvedSlug(String(list[0].slug).toLowerCase())
+        }
+      } catch {
+        /* picker optional */
+      }
+    })()
+    return () => { cancelled = true }
+  }, [resolvedSlug])
+
+  const fetchPublicJobs = useCallback(async () => {
     setJobsLoading(true)
     setJobsError('')
     try {
-      const data = await apiRequest('/api/jobs', { method: 'GET' })
+      if (!resolvedSlug) {
+        setJobs([])
+        setJobsError(companies.length ? 'Select a company to view open roles.' : '')
+        return
+      }
+      const data = await apiRequest(`/api/jobs?company=${encodeURIComponent(resolvedSlug)}`, {
+        method: 'GET',
+      })
       if (Array.isArray(data)) setJobs(data)
       else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)
       else setJobs([])
@@ -68,11 +105,11 @@ export default function Jobs() {
     } finally {
       setJobsLoading(false)
     }
-  }
+  }, [resolvedSlug, companies.length])
 
   useEffect(() => {
     fetchPublicJobs()
-  }, [location.key, jobsBoardRevision])
+  }, [fetchPublicJobs, location.key, jobsBoardRevision])
 
   useEffect(() => {
     const onVisible = () => {
@@ -80,7 +117,7 @@ export default function Jobs() {
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [])
+  }, [fetchPublicJobs])
 
   useEffect(() => {
     if (!sortOpen) return
@@ -131,11 +168,25 @@ export default function Jobs() {
 
   const sortLabel = SORT_OPTIONS.find((o) => o.value === sortBy)?.label || 'Relevance'
 
+  const jobsPath = resolvedSlug ? `/c/${encodeURIComponent(resolvedSlug)}/jobs` : '/jobs'
+
   const handleSearch = ({ keywords, location: loc }) => {
     const sp = new URLSearchParams()
     if (keywords) sp.set('q', keywords)
     if (loc) sp.set('loc', loc)
-    navigate({ pathname: '/jobs', search: `?${sp.toString()}` }, { replace: false })
+    navigate({ pathname: jobsPath, search: sp.toString() ? `?${sp.toString()}` : '' }, { replace: false })
+  }
+
+  const handleCompanyChange = (slug) => {
+    const next = (slug || '').trim().toLowerCase()
+    setResolvedSlug(next)
+    const sp = new URLSearchParams(location.search)
+    sp.delete('company')
+    const search = sp.toString()
+    navigate(
+      { pathname: next ? `/c/${encodeURIComponent(next)}/jobs` : '/jobs', search: search ? `?${search}` : '' },
+      { replace: true },
+    )
   }
 
   useEffect(() => {
@@ -144,19 +195,38 @@ export default function Jobs() {
       fetchPublicJobs()
     }, 5000)
     return () => clearTimeout(id)
-  }, [jobsError])
+  }, [jobsError, fetchPublicJobs])
 
   return (
     <div className="min-h-[calc(100vh-4rem)]">
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
         <AnimatedContainer animation="slideDown">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ei-text-muted)]">
-              Open roles
-            </p>
-            <h2 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--ei-text-primary)] sm:text-[2rem]">
-              Latest Jobs
-            </h2>
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--ei-text-muted)]">
+                Open roles
+              </p>
+              <h2 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--ei-text-primary)] sm:text-[2rem]">
+                Latest Jobs
+              </h2>
+            </div>
+            {companies.length > 1 && (
+              <label className="flex flex-col gap-1 text-xs text-[var(--ei-text-muted)]">
+                Company
+                <select
+                  value={resolvedSlug}
+                  onChange={(e) => handleCompanyChange(e.target.value)}
+                  className="min-w-[12rem] rounded-lg border border-[var(--ei-border-primary)] bg-[var(--ei-surface-input)] px-3 py-2 text-sm text-[var(--ei-text-primary)]"
+                >
+                  <option value="">Select company</option>
+                  {companies.map((c) => (
+                    <option key={c.slug || c.id} value={c.slug}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </div>
         </AnimatedContainer>
 
@@ -323,6 +393,7 @@ export default function Jobs() {
       <ApplyJobModal
         open={!!applyJob}
         job={applyJob}
+        companySlug={resolvedSlug}
         onClose={() => setApplyJob(null)}
         onSuccess={(data) => {
           setApplySuccess(

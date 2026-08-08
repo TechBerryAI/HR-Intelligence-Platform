@@ -109,7 +109,7 @@ def create_app() -> Flask:
             r"/*": {
                 "origins": cors_origins,
                 "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
-                "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With"],
+                "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With", "X-Platform-Key"],
                 "expose_headers": ["Content-Type", "Authorization"],
                 "supports_credentials": True,
                 "max_age": 3600,
@@ -138,8 +138,10 @@ def create_app() -> Flask:
     from app.domains.administration.api.admin import admin_bp  # noqa: E402
     from app.domains.administration.api.developer import developer_bp  # noqa: E402
     from app.domains.administration.api.head_hr import head_hr_bp  # noqa: E402
+    from app.domains.administration.api.platform import platform_bp  # noqa: E402
     from app.domains.candidate.api.routes import candidate_bp  # noqa: E402
     from app.domains.employee.api.feedback import feedback_bp  # noqa: E402
+    from app.domains.identity.api.companies import companies_bp  # noqa: E402
     from app.domains.identity.api.hr_auth import auth_bp  # noqa: E402
     from app.domains.identity.sessions.routes import sessions_bp  # noqa: E402
     from app.domains.recruitment.api.applications import applications_bp  # noqa: E402
@@ -273,6 +275,8 @@ def create_app() -> Flask:
         })
 
     app.register_blueprint(auth_bp, url_prefix='/api')
+    app.register_blueprint(companies_bp, url_prefix='/api/companies')
+    app.register_blueprint(platform_bp, url_prefix='/api/platform')
     app.register_blueprint(jobs_bp, url_prefix='/api/jobs')
     app.register_blueprint(candidate_bp, url_prefix='/api/candidate')
     app.register_blueprint(applications_bp, url_prefix='/api/applications')

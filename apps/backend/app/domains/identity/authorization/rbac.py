@@ -68,82 +68,111 @@ def is_staff_recruiter(user):
     return get_role(user) in (ROLE_RECRUITER, ROLE_HEAD_HR)
 
 
-def can_access_job(user, posted_by):
-    role = get_role(user)
-    if role in (ROLE_CEO, ROLE_HEAD_HR):
-        return True
-    if role == ROLE_RECRUITER:
-        uid = get_user_id(user)
-        if posted_by == uid:
-            return True
-        if not posted_by:
-            return False
-        try:
-            from app.database.connection.db import db_get
-            from app.domains.recruitment.services.company_scope import companies_related
+def _resolve_job_organization_id(organization_id=None, posted_by=None) -> str | None:
+    if organization_id:
+        return str(organization_id)
+    if not posted_by:
+        return None
+    try:
+        from app.database.connection.db import db_get
 
-            my_co = (user or {}).get('company')
-            if not my_co:
-                me = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (uid,))
-                my_co = (me or {}).get('company')
-            owner = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (posted_by,))
-            if companies_related(my_co, (owner or {}).get('company')):
-                return True
-            job = db_get(
-                'SELECT company FROM jobs WHERE posted_by = ? ORDER BY posted_on DESC',
-                (posted_by,),
-            )
-            if companies_related(my_co, (job or {}).get('company')):
-                return True
-        except Exception:
-            return False
+        owner = db_get(
+            'SELECT organization_id FROM hr_signup WHERE hrid = ?',
+            (posted_by,),
+        )
+        if owner and owner.get('organization_id'):
+            return str(owner['organization_id'])
+        job = db_get(
+            '''
+            SELECT organization_id FROM jobs
+            WHERE posted_by = ? AND organization_id IS NOT NULL
+            ORDER BY posted_on DESC
+            LIMIT 1
+            ''',
+            (posted_by,),
+        )
+        if job and job.get('organization_id'):
+            return str(job['organization_id'])
+    except Exception:
+        return None
+    return None
+
+
+def same_organization(user, organization_id) -> bool:
+    """True when user belongs to the given organization_id."""
+    if not user or not organization_id:
         return False
-    return False
+    from app.domains.identity.services.organizations import get_organization_id_for_user
+
+    user_org = get_organization_id_for_user(user)
+    if not user_org:
+        return False
+    return str(user_org) == str(organization_id)
 
 
-def can_modify_job(user, posted_by):
+def can_access_job(user, posted_by=None, organization_id=None):
+    """Staff may access jobs only within their organization."""
+    role = get_role(user)
+    if role not in STAFF_ROLES:
+        return False
+    job_org = _resolve_job_organization_id(organization_id=organization_id, posted_by=posted_by)
+    return same_organization(user, job_org)
+
+
+def can_modify_job(user, posted_by=None, organization_id=None):
     if is_read_only(user):
         return False
     role = get_role(user)
-    if role == ROLE_HEAD_HR:
-        return True
-    if role == ROLE_RECRUITER:
-        # Same-company recruiters may enable/disable/edit/delete org postings
-        return can_access_job(user, posted_by)
-    return False
+    if role not in (ROLE_HEAD_HR, ROLE_RECRUITER):
+        return False
+    return can_access_job(user, posted_by=posted_by, organization_id=organization_id)
 
 
-def can_access_application(user, job_posted_by):
-    return can_access_job(user, job_posted_by)
+def can_access_application(user, job_posted_by=None, organization_id=None):
+    return can_access_job(user, posted_by=job_posted_by, organization_id=organization_id)
 
 
-def can_act_on_application(user, job_posted_by):
+def can_act_on_application(user, job_posted_by=None, organization_id=None):
     if is_read_only(user):
         return False
     role = get_role(user)
-    if role == ROLE_HEAD_HR:
-        return True
-    if role == ROLE_RECRUITER:
-        return can_access_job(user, job_posted_by)
-    return False
+    if role not in (ROLE_HEAD_HR, ROLE_RECRUITER):
+        return False
+    return can_access_job(user, posted_by=job_posted_by, organization_id=organization_id)
 
 
 def can_access_bulk_session(user, started_by):
+    """Org-scoped: Head HR/CEO see org sessions; recruiter sees own."""
     role = get_role(user)
-    if role in (ROLE_HEAD_HR, ROLE_CEO):
-        return True
     if role == ROLE_RECRUITER:
         return started_by == get_user_id(user)
+    if role in (ROLE_HEAD_HR, ROLE_CEO):
+        if started_by == get_user_id(user):
+            return True
+        try:
+            from app.database.connection.db import db_get
+            from app.domains.identity.services.organizations import get_organization_id_for_user
+
+            user_org = get_organization_id_for_user(user)
+            if not user_org or not started_by:
+                return False
+            owner = db_get(
+                'SELECT organization_id FROM hr_signup WHERE hrid = ?',
+                (started_by,),
+            )
+            return bool(owner and str(owner.get('organization_id') or '') == str(user_org))
+        except Exception:
+            return False
     return False
 
 
 def job_list_scope(user):
-    role = get_role(user)
-    if role in (ROLE_CEO, ROLE_HEAD_HR):
-        return '', ()
-    uid = get_user_id(user)
-    if role == ROLE_RECRUITER and uid:
-        return 'j.posted_by = ?', (uid,)
+    """SQL fragment filtering jobs to the caller's organization."""
+    from app.domains.identity.services.organizations import get_organization_id_for_user
+
+    org_id = get_organization_id_for_user(user)
+    if org_id and get_role(user) in STAFF_ROLES:
+        return 'j.organization_id = ?', (org_id,)
     return '1 = 0', ()
 
 
@@ -156,15 +185,34 @@ def resolve_hr_role(signup_data):
 
 
 def build_hr_identity(signup_data):
-    return {
-        'user_id': signup_data['hrid'],
-        'email': signup_data['email'],
-        'role': resolve_hr_role(signup_data),
+    from app.domains.identity.services.organizations import enrich_signup_with_org
+
+    data = enrich_signup_with_org(signup_data)
+    identity = {
+        'user_id': data['hrid'],
+        'email': data['email'],
+        'role': resolve_hr_role(data),
     }
+    if data.get('organization_id'):
+        identity['organization_id'] = str(data['organization_id'])
+    if data.get('company'):
+        identity['company'] = data['company']
+    if data.get('org_slug'):
+        identity['org_slug'] = data['org_slug']
+    if data.get('org_name'):
+        identity['org_name'] = data['org_name']
+    return identity
 
 
-def build_jwt_identity(user_id, email, role):
-    return {'user_id': user_id, 'email': email, 'role': role}
+def build_jwt_identity(user_id, email, role, organization_id=None, company=None, org_slug=None):
+    identity = {'user_id': user_id, 'email': email, 'role': role}
+    if organization_id:
+        identity['organization_id'] = str(organization_id)
+    if company:
+        identity['company'] = company
+    if org_slug:
+        identity['org_slug'] = org_slug
+    return identity
 
 
 def require_analytics_read(f):

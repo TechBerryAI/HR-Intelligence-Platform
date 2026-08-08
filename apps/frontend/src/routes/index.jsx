@@ -52,6 +52,7 @@ export default function AppRoutes() {
     <Routes>
       <Route path="/" element={<Home />} />
       <Route path="/jobs" element={<Jobs />} />
+      <Route path="/c/:companySlug/jobs" element={<Jobs />} />
       <Route path="/book/:token" element={<BookInterview />} />
       <Route path="/validation/resume-autofill" element={<ResumeAutofillHarness />} />
       <Route path="/support/faq" element={<FAQ />} />

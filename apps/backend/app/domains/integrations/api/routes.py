@@ -43,6 +43,19 @@ def _job_belongs_to_company(job_id: str, company_key: str, user) -> bool:
     job = db_get('SELECT * FROM jobs WHERE jdid = ?', (job_id,))
     if not job:
         return False
+    try:
+        from app.domains.identity.services.organizations import get_organization_id_for_user
+        from app.domains.identity.authorization.rbac import same_organization
+
+        org_id = job.get('organization_id')
+        if org_id and same_organization(user, org_id):
+            return True
+        # Fallback for legacy rows without organization_id
+        user_org = get_organization_id_for_user(user)
+        if user_org and org_id and str(user_org) == str(org_id):
+            return True
+    except Exception:
+        pass
     job_key = normalize_company(job.get('company') or '')
     if job_key and job_key == company_key:
         return True

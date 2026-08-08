@@ -49,6 +49,7 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
   const navItems = isCeoPanel ? ceoNav : headHrNav
   const displayEmail = auth?.email
   const displayName = auth?.fullName || (isCeoPanel ? 'CEO' : 'Head of HR')
+  const companyLabel = auth?.company || ''
   const panelTitle = isCeoPanel ? 'Executive Panel' : 'Head of HR Panel'
   const roleLabel = isCeoPanel ? 'Executive' : 'Administrator'
   const PanelIcon = isCeoPanel ? FiBarChart2 : FiShield
@@ -74,6 +75,11 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-[var(--ei-text-primary)] truncate">{displayName}</p>
           <p className="text-xs text-[var(--ei-text-muted)] truncate">{displayEmail || ''}</p>
+          {companyLabel ? (
+            <p className="text-xs text-[var(--ei-text-secondary)] truncate mt-0.5" title={companyLabel}>
+              {companyLabel}
+            </p>
+          ) : null}
           <p className="text-[10px] uppercase tracking-[0.08em] text-[#00A6FF]/80 mt-1">
             {isCeoPanel ? 'Read-only access' : roleLabel}
           </p>
