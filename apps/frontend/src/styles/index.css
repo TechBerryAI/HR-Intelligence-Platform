@@ -871,8 +871,8 @@ h1, h2, h3, h4, h5, h6 {
 
   .auth-nav-link-active {
     color: #ffffff !important;
-    background: rgba(0, 166, 255, 0.08);
-    border: 1px solid rgba(0, 166, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
   }
 }
