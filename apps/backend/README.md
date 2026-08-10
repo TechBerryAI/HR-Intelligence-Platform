@@ -18,7 +18,7 @@ All HRMS business logic and data persistence live here. The frontend and Electro
 |------|---------|
 | `wsgi.py` / `app.py` | Application entry |
 | `app/` | Modular monolith (`domains/*`, bootstrap, config) |
-| `schema_pg/` | PostgreSQL DDL and seeds |
+| `alembic/` | PostgreSQL schema migrations (sole DDL source of truth) |
 | Root `*.py` shims | Compatibility re-exports from `app.*` |
 
 ## What should never be placed here?

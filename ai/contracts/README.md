@@ -24,7 +24,7 @@ Contracts are the first layer in the authority chain. Schemas compose contracts;
 
 - JSON Schema for runtime validation → `ai/capabilities/*/schema.json`
 - TOON wire mappings → `ai/toon/v1/mappings/`
-- PostgreSQL DDL → `backend/schema_pg/`
+- PostgreSQL DDL → `apps/backend/alembic/` (migrations)
 
 ## Authority chain position
 

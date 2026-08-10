@@ -8,6 +8,7 @@ Flask-Mail==0.9.1
 PyJWT==2.9.0
 bcrypt==4.2.0
 psycopg[binary]>=3.1
+redis>=5.0.0
 python-dotenv==1.0.1
 SQLAlchemy==2.0.36
 alembic>=1.13

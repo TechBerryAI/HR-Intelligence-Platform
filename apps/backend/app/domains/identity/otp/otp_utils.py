@@ -1,7 +1,16 @@
-import random
+import secrets
 import re
 from datetime import datetime, timezone
 from typing import Optional
+
+from flask import current_app
+
+from app.integrations.email.utils import send_notification_email
+from app.integrations.email.templates import otp_html
+
+GMAIL_REGEX = re.compile(r'^[A-Za-z0-9._%+-]+@gmail\.com$', re.IGNORECASE)
+EMAIL_REGEX = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$', re.IGNORECASE)
+INDIAN_PHONE_REGEX = re.compile(r'^[6-9]\d{9}$')
 
 
 def utc_now_aware() -> datetime:
@@ -10,45 +19,28 @@ def utc_now_aware() -> datetime:
 
 
 def normalize_to_utc_aware(dt: Optional[datetime]) -> Optional[datetime]:
-    """Convert a datetime to timezone-aware UTC. Handles naive (from MSSQL) and aware (from PostgreSQL)."""
+    """Convert a datetime to timezone-aware UTC."""
     if dt is None:
         return None
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
 
-from flask import current_app
-
-from app.integrations.email.utils import send_notification_email
-from app.integrations.email.templates import otp_html
-
-GMAIL_REGEX = re.compile(r'^[A-Za-z0-9._%+-]+@gmail\.com$', re.IGNORECASE)
-# General email regex: accepts any email with @ symbol and valid domain
-EMAIL_REGEX = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}$', re.IGNORECASE)
-INDIAN_PHONE_REGEX = re.compile(r'^[6-9]\d{9}$')
-
 
 def generate_otp() -> str:
-    return f"{random.randint(100000, 999999):06d}"
+    return f"{secrets.randbelow(1_000_000):06d}"
 
 
 def is_valid_email(email: Optional[str]) -> bool:
-    """
-    Validate any email address (institute, corporate, or personal).
-    Checks for @ symbol and valid email format.
-    """
     if not email:
         return False
     email = email.strip()
-    # Basic check: must contain @ symbol
     if '@' not in email:
         return False
-    # Validate email format using regex
     return bool(EMAIL_REGEX.match(email))
 
 
 def is_valid_gmail(email: Optional[str]) -> bool:
-    """Legacy function - kept for backward compatibility"""
     if not email:
         return False
     return bool(GMAIL_REGEX.match(email.strip()))
@@ -83,15 +75,15 @@ def send_email_otp(
     if not recipient:
         return False
     try:
-        print(f"[SEND_EMAIL_OTP] Called with recipient={recipient}, otp={otp}, user_type={user_type}, purpose={purpose}")
+        print(f"[SEND_EMAIL_OTP] Called with recipient={recipient}, user_type={user_type}, purpose={purpose}")
         cfg = current_app.config if current_app else {}
         suppress_send = cfg.get('MAIL_SUPPRESS_SEND')
         missing_creds = not cfg.get('MAIL_USERNAME') or not cfg.get('MAIL_PASSWORD')
         if suppress_send or missing_creds:
             if current_app:
-                current_app.logger.info("Dev email OTP (not sent) to %s: %s", recipient, otp)
+                current_app.logger.info("Dev email OTP (not sent) to %s", recipient)
             else:
-                print(f"[SEND_EMAIL_OTP] Dev mode - OTP for {recipient}: {otp}")
+                print(f"[SEND_EMAIL_OTP] Dev mode - OTP issued for {recipient} (value not logged)")
             return True
         if purpose == "password_reset":
             subject = "Your HR Intelligence password reset OTP"
@@ -108,7 +100,7 @@ def send_email_otp(
             f"Regards,\nHR Intelligence Team"
         )
         html = otp_html(otp, user_type, purpose=purpose, minutes=minutes)
-        print(f"[SEND_EMAIL_OTP] Sending email to {recipient} with OTP: {otp}")
+        print(f"[SEND_EMAIL_OTP] Sending email to {recipient}")
         ok = send_notification_email(recipient, subject, body, html=html)
         if ok:
             print(f"[SEND_EMAIL_OTP] Email sent successfully to {recipient}")
@@ -126,9 +118,9 @@ def send_sms_otp(phone: str, otp: str) -> bool:
         return False
     try:
         if current_app:
-            current_app.logger.info("Simulating Fast2SMS OTP send to %s: %s", phone, otp)
+            current_app.logger.info("Simulating Fast2SMS OTP send to %s", phone)
         else:
-            print(f"Simulating Fast2SMS OTP send to {phone}: {otp}")
+            print(f"Simulating Fast2SMS OTP send to {phone}")
         return True
     except Exception as exc:
         if current_app:
@@ -139,9 +131,7 @@ def send_sms_otp(phone: str, otp: str) -> bool:
 
 
 def parse_otp_expiry(raw_expiry) -> Optional[datetime]:
-    """
-    Normalize OTP expiry values coming from SQLAlchemy/pyodbc into datetime.
-    """
+    """Normalize OTP expiry values coming from SQLAlchemy/pyodbc into datetime."""
     if not raw_expiry:
         return None
     if isinstance(raw_expiry, datetime):
@@ -175,4 +165,3 @@ def parse_otp_expiry(raw_expiry) -> Optional[datetime]:
         return datetime.fromisoformat(str(raw_expiry))
     except Exception:
         return None
-

@@ -8,9 +8,7 @@ from __future__ import annotations
 
 import hmac
 import os
-import time
 import uuid
-from collections import defaultdict, deque
 
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 from werkzeug.utils import secure_filename
@@ -24,6 +22,7 @@ from app.ai.parser.engine import get_parse_job, run_jd_parse_pipeline, run_resum
 from app.ai.parser.engine.confidence import calculate_confidence
 from app.ai.parser.engine.progress import create_parse_job
 from app.ai.toon.runtime import toon_loads_flex
+from app.core import shared_store
 from app.domains.identity.authorization.rbac import STAFF_ROLES, get_role, get_user_id
 
 
@@ -46,7 +45,6 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 _PUBLIC_PARSE_LIMIT = int(os.getenv('PUBLIC_PARSE_RATE_LIMIT', '10'))
 _PUBLIC_PARSE_WINDOW_SEC = int(os.getenv('PUBLIC_PARSE_RATE_WINDOW_SEC', '600'))
 _VALIDATION_TOKEN = os.getenv('DOCUMENT_INTELLIGENCE_VALIDATION_TOKEN', '')
-_public_parse_hits: dict[str, deque] = defaultdict(deque)
 
 MIME_TYPE_MAP = {
     'pdf': 'application/pdf',
@@ -94,14 +92,11 @@ def _public_parse_rate_limited(ip: str) -> bool:
     if validation_payload and ip in ('127.0.0.1', '::1', 'localhost'):
         return False
 
-    now = time.time()
-    q = _public_parse_hits[ip]
-    while q and now - q[0] > _PUBLIC_PARSE_WINDOW_SEC:
-        q.popleft()
-    if len(q) >= _PUBLIC_PARSE_LIMIT:
-        return True
-    q.append(now)
-    return False
+    return shared_store.rate_limit_hit(
+        f'public_parse:{ip}',
+        _PUBLIC_PARSE_LIMIT,
+        _PUBLIC_PARSE_WINDOW_SEC,
+    )
 
 
 # Re-export for tests / bulk workers that import from this module
@@ -486,11 +481,31 @@ def parse_jd_stream():
 @authenticate_token
 def get_parsed_resume(parsed_id):
     from app.database.connection.db import db_get
+    from app.domains.identity.services.organizations import require_organization_id
+    from app.domains.identity.authorization.rbac import get_user_id, get_role, ROLE_RECRUITER
 
     try:
+        org_id, org_err = require_organization_id(request.user)
+        if org_err:
+            return org_err
         result = db_get(
-            "SELECT id, toon, confidence, model_version, created_at FROM parsed_resumes WHERE id = ?",
-            (parsed_id,),
+            """
+            SELECT pr.id, pr.toon, pr.confidence, pr.model_version, pr.created_at, pr.candidate_id
+            FROM parsed_resumes pr
+            WHERE pr.id = ?
+              AND (
+                EXISTS (
+                  SELECT 1 FROM applications a
+                  JOIN jobs j ON j.jdid = a.job_id
+                  WHERE a.candidate_id = pr.candidate_id AND j.organization_id = ?
+                )
+                OR EXISTS (
+                  SELECT 1 FROM raw_files rf
+                  WHERE rf.id = pr.raw_file_id AND rf.uploader_id = ?
+                )
+              )
+            """,
+            (parsed_id, org_id, get_user_id(request.user)),
         )
         if not result:
             return jsonify({'status': 'error', 'error': 'Parsed resume not found'}), 404
@@ -516,11 +531,30 @@ def get_parsed_resume(parsed_id):
 @authenticate_token
 def get_parsed_jd(parsed_id):
     from app.database.connection.db import db_get
+    from app.domains.identity.services.organizations import require_organization_id
+    from app.domains.identity.authorization.rbac import get_user_id
 
     try:
+        org_id, org_err = require_organization_id(request.user)
+        if org_err:
+            return org_err
         result = db_get(
-            "SELECT id, toon, confidence, model_version, created_at FROM parsed_jds WHERE id = ?",
-            (parsed_id,),
+            """
+            SELECT pj.id, pj.toon, pj.confidence, pj.model_version, pj.created_at
+            FROM parsed_jds pj
+            WHERE pj.id = ?
+              AND (
+                EXISTS (
+                  SELECT 1 FROM jobs j
+                  WHERE j.parsed_jd_id = pj.id AND j.organization_id = ?
+                )
+                OR EXISTS (
+                  SELECT 1 FROM raw_files rf
+                  WHERE rf.id = pj.raw_file_id AND rf.uploader_id = ?
+                )
+              )
+            """,
+            (parsed_id, org_id, get_user_id(request.user)),
         )
         if not result:
             return jsonify({'status': 'error', 'error': 'Parsed JD not found'}), 404

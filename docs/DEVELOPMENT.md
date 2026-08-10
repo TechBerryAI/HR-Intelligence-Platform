@@ -101,18 +101,9 @@ node scripts/db-preflight.js
 python scripts/database/test_db_connection.py
 ```
 
-### Schema migrations (Alembic — Current)
+### Schema migrations (Alembic — sole source of truth)
 
-Consolidated SQL lives in `apps/backend/schema_pg/`:
-
-| File | Contents |
-|------|----------|
-| `01_core.sql` | Core tables (auth, jobs, applications, raw_files, parsing, …) |
-| `02_domain.sql` | Domain freeze, interviews, RBAC cleanup, keywords, blobs |
-| `03_integrations.sql` | Job-board integrations, OAuth, site assets |
-| `04_seeds.sql` | Seed admin / CEO accounts |
-
-Alembic applies these and tracks versions:
+Schema changes live only under `apps/backend/alembic/`. The squashed baseline is `20260810_s001` (SQL in `alembic/baseline/`).
 
 ```bash
 cd apps/backend
@@ -121,7 +112,7 @@ alembic current
 alembic revision -m "describe_change"
 ```
 
-Do **not** add new numbered SQL migration files. See `apps/backend/alembic/README.md`.
+Fresh local DB: create an empty Postgres database, then `alembic upgrade head`. Do **not** add parallel SQL schema trees. See `apps/backend/alembic/README.md`.
 
 ## Environment files
 

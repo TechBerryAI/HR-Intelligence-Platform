@@ -1,8 +1,10 @@
 # HRMS AI Platform
 
-Enterprise AI platform for the HR Job Portal — designed for long-term maintainability. Powers parsing, matching, ranking, search, summarization, interview generation, chat, and future HR intelligence.
+Enterprise AI workspace for the HR Job Portal — maintainable capability library under `ai/`.
 
-**Independent of the HRMS application** until Milestone 9. No backend, frontend, or API changes in current milestones.
+**Production HRMS path today:** resume/JD document intelligence (parsing) plus ATS scoring via the app adapter. Matching, chat, and interview-generation live as **capability packs** in `ai/capabilities/` — not fully productized end-user services in the Flask/React app.
+
+**Workspace isolation:** the `ai/` tree stays independent of day-to-day HRMS routes except where the backend explicitly adapters into parsing/ATS.
 
 ## Directory map
 
@@ -86,6 +88,8 @@ python -m runtime.cli.main --help
 | M2 Foundation (contracts, schemas, TOON, knowledge) | Active — manifests in place |
 | M7 Runtime + capabilities + providers | **Implemented** — `pytest` passes |
 | M3 Dataset platform | Inspector + extraction + proposals implemented; other factory stages interface-only |
-| M9 HRMS integration | Planned |
+| HRMS production path | Resume/JD parsing + ATS via adapter (shipped in app) |
+| Capability packs (matching / chat / interview gen) | Library / runtime — **not** fully productized product services |
+| M9 broader HRMS integration | Ongoing for additional features |
 
 Milestone labels may lag implementation — verify against code, tests, and [docs/AI_WORKFLOW.md](../docs/AI_WORKFLOW.md).

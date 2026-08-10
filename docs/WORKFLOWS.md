@@ -35,9 +35,9 @@ Landing video is streamed from `MEDIA_ROOT` (catalog in Postgres `site_assets`) 
 
 ## Schema / database
 
-- Canonical SQL: `apps/backend/schema_pg/` (`01_core` … `04_seeds`)
-- Apply via Alembic: `alembic upgrade head` (from `apps/backend`)
-- New changes: `alembic revision` only — do not add numbered SQL files
+- Source of truth: Alembic (`apps/backend/alembic/`)
+- Apply: `alembic upgrade head` (from `apps/backend`)
+- New changes: `alembic revision` only — do not add parallel SQL schema trees
 
 Preflight: `node scripts/db-preflight.js`
 
@@ -68,7 +68,7 @@ Full notes + eval commands: [DOCUMENT_INTELLIGENCE.md](DOCUMENT_INTELLIGENCE.md)
 3. Candidate books via public `GET/POST /api/interviews/book/<token>`
 4. Application status → `Interview`
 
-Schema: `interviews`, `interview_slots` (see `schema_pg/`).
+Schema: `interviews`, `interview_slots` (see Alembic baseline / live DB).
 
 ---
 

@@ -1,0 +1,73 @@
+# Production-oriented data plane (Postgres + Redis).
+# API and frontend are typically run on the host or as separate images —
+# see README.md in this folder for wiring notes. Do not commit real secrets;
+# pass them via .env or your orchestrator's secret store.
+#
+# Usage:
+#   docker compose -f infrastructure/docker/docker-compose.prod.yml --env-file apps/backend/.env up -d
+#
+# Then point apps/backend/.env at:
+#   POSTGRES_HOST=localhost  (or the compose network hostname `postgres` from other containers)
+#   REDIS_URL=redis://localhost:6379/0
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-JobPortal}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    command: ["redis-server", "--appendonly", "yes"]
+
+  # Optional: uncomment and provide a Dockerfile / image for the API.
+  # api:
+  #   image: ${API_IMAGE:-hr-intelligence-api:latest}
+  #   restart: unless-stopped
+  #   env_file:
+  #     - ../../apps/backend/.env
+  #   environment:
+  #     POSTGRES_HOST: postgres
+  #     REDIS_URL: redis://redis:6379/0
+  #   ports:
+  #     - "${API_PORT:-3000}:3000"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+
+  # Optional: static frontend (nginx) serving dist/ and proxying /api + /health.
+  # frontend:
+  #   image: ${FRONTEND_IMAGE:-hr-intelligence-frontend:latest}
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${FRONTEND_PORT:-8080}:80"
+  #   depends_on:
+  #     - api
+
+volumes:
+  pgdata_prod:
+  redisdata_prod:

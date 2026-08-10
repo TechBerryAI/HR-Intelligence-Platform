@@ -54,23 +54,24 @@ def _database_url() -> str:
     return url
 
 
-_BASELINE = '20260806_0001'
+_BASELINE = '20260810_s001'
 
 
 def _repair_orphan_stamp(connection) -> None:
     """Retarget alembic_version when it points at a deleted revision file."""
-    from sqlalchemy import text
+    from sqlalchemy import text, inspect
     from alembic.script import ScriptDirectory
 
     try:
+        insp = inspect(connection)
+        if not insp.has_table('alembic_version'):
+            return
         row = connection.execute(
             text('SELECT version_num FROM alembic_version LIMIT 1')
         ).fetchone()
-    except Exception:
-        try:
-            connection.rollback()
-        except Exception:
-            pass
+    except Exception as exc:
+        # Never rollback the Alembic migration transaction on a missing table.
+        print(f'[alembic] orphan-stamp check skipped: {exc}')
         return
 
     if not row or not row[0]:

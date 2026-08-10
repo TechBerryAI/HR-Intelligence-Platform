@@ -5,6 +5,8 @@ Reference for durable file storage (resumes, JDs, hero video).
 
 Postgres backups are owned by the **database team** — this app does not dump or archive the DB.
 
+**Operator runbook:** concrete `pg_dump` + `MEDIA_ROOT` rsync and restore steps → [BACKUP_RUNBOOK.md](BACKUP_RUNBOOK.md).
+
 ---
 
 ## Mental model (read this once)
@@ -93,7 +95,7 @@ alembic upgrade head
 alembic current
 ```
 
-Related revision: `20260807_0012` — `site_assets.content_sha256`.
+Schema includes `site_assets.content_sha256` (media-volume verification) in the squashed baseline `20260810_s001`.
 
 ---
 

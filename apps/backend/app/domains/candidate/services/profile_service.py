@@ -299,17 +299,30 @@ def save_candidate_profile(
 def link_parsed_resume(parsed_id: str | None, candidate_id: str, public_uploader_id: str | None = None) -> dict | None:
     """
     Ensure a parsed_resumes row is linked to candidate_id.
+    Only rebinds rows that are unowned or already owned by this candidate / uploader.
     Returns the parsed resume record or None.
     """
     if parsed_id:
         row = db_get(
-            "SELECT id, toon, confidence, raw_file_id FROM parsed_resumes WHERE id = ?",
+            "SELECT id, toon, confidence, raw_file_id, candidate_id FROM parsed_resumes WHERE id = ?",
             (parsed_id,),
         )
         if row:
+            existing_cid = row.get('candidate_id')
+            if existing_cid and str(existing_cid) != str(candidate_id):
+                return None
+            if not existing_cid:
+                if not public_uploader_id or not row.get('raw_file_id'):
+                    return None
+                owned = db_get(
+                    "SELECT 1 AS ok FROM raw_files WHERE id = ? AND uploader_id = ?",
+                    (row['raw_file_id'], public_uploader_id),
+                )
+                if not owned:
+                    return None
             db_run(
-                "UPDATE parsed_resumes SET candidate_id = ? WHERE id = ?",
-                (candidate_id, parsed_id),
+                "UPDATE parsed_resumes SET candidate_id = ? WHERE id = ? AND (candidate_id IS NULL OR candidate_id = ?)",
+                (candidate_id, parsed_id, candidate_id),
             )
             return row
 

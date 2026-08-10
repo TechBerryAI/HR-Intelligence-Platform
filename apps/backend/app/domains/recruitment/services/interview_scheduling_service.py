@@ -368,6 +368,11 @@ def book_slot(token: str, slot_id: str) -> tuple[dict | None, str | None, int]:
     company_name = ctx.get('company_name') or ''
     tz_name = (os.getenv('INTERVIEW_TZ') or 'Asia/Kolkata').strip()
 
+    # Claim slot before creating the calendar event to prevent double-booking races.
+    if not repo.claim_slot(slot_id):
+        remaining = [repo.serialize_slot(s) for s in repo.list_available_slots(interview_id)]
+        return {'slots': remaining, 'reason': 'slot_unavailable'}, 'Slot is no longer available', 409
+
     result = provider.create_event(
         tokens,
         summary=f'Interview: {candidate_name} — {job_title}',
@@ -379,9 +384,9 @@ def book_slot(token: str, slot_id: str) -> tuple[dict | None, str | None, int]:
         create_meet=True,
     )
     if not result.success:
+        repo.release_slot_claim(slot_id)
         return None, result.error or 'Failed to create calendar event', 502
 
-    repo.mark_slot_booked(slot_id)
     repo.confirm_interview_scheduled(
         interview_id,
         scheduled_at=start,

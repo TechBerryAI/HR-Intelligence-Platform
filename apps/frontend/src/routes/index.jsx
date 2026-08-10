@@ -78,7 +78,7 @@ export default function AppRoutes() {
       <Route path="/settings" element={<StaffSettingsRoute><Settings /></StaffSettingsRoute>} />
       <Route path="/integrations" element={<StaffSettingsRoute><IntegrationsDashboard /></StaffSettingsRoute>} />
       <Route path="/admin/bulk-resume-parser" element={<RecruiterGuard><BulkResumeParser /></RecruiterGuard>} />
-      <Route path="/admin/feedback" element={<RecruiterGuard><FeedbackAdmin /></RecruiterGuard>} />
+      <Route path="/admin/feedback" element={<HeadHrGuard><FeedbackAdmin /></HeadHrGuard>} />
       <Route path="/head-hr" element={<HeadHrGuard><HeadHrDashboard /></HeadHrGuard>} />
       <Route path="/head-hr/admins" element={<HeadHrGuard><HeadHrAdmins /></HeadHrGuard>} />
       <Route path="/head-hr/candidates" element={<HeadHrGuard><HeadHrCandidates /></HeadHrGuard>} />

@@ -1,5 +1,14 @@
 # Engineering Workflow
 
+## Productized vs capability packs
+
+| Surface | Status |
+|---------|--------|
+| Resume / JD parsing (+ ATS via HRMS adapter) | **Production HRMS path** |
+| Matching, chat, interview-generation, ranking/summary | **Capability packs** in `ai/` — not fully productized app services |
+
+Market and roadmap claims should match this table. See [docs/06-AI.md](06-AI.md) and [ADRS.md](ADRS.md) (ADR-006).
+
 ## Standard workflow
 
 ### 1. Research (optional)

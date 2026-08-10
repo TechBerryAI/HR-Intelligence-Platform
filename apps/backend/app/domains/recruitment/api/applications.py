@@ -1,5 +1,6 @@
 import os
 import re
+import hmac
 import traceback
 import requests
 from flask import Blueprint, request, jsonify
@@ -184,7 +185,7 @@ def _jd_toon_from_job_row(job):
 
 # Environment variables for n8n workflow integration
 N8N_WEBHOOK_URL = os.getenv('N8N_WEBHOOK_URL', '')
-N8N_CALLBACK_SECRET = os.getenv('N8N_CALLBACK_SECRET', '')  # Optional security token
+N8N_CALLBACK_SECRET = os.getenv('N8N_CALLBACK_SECRET', '')
 
 def trigger_n8n(candidate_id, job_id, parsed_resume, parsed_jd):
     """
@@ -258,8 +259,8 @@ def receive_ats_result():
     POST /api/applications/ats/result
     
     SECURITY:
-    If N8N_CALLBACK_SECRET environment variable is set, the request must include
-    a matching 'X-N8N-Callback-Secret' header for authentication.
+    Requires N8N_CALLBACK_SECRET (or ALLOW_INSECURE_ATS_CALLBACK=true in local debug).
+    Request must include matching 'X-N8N-Callback-Secret' header.
     
     Body (JSON):
     {
@@ -305,13 +306,18 @@ def receive_ats_result():
     (talent pool / recruiter review — not auto-Rejected).
     """
     try:
-        # ========================================================================
-        # OPTIONAL SECURITY: Verify callback secret if configured
-        # ========================================================================
-        if N8N_CALLBACK_SECRET:
+        allow_insecure = os.getenv('ALLOW_INSECURE_ATS_CALLBACK', 'false').lower() in (
+            '1', 'true', 'yes', 'on',
+        )
+        flask_debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+        if not N8N_CALLBACK_SECRET:
+            if not (allow_insecure and flask_debug):
+                print("[ATS_RESULT] SECURITY: N8N_CALLBACK_SECRET is not configured")
+                return jsonify({'error': 'ATS callback not configured'}), 503
+        else:
             provided_secret = request.headers.get('X-N8N-Callback-Secret', '')
-            if provided_secret != N8N_CALLBACK_SECRET:
-                print(f"[ATS_RESULT] SECURITY: Invalid or missing callback secret")
+            if not hmac.compare_digest(provided_secret, N8N_CALLBACK_SECRET):
+                print("[ATS_RESULT] SECURITY: Invalid or missing callback secret")
                 return jsonify({'error': 'Unauthorized - invalid callback secret'}), 401
         
         data = request.get_json(force=True)

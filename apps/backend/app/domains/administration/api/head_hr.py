@@ -476,8 +476,23 @@ def delete_candidate(cid):
     if not existing:
         return jsonify({'error': 'Candidate not found'}), 404
     try:
-        db_run('DELETE FROM candidates WHERE cid = ?', (cid,))
-        return jsonify({'message': f'Candidate {cid} deleted successfully'})
+        # Delete only this org's application links (and cascaded interview/match rows).
+        # Never hard-delete shared candidates rows used by other organizations.
+        db_run(
+            '''
+            DELETE FROM applications
+            WHERE candidate_id = ?
+              AND job_id IN (SELECT jdid FROM jobs WHERE organization_id = ?)
+            ''',
+            (cid, org_id),
+        )
+        remaining = db_get(
+            'SELECT 1 AS ok FROM applications WHERE candidate_id = ? LIMIT 1',
+            (cid,),
+        )
+        if not remaining:
+            db_run('DELETE FROM candidates WHERE cid = ?', (cid,))
+        return jsonify({'message': f'Candidate {cid} removed from organization successfully'})
     except Exception as e:
         print(f'[HEAD HR] Error deleting candidate {cid}: {e}')
         return jsonify({'error': 'Failed to delete candidate'}), 500

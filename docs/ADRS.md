@@ -400,6 +400,8 @@ Adopt **AI Platform** paradigm with five platform subsystems:
 
 **Feature services (M10)** expose parsing, matching, chat as discrete capabilities built on inference platform.
 
+**Market-readiness note (current):** the production HRMS path is **resume/JD parsing** and **ATS via adapter**. Matching, chat, and interview-generation remain **capability packs** (library/runtime) until productized as first-class app services — do not claim them as shipped product features.
+
 ## Alternatives considered
 
 | Alternative | Rejected because |

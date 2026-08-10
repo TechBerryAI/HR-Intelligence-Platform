@@ -6,6 +6,7 @@ import os
 import re
 import uuid
 from flask import Blueprint, request, jsonify, current_app
+from app.api.middleware.auth import require_head_hr
 from app.database.connection.db import db_run, db_get, db_all, BACKEND, NOW_SQL
 from app.integrations.email.utils import send_notification_email
 from app.integrations.email.templates import hrms_feedback_html
@@ -183,9 +184,10 @@ def submit_feedback():
 
 
 @feedback_bp.route('/list', methods=['GET'])
+@require_head_hr
 def list_feedback():
     """
-    List feedback entries with optional filters (admin / review).
+    List feedback entries with optional filters (Head HR only).
     Query params: feedback_type, module, severity, status, date_from, date_to.
     """
     try:
@@ -241,8 +243,9 @@ def list_feedback():
 
 
 @feedback_bp.route('/<int:feedback_id>/status', methods=['PATCH'])
+@require_head_hr
 def update_feedback_status(feedback_id):
-    """Update feedback status (open / reviewed / resolved). For admin use."""
+    """Update feedback status (open / reviewed / resolved). Head HR only."""
     try:
         data = request.get_json() or {}
         status = (data.get('status') or '').strip()

@@ -13,7 +13,7 @@ import {
   AvatarWithInitials,
 } from './ui/index.js'
 import { FiBriefcase, FiFileText, FiLogOut, FiUsers, FiHelpCircle, FiMessageCircle, FiMessageSquare, FiBook, FiShield, FiSettings } from 'react-icons/fi'
-import { isRecruiter, isHeadHr, isCeo } from '@/core/permissions/rbac.js'
+import { isRecruiter, isHeadHr, isCeo, isStaff } from '@/core/permissions/rbac.js'
 
 function isStaffAppPath(pathname) {
   return (
@@ -58,6 +58,7 @@ export default function Navbar() {
   const isHrRecruiter = auth.isLoggedIn && isRecruiter(auth)
   const isHeadHrLoggedIn = auth.isLoggedIn && isHeadHr(auth)
   const isCeoLoggedIn = auth.isLoggedIn && isCeo(auth)
+  const showHrmsFeedback = auth.isLoggedIn && isStaff(auth)
 
   const hrInitials = (() => {
     const name = user?.fullName || user?.name || auth?.fullName || ''
@@ -254,9 +255,11 @@ export default function Navbar() {
               <DropdownMenuItem onClick={() => navigate('/support/contact')} className={menuItemClass}>
                 <FiMessageCircle className="mr-2 h-4 w-4" /> Contact Us
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/support/hrms-feedback')} className={menuItemClass}>
-                <FiMessageSquare className="mr-2 h-4 w-4" /> HRMS Testing Feedback
-              </DropdownMenuItem>
+              {showHrmsFeedback && (
+                <DropdownMenuItem onClick={() => navigate('/support/hrms-feedback')} className={menuItemClass}>
+                  <FiMessageSquare className="mr-2 h-4 w-4" /> HRMS Testing Feedback
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </nav>
