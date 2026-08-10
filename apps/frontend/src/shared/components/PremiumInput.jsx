@@ -28,7 +28,7 @@ const PremiumInput = forwardRef(({
 
   const labelClass = isFocused
     ? 'block text-sm font-semibold text-[#3AA9FF] mb-2'
-    : 'block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 org-field-label';
+    : 'block text-sm font-semibold text-[var(--ei-text-label)] mb-2 org-field-label';
 
   const fieldClass = `
     premium-input w-full
@@ -50,7 +50,7 @@ const PremiumInput = forwardRef(({
       
       <div className="relative">
         {Icon && (
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400 pointer-events-none org-field-icon">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--ei-text-muted)] pointer-events-none org-field-icon">
             <Icon className="w-5 h-5" />
           </div>
         )}
