@@ -10,6 +10,7 @@ import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiExternalLink, FiTrash2 } from 'react-icons/fi';
 import { tokenService } from '@/core/auth/tokenService.js';
+import { useTheme } from '@/core/context/ThemeContext.jsx';
 
 function humanizeParseError(raw) {
   const detail = extractParseErrorMessage(raw, '').trim();
@@ -45,6 +46,7 @@ export default function ResumeUploadWithParsing({
   const [progressPct, setProgressPct] = useState(null);
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
+  const { theme } = useTheme();
 
   useEffect(() => {
     setParseError('');
@@ -194,8 +196,7 @@ export default function ResumeUploadWithParsing({
   };
 
   const hasResume = currentFileName && currentFileName.trim() && !isUploading;
-  // Public apply form is always light; staff dashboards keep dark glass upload chrome
-  const light = Boolean(publicMode);
+  const light = theme === 'light';
 
   return (
     <>
