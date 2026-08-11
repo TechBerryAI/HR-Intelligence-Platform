@@ -175,10 +175,22 @@ def send_and_get_output(
         hr_action, candidate_name, candidate_email, job_title, company_name,
         application_id, timestamp,
     )
-    send_notification_email(
+    ok = send_notification_email(
         out["email"]["to"],
         out["email"]["subject"],
         out["email"]["body"],
         html=out["email"].get("html"),
     )
+    try:
+        from app.domains.recruitment.repository import email_event_repository as email_events
+
+        email_events.log_email_event(
+            application_id=application_id,
+            email_kind=(hr_action or '').strip().upper(),
+            recipient=out["email"]["to"],
+            subject=out["email"]["subject"],
+            status=email_events.STATUS_SENT if ok else email_events.STATUS_FAILED,
+        )
+    except Exception as log_err:
+        print(f"[EMAIL_EVENT] shortlist/action log failed: {log_err}")
     return out

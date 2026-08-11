@@ -83,7 +83,19 @@ def _send_booking_invite_email(ctx: dict, invite_token: str, *, application_id: 
         ttl_hours=_invite_ttl_hours(),
     )
     try:
-        send_notification_email(candidate_email, subject, body, html=html)
+        ok = send_notification_email(candidate_email, subject, body, html=html)
+        try:
+            from app.domains.recruitment.repository import email_event_repository as email_events
+
+            email_events.log_email_event(
+                application_id=application_id,
+                email_kind=email_events.KIND_INTERVIEW_INVITE,
+                recipient=candidate_email,
+                subject=subject,
+                status=email_events.STATUS_SENT if ok else email_events.STATUS_FAILED,
+            )
+        except Exception as log_err:
+            logger.warning('[interview_scheduling] email event log failed: %s', log_err)
     except Exception:
         logger.exception('[interview_scheduling] invite email failed app=%s', application_id)
     return booking_url
