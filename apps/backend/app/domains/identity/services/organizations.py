@@ -109,25 +109,25 @@ def force_organization_id(table: str, pk_col: str, pk_val, organization_id: str 
 
 
 def get_organization_id_for_user(user: dict | None) -> str | None:
+    """Resolve org from DB first; JWT claim is a last-resort fallback only."""
     if not user:
         return None
-    claimed = user.get('organization_id')
-    if claimed:
-        return str(claimed)
     from app.domains.identity.authorization.rbac import get_user_id
 
     uid = get_user_id(user)
-    if not uid:
-        return None
-    row = db_get('SELECT organization_id, company FROM hr_signup WHERE hrid = ?', (uid,))
-    if not row:
-        return None
-    if row.get('organization_id'):
-        return str(row['organization_id'])
-    org_id = ensure_organization(row.get('company'))
-    if org_id:
-        attach_organization_id('hr_signup', 'hrid', uid, org_id)
-    return org_id
+    if uid:
+        row = db_get('SELECT organization_id, company FROM hr_signup WHERE hrid = ?', (uid,))
+        if row:
+            if row.get('organization_id'):
+                return str(row['organization_id'])
+            org_id = ensure_organization(row.get('company'))
+            if org_id:
+                attach_organization_id('hr_signup', 'hrid', uid, org_id)
+                return org_id
+    claimed = user.get('organization_id')
+    if claimed:
+        return str(claimed)
+    return None
 
 
 def require_organization_id(user: dict | None) -> tuple[str | None, tuple | None]:

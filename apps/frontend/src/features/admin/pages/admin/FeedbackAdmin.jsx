@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { FiFilter, FiRefreshCw, FiMessageSquare, FiChevronDown } from 'react-icons/fi'
 import { useToast } from '@/shared/components/Toast.jsx'
-import { BASE_URL } from '@/core/api/api.js'
+import { apiRequest } from '@/core/api/api.js'
 
 const FEEDBACK_TYPES = ['Bug Report', 'Feature Request', 'General Feedback', 'Appreciation']
 const MODULES = ['Leave Management', 'Payroll', 'Attendance', 'Dashboard', 'Other']
@@ -33,16 +33,11 @@ export default function FeedbackAdmin() {
       Object.entries(filters).forEach(([k, v]) => {
         if (v && v.trim()) params.set(k, v.trim())
       })
-      const url = `${BASE_URL}/api/feedback/list${params.toString() ? `?${params}` : ''}`
-      const res = await fetch(url)
-      const data = await res.json()
-      if (res.ok && data.success) {
-        setFeedback(data.feedback || [])
-      } else {
-        toast.error(data.error || 'Failed to load feedback')
-      }
-    } catch {
-      toast.error('Failed to load feedback')
+      const qs = params.toString() ? `?${params}` : ''
+      const data = await apiRequest(`/api/feedback/list${qs}`, 'GET')
+      setFeedback(data.feedback || [])
+    } catch (err) {
+      toast.error(err?.message || 'Failed to load feedback')
     } finally {
       setLoading(false)
     }

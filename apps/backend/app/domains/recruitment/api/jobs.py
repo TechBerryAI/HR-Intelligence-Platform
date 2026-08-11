@@ -576,6 +576,8 @@ def get_candidate_resume(job_id: str, candidate_id: str):
 def record_profile_viewed(job_id: str, candidate_id: str):
     """Record that HR viewed this candidate's profile for this job. Sends email and updates status."""
     try:
+        from app.common.application_status import STATUS_SCREENING, normalize_status
+
         job = _get_job_for_user(job_id, request.user, require_write=True)
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
@@ -585,14 +587,14 @@ def record_profile_viewed(job_id: str, candidate_id: str):
         )
         if not app:
             return jsonify({'error': 'Application not found'}), 404
-        current_status = (app.get('status') or '').lower()
+        current_status = normalize_status(app.get('status'))
         is_shortlisted = app.get('shortlisted') in (True, 1, 't', 'true', '1')
-        if current_status == 'shortlisted' or current_status == 'rejected' or is_shortlisted:
+        if current_status in ('Shortlisted', 'Rejected') or is_shortlisted:
             return jsonify({
                 'status': 'ok',
                 'profile_update': {
                     'application_id': str(app['id']),
-                    'status': 'Shortlisted' if (current_status == 'shortlisted' or is_shortlisted) else 'Rejected',
+                    'status': 'Shortlisted' if (current_status == 'Shortlisted' or is_shortlisted) else 'Rejected',
                     'updated_at': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
                     'unchanged': True,
                 }
@@ -602,7 +604,8 @@ def record_profile_viewed(job_id: str, candidate_id: str):
         app['full_name'] = (profile or {}).get('full_name') or ''
         app['email'] = (profile or {}).get('email') or (signup or {}).get('email') or ''
         ts = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-        status_db = 'profile_viewed'
+        # Never write legacy 'profile_viewed' — CHECK constraint requires Screening.
+        status_db = STATUS_SCREENING
         if app['email']:
             out = _send_notification(
                 hr_action='PROFILE_VIEWED',
@@ -613,12 +616,20 @@ def record_profile_viewed(job_id: str, candidate_id: str):
                 application_id=app['id'],
                 timestamp=ts,
             )
-            status_db = out['profile_update']['status_db']
+            status_db = out['profile_update'].get('status_db') or STATUS_SCREENING
         db_run(
             'UPDATE applications SET status = ? WHERE id = ?',
             (status_db, app['id'])
         )
-        return jsonify({'status': 'ok', 'profile_update': {'application_id': str(app['id']), 'status': 'Profile Viewed', 'updated_at': ts}}), 200
+        return jsonify({
+            'status': 'ok',
+            'profile_update': {
+                'application_id': str(app['id']),
+                'status': 'Profile Viewed',
+                'status_db': status_db,
+                'updated_at': ts,
+            },
+        }), 200
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
@@ -635,9 +646,18 @@ def update_application_status(job_id: str, candidate_id: str):
     """Shortlist or reject candidate. Body: { "action": "shortlist" | "reject" }.
 
     Shortlist: send SHORTLISTED email + interview scheduling.
-    Reject: update DB only (no email) so candidates stay available for future roles.
+    Reject: update DB only (no email) so candidates stay available for future roles;
+    also cancel open interviews and invalidate booking tokens.
     """
     try:
+        from app.common.application_status import (
+            STATUS_REJECTED,
+            STATUS_SHORTLISTED,
+            can_transition,
+            normalize_status,
+        )
+        from app.domains.recruitment.repository import interview_repository as interview_repo
+
         data = request.get_json(force=True) or {}
         action = (data.get('action') or '').strip().lower()
         if action not in ('shortlist', 'reject'):
@@ -645,11 +665,21 @@ def update_application_status(job_id: str, candidate_id: str):
         job = _get_job_for_user(job_id, request.user, require_write=True)
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
-        app = db_get('SELECT id FROM applications WHERE job_id = ? AND candidate_id = ?', (job_id, candidate_id))
+        app = db_get(
+            'SELECT id, status FROM applications WHERE job_id = ? AND candidate_id = ?',
+            (job_id, candidate_id),
+        )
         if not app:
             return jsonify({'error': 'Application not found'}), 404
 
-        from app.common.application_status import STATUS_REJECTED
+        current = normalize_status(app.get('status'))
+        target = STATUS_REJECTED if action == 'reject' else STATUS_SHORTLISTED
+        if not can_transition(current, target):
+            return jsonify({
+                'error': f'Cannot transition from {current} to {target}',
+                'from': current,
+                'to': target,
+            }), 409
 
         if action == 'reject':
             _sl_val = False if BACKEND == 'postgresql' else 0
@@ -657,6 +687,7 @@ def update_application_status(job_id: str, candidate_id: str):
                 'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
                 (STATUS_REJECTED, _sl_val, app['id'])
             )
+            interview_repo.cancel_open_interviews_for_application(int(app['id']))
             return jsonify({
                 'status': 'ok',
                 'profile_update': {
@@ -682,10 +713,11 @@ def update_application_status(job_id: str, candidate_id: str):
             application_id=app['id'],
             timestamp=ts,
         )
+        status_db = out['profile_update'].get('status_db') or STATUS_SHORTLISTED
         _sl_val = True if BACKEND == 'postgresql' else 1
         db_run(
             'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
-            (out['profile_update']['status_db'], _sl_val, app['id'])
+            (status_db, _sl_val, app['id'])
         )
         from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
         trigger_interview_scheduling(app['id'], recruiter_hrid=get_user_id(request.user))
@@ -799,12 +831,14 @@ def create_job():
         print("Executing INSERT query...")
         
         _enabled_val = True if BACKEND == 'postgresql' else 1
+        # status='Published' keeps jobs_status_enabled_sync from forcing enabled=false
+        # (INSERT with Draft default would set enabled := (status = 'Published') → false).
         result = db_run(
             '''
-            INSERT INTO jobs (jdid, title, company, location, salary, experience, description, keywords, posted_by, enabled, parsed_jd_id, organization_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (jdid, title, company, location, salary, experience, description, keywords, posted_by, enabled, status, parsed_jd_id, organization_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
-            (jdid, title, company, location, salary, experience, description, keywords, hr_id, _enabled_val, parsed_jd_id, org_id)
+            (jdid, title, company, location, salary, experience, description, keywords, hr_id, _enabled_val, 'Published', parsed_jd_id, org_id)
         )
         print(f"INSERT result: {result}")
         

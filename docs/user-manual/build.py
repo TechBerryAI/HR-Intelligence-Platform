@@ -525,13 +525,45 @@ def build_docx(manifest: list[dict]) -> Path:
         return para
 
     def add_figure(item: dict, fig_id: str):
+        """Insert screenshot scaled to fit one page (avoids caption-only orphan pages)."""
         path = SHOTS / item["file"]
         if not path.exists():
             p(f"[Missing figure: {item['file']}]")
-            return
-        doc.add_picture(str(path), width=Inches(6.2))
+            return None
+
+        # Usable page body ≈ 6.5\" wide × ~8.5\" tall; leave room for caption + labels.
+        max_w_in = 6.2
+        max_h_in = 7.0
+        width_in = max_w_in
+        try:
+            from PIL import Image
+
+            with Image.open(path) as im:
+                px_w, px_h = im.size
+            if px_w > 0:
+                height_in = width_in * (px_h / px_w)
+                if height_in > max_h_in:
+                    height_in = max_h_in
+                    width_in = height_in * (px_w / px_h)
+            else:
+                height_in = None
+        except Exception:
+            height_in = None
+
+        if height_in is not None:
+            doc.add_picture(str(path), width=Inches(width_in), height=Inches(height_in))
+        else:
+            doc.add_picture(str(path), width=Inches(width_in))
+
+        # Keep image + caption on the same page when possible
+        img_para = doc.paragraphs[-1]
+        img_para.paragraph_format.keep_with_next = True
+        img_para.paragraph_format.space_after = Pt(4)
+
         cap = doc.add_paragraph()
         cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        cap.paragraph_format.keep_with_next = True
+        cap.paragraph_format.space_after = Pt(8)
         r = cap.add_run(f"Figure {fig_id}  {item['title']}")
         r.italic = True
         _set_run_font(r, size=9, color=(0x47, 0x55, 0x69))
@@ -597,7 +629,9 @@ def build_docx(manifest: list[dict]) -> Path:
     intro = doc.add_paragraph()
     intro.paragraph_format.space_after = Pt(10)
     r = intro.add_run(
-        "Click any section name (or page number) to jump to that chapter."
+        "In Microsoft Word: Ctrl+Click a section name or page number to jump "
+        "(File → Options → Advanced → uncheck “Use CTRL + Click to follow hyperlink” for single-click). "
+        "In the PDF: click once. Links jump to that chapter."
     )
     _set_run_font(r, size=10, color=(0x64, 0x74, 0x8B))
 
@@ -664,10 +698,11 @@ def build_docx(manifest: list[dict]) -> Path:
         for i, item in enumerate(items, start=1):
             h(f"Step {i}", 3)
             p("Action:", bold=True, keep_with_next=True)
-            bullet(item["action"])
+            bullet(item["action"], keep_with_next=True)
             add_figure(item, f"{chapter}.{i}")
-            # Keep Description + Expected Result together on the page after the screenshot
-            p("Description:", bold=True, page_break_before=True, keep_with_next=True)
+            # Description + Expected Result stay with the figure (no forced page break —
+            # that left caption-only / blank pages after tall screenshots).
+            p("Description:", bold=True, keep_with_next=True)
             bullet(item.get("title") or item["action"], keep_with_next=True)
             p("Expected Result:", bold=True, keep_with_next=True)
             bullet(item["expected"])

@@ -9,6 +9,15 @@ import os
 import sys
 from typing import List, Tuple
 
+_PLACEHOLDER_JWT = {
+    '',
+    'your-jwt-secret-change-in-production',
+    'changeme',
+    'secret',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE',
+    'dev-only-insecure-jwt-secret-do-not-use-in-prod',
+}
+
 
 class EnvValidator:
     # Required for database (PostgreSQL)
@@ -18,12 +27,11 @@ class EnvValidator:
     RECOMMENDED_VARS = {
         'MAIL_USERNAME': 'Gmail address for OTP sending',
         'MAIL_PASSWORD': 'Gmail App Password (not regular password)',
-        'JWT_SECRET': 'JWT signing secret (change from placeholder in production)',
     }
 
     DEFAULTED_VARS = {
         'PORT': '3000',
-        'FLASK_DEBUG': 'true',
+        'FLASK_DEBUG': 'false',
         'POSTGRES_HOST': 'localhost',
         'POSTGRES_PORT': '5432',
         'POSTGRES_DB': 'JobPortal',
@@ -32,12 +40,47 @@ class EnvValidator:
     }
 
     @classmethod
+    def _is_production_like(cls) -> bool:
+        flask_debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+        allow_insecure = os.getenv('ALLOW_INSECURE_JWT', 'false').lower() in (
+            '1', 'true', 'yes', 'on',
+        )
+        return not flask_debug and not allow_insecure
+
+    @classmethod
     def validate(cls, strict: bool = False) -> Tuple[bool, List[str], List[str]]:
         errors = []
         warnings = []
 
         if not os.getenv('DATABASE_URL') and not (os.getenv('POSTGRES_USER') and os.getenv('POSTGRES_PASSWORD')):
             errors.append(f"  ❌ {cls.DB_REQUIRED}")
+
+        jwt_secret = (os.getenv('JWT_SECRET') or '').strip()
+        if cls._is_production_like():
+            if not jwt_secret or jwt_secret in _PLACEHOLDER_JWT or len(jwt_secret) < 32:
+                errors.append(
+                    "  ❌ JWT_SECRET: required unique secret (≥32 chars); placeholders are blocked in production"
+                )
+            if not (os.getenv('N8N_CALLBACK_SECRET') or '').strip():
+                # Only required if webhook URL is configured; otherwise warn
+                if (os.getenv('N8N_WEBHOOK_URL') or '').strip():
+                    errors.append(
+                        "  ❌ N8N_CALLBACK_SECRET: required when N8N_WEBHOOK_URL is set"
+                    )
+                else:
+                    warnings.append(
+                        "  ⚠️  N8N_CALLBACK_SECRET: set before enabling ATS callbacks"
+                    )
+            integ = (os.getenv('INTEGRATION_SECRETS_KEY') or '').strip()
+            if not integ or integ in ('dev-integration-secrets',):
+                warnings.append(
+                    "  ⚠️  INTEGRATION_SECRETS_KEY: set a dedicated Fernet key for provider credentials"
+                )
+        else:
+            if not jwt_secret or jwt_secret in _PLACEHOLDER_JWT or len(jwt_secret) < 32:
+                warnings.append(
+                    "  ⚠️  JWT_SECRET: using insecure/dev secret (set a strong secret before production)"
+                )
 
         for var, description in cls.RECOMMENDED_VARS.items():
             value = os.getenv(var)
@@ -67,7 +110,8 @@ class EnvValidator:
             print("\n📋 To fix:")
             print("   1. Copy apps/backend/.env.example to apps/backend/.env")
             print("   2. Set DATABASE_URL or POSTGRES_* variables")
-            print("   3. Restart the application")
+            print("   3. Set a unique JWT_SECRET (≥32 chars)")
+            print("   4. Restart the application")
 
         if warnings:
             print("\n⚠️  RECOMMENDED CONFIGURATION:")

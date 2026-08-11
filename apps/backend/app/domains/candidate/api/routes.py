@@ -85,19 +85,35 @@ def parse_profile(profile: dict) -> dict:
 @candidate_bp.get('/profile/<string:candidate_id>')
 @authenticate_token
 def get_profile_admin(candidate_id: str):
-    """HR/HEAD_HR/CEO view candidate profile with ownership rules for recruiters."""
+    """HR/HEAD_HR/CEO view candidate profile scoped to caller's organization."""
     user = request.user
     if not has_permission(user, 'candidates:read_own'):
         return jsonify({'error': 'Access denied'}), 403
+    from app.domains.identity.services.organizations import require_organization_id
+    org_id, org_err = require_organization_id(user)
+    if org_err:
+        return org_err
     if get_role(user) == ROLE_RECRUITER:
         linked = db_get(
             '''
             SELECT 1 FROM applications a
             JOIN jobs j ON a.job_id = j.jdid
-            WHERE a.candidate_id = ? AND j.posted_by = ?
+            WHERE a.candidate_id = ? AND j.posted_by = ? AND j.organization_id = ?
             LIMIT 1
             ''',
-            (candidate_id, get_user_id(user)),
+            (candidate_id, get_user_id(user), org_id),
+        )
+        if not linked:
+            return jsonify({'error': 'Profile not found'}), 404
+    else:
+        linked = db_get(
+            '''
+            SELECT 1 FROM applications a
+            JOIN jobs j ON a.job_id = j.jdid
+            WHERE a.candidate_id = ? AND j.organization_id = ?
+            LIMIT 1
+            ''',
+            (candidate_id, org_id),
         )
         if not linked:
             return jsonify({'error': 'Profile not found'}), 404

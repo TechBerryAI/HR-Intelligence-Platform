@@ -70,10 +70,8 @@ def create_app() -> Flask:
     # Bulk resume uploads: raise body size (Flask wires this via Request.max_content_length).
     # Form part/memory limits are on _AppRequest (see class docstring).
     app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', str(512 * 1024 * 1024)))
-    app.config['JWT_SECRET'] = os.getenv(
-        'JWT_SECRET',
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE',
-    )
+    from app.core.auth import JWT_SECRET
+    app.config['JWT_SECRET'] = JWT_SECRET
     app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
     app.config['MAIL_PORT'] = int(os.getenv('MAIL_PORT', '587'))
     app.config['MAIL_USE_TLS'] = os.getenv('MAIL_USE_TLS', 'true').lower() == 'true'
@@ -132,6 +130,22 @@ def create_app() -> Flask:
             "[MAIL] Configured — sending enabled (server=%s, user=%s)"
             % (app.config['MAIL_SERVER'], app.config['MAIL_USERNAME'])
         )
+
+    from app.core.structured_logging import configure_structured_logging  # noqa: E402
+
+    configure_structured_logging(app)
+
+    @app.after_request
+    def _security_headers(response):
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('X-Frame-Options', 'DENY')
+        response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+        response.headers.setdefault(
+            'Permissions-Policy',
+            'camera=(), microphone=(), geolocation=(), payment=()',
+        )
+        return response
+
     init_models()
 
     from app.database.connection.db import init_db  # noqa: E402
@@ -166,7 +180,7 @@ def create_app() -> Flask:
                 return
             # Skip noisy probes and the developer dashboard APIs themselves
             path = request.path or ''
-            if path in ('/health', '/', '/api/test-cors') or path.startswith('/api/admin/developer'):
+            if path in ('/health', '/ready', '/', '/api/test-cors') or path.startswith('/api/admin/developer'):
                 return
             ctx = start_request_context(path=path, method=request.method)
             timing_collector.begin_session(
@@ -242,28 +256,80 @@ def create_app() -> Flask:
             "status": "ok",
             "message": "HR Intelligence API root. See /health for status.",
             "endpoints": [
-                "/health", "/api", "/api/jobs", "/api/candidate",
+                "/health", "/ready", "/api", "/api/jobs", "/api/candidate",
                 "/api/applications", "/api/sessions", "/api/admin",
                 "/api/integrations",
             ],
         })
 
+    def _check_postgres() -> str:
+        try:
+            from app.database.connection.db import get_conn
+
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute('SELECT 1')
+                    cur.fetchone()
+            return 'ok'
+        except Exception:
+            return 'error'
+
+    def _check_ollama() -> str:
+        base = (
+            (os.getenv('OLLAMA_HOST') or os.getenv('OLLAMA_BASE_URL') or '')
+            .strip()
+            .rstrip('/')
+        )
+        if not base:
+            return 'not_configured'
+        try:
+            import requests
+
+            r = requests.get(f'{base}/api/tags', timeout=2)
+            return 'ok' if r.ok else 'unreachable'
+        except Exception:
+            return 'unreachable'
+
+    def _check_bulk_parser() -> str:
+        bulk_url = (os.getenv('BULK_PARSER_URL') or '').rstrip('/')
+        if not bulk_url:
+            return 'not_configured'
+        try:
+            import requests
+
+            r = requests.get(f'{bulk_url}/health', timeout=2)
+            return 'ok' if r.ok else 'unreachable'
+        except Exception:
+            return 'unreachable'
+
     @app.route('/health', methods=['GET'])
     def health():
-        bulk_parser = "not_configured"
-        bulk_url = os.getenv('BULK_PARSER_URL', '').rstrip('/')
-        if bulk_url:
-            try:
-                import requests
-                r = requests.get(f"{bulk_url}/health", timeout=2)
-                bulk_parser = "ok" if r.ok else "unreachable"
-            except Exception:
-                bulk_parser = "unreachable"
+        """Liveness: process is up. Reports dependency status; does not fail on Ollama/DB."""
+        from app.core.shared_store import redis_status
+
+        checks = {
+            'postgres': _check_postgres(),
+            'redis': redis_status(),
+            'ollama': _check_ollama(),
+            'bulk_parser': _check_bulk_parser(),
+        }
         return jsonify({
-            "status": "ok",
-            "message": "HR Intelligence API is running",
-            "bulk_parser": bulk_parser,
+            'status': 'ok',
+            'message': 'HR Intelligence API is running',
+            'checks': checks,
+            # Back-compat for older probes
+            'bulk_parser': checks['bulk_parser'],
         })
+
+    @app.route('/ready', methods=['GET'])
+    def ready():
+        """Readiness: Postgres must be reachable before serving traffic."""
+        postgres = _check_postgres()
+        body = {
+            'status': 'ready' if postgres == 'ok' else 'not_ready',
+            'postgres': postgres,
+        }
+        return jsonify(body), (200 if postgres == 'ok' else 503)
 
     @app.route('/api/test-cors', methods=['GET', 'OPTIONS'])
     def test_cors():

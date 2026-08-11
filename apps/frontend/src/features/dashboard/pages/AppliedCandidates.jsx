@@ -6,7 +6,7 @@ import { MatchHeader, ScoreCard, ChipGroup, CollapsibleSection, RequirementsChec
 import { BASE_URL, apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
 import { getAvatarGradient } from '@/shared/utils/avatarColor.js'
-
+import { fetchInterviewByApplication } from '@/features/interview/services/bookingApi.js'
 // Helper function to get score color and label (same as CandidateCard)
 const formatStatusLabel = (status) => {
   if (!status) return 'Applied'
@@ -28,6 +28,24 @@ const getStatusBadgeClass = (status) => {
   if (s === 'rejected') return 'bg-red-500/20 text-red-300 border-red-500/30'
   if (s === 'ats_failed') return 'bg-orange-500/20 text-orange-300 border-orange-500/30'
   return 'bg-green-500/20 text-green-300 border-green-500/30' // applied
+}
+
+const formatInterviewStatusLabel = (status) => {
+  if (!status) return 'Interview'
+  const s = String(status).toLowerCase()
+  if (s === 'pending' || s === 'invited') return 'Invite sent'
+  if (s === 'scheduled' || s === 'booked') return 'Interview booked'
+  if (s === 'completed') return 'Interview done'
+  if (s === 'cancelled' || s === 'canceled' || s === 'expired') return 'Interview cancelled'
+  return `Interview: ${status}`
+}
+
+const getInterviewBadgeClass = (status) => {
+  const s = String(status || '').toLowerCase()
+  if (s === 'scheduled' || s === 'booked') return 'bg-sky-500/20 text-sky-300 border-sky-500/30'
+  if (s === 'completed') return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+  if (s === 'cancelled' || s === 'canceled' || s === 'expired') return 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'
+  return 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30'
 }
 
 const getScoreInfo = (score) => {
@@ -74,6 +92,8 @@ export default function AppliedCandidates() {
   const [profileLoading, setProfileLoading] = useState(false)
   const [reasonCandidate, setReasonCandidate] = useState(null)
   const [statusAction, setStatusAction] = useState({ loading: false, action: null })
+  const [interviewInfo, setInterviewInfo] = useState(null)
+  const [interviewLoading, setInterviewLoading] = useState(false)
 
   const resolvedCandidateId = useMemo(() => {
     if (!selectedCandidate) return null
@@ -164,6 +184,7 @@ export default function AppliedCandidates() {
 
   const handleViewDetails = (candidate) => {
     setSelectedCandidate(candidate)
+    setInterviewInfo(null)
   }
 
   const handleViewReason = (candidate) => {
@@ -173,6 +194,44 @@ export default function AppliedCandidates() {
   const closeReasonModal = () => {
     setReasonCandidate(null)
   }
+
+  const closeModal = () => {
+    setSelectedCandidate(null)
+    setInterviewInfo(null)
+  }
+
+  useEffect(() => {
+    if (!selectedCandidate?.id) {
+      setInterviewInfo(null)
+      return
+    }
+    const appStatus = String(selectedCandidate.status || '').toLowerCase()
+    const isShortlisted =
+      selectedCandidate.shortlisted === true ||
+      selectedCandidate.shortlisted === 1 ||
+      appStatus === 'shortlisted' ||
+      appStatus === 'interview'
+    if (!isShortlisted) {
+      setInterviewInfo(null)
+      return
+    }
+
+    let cancelled = false
+    setInterviewLoading(true)
+    fetchInterviewByApplication(selectedCandidate.id)
+      .then((data) => {
+        if (!cancelled) setInterviewInfo(data?.interview || null)
+      })
+      .catch(() => {
+        if (!cancelled) setInterviewInfo(null)
+      })
+      .finally(() => {
+        if (!cancelled) setInterviewLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [selectedCandidate?.id, selectedCandidate?.status, selectedCandidate?.shortlisted])
 
   const handleStatusAction = async (action) => {
     if (!selectedJobId || !resolvedCandidateId || statusAction.loading) return
@@ -247,10 +306,6 @@ export default function AppliedCandidates() {
       cancelled = true
     }
   }, [resolvedCandidateId, selectedJobId])
-
-  const closeModal = () => {
-    setSelectedCandidate(null)
-  }
 
   const buildResumeUrl = (candidate) => {
     if (!candidate) return null
@@ -703,6 +758,14 @@ export default function AppliedCandidates() {
                     </span>
                   )
                 })()}
+                {interviewLoading && (
+                  <span className="text-xs text-zinc-500 animate-pulse">Interview…</span>
+                )}
+                {!interviewLoading && interviewInfo?.status && (
+                  <span className={`inline-flex items-center text-xs px-2.5 py-1 rounded-full border font-medium ${getInterviewBadgeClass(interviewInfo.status)}`}>
+                    {formatInterviewStatusLabel(interviewInfo.status)}
+                  </span>
+                )}
                 <button onClick={closeModal} className="text-zinc-400 hover:text-white transition p-2 hover:bg-zinc-800 rounded-lg">
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />

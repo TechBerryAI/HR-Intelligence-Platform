@@ -44,6 +44,23 @@ def post_booking(token: str):
 @authenticate_token
 @require_recruiter
 def interview_by_application(application_id: int):
+    from app.database.connection.db import db_get
+    from app.domains.identity.services.organizations import require_organization_id
+
+    org_id, org_err = require_organization_id(request.user)
+    if org_err:
+        return org_err
+    owned = db_get(
+        '''
+        SELECT 1 AS ok
+        FROM applications a
+        JOIN jobs j ON j.jdid = a.job_id
+        WHERE a.id = ? AND j.organization_id = ?
+        ''',
+        (application_id, org_id),
+    )
+    if not owned:
+        return jsonify({'error': 'Application not found'}), 404
     row = scheduling.get_interview_for_application(application_id)
     if not row:
         return jsonify({'interview': None}), 200

@@ -109,7 +109,7 @@ npm run dev
 - **Frontend:** http://localhost:5173  
 - **Backend / Health:** http://localhost:3000, http://localhost:3000/health  
 
-Database and tables are created automatically on first backend run from `apps/backend/schema_pg/*.sql`.
+Database and tables are created automatically on first backend run via Alembic (`alembic upgrade head` from `apps/backend`).
 
 ---
 
@@ -172,8 +172,7 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 │   ├── auth.py, jobs.py, candidate.py, applications.py, ...
 │   ├── db.py             # PostgreSQL pool + helpers
 │   ├── utils.py          # JWT, auth decorators
-│   ├── schema_pg/        # Consolidated DDL (01_core … 04_seeds); Alembic applies
-│   ├── alembic/          # Schema migration revisions
+│   ├── alembic/          # Schema migrations (sole DDL source of truth)
 │   └── requirements.txt
 ├── desktop/              # Electron shell (native dialogs, IPC)
 ├── scripts/              # Root utilities (db-preflight, database tests)

@@ -23,7 +23,16 @@ from app.domains.identity.otp.otp_utils import (
     utc_now_aware,
     normalize_to_utc_aware,
 )
-from app.domains.identity.sessions.service import record_login_attempt
+from app.domains.identity.sessions.service import (
+    record_login_attempt,
+    register_refresh_token,
+    rotate_refresh_token,
+    is_refresh_token_active,
+    is_login_rate_limited,
+    hash_otp,
+    verify_otp_hash,
+    deactivate_session,
+)
 from app.core.auth import build_jwt_payload, JWT_SECRET, validate_password_strength
 from app.api.middleware.auth import authenticate_token
 from app.domains.identity.authorization.rbac import build_hr_identity, ROLE_RECRUITER, get_user_id
@@ -33,11 +42,6 @@ auth_bp = Blueprint('auth', __name__)
 ALLOWED_PASSWORD_RESET_DOMAIN = (
     os.getenv('ALLOWED_PASSWORD_RESET_DOMAIN') or 'techberryinfotech.com'
 ).strip().lower()
-
-JWT_SECRET = os.getenv(
-    'JWT_SECRET',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE',
-)
 
 
 def _is_allowed_password_reset_email(email: str) -> bool:
@@ -61,8 +65,7 @@ def _next_hrid() -> str:
 
 
 def _otp_valid(stored_otp, otp_expiry_raw, input_otp: str, *, grace_seconds: int = 30) -> tuple[bool, str | None]:
-    stored = str(stored_otp).strip() if stored_otp else None
-    if not stored or stored != str(input_otp).strip():
+    if not verify_otp_hash(stored_otp, input_otp):
         return False, 'Invalid OTP.'
     expiry = parse_otp_expiry(otp_expiry_raw)
     if not expiry:
@@ -71,6 +74,13 @@ def _otp_valid(stored_otp, otp_expiry_raw, input_otp: str, *, grace_seconds: int
     if expiry_utc and utc_now_aware() > (expiry_utc + timedelta(seconds=grace_seconds)):
         return False, 'OTP expired. Please request a new OTP.'
     return True, None
+
+
+def _issue_token_pair(identity: dict) -> tuple[str, str]:
+    access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
+    refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
+    register_refresh_token(refresh_token, identity['user_id'])
+    return access_token, refresh_token
 
 
 def _attach_org(hrid: str, company: str | None) -> None:
@@ -96,8 +106,9 @@ def hr_signup():
 
         if not full_name or not email or not password or not company:
             return jsonify({"error": "All fields are required"}), 400
-        if len(password) < 6:
-            return jsonify({"error": "Password must be at least 6 characters"}), 400
+        ok, err = validate_password_strength(password)
+        if not ok:
+            return jsonify({"error": err}), 400
         if not is_valid_email(email):
             return jsonify({"error": "Please provide a valid email address"}), 400
 
@@ -155,9 +166,8 @@ def verify_hr_otp():
         )
 
         hrid = row['hrid']
-        identity = {"user_id": hrid, "email": row['email'], "role": ROLE_RECRUITER}
-        access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
-        refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
+        identity = build_hr_identity({**row, 'role': ROLE_RECRUITER})
+        access_token, refresh_token = _issue_token_pair(identity)
 
         ip_address = request.remote_addr
         user_agent = request.headers.get('User-Agent')
@@ -217,7 +227,7 @@ def resend_hr_otp():
         expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
         db_run(
             'UPDATE hr_signup SET otp = ?, otp_expiry = ?, updated_at = NOW() WHERE hrid = ?',
-            (otp, expiry, row['hrid']),
+            (hash_otp(otp), expiry, row['hrid']),
         )
         if not send_email_otp(email, otp, user_type="HR"):
             return jsonify({'error': 'Unable to send OTP. Please try again later.'}), 500
@@ -253,7 +263,7 @@ def hr_forgot_password():
         expiry = datetime.now(timezone.utc) + timedelta(minutes=10)
         db_run(
             'UPDATE hr_signup SET otp = ?, otp_expiry = ?, updated_at = NOW() WHERE hrid = ?',
-            (otp, expiry, hr_row['hrid']),
+            (hash_otp(otp), expiry, hr_row['hrid']),
         )
         if not send_email_otp(email, otp, user_type="HR", purpose="password_reset", minutes=10):
             return jsonify({'error': 'Failed to send OTP email. Please try again later.'}), 500
@@ -370,6 +380,11 @@ def hr_login():
             return jsonify({"error": "Email and password are required"}), 400
 
         email_clean = email.strip().lower()
+        if is_login_rate_limited(email_clean, 'HR'):
+            return jsonify({
+                "error": "Too many failed login attempts. Try again in 15 minutes.",
+            }), 429
+
         signup_data = db_get(
             """
             SELECT hrid, email, password, full_name, company, role, account_status,
@@ -398,8 +413,7 @@ def hr_login():
 
         identity = build_hr_identity(signup_data)
         role = identity['role']
-        access_token = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
-        refresh_token = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
+        access_token, refresh_token = _issue_token_pair(identity)
 
         from app.domains.identity.sessions.service import has_previous_login_from_same_device
         is_new_device = not has_previous_login_from_same_device(email, 'HR', ip_address, user_agent)
@@ -508,11 +522,25 @@ def refresh_tokens():
         payload = jwt.decode(refresh_token, JWT_SECRET, algorithms=["HS256"])
         if payload.get('type') != 'refresh':
             return jsonify({"error": "Invalid refresh token"}), 403
-        identity = {k: payload[k] for k in ('user_id', 'email', 'role') if k in payload}
-        if not identity.get('user_id') or not identity.get('role'):
+        if not is_refresh_token_active(refresh_token):
+            return jsonify({"error": "Refresh token revoked"}), 403
+        user_id = payload.get('user_id')
+        if not user_id:
             return jsonify({"error": "Invalid refresh token"}), 403
+        signup_data = db_get(
+            """
+            SELECT hrid, email, full_name, company, role, account_status, organization_id
+            FROM hr_signup WHERE hrid = ?
+            """,
+            (user_id,),
+        )
+        if not signup_data or (signup_data.get('account_status') or 'active') != 'active':
+            deactivate_session(refresh_token)
+            return jsonify({"error": "Account inactive or not found"}), 403
+        identity = build_hr_identity(signup_data)
         new_access = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
         new_refresh = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
+        rotate_refresh_token(refresh_token, new_refresh, identity['user_id'])
         return jsonify({"token": new_access, "refresh_token": new_refresh})
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Refresh token expired"}), 403
@@ -525,12 +553,15 @@ def refresh_tokens():
 
 @auth_bp.post('/logout')
 def hr_logout():
-    from app.domains.identity.sessions.service import deactivate_session
     try:
+        data = request.get_json(silent=True) or {}
+        refresh_token = (data.get('refresh_token') or '').strip()
         auth_header = request.headers.get('Authorization', '')
-        token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else None
-        if token:
-            deactivate_session(token)
+        access_token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else None
+        if refresh_token:
+            deactivate_session(refresh_token)
+        elif access_token:
+            deactivate_session(access_token)
         return jsonify({"message": "Logged out successfully"})
     except Exception:
         return jsonify({"message": "Logged out successfully"})

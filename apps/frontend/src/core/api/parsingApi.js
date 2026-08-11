@@ -7,6 +7,8 @@
 import { BASE_URL as API_URL } from './api';
 
 function validationHeaders() {
+  // Never embed validation bypass tokens in production bundles.
+  if (import.meta.env.PROD) return {};
   const token = import.meta.env.VITE_VALIDATION_TOKEN;
   if (!token) return {};
   return { 'X-Validation-Token': String(token) };

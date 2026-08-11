@@ -10,7 +10,8 @@ threads = 2
 worker_connections = 1000
 max_requests = 1000
 max_requests_jitter = 50
-timeout = 120
+# Exceed AI parse default_timeout_seconds (300) so long resume/JD parses are not killed mid-request.
+timeout = int(os.getenv("GUNICORN_TIMEOUT", "320"))
 keepalive = 5
 capture_output = True
 enable_stdio_inheritance = True

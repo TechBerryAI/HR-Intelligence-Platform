@@ -120,7 +120,7 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--ei-text-primary);
   }
 
-  /* Public apply modal stays light even inside org-shell (e.g. /jobs) */
+  /* Apply modal follows global dark/light tokens (same as /jobs org-shell) */
   .apply-modal,
   .apply-modal h1,
   .apply-modal h2,
@@ -128,65 +128,68 @@ h1, h2, h3, h4, h5, h6 {
   .apply-modal h4,
   .apply-modal h5,
   .apply-modal h6 {
-    color: #0f172a !important;
+    color: var(--ei-text-primary);
   }
 
   .apply-modal {
-    color: #334155 !important;
-    background-color: #ffffff !important;
+    color: var(--ei-text-secondary);
+    background-color: var(--ei-bg-secondary) !important;
     background-image: none !important;
-    border-color: #e2e8f0 !important;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
-    backdrop-filter: none !important;
+    border-color: var(--ei-border-primary) !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45) !important;
+    backdrop-filter: blur(18px);
   }
 
+  .org-shell .apply-modal.rounded-2xl,
+  .org-shell .apply-modal.rounded-t-2xl,
   .org-shell .apply-modal.rounded-2xl.bg-white,
   .org-shell .apply-modal.rounded-t-2xl.bg-white {
-    background: #ffffff !important;
+    background: var(--ei-bg-secondary) !important;
     background-image: none !important;
-    border-color: #e2e8f0 !important;
-    color: #334155 !important;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
-    backdrop-filter: none !important;
+    border-color: var(--ei-border-primary) !important;
+    color: var(--ei-text-secondary) !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.45) !important;
   }
 
   .org-shell .apply-modal .premium-input,
-  .org-shell .apply-modal .input-premium {
-    background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
-    color: #0f172a !important;
+  .org-shell .apply-modal .input-premium,
+  .org-shell .apply-modal select.premium-input,
+  .org-shell .apply-modal textarea.premium-input {
+    background: var(--ei-surface-input) !important;
+    border: 1px solid var(--ei-border-primary) !important;
+    color: var(--ei-text-primary) !important;
     box-shadow: none !important;
   }
 
   .org-shell .apply-modal .premium-input::placeholder,
   .org-shell .apply-modal .input-premium::placeholder {
-    color: #94a3b8 !important;
+    color: var(--ei-text-placeholder) !important;
   }
 
   .org-shell .apply-modal .premium-input:focus,
   .org-shell .apply-modal .input-premium:focus {
-    border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35) !important;
+    border-color: var(--ei-border-focus) !important;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--ei-border-focus) 35%, transparent) !important;
   }
 
   .org-shell .apply-modal .org-field-label,
   .org-shell .apply-modal label {
-    color: #334155 !important;
+    color: var(--ei-text-label) !important;
   }
 
   .org-shell .apply-modal .org-field-icon {
-    color: #64748b !important;
+    color: var(--ei-text-muted) !important;
   }
 
-  .org-shell .apply-modal select,
-  .org-shell .apply-modal textarea.premium-input {
-    background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
-    color: #0f172a !important;
+  .org-shell .apply-modal .border-slate-200,
+  .org-shell .apply-modal .border-slate-100 {
+    border-color: var(--ei-border-primary) !important;
   }
 
-  .org-shell .apply-modal .border-slate-200 {
-    border-color: #e2e8f0 !important;
+  .org-shell .apply-modal .bg-white,
+  .org-shell .apply-modal .bg-slate-50,
+  .org-shell .apply-modal .bg-slate-50\/80 {
+    background-color: var(--ei-surface-input) !important;
   }
 
   .org-shell ::selection {
@@ -871,8 +874,8 @@ h1, h2, h3, h4, h5, h6 {
 
   .auth-nav-link-active {
     color: #ffffff !important;
-    background: rgba(0, 166, 255, 0.08);
-    border: 1px solid rgba(0, 166, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
   }
 }

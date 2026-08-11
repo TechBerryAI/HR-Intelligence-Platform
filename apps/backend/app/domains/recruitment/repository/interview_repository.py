@@ -142,16 +142,50 @@ def get_slot(slot_id: str, interview_id: str) -> dict | None:
     )
 
 
-def mark_slot_booked(slot_id: str) -> None:
+def claim_slot(slot_id: str) -> bool:
+    """Atomically claim an unbooked slot. Returns True if this caller won the claim."""
+    result = db_run(
+        'UPDATE interview_slots SET is_booked = TRUE WHERE id = ? AND is_booked = FALSE',
+        (slot_id,),
+    )
+    return bool(result and (result.get('changes') or 0) > 0)
+
+
+def release_slot_claim(slot_id: str) -> None:
+    """Release a previously claimed slot (e.g. after calendar create failure)."""
+    db_run(
+        'UPDATE interview_slots SET is_booked = FALSE WHERE id = ?',
+        (slot_id,),
+    )
+
+
+def mark_slot_booked(slot_id: str) -> bool:
+    """Atomically claim an unbooked slot. Returns True if this caller won the claim."""
+    return claim_slot(slot_id)
+
+
+def mark_slot_unavailable(slot_id: str) -> None:
+    """Treat as booked so it is no longer offered (became unavailable)."""
     db_run(
         'UPDATE interview_slots SET is_booked = TRUE WHERE id = ?',
         (slot_id,),
     )
 
 
-def mark_slot_unavailable(slot_id: str) -> None:
-    """Treat as booked so it is no longer offered (became unavailable)."""
-    mark_slot_booked(slot_id)
+def cancel_open_interviews_for_application(application_id: int) -> int:
+    """Cancel Invited/Scheduled interviews and invalidate booking tokens."""
+    result = db_run(
+        '''
+        UPDATE interviews
+        SET status = ?,
+            invite_token = NULL,
+            updated_at = NOW()
+        WHERE application_id = ?
+          AND status IN (?, ?)
+        ''',
+        (STATUS_CANCELLED, application_id, STATUS_INVITED, STATUS_SCHEDULED),
+    )
+    return int((result or {}).get('changes') or 0)
 
 
 def confirm_interview_scheduled(

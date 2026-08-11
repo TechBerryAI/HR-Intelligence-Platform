@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { NAV_LINKS } from '../constants/landingContent.js'
+import BrandMark from '@/shared/components/BrandMark.jsx'
 
 function scrollToHash(href) {
   const id = href.replace('#', '')
@@ -32,12 +33,7 @@ export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           className="flex items-center gap-3.5 sm:gap-4 shrink-0 group"
         >
-          <div className="relative h-11 w-11 sm:h-12 sm:w-12">
-            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-sky-400/35 to-blue-600/25 blur-lg group-hover:blur-xl transition-all" />
-            <div className="relative h-full w-full rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white font-display font-bold text-lg ring-1 ring-white/25 shadow-inner">
-              H
-            </div>
-          </div>
+          <BrandMark size="lg" className="group-hover:border-white/16 transition-[border-color]" />
           <div className="hidden sm:block text-left">
             <span className="block font-display font-semibold text-lg sm:text-xl text-white tracking-tight leading-none">
               HR Intelligence
@@ -57,7 +53,7 @@ export default function LandingNav({ scrollProgress = 0, onGetStarted }) {
               className="relative px-5 py-2.5 text-[13px] font-medium uppercase tracking-[0.12em] text-white/55 hover:text-white transition-colors duration-300 group"
             >
               {link.label}
-              <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-px bg-gradient-to-r from-transparent via-sky-400 to-transparent group-hover:w-4/5 transition-all duration-300" />
+              <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-0 h-px bg-gradient-to-r from-transparent via-white/50 to-transparent group-hover:w-4/5 transition-all duration-300" />
             </button>
           ))}
         </nav>

@@ -45,6 +45,12 @@ export function isStaffRecruiter(auth) {
   return role === ROLES.RECRUITER || role === ROLES.HEAD_HR
 }
 
+/** Any enterprise staff role (recruiter, Head HR, or CEO). */
+export function isStaff(auth) {
+  const role = getRole(auth)
+  return role === ROLES.RECRUITER || role === ROLES.HEAD_HR || role === ROLES.CEO
+}
+
 export function isCeo(auth) {
   return getRole(auth) === ROLES.CEO
 }

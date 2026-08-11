@@ -39,8 +39,17 @@ def _get_fernet():
     from app.domains.integrations.config import get_secrets_key
 
     key = get_secrets_key()
+    flask_debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+    allow_insecure = os.getenv('ALLOW_INSECURE_INTEGRATION_SECRETS', 'false').lower() in (
+        '1', 'true', 'yes', 'on',
+    )
     if not key:
-        key = (os.getenv('JWT_SECRET') or 'dev-integration-secrets').strip()
+        if flask_debug or allow_insecure:
+            key = (os.getenv('JWT_SECRET') or 'dev-integration-secrets').strip()
+            logger.warning('[integrations] Using fallback integration secrets key (dev only)')
+        else:
+            logger.error('[integrations] INTEGRATION_SECRETS_KEY is required in production')
+            return None
     try:
         return Fernet(_derive_fernet_key(key))
     except Exception as exc:

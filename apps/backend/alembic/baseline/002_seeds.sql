@@ -1,3 +1,4 @@
+-- Seed accounts (env-gated passwords). Same semantics as former schema_pg/04_seeds.sql.
 -- =============================================================================
 -- 04_seeds.sql — seed HEAD_HR / CEO accounts (NO plaintext passwords in-repo)
 -- =============================================================================

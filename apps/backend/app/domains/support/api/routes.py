@@ -3,6 +3,7 @@ Support Routes - Handle help and support requests
 """
 import os
 from flask import Blueprint, request, jsonify
+from app.api.middleware.auth import authenticate_token, require_head_hr
 from app.database.connection.db import db_run, db_get, db_all, BACKEND, NOW_SQL
 from app.integrations.email.utils import send_notification_email
 from app.integrations.email.templates import support_request_html
@@ -12,6 +13,13 @@ SUPPORT_TABLE = "support_requests" if BACKEND == "postgresql" else "dbo.support_
 
 # Email where Contact Us and internal feedback notifications are sent (can override via env)
 SUPPORT_NOTIFICATION_EMAIL = os.getenv('SUPPORT_NOTIFICATION_EMAIL', 'techberryaiteam@gmail.com')
+
+
+def _serialize_request_datetimes(req: dict) -> dict:
+    for key in ('created_at', 'updated_at', 'resolved_at'):
+        if req.get(key):
+            req[key] = req[key].isoformat() if hasattr(req[key], 'isoformat') else str(req[key])
+    return req
 
 
 @support_bp.route('/submit', methods=['POST'])
@@ -107,17 +115,16 @@ def submit_support_request():
 
 
 @support_bp.route('/my-requests', methods=['GET'])
+@authenticate_token
 def get_my_requests():
-    """
-    Get support requests by email or user_id
-    """
+    """Get support requests for the authenticated user only."""
     try:
-        email = request.args.get('email', '').strip()
-        user_id = request.args.get('user_id', '').strip()
-        
+        user = request.user or {}
+        email = (user.get('email') or '').strip()
+        user_id = str(user.get('user_id') or '').strip()
         if not email and not user_id:
-            return jsonify({"error": "Email or user_id is required"}), 400
-        
+            return jsonify({"error": "Authenticated identity required"}), 401
+
         if email:
             query = """
                 SELECT id, name, email, user_id, user_type, subject, message, 
@@ -136,16 +143,10 @@ def get_my_requests():
                 ORDER BY created_at DESC
             """
             requests = db_all(query, (user_id,))
-        
-        # Convert datetime objects to strings
+
         for req in requests:
-            if req.get('created_at'):
-                req['created_at'] = req['created_at'].isoformat() if hasattr(req['created_at'], 'isoformat') else str(req['created_at'])
-            if req.get('updated_at'):
-                req['updated_at'] = req['updated_at'].isoformat() if hasattr(req['updated_at'], 'isoformat') else str(req['updated_at'])
-            if req.get('resolved_at'):
-                req['resolved_at'] = req['resolved_at'].isoformat() if hasattr(req['resolved_at'], 'isoformat') else str(req['resolved_at'])
-        
+            _serialize_request_datetimes(req)
+
         return jsonify({
             "success": True,
             "requests": requests
@@ -157,11 +158,9 @@ def get_my_requests():
 
 
 @support_bp.route('/all', methods=['GET'])
+@require_head_hr
 def get_all_requests():
-    """
-    Get all support requests (admin only)
-    Note: Add authentication middleware for production
-    """
+    """Get all support requests (Head HR only)."""
     try:
         status = request.args.get('status', '').strip()
         
@@ -182,16 +181,10 @@ def get_all_requests():
                 ORDER BY created_at DESC
             """
             requests = db_all(query)
-        
-        # Convert datetime objects to strings
+
         for req in requests:
-            if req.get('created_at'):
-                req['created_at'] = req['created_at'].isoformat() if hasattr(req['created_at'], 'isoformat') else str(req['created_at'])
-            if req.get('updated_at'):
-                req['updated_at'] = req['updated_at'].isoformat() if hasattr(req['updated_at'], 'isoformat') else str(req['updated_at'])
-            if req.get('resolved_at'):
-                req['resolved_at'] = req['resolved_at'].isoformat() if hasattr(req['resolved_at'], 'isoformat') else str(req['resolved_at'])
-        
+            _serialize_request_datetimes(req)
+
         return jsonify({
             "success": True,
             "requests": requests
@@ -203,10 +196,9 @@ def get_all_requests():
 
 
 @support_bp.route('/<int:request_id>', methods=['GET'])
+@require_head_hr
 def get_request_by_id(request_id):
-    """
-    Get a specific support request by ID
-    """
+    """Get a specific support request by ID (Head HR only)."""
     try:
         query = """
             SELECT id, name, email, user_id, user_type, subject, message, 
@@ -218,15 +210,9 @@ def get_request_by_id(request_id):
         
         if not support_request:
             return jsonify({"error": "Support request not found"}), 404
-        
-        # Convert datetime objects to strings
-        if support_request.get('created_at'):
-            support_request['created_at'] = support_request['created_at'].isoformat() if hasattr(support_request['created_at'], 'isoformat') else str(support_request['created_at'])
-        if support_request.get('updated_at'):
-            support_request['updated_at'] = support_request['updated_at'].isoformat() if hasattr(support_request['updated_at'], 'isoformat') else str(support_request['updated_at'])
-        if support_request.get('resolved_at'):
-            support_request['resolved_at'] = support_request['resolved_at'].isoformat() if hasattr(support_request['resolved_at'], 'isoformat') else str(support_request['resolved_at'])
-        
+
+        _serialize_request_datetimes(support_request)
+
         return jsonify({
             "success": True,
             "request": support_request
@@ -238,11 +224,9 @@ def get_request_by_id(request_id):
 
 
 @support_bp.route('/<int:request_id>/status', methods=['PATCH'])
+@require_head_hr
 def update_request_status(request_id):
-    """
-    Update the status of a support request (admin only)
-    Note: Add authentication middleware for production
-    """
+    """Update the status of a support request (Head HR only)."""
     try:
         data = request.get_json()
         if not data:

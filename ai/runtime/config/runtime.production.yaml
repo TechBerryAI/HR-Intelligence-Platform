@@ -4,7 +4,7 @@
 runtime:
   settings:
     default_timeout_seconds: 300
-    max_input_chars: 0
+    max_input_chars: 100000
 
   routing:
     primary: ollama
@@ -31,7 +31,7 @@ runtime:
     retry_on_status: [429, 500, 502, 503, 504]
 
   validation:
-    fail_on_validation_error: false
+    fail_on_validation_error: true
 
   capabilities_dir: ../../capabilities
   tasks_config_path: tasks.default.yaml

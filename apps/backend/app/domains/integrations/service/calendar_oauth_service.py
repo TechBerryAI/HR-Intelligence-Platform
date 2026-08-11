@@ -8,6 +8,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+from app.core import shared_store
 from app.domains.integrations.company_context import resolve_company_for_user
 from app.domains.integrations.provider.calendar_factory import get_calendar_provider
 from app.domains.integrations.provider.google_calendar import (
@@ -22,9 +23,8 @@ from app.domains.identity.authorization.rbac import get_user_id
 logger = logging.getLogger(__name__)
 
 PROVIDER = oauth_repo.PROVIDER_GOOGLE_CALENDAR
-
-# In-process OAuth state → hrid (swap-ready for Redis)
-_oauth_states: dict[str, dict] = {}
+_OAUTH_STATE_TTL_SEC = int(os.getenv('OAUTH_STATE_TTL_SEC', '600'))
+_OAUTH_STATE_PREFIX = 'oauth:calendar:state:'
 
 _ALLOWED_RETURN_PATHS = frozenset({'/settings', '/head-hr/settings'})
 _DEBUG_ORIGIN_RE = re.compile(
@@ -102,12 +102,16 @@ def start_oauth(user: dict, return_to: str | None = None) -> tuple[str | None, s
     if not company_key:
         return None, 'Company context required'
     state = secrets.token_urlsafe(24)
-    _oauth_states[state] = {
-        'hrid': hrid,
-        'company_key': company_key,
-        'return_to': sanitize_oauth_return_to(return_to),
-        'created_at': datetime.now(timezone.utc).isoformat(),
-    }
+    shared_store.set_json(
+        f'{_OAUTH_STATE_PREFIX}{state}',
+        {
+            'hrid': hrid,
+            'company_key': company_key,
+            'return_to': sanitize_oauth_return_to(return_to),
+            'created_at': datetime.now(timezone.utc).isoformat(),
+        },
+        ttl_seconds=_OAUTH_STATE_TTL_SEC,
+    )
     return build_google_auth_url(state), None
 
 
@@ -116,7 +120,7 @@ def handle_oauth_callback(code: str | None, state: str | None) -> tuple[str, str
     Exchange code, store tokens.
     Returns (redirect_url, error_message).
     """
-    ctx = _oauth_states.pop(state, None) if state else None
+    ctx = shared_store.pop_json(f'{_OAUTH_STATE_PREFIX}{state}') if state else None
     redirect = _frontend_settings_url((ctx or {}).get('return_to'))
     if not code or not state:
         return f'{redirect}&calendar=error', 'Missing code or state'

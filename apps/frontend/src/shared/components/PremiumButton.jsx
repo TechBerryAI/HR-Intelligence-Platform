@@ -21,7 +21,8 @@ export default function PremiumButton({
   const variants = {
     primary:
       'bg-[var(--ei-btn-primary-from)] hover:brightness-105 text-[var(--ei-btn-primary-text)] shadow-md border border-white/10',
-    secondary: 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700',
+    secondary:
+      'bg-slate-100 border border-slate-200 text-slate-900 hover:bg-slate-200 dark:bg-white/[0.08] dark:border-white/15 dark:text-[var(--ei-text-primary)] dark:hover:bg-white/[0.12]',
     outline:
       'border-2 border-[var(--ei-btn-primary-from)] text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)]',
     ghost: 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800',

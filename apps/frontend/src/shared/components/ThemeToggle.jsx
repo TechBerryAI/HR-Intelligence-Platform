@@ -35,6 +35,22 @@ export default function ThemeToggle({ className = '', compact = false, variant =
     )
   }
 
+  /* When parent passes a full chrome class (Navbar), use it as the sole style source. */
+  if (variant === 'chrome' && className) {
+    return (
+      <button
+        type="button"
+        onClick={toggleTheme}
+        aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+        title={isDark ? 'Light mode' : 'Dark mode'}
+        className={className}
+      >
+        <Icon className="w-4 h-4 shrink-0" strokeWidth={2} />
+        <span>{label}</span>
+      </button>
+    )
+  }
+
   const chromeStyle = variant === 'chrome' || (variant === 'default' && !compact)
   const baseClass = chromeStyle
     ? 'inline-flex items-center justify-center gap-2 h-9 px-3 rounded-xl text-sm font-medium border transition-colors'

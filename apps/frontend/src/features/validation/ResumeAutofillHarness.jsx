@@ -61,7 +61,9 @@ function serializableForm(form) {
   }
 }
 
-const HARNESS_ENABLED = String(import.meta.env.VITE_VALIDATION_HARNESS || '').toLowerCase() === 'true'
+const HARNESS_ENABLED =
+  !import.meta.env.PROD &&
+  String(import.meta.env.VITE_VALIDATION_HARNESS || '').toLowerCase() === 'true'
 
 export default function ResumeAutofillHarness() {
   const [form, setForm] = useState(initialForm)

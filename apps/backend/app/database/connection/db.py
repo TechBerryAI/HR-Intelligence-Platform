@@ -171,30 +171,8 @@ def db_all(query: str, params: list | tuple = ()):
 
 
 def init_db():
-    """Apply schema via Alembic (consolidated schema_pg + revision chain)."""
-    try:
-        from app.database.alembic_runner import stamp_if_needed, upgrade_head
-        from app.database.schema_apply import _ensure_hr_role_column
+    """Apply schema via Alembic only (``alembic upgrade head``)."""
+    from app.database.alembic_runner import upgrade_head
 
-        stamp_if_needed()
-        upgrade_head()
-        _ensure_hr_role_column()
-        print('[DB] Schema ready (Alembic + schema_pg)')
-    except Exception as e:
-        print(f'[DB] Alembic/schema error: {e}')
-        import traceback
-        traceback.print_exc()
-        # Last-resort bootstrap for brand-new DBs if Alembic is unavailable
-        try:
-            from alembic import command
-            from app.database.alembic_runner import _config
-            from app.database.schema_apply import apply_consolidated_schema
-
-            print('[DB] Falling back to direct schema_pg apply…')
-            apply_consolidated_schema()
-            # Schema matches current code; avoid replaying the same broken mid-chain
-            # revision on every startup.
-            command.stamp(_config(), 'head')
-            print('[DB] Alembic stamped at head after schema_pg fallback')
-        except Exception as e2:
-            print(f'[DB] Schema fallback failed: {e2}')
+    upgrade_head()
+    print('[DB] Schema ready (Alembic)')
