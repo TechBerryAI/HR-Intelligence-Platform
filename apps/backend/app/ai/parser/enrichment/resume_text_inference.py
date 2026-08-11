@@ -598,6 +598,88 @@ def compute_total_experience_years(experience: list[dict[str, Any]]) -> float | 
     return round(total_months / 12.0, 1)
 
 
+_PROSE_YEARS_RE = re.compile(
+    r'(?i)(?:'
+    r'(?:total\s+)?(?:work\s+)?experience\s*(?:of|:)?\s*(\d{1,2}(?:\.\d)?)\+?\s*(?:years?|yrs?)'
+    r'|'
+    r'(\d{1,2}(?:\.\d)?)\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:total\s+)?(?:work\s+)?experience'
+    r'|'
+    r'(?:total\s+experience|overall\s+experience)\s*[:\-–—]\s*(\d{1,2}(?:\.\d)?)\+?\s*(?:years?|yrs?)?'
+    r')'
+)
+
+
+def extract_total_experience_years_from_text(text: str) -> float | None:
+    """Grounded prose years only when explicit 'N years' evidence exists in source text."""
+    if not text:
+        return None
+    # Prefer header/summary zone to avoid project "2 years" noise mid-body
+    window = text[:3500]
+    best: float | None = None
+    for m in _PROSE_YEARS_RE.finditer(window):
+        raw = next((g for g in m.groups() if g), None)
+        if not raw:
+            continue
+        try:
+            val = float(raw)
+        except ValueError:
+            continue
+        if val <= 0 or val > 45:
+            continue
+        if best is None or val > best:
+            best = val
+    return round(best, 1) if best is not None else None
+
+
+def merge_experience_years(
+    date_years: float | None,
+    prose_years: float | None,
+) -> float | None:
+    """Prefer date-sum; use prose when dates missing; max when both consistent."""
+    if date_years is None and prose_years is None:
+        return None
+    if date_years is None:
+        return prose_years
+    if prose_years is None:
+        return date_years
+    # Consistent if within ~2 years; otherwise trust dated ranges
+    if abs(date_years - prose_years) <= 2.0:
+        return max(date_years, prose_years)
+    return date_years
+
+
+def heal_location_candidate(value: str) -> str:
+    """Strip Company|City / phone⋄City bleed and return a city-like token when possible."""
+    s = (value or '').strip()
+    if not s:
+        return ''
+    if '\n' in s or '\r' in s:
+        s = s.splitlines()[0].strip()
+    # phone ⋄ City / +91…·City
+    s = re.sub(r'(?i)^\+?\d[\d\s\-().]{6,}\s*[⋄·•|]*\s*', '', s).strip()
+    s = re.sub(r'(?i)[⋄·•]\s*', ' ', s).strip()
+    if '|' in s:
+        parts = [p.strip() for p in s.split('|') if p.strip()]
+        for p in reversed(parts):
+            healed = heal_location_candidate(p) if ('|' in p or '⋄' in p) else p
+            if healed and is_plausible_location_value(healed):
+                return healed
+            for city in _KNOWN_LOCATION_CITIES:
+                if city.lower() == healed.lower() or city.lower() == p.lower():
+                    return city
+        return ''
+    # Prefer known city substring from polluted strings
+    if not is_plausible_location_value(s):
+        low = s.lower()
+        for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+            if city.lower() in low and not _LOCATION_TECH_NOISE.search(city):
+                # Avoid matching short tokens inside tech words
+                if re.search(rf'(?i)\b{re.escape(city)}\b', s):
+                    return city
+        return ''
+    return s
+
+
 def is_section_header_line(line: str) -> bool:
     cleaned = re.sub(r'^[\s#*•\-]+|[\s#:]+$', '', (line or '').strip()).strip()
     if not cleaned:
@@ -791,7 +873,9 @@ _KNOWN_LOCATION_CITIES = (
     'Indore', 'Thane', 'Navi Mumbai', 'Mulund', 'Kandivali', 'Andheri', 'Powai',
     'Faridabad', 'Jaipur', 'Lucknow', 'Bhopal', 'Surat', 'Vadodara', 'Coimbatore',
     'Kochi', 'Chandigarh', 'Mysore', 'Mysuru', 'Visakhapatnam', 'Mehdipatnam',
-    'Kalwa', 'Nashik', 'Austin', 'Seattle', 'San Francisco', 'New York', 'London',
+    'Kalwa', 'Nashik', 'Ambernath', 'Dombivli', 'Dombivili', 'Sindhudurg', 'Sewree',
+    'Solapur', 'Kalyan', 'Vasai', 'Virar', 'Panvel', 'Aurangabad', 'Kolhapur',
+    'Austin', 'Seattle', 'San Francisco', 'New York', 'London',
     'Toronto', 'Singapore', 'Dubai',
 )
 _KNOWN_REGIONS = frozenset({
@@ -807,13 +891,30 @@ def is_plausible_location_value(value: str) -> bool:
     if not s or len(s) < 2 or len(s) > 80:
         return False
     if '\n' in s or '\r' in s:
-        # Keep first line only for validation of multi-line bleed
         s = s.splitlines()[0].strip()
         if not s or len(s) > 80:
             return False
     low = s.lower()
     if '@' in s or 'http' in low or 'linkedin' in low or 'github' in low:
         return False
+    if '|' in s or '⋄' in s or re.search(r'\+?\d[\d\s\-]{8,}\d', s):
+        return False
+    if low in (
+        'education', 'experience', 'skills', 'summary', 'objective', 'projects',
+        'certifications', 'internship', 'profile',
+    ):
+        return False
+    # Reject person-name lines mistaken for location (header bleed)
+    if (
+        not any(c.lower() == low or c.lower() in low for c in _KNOWN_LOCATION_CITIES)
+        and low not in ('remote', 'hybrid', 'wfh', 'work from home', 'india')
+        and ',' not in s
+    ):
+        try:
+            if is_plausible_person_name(s) and len(s.split()) >= 2:
+                return False
+        except Exception:
+            pass
     # Reject if line looks like a person name glued after city
     if re.search(r'(?i),\s*india\s+\w+', s):
         return False
@@ -960,6 +1061,34 @@ def extract_location_from_text(text: str) -> str:
     m_remote = re.search(r'(?i)\b(remote|hybrid|work\s+from\s+home|wfh)\b', header)
     if m_remote:
         return m_remote.group(1).strip()
+
+    # Single allowlisted city from early body when not inside Skills/Summary sections
+    section_break = re.search(
+        r'(?im)^(?:education|experience|skills|summary|objective|projects|'
+        r'certifications|internship|work\s+history)\b',
+        text[:4000],
+    )
+    body_end = section_break.start() if section_break else min(len(text), 2500)
+    early_body = text[:body_end]
+    for city in _KNOWN_LOCATION_CITIES:
+        if re.search(rf'(?i)\b{re.escape(city)}\b', early_body):
+            # Prefer labeled hits; otherwise single short-line hit
+            labeled = re.search(
+                rf'(?i)(?:location|address|based\s+in|city)\s*[:\-–—]\s*[^\n]*\b{re.escape(city)}\b',
+                early_body,
+            )
+            if labeled:
+                return city
+            for line in early_body.splitlines()[:25]:
+                if city.lower() in line.lower() and len(line.strip()) <= 60:
+                    if _LOCATION_TECH_NOISE.search(line) or _LOCATION_PROSE_NOISE.search(line):
+                        continue
+                    if is_section_header_line(line):
+                        continue
+                    cleaned = heal_location_candidate(line)
+                    if cleaned and is_plausible_location_value(cleaned):
+                        return cleaned if len(cleaned) <= 60 else city
+            return city
 
     # Country-only last resort when clearly labeled
     if re.search(r'(?i)(?:^|\n)\s*India\s*(?:\n|$)', text[:600]):

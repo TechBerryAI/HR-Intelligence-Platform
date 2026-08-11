@@ -245,18 +245,34 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
       fd.append('certifications', JSON.stringify(form.certifications || []))
       if (form._parsedId) fd.append('parsedId', form._parsedId)
       if (form._publicUploaderId) fd.append('publicUploaderId', form._publicUploaderId)
-      if (form.resumeFile) fd.append('resume', form.resumeFile)
+      // Resume was already stored during AI parse — re-uploading the PDF only slows submit.
+      if (!form._parsedId && form.resumeFile) fd.append('resume', form.resumeFile)
 
       const applyQs = companySlug
         ? `?company=${encodeURIComponent(companySlug)}`
         : ''
-      const res = await fetch(
-        `${BASE_URL}/api/jobs/${encodeURIComponent(job.id || job.jdid)}/apply${applyQs}`,
-        {
-          method: 'POST',
-          body: fd,
-        },
-      )
+      // Submit is deterministic ATS only — keep a hard client timeout so the UI never hangs.
+      const applyTimeoutMs = Number(import.meta.env?.VITE_API_TIMEOUT_MS) || 30000
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), applyTimeoutMs)
+      let res
+      try {
+        res = await fetch(
+          `${BASE_URL}/api/jobs/${encodeURIComponent(job.id || job.jdid)}/apply${applyQs}`,
+          {
+            method: 'POST',
+            body: fd,
+            signal: controller.signal,
+          },
+        )
+      } catch (fetchErr) {
+        if (fetchErr?.name === 'AbortError') {
+          throw new Error('Submit timed out. Please try again — parsing is already done; submit should be quick.')
+        }
+        throw fetchErr
+      } finally {
+        clearTimeout(timeoutId)
+      }
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         const raw = String(data.error || '')

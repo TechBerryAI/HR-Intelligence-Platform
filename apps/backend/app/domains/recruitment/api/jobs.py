@@ -1082,7 +1082,8 @@ def public_apply_to_job(job_id: str):
                     resume_binary = bytes(resume_binary) if resume_binary else None
 
         has_resume = bool(resume_binary and len(resume_binary) > 0)
-        err = validate_public_apply_payload(data, has_resume)
+        parsed_id_early = (data.get('parsedId') or data.get('parsed_id') or '').strip() or None
+        err = validate_public_apply_payload(data, has_resume or bool(parsed_id_early))
         if err:
             return jsonify({'error': err}), 400
 
@@ -1108,10 +1109,25 @@ def public_apply_to_job(job_id: str):
         if existing:
             return jsonify({'error': 'Applicant already applied'}), 400
 
-        data = {**data, 'email': email, 'fullName': full_name, 'completed': True}
-        save_candidate_profile(candidate_id, data, resume_binary, completed=True)
+        # Prefer already-catalogued resume from parse (avoid re-writing PDF on submit)
+        resume_raw_file_id = None
+        if parsed_id_early:
+            pr_row = db_get(
+                'SELECT raw_file_id FROM parsed_resumes WHERE id = ?',
+                (parsed_id_early,),
+            )
+            resume_raw_file_id = (pr_row or {}).get('raw_file_id') or None
 
-        parsed_id = (data.get('parsedId') or data.get('parsed_id') or '').strip() or None
+        data = {**data, 'email': email, 'fullName': full_name, 'completed': True}
+        save_candidate_profile(
+            candidate_id,
+            data,
+            None if resume_raw_file_id else resume_binary,
+            completed=True,
+            resume_raw_file_id=resume_raw_file_id,
+        )
+
+        parsed_id = parsed_id_early
         public_uploader_id = (data.get('publicUploaderId') or data.get('public_uploader_id') or '').strip() or None
         parsed_resume_record = link_parsed_resume(parsed_id, candidate_id, public_uploader_id)
         if not parsed_resume_record:
@@ -1119,6 +1135,15 @@ def public_apply_to_job(job_id: str):
                 'error': 'No parsed resume found. Please upload your resume and wait for AI parsing to finish.'
             }), 400
 
+        # If profile still lacks a raw file link, bind from parsed resume
+        if not resume_raw_file_id and parsed_resume_record.get('raw_file_id'):
+            save_candidate_profile(
+                candidate_id,
+                data,
+                None,
+                completed=True,
+                resume_raw_file_id=parsed_resume_record.get('raw_file_id'),
+            )
         parsed_jd_record = db_get(
             """
             SELECT toon, confidence, id
@@ -1141,7 +1166,11 @@ def public_apply_to_job(job_id: str):
             return jsonify({'error': 'Resume or job description data is not in a valid format'}), 400
 
         ats_success, ats_result = match_candidate_to_job(
-            candidate_id, job_id, parsed_resume, parsed_jd
+            candidate_id,
+            job_id,
+            parsed_resume,
+            parsed_jd,
+            skip_narrative=True,  # submit must not wait on Ollama narrative
         )
         if not ats_success or not ats_result:
             err_msg = (
@@ -1167,25 +1196,58 @@ def public_apply_to_job(job_id: str):
         )
 
         if shortlisted and app_id:
-            from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
-            from app.domains.recruitment.services.notifications import send_and_get_output
-            profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
-            signup = db_get('SELECT email FROM candidates WHERE cid = ?', (candidate_id,))
-            candidate_email = (profile or {}).get('email') or (signup or {}).get('email') or email or ''
-            if candidate_email:
+            # Defer email + interview scheduling so the apply response returns immediately.
+            import threading
+
+            _app_id = app_id
+            _full_name = full_name
+            _email = email
+            _job = dict(job) if isinstance(job, dict) else job
+            _candidate_id = candidate_id
+
+            def _shortlist_side_effects() -> None:
                 try:
-                    send_and_get_output(
-                        hr_action='SHORTLISTED',
-                        candidate_name=(profile or {}).get('full_name') or full_name or '',
-                        candidate_email=candidate_email,
-                        job_title=job.get('title') or '',
-                        company_name=job.get('company') or '',
-                        application_id=app_id,
-                        timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+                    from app.domains.recruitment.services.interview_trigger import (
+                        trigger_interview_scheduling,
                     )
-                except Exception as notify_err:
-                    print(f"[PUBLIC_APPLY] SHORTLISTED notification failed: {notify_err}")
-            trigger_interview_scheduling(app_id, recruiter_hrid=job.get('posted_by'))
+                    from app.domains.recruitment.services.notifications import send_and_get_output
+
+                    profile = db_get(
+                        'SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?',
+                        (_candidate_id,),
+                    )
+                    signup = db_get('SELECT email FROM candidates WHERE cid = ?', (_candidate_id,))
+                    candidate_email = (
+                        (profile or {}).get('email')
+                        or (signup or {}).get('email')
+                        or _email
+                        or ''
+                    )
+                    if candidate_email:
+                        try:
+                            send_and_get_output(
+                                hr_action='SHORTLISTED',
+                                candidate_name=(profile or {}).get('full_name') or _full_name or '',
+                                candidate_email=candidate_email,
+                                job_title=(_job.get('title') if isinstance(_job, dict) else '') or '',
+                                company_name=(_job.get('company') if isinstance(_job, dict) else '') or '',
+                                application_id=_app_id,
+                                timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+                            )
+                        except Exception as notify_err:
+                            print(f"[PUBLIC_APPLY] SHORTLISTED notification failed: {notify_err}")
+                    trigger_interview_scheduling(
+                        _app_id,
+                        recruiter_hrid=(_job.get('posted_by') if isinstance(_job, dict) else None),
+                    )
+                except Exception as side_err:
+                    print(f"[PUBLIC_APPLY] shortlist side effects failed: {side_err}")
+
+            threading.Thread(
+                target=_shortlist_side_effects,
+                name=f'apply-shortlist-{_app_id}',
+                daemon=True,
+            ).start()
 
         return jsonify({
             'message': 'Application submitted successfully',

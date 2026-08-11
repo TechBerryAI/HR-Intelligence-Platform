@@ -26,7 +26,8 @@ _local_jobs_lock = threading.Lock()
 _BULK_EXPORT_DIR = media_storage.bulk_exports_dir()
 _BULK_UPLOAD_DIR = media_storage.bulk_uploads_dir()
 
-ALLOWED_EXT = {'pdf', 'doc', 'docx'}
+ALLOWED_EXT = {'pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff'}
+# Legacy .doc is not extractable by current text_extraction — reject before staging.
 EXCEL_HEADERS = [
     'Filename',
     'Name',
@@ -256,15 +257,31 @@ def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
     for e in exp[:25]:
         if not isinstance(e, dict):
             continue
-        title = _as_text(e.get('title'))
+        title = _as_text(e.get('title') or e.get('role'))
         company = _as_text(e.get('company'))
-        fr = _as_text(e.get('from'))
-        to = _as_text(e.get('to'))
+        fr = _as_text(e.get('from') or e.get('start'))
+        to = _as_text(e.get('to') or e.get('end'))
+        if (e.get('is_current') or str(to).lower() in ('present', 'current', 'now')) and not to:
+            to = 'Present'
         desc = _as_text(e.get('description'))
-        chunk = f'{title} at {company} ({fr}-{to})'.strip()
+        # Skip geo-only / empty noise rows
+        if not title and not company:
+            continue
+        if re.match(r'(?i)^(india|pune|mumbai|remote)$', title) and re.match(
+            r'(?i)^(india|pune|mumbai|remote)$', company or 'x'
+        ):
+            continue
+        if title and company:
+            chunk = f'{title} at {company}'
+        elif title:
+            chunk = title
+        else:
+            chunk = company
+        if fr or to:
+            chunk = f'{chunk} ({fr}-{to})'.strip()
         if desc:
             chunk = f'{chunk}: {desc[:400]}'
-        if chunk and chunk != 'at ()':
+        if chunk and chunk not in ('at ()', '()'):
             exp_parts.append(chunk)
 
     edu_parts = []
@@ -970,7 +987,20 @@ def stage_files(job_id: str, files_list: list[tuple[str, bytes]], started_by=Non
         file_bytes_for_db.append(data)
 
     if not staged_names:
-        return False, {'error': 'No valid resume files (PDF/DOC/DOCX)'}
+        # Surface clear reject when only legacy .doc (or other junk) was uploaded
+        rejected_doc = any(
+            (n or '').lower().endswith('.doc') and not (n or '').lower().endswith('.docx')
+            for n, _ in files_list
+        )
+        if rejected_doc:
+            return False, {
+                'error': (
+                    'Unsupported format: legacy .doc is not accepted. '
+                    'Convert to PDF or DOCX (or upload PNG/JPG for scanned resumes).'
+                ),
+                'code': 'unsupported_format',
+            }
+        return False, {'error': 'No valid resume files (PDF/DOCX/PNG/JPG/WEBP/TIFF)'}
 
     with _local_jobs_lock:
         if job_id in _local_jobs:
@@ -1033,7 +1063,7 @@ def extract_zip_to_job(job_id: str, zip_bytes: bytes, started_by=None) -> tuple[
         return False, {'error': f'ZIP extract failed: {e}'}
 
     if not extracted:
-        return False, {'error': 'No valid resume files (PDF/DOC/DOCX) found in ZIP'}
+        return False, {'error': 'No valid resume files (PDF/DOCX/PNG/JPG/WEBP/TIFF) found in ZIP'}
 
     return stage_files(job_id, extracted, started_by=started_by)
 

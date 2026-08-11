@@ -236,7 +236,7 @@ def enrich_resume_semantic(
                 'experience': exp_keep,
             }
         )
-        return sanitize_candidate_profile(merged)
+        return sanitize_candidate_profile(merged, source_text=unresolved_text or '')
     except Exception as exc:
         logger.debug('semantic merge failed: %s', exc)
         return profile
