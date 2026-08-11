@@ -231,6 +231,64 @@ B.Tech - Test University
     assert passes2 is True
 
 
+def test_experience_rejects_edu_table_and_duty_bleed():
+    from app.ai.document_intelligence.models.candidate import ExperienceEntry
+    from app.ai.document_intelligence.validation.engine import sanitize_experience_row
+
+    junk = sanitize_experience_row(
+        ExperienceEntry(role='Degree/Certificate: School/College', company='Board/University')
+    )
+    assert not junk.role and not junk.company
+    duty = sanitize_experience_row(
+        ExperienceEntry(
+            role='Identifying sales trends, customer purchasing patterns',
+            company='and inventory movement insights.',
+        )
+    )
+    assert not duty.role
+    em = sanitize_experience_row(ExperienceEntry(role='SDE Intern — Edviron', company=''))
+    assert 'intern' in em.role.lower()
+    assert 'edviron' in em.company.lower()
+
+
+def test_location_rejects_pipe_phone_and_section_headers():
+    assert not is_plausible_location_value('Magic Bus | Thane')
+    assert not is_plausible_location_value('+91 9967705134 ⋄Mumbai')
+    assert not is_plausible_location_value('Education')
+    assert is_plausible_location_value('Thane')
+    assert is_plausible_location_value('Mumbai')
+
+
+def test_sanitize_profile_heals_pipe_location_and_years():
+    from app.ai.document_intelligence.models.candidate import (
+        CandidateProfile,
+        ContactInfo,
+        ExperienceEntry,
+        PersonalInfo,
+        SkillEntry,
+    )
+    from app.ai.document_intelligence.validation.engine import sanitize_candidate_profile
+
+    profile = CandidateProfile(
+        personal=PersonalInfo(full_name='Om Gharte'),
+        contact=ContactInfo(
+            email='o@example.com',
+            phone='9356791511',
+            location='Magic Bus | Thane',
+        ),
+        skills=[SkillEntry(canonical='RPA')],
+        experience=[
+            ExperienceEntry(role='RPA Intern', company='ValueDX', start='2026-06', is_current=True),
+            ExperienceEntry(role='Pune', company='India', start='2026-06'),
+        ],
+    )
+    cleaned = sanitize_candidate_profile(profile)
+    assert cleaned.contact.location == 'Thane'
+    assert all(e.role != 'Pune' for e in cleaned.experience)
+    assert cleaned.total_experience_years is not None
+    assert cleaned.total_experience_years > 0
+
+
 def test_coverage_clears_polluted_location():
     from app.ai.document_intelligence.models.candidate import (
         CandidateProfile,

@@ -75,10 +75,21 @@ _PROJECT_LIKE_EXP = re.compile(
     r'fictional\s+brand|client\s*name\s*/?\s*projects?)\b'
 )
 _PIPE_TWO = re.compile(r'^(.+?)\s*[|]\s*(.+)$')
+_ROLE_COMPANY_PARENS = re.compile(
+    r'^(.+?)\s*\(([^)]{2,80})\)\s*(?:,\s*([A-Za-z .]{2,40}))?$'
+)
+_ORG_CUE = re.compile(
+    r'(?i)\b(?:pvt\.?\s*ltd\.?|private\s+limited|ltd\.?|llc|inc\.?|corp\.?|'
+    r'limited|technologies|solutions|systems|labs|softwares?|services)\b'
+)
+_EDU_IN_EXP = re.compile(
+    r'(?i)\b(?:degree/certificate|year of passing|board/university|school/college|'
+    r'percentage/?\s*cgpa|bachelor|master|b\.?\s?tech|bca|mca|diploma|hsc|ssc)\b'
+)
 _CITY_LIKE = re.compile(
     r'(?i)^(remote|hybrid|wfh|work\s+from\s+home|mumbai|delhi|pune|thane|'
     r'hyderabad|chennai|bangalore|bengaluru|noida|gurugram|gurgaon|kolkata|'
-    r'ahmedabad|navi\s+mumbai|india)$'
+    r'ahmedabad|navi\s+mumbai|india|kalwa|nashik|surat|vadodara|ambernath)$'
 )
 _DATE_FIRST_LINE = re.compile(
     r'(?i)^\(?\s*('
@@ -736,7 +747,7 @@ def _parse_experience_line(line: str) -> ExperienceEntry | None:
     if is_current:
         end = ''
 
-    # Preferred: Role - Company - (dates)
+    # Preferred: Role - Company - (dates)  OR  Role — Company
     dash = _DASH_ROLE_COMPANY_DATES.match(stripped)
     if dash:
         role = dash.group(1).strip(' -–—|')
@@ -755,6 +766,48 @@ def _parse_experience_line(line: str) -> ExperienceEntry | None:
                 end=end,
                 is_current=is_current,
             )
+
+    # Em/en dash without dates: SDE Intern — Edviron
+    em = re.match(r'^(.+?)\s*[—–]\s*(.+)$', stripped)
+    if em and not start:
+        left, right = em.group(1).strip(), em.group(2).strip()
+        if (
+            (is_plausible_job_title(left) or re.search(r'(?i)\bintern\b', left))
+            and not _DUTY_VERB_START.match(left)
+            and len(left.split()) <= 8
+        ):
+            return ExperienceEntry(company=right[:200], role=left[:200])
+
+    # Role (Company) or Role (Company), City
+    paren = _ROLE_COMPANY_PARENS.match(stripped)
+    if paren:
+        role = paren.group(1).strip()
+        company = paren.group(2).strip()
+        if (
+            role
+            and not _DUTY_VERB_START.match(role)
+            and (
+                is_plausible_job_title(role)
+                or re.search(r'(?i)\bintern|trainee|developer|engineer|analyst\b', role)
+            )
+        ):
+            return ExperienceEntry(
+                company=company[:200],
+                role=role[:200],
+                start=start,
+                end=end,
+                is_current=is_current,
+            )
+
+    # Company-only org line (role often on next line) — Dhaval-style
+    if (
+        _ORG_CUE.search(stripped)
+        and not is_plausible_job_title(stripped)
+        and not re.search(r'(?i)\bintern|trainee|developer|engineer|analyst\b', stripped)
+        and len(stripped.split()) <= 12
+        and not _DUTY_VERB_START.match(stripped)
+    ):
+        return ExperienceEntry(company=stripped[:200], role='')
 
     # Gold / common: Role | Company | Dates
     pipe = _PIPE_EXP.match(stripped)

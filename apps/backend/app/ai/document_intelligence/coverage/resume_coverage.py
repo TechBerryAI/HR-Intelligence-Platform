@@ -269,7 +269,9 @@ def recover_resume_profile_gaps(
         updated = CandidateProfile.model_validate(data)
     except Exception:
         return profile, report
-    return updated, report
+    from app.ai.document_intelligence.validation.engine import sanitize_candidate_profile
+
+    return sanitize_candidate_profile(updated), report
 
 
 def resume_has_recoverable_gaps(profile: CandidateProfile, raw_text: str) -> bool:

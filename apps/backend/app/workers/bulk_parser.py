@@ -256,15 +256,31 @@ def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
     for e in exp[:25]:
         if not isinstance(e, dict):
             continue
-        title = _as_text(e.get('title'))
+        title = _as_text(e.get('title') or e.get('role'))
         company = _as_text(e.get('company'))
-        fr = _as_text(e.get('from'))
-        to = _as_text(e.get('to'))
+        fr = _as_text(e.get('from') or e.get('start'))
+        to = _as_text(e.get('to') or e.get('end'))
+        if (e.get('is_current') or str(to).lower() in ('present', 'current', 'now')) and not to:
+            to = 'Present'
         desc = _as_text(e.get('description'))
-        chunk = f'{title} at {company} ({fr}-{to})'.strip()
+        # Skip geo-only / empty noise rows
+        if not title and not company:
+            continue
+        if re.match(r'(?i)^(india|pune|mumbai|remote)$', title) and re.match(
+            r'(?i)^(india|pune|mumbai|remote)$', company or 'x'
+        ):
+            continue
+        if title and company:
+            chunk = f'{title} at {company}'
+        elif title:
+            chunk = title
+        else:
+            chunk = company
+        if fr or to:
+            chunk = f'{chunk} ({fr}-{to})'.strip()
         if desc:
             chunk = f'{chunk}: {desc[:400]}'
-        if chunk and chunk != 'at ()':
+        if chunk and chunk not in ('at ()', '()'):
             exp_parts.append(chunk)
 
     edu_parts = []

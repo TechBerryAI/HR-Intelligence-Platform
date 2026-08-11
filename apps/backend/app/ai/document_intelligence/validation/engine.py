@@ -169,6 +169,22 @@ def validate_company(value: str) -> Tuple[bool, str]:
         return False, 'company_empty'
     if _MONTH_ONLY_RE.match(s) or _MONTH_YEAR_RE.match(s):
         return False, 'company_is_date'
+    low = s.lower()
+    if low in _SECTION_HEADERS or low in (
+        'board/university', 'board / university', 'school/college',
+        'year of passing', 'percentage/ cgpa', 'percentage/cgpa',
+    ):
+        return False, 'company_is_header'
+    if re.search(r'(?i)year of passing|board/university|school/college', s):
+        return False, 'company_is_edu_table'
+    if re.match(
+        r'(?i)^(india|usa|uk|remote|hybrid|mumbai|pune|thane|delhi|hyderabad|'
+        r'chennai|bangalore|bengaluru|noida)$',
+        s,
+    ):
+        return False, 'company_is_geo'
+    if len(s) > 120:
+        return False, 'company_too_long'
     return True, 'ok'
 
 
@@ -180,6 +196,27 @@ def validate_role(value: str) -> Tuple[bool, str]:
         return False, 'role_is_date'
     if len(s) > 120:
         return False, 'role_too_long'
+    low = s.lower()
+    if low in _SECTION_HEADERS:
+        return False, 'role_is_header'
+    if re.search(
+        r'(?i)degree/certificate|year of passing|board/university|school/college|'
+        r'percentage/?\s*cgpa',
+        s,
+    ):
+        return False, 'role_is_edu_table'
+    if re.match(
+        r'(?i)^(india|usa|uk|remote|hybrid|mumbai|pune|thane|delhi|hyderabad|'
+        r'chennai|bangalore|bengaluru|noida|trends|python|sql|java)$',
+        s,
+    ):
+        return False, 'role_is_noise'
+    # Education lines mistaken for jobs
+    if re.search(
+        r'(?i)\b(?:b\.?\s?tech|b\.?\s?e\b|bca|mca|mba|bsc|msc|bachelor|master|diploma|hsc|ssc)\b',
+        s,
+    ) and not re.search(r'(?i)\bintern|engineer|developer|analyst|trainee\b', s):
+        return False, 'role_is_degree'
     return True, 'ok'
 
 
@@ -200,10 +237,20 @@ def validate_skill_item(value: str) -> Tuple[bool, str]:
 
 
 def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
-    """Reject company/role swaps, date contamination, and project-like rows."""
+    """Reject company/role swaps, date contamination, edu-table and project-like rows."""
     company = exp.company.strip()
     role = exp.role.strip()
     desc = (exp.description or '').strip()
+    # Em-dash title — Company  (SDE Intern — Edviron)
+    if '—' in role and not company:
+        left, _, right = role.partition('—')
+        if left.strip() and right.strip():
+            role, company = left.strip(), right.strip()
+    if '—' in company and not role:
+        left, _, right = company.partition('—')
+        if left.strip() and right.strip():
+            role, company = left.strip(), right.strip()
+
     # Drop assignment / Coursera / project narratives mistaken for jobs
     if _PROJECT_LIKE_EXP.search(f'{role} {company} {desc}'):
         return ExperienceEntry(company='', role='', start='', end='', is_current=False)
@@ -213,14 +260,17 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
         r'facilitated|developed|designed|created|built|led|drove|implemented|'
         r'optimized|improved|increased|worked|assisted|supported|handled|'
         r'performed|conducted|analyzed|monitored|delivered|owned|spearheaded|'
+        r'identifying|enabling|engineered|gained|'
         r'[•·\*●])',
         role,
     ) or re.match(
         r'(?i)^(resulting|ensuring|improving|including|across|reports?|captions|'
-        r'brand voice|traffic|and efficiency)\b',
+        r'brand voice|traffic|and efficiency|identifying|integrating)\b',
         company,
     ):
         return ExperienceEntry(company='', role='', start='', end='', is_current=False)
+    if company and len(company.split()) >= 10:
+        company = ''
     company_ok, _ = validate_company(company) if company else (False, '')
     role_ok, _ = validate_role(role) if role else (False, '')
 
@@ -228,7 +278,8 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
     if company and role:
         company_looks_role = bool(
             re.search(
-                r'(?i)\b(?:engineer|developer|manager|analyst|consultant|lead|intern|officer)\b',
+                r'(?i)\b(?:engineer|developer|manager|analyst|consultant|lead|intern|officer|'
+                r'trainee|associate)\b',
                 company,
             )
         )
@@ -238,7 +289,7 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
                 role,
             )
         ) and not re.search(
-            r'(?i)\b(?:engineer|developer|manager|analyst)\b',
+            r'(?i)\b(?:engineer|developer|manager|analyst|intern)\b',
             role,
         )
         if company_looks_role and role_looks_company:
@@ -246,21 +297,37 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
             company_ok, role_ok = True, True
 
     if company and role and company.lower() == role.lower():
-        # Ambiguous — keep role, blank company rather than duplicate
         company = ''
         company_ok = False
 
+    # Role is actually a company name (no title on line)
+    if role and not company and re.search(
+        r'(?i)\b(?:pvt|ltd|llc|inc|corp|limited|technologies|solutions|labs|systems)\b',
+        role,
+    ) and not re.search(r'(?i)\b(?:engineer|developer|manager|analyst|intern|trainee)\b', role):
+        company, role = role, ''
+        company_ok, role_ok = validate_company(company)[0], False
+
     start_ok, _ = validate_month_year(exp.start)
     end_ok, _ = validate_month_year(exp.end)
-    return ExperienceEntry(
+    cleaned = ExperienceEntry(
         company=company if company_ok else '',
         role=role if role_ok else '',
         start=exp.start if start_ok else '',
         end=exp.end if end_ok else '',
         is_current=exp.is_current,
-        description=exp.description.strip(),
+        description=desc,
         location=exp.location.strip(),
     )
+    # Prefer rows with a real role; company-only only when dated + org-like
+    if cleaned.role:
+        return cleaned
+    if cleaned.company and cleaned.start and re.search(
+        r'(?i)\b(?:pvt|ltd|llc|inc|corp|limited|technologies|solutions|labs|systems)\b',
+        cleaned.company,
+    ):
+        return cleaned
+    return ExperienceEntry(company='', role='', start='', end='', is_current=False)
 
 
 def sanitize_education_row(edu: EducationEntry) -> EducationEntry:
@@ -268,10 +335,17 @@ def sanitize_education_row(edu: EducationEntry) -> EducationEntry:
     deg_ok, _ = validate_degree(edu.degree) if edu.degree else (False, '')
     start_ok, _ = validate_month_year(edu.start)
     end_ok, _ = validate_month_year(edu.end)
-    # Institution must never be a month
+    degree = edu.degree if deg_ok else ''
     institution = edu.institution if inst_ok else ''
+    # Drop education table header pollution
+    if re.search(
+        r'(?i)degree/certificate|year of passing|board/university|school/college|'
+        r'percentage/?\s*cgpa',
+        f'{degree} {institution}',
+    ):
+        return EducationEntry()
     return EducationEntry(
-        degree=edu.degree if deg_ok else '',
+        degree=degree,
         field=edu.field.strip(),
         institution=institution,
         gpa=edu.gpa.strip(),
@@ -318,12 +392,52 @@ def sanitize_candidate_profile(profile: CandidateProfile) -> CandidateProfile:
     port_ok, _ = validate_url(port, allow_empty=True) if port else (True, '')
 
     experience = [sanitize_experience_row(e) for e in profile.experience]
-    experience = [e for e in experience if e.company or e.role or e.start]
+    experience = [e for e in experience if e.role or (e.company and e.start)]
     education = [sanitize_education_row(e) for e in profile.education]
     education = [e for e in education if e.degree or e.institution]
 
     companies = {e.company for e in experience if e.company}
     skills = sanitize_skills(profile.skills, companies=companies)
+
+    # Recompute years after experience sanitization (VALIDATION_FIX_years_after_sanitize)
+    from app.ai.parser.enrichment.resume_text_inference import compute_total_experience_years
+
+    years = compute_total_experience_years(
+        [
+            {
+                'from': e.start,
+                'to': 'Present' if e.is_current else e.end,
+            }
+            for e in experience
+        ]
+    )
+
+    # Sanitize location on contact
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_location_value
+
+    loc = (profile.contact.location or '').strip()
+    if loc:
+        loc = loc.splitlines()[0].strip()
+        # Prefer city token from "Company | City" or phone⋄City bleed
+        if '|' in loc:
+            parts = [p.strip() for p in loc.split('|') if p.strip()]
+            city_part = next(
+                (
+                    p
+                    for p in reversed(parts)
+                    if is_plausible_location_value(p)
+                ),
+                '',
+            )
+            loc = city_part or ''
+        loc = re.sub(r'(?i)^\+?\d[\d\s\-().]{6,}\s*[⋄·•|]*\s*', '', loc).strip()
+        if not is_plausible_location_value(loc):
+            loc = ''
+    pref = (profile.contact.preferred_location or '').strip()
+    if pref and not is_plausible_location_value(pref.splitlines()[0].strip()):
+        pref = ''
+    if loc and not pref:
+        pref = loc
 
     return CandidateProfile(
         schema_version=profile.schema_version,
@@ -340,6 +454,8 @@ def sanitize_candidate_profile(profile: CandidateProfile) -> CandidateProfile:
                 'linkedin': li if li_ok else '',
                 'github': gh if gh_ok else '',
                 'portfolio': port if port_ok else '',
+                'location': loc,
+                'preferred_location': pref,
             }
         ),
         education=education,
@@ -350,6 +466,6 @@ def sanitize_candidate_profile(profile: CandidateProfile) -> CandidateProfile:
         languages=profile.languages,
         links=profile.links,
         preferences=profile.preferences,
-        total_experience_years=profile.total_experience_years,
+        total_experience_years=years if years is not None else profile.total_experience_years,
         field_meta=dict(profile.field_meta or {}),
     )

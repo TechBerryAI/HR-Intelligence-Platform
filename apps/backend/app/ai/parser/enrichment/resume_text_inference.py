@@ -807,12 +807,18 @@ def is_plausible_location_value(value: str) -> bool:
     if not s or len(s) < 2 or len(s) > 80:
         return False
     if '\n' in s or '\r' in s:
-        # Keep first line only for validation of multi-line bleed
         s = s.splitlines()[0].strip()
         if not s or len(s) > 80:
             return False
     low = s.lower()
     if '@' in s or 'http' in low or 'linkedin' in low or 'github' in low:
+        return False
+    if '|' in s or '⋄' in s or re.search(r'\+?\d[\d\s\-]{8,}\d', s):
+        return False
+    if low in (
+        'education', 'experience', 'skills', 'summary', 'objective', 'projects',
+        'certifications', 'internship', 'profile',
+    ):
         return False
     # Reject if line looks like a person name glued after city
     if re.search(r'(?i),\s*india\s+\w+', s):
