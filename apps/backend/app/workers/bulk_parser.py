@@ -453,6 +453,56 @@ def _bulk_stage(stage: str, outcome: str, duration_ms: float = 0.0) -> None:
         pass
 
 
+_RESUME_CORE_COVERAGE_GAPS = frozenset(
+    {'fullName', 'email', 'phone', 'location', 'education', 'experience'}
+)
+_COVERAGE_GAP_LABELS = {
+    'fullName': 'name',
+    'email': 'email',
+    'phone': 'phone',
+    'location': 'location',
+    'education': 'education',
+    'experience': 'experience',
+}
+
+
+def _coverage_gaps_from_form(form_dto) -> list[str]:
+    """Named core coverage gaps from ApplicationFormDTO (JD-parity honesty)."""
+    if form_dto is None:
+        return []
+    rows = getattr(form_dto, 'coverage', None)
+    if rows is None and isinstance(form_dto, dict):
+        rows = form_dto.get('coverage')
+    if not isinstance(rows, list):
+        return []
+    gaps: list[str] = []
+    for c in rows:
+        if not isinstance(c, dict):
+            continue
+        field = str(c.get('field') or '')
+        if field in _RESUME_CORE_COVERAGE_GAPS and c.get('status') == 'missing_with_evidence':
+            gaps.append(field)
+    return gaps
+
+
+def _apply_coverage_parse_honesty(
+    row: dict,
+    form_dto,
+    *,
+    parse_status: str,
+    note_bits: list[str],
+) -> str:
+    """Mark partial + ParseNotes when coverage still has named gaps with evidence."""
+    gaps = _coverage_gaps_from_form(form_dto)
+    if gaps:
+        parse_status = 'partial'
+        labels = [_COVERAGE_GAP_LABELS.get(g, g) for g in gaps]
+        note_bits.append('coverage_gaps=' + ','.join(labels))
+    row['ParseStatus'] = parse_status
+    row['ParseNotes'] = '; '.join(note_bits)[:2000]
+    return parse_status
+
+
 def _process_one_file(args: tuple) -> tuple[str, dict | None, bool, str, str]:
     """
     Process a single staged file: extract → deterministic rules → LLM if needed.
@@ -644,8 +694,12 @@ def _process_one_file_inner(
                             note_bits.append("weak=" + ",".join(missing[:6]))
                         if notes:
                             note_bits.append(notes)
-                        row["ParseStatus"] = "ok"
-                        row["ParseNotes"] = "; ".join(note_bits)[:2000]
+                        parse_status = _apply_coverage_parse_honesty(
+                            row,
+                            form_dto,
+                            parse_status=parse_status,
+                            note_bits=note_bits,
+                        )
                         _persist_bulk_parse(
                             job_id=job_id,
                             filename=filename,
@@ -676,7 +730,7 @@ def _process_one_file_inner(
                                 row,
                                 False,
                                 f"Processing: {filename} (engine:{source})",
-                                "ok",
+                                parse_status if parse_status in ("ok", "partial") else "ok",
                             )
             except Exception as det_err:
                 print(f"[local_bulk_parser] engine det path failed for {filename}: {det_err}")
@@ -728,8 +782,12 @@ def _process_one_file_inner(
                     note_bits.extend(eng_notes[:4])
                     if notes:
                         note_bits.append(notes)
-                    row["ParseStatus"] = parse_status
-                    row["ParseNotes"] = "; ".join(note_bits)[:2000]
+                    parse_status = _apply_coverage_parse_honesty(
+                        row,
+                        form_dto,
+                        parse_status=parse_status,
+                        note_bits=note_bits,
+                    )
                     _persist_bulk_parse(
                         job_id=job_id,
                         filename=filename,

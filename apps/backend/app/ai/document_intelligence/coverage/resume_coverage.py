@@ -101,8 +101,39 @@ def recover_resume_profile_gaps(
     text = raw_text or ''
     data = profile.model_dump()
     contact = data.get('contact') or {}
+    personal = data.get('personal') or {}
     recovered: list[str] = []
     fields: list[FieldCoverage] = []
+
+    # Full name — report only (never invent); recover via existing parsers elsewhere
+    from app.ai.parser.enrichment.resume_text_inference import (
+        extract_name_from_text,
+        is_plausible_person_name,
+    )
+
+    full_name = str(personal.get('full_name') or '').strip()
+    name_ev = bool(extract_name_from_text(text[:2500]) if text else '')
+    if full_name and is_plausible_person_name(full_name):
+        fields.append(FieldCoverage('fullName', 'filled', True))
+    elif name_ev:
+        found = extract_name_from_text(text[:2500])
+        if found and is_plausible_person_name(found) and not full_name:
+            personal['full_name'] = found
+            data['personal'] = personal
+            recovered.append('fullName')
+            fields.append(FieldCoverage('fullName', 'recovered', True, found[:80]))
+        elif not full_name:
+            fields.append(FieldCoverage('fullName', 'missing_with_evidence', True))
+        else:
+            fields.append(FieldCoverage('fullName', 'filled', True, 'unvalidated'))
+    else:
+        fields.append(
+            FieldCoverage(
+                'fullName',
+                'filled' if full_name else 'missing_no_evidence',
+                bool(full_name),
+            )
+        )
 
     # Email
     email = str(contact.get('email') or '').strip()
@@ -276,8 +307,16 @@ def recover_resume_profile_gaps(
 
 def resume_has_recoverable_gaps(profile: CandidateProfile, raw_text: str) -> bool:
     """True when contact/location/education/experience incomplete but source has evidence."""
+    from app.ai.parser.enrichment.resume_text_inference import (
+        extract_name_from_text,
+        is_plausible_person_name,
+    )
+
     contact = profile.contact
     text = raw_text or ''
+    name = (profile.personal.full_name or '').strip()
+    if (not name or not is_plausible_person_name(name)) and extract_name_from_text(text[:2500]):
+        return True
     if not (contact.email or '').strip() and _has_email_evidence(text):
         return True
     phone = (contact.phone or '').strip()

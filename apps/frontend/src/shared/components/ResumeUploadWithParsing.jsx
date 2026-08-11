@@ -120,7 +120,7 @@ export default function ResumeUploadWithParsing({
     try {
       const onStage = (ev) => {
         if (ev?.stage) setStageLabel(ev.stage);
-        const order = ['cache', 'persist_raw', 'layout', 'text', 'sections', 'deterministic', 'semantic', 'knowledge', 'validate', 'persist'];
+        const order = ['cache', 'persist_raw', 'layout', 'text', 'sections', 'deterministic', 'coverage', 'semantic', 'knowledge', 'validate', 'persist'];
         const idx = order.indexOf(ev?.stage);
         if (idx >= 0) setProgressPct(Math.round(((idx + 1) / order.length) * 100));
       };
@@ -133,19 +133,53 @@ export default function ResumeUploadWithParsing({
         const formData = takeResumeFormDTO(result);
         setConfidence(result.confidence);
         setProgressPct(100);
+
+        const coverage = Array.isArray(formData.coverage)
+          ? formData.coverage
+          : (Array.isArray(result.coverage) ? result.coverage : []);
+        const missingFields = Array.isArray(result.missing_fields)
+          ? result.missing_fields
+          : coverage
+              .filter((c) => c && c.status === 'missing_with_evidence')
+              .map((c) => c.field);
+        const coreGaps = missingFields.filter((f) =>
+          ['fullName', 'email', 'phone', 'location', 'education', 'experience'].includes(f),
+        );
+        const gapLabels = {
+          fullName: 'Name',
+          email: 'Email',
+          phone: 'Phone',
+          location: 'Location',
+          education: 'Education',
+          experience: 'Experience',
+        };
+
         onParseComplete?.(result, null);
-        onParseError?.(null);
-        
-        if (result.is_duplicate) {
+
+        if (coreGaps.length > 0) {
+          const labels = coreGaps.map((f) => gapLabels[f] || f).join(', ');
+          setParseSuccess('');
+          setParseError(
+            `Parsed with incomplete fields — please review: ${labels}. Other fields were auto-filled below.`,
+          );
+          onParseError?.(
+            `Parsed with incomplete fields — please review: ${labels}. Other fields were auto-filled below.`,
+          );
+        } else if (result.is_duplicate) {
           setParseSuccess('Resume recognized! Using previously parsed data.');
+          setParseError('');
+          onParseError?.(null);
         } else {
           const modelInfo = result.model_version ? ` (${result.model_version})` : '';
           setParseSuccess(`Resume parsed successfully! Fields auto-filled below.${modelInfo}`);
+          setParseError('');
+          onParseError?.(null);
         }
 
         if (onAutofill) {
           onAutofill({
             ...formData,
+            coverage,
             resumeFile: file,
             resumeFileName: file.name,
             _parsedId: result.parsed_id,
@@ -157,7 +191,8 @@ export default function ResumeUploadWithParsing({
           });
         }
 
-        if (result.partial || result.confidence < 0.75) {
+        // Low-confidence warning only when no named coverage gaps (JD parity)
+        if (coreGaps.length === 0 && (result.partial || result.confidence < 0.75)) {
           const mv = String(result.model_version || '');
           if (mv.includes('text-fallback')) {
             setParseError(

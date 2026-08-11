@@ -1,0 +1,15 @@
+JORKA SANDEEP
+jorka@example.com
++91 9392883968
+Hyderabad, India
+
+SKILLS
+Docker, Kubernetes, Jenkins
+
+EXPERIENCE
+07/2025 – 10/2025 | Remote
+DevOps Intern
+• Engineered CI pipelines
+
+EDUCATION
+B.Tech CSE - Hyderabad University
