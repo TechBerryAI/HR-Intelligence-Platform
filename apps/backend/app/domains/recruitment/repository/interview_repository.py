@@ -25,6 +25,52 @@ def get_open_interview_for_application(application_id: int) -> dict | None:
     )
 
 
+def list_interviews_for_job(jdid: str, organization_id: int) -> list[dict]:
+    """Open interviews (Invited/Scheduled) for a job in the given org."""
+    return db_all(
+        '''
+        SELECT
+            i.id,
+            i.application_id,
+            i.status,
+            i.scheduled_at,
+            i.meeting_link,
+            i.invite_expires_at,
+            i.assigned_to,
+            i.duration_minutes,
+            i.created_at,
+            a.candidate_id,
+            a.status AS application_status,
+            COALESCE(cp.full_name, cs.name, '') AS candidate_name,
+            COALESCE(cp.email, cs.email) AS candidate_email,
+            hr.full_name AS recruiter_name,
+            (
+              SELECT COUNT(*) FROM interview_slots s
+              WHERE s.interview_id = i.id AND s.is_booked = FALSE
+            ) AS open_slots
+        FROM interviews i
+        JOIN applications a ON a.id = i.application_id
+        JOIN jobs j ON j.jdid = a.job_id AND j.organization_id = ?
+        LEFT JOIN candidate_profiles cp ON cp.candidate_id = a.candidate_id
+        LEFT JOIN candidates cs ON cs.cid = a.candidate_id
+        LEFT JOIN hr_signup hr ON hr.hrid = i.assigned_to
+        WHERE a.job_id = ?
+          AND i.status IN (?, ?)
+        ORDER BY
+          CASE WHEN i.status = ? THEN 0 ELSE 1 END,
+          i.scheduled_at NULLS LAST,
+          i.created_at DESC
+        ''',
+        (
+            organization_id,
+            jdid,
+            STATUS_INVITED,
+            STATUS_SCHEDULED,
+            STATUS_SCHEDULED,
+        ),
+    )
+
+
 def get_interview_by_token(token: str) -> dict | None:
     return db_get(
         'SELECT * FROM interviews WHERE invite_token = ?',

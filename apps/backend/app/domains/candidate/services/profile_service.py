@@ -36,10 +36,15 @@ def validate_public_apply_payload(data: dict, has_resume: bool) -> str | None:
     if experience_level not in ("fresher", "experienced"):
         return "Experience level is required"
     if experience_level == "experienced":
-        if not (data.get("servingNotice") or "").strip():
+        serving_notice = (data.get("servingNotice") or "").strip().lower()
+        if serving_notice not in ("yes", "no"):
             return "Serving notice is required for experienced candidates"
-        if not (data.get("noticePeriod") or "").strip():
-            return "Notice period is required for experienced candidates"
+        # Period + last working day only when currently serving notice
+        if serving_notice == "yes":
+            if not (data.get("noticePeriod") or "").strip():
+                return "Notice period is required when serving notice"
+            if not (data.get("lastWorkingDay") or "").strip():
+                return "Last working date is required when serving notice"
     parsed_id = (data.get("parsedId") or data.get("parsed_id") or "").strip()
     if not has_resume and not parsed_id:
         return "Resume file is required"
@@ -57,15 +62,28 @@ def validate_public_apply_payload(data: dict, has_resume: bool) -> str | None:
     return None
 
 
-def upsert_passwordless_candidate(name: str, email: str) -> str:
+def upsert_passwordless_candidate(
+    name: str,
+    email: str,
+    *,
+    organization_id: str | None = None,
+) -> str:
     """
-    Find or create applicant (candidates) by email — no password / no login.
+    Find or create applicant (candidates) by email within an organization — no password / no login.
     Returns cid.
     """
     email_norm = normalize_email(email)
+    org_id = str(organization_id or "").strip() or None
+    if not org_id:
+        raise ValueError("organization_id is required to create a candidate")
+
     existing = db_get(
-        "SELECT cid, name FROM candidates WHERE LOWER(TRIM(email)) = ?",
-        (email_norm,),
+        """
+        SELECT cid, name FROM candidates
+        WHERE organization_id = ?
+          AND LOWER(TRIM(email)) = ?
+        """,
+        (org_id, email_norm),
     )
     if existing:
         cid = existing["cid"]
@@ -77,12 +95,16 @@ def upsert_passwordless_candidate(name: str, email: str) -> str:
         return cid
 
     db_run(
-        "INSERT INTO candidates (name, email) VALUES (?, ?)",
-        (name.strip(), email_norm),
+        "INSERT INTO candidates (name, email, organization_id) VALUES (?, ?, ?)",
+        (name.strip(), email_norm, org_id),
     )
     row = db_get(
-        "SELECT cid FROM candidates WHERE LOWER(TRIM(email)) = ?",
-        (email_norm,),
+        """
+        SELECT cid FROM candidates
+        WHERE organization_id = ?
+          AND LOWER(TRIM(email)) = ?
+        """,
+        (org_id, email_norm),
     )
     if not row:
         raise RuntimeError("Failed to create candidates row")
@@ -300,8 +322,12 @@ def save_candidate_profile(
 def link_parsed_resume(parsed_id: str | None, candidate_id: str, public_uploader_id: str | None = None) -> dict | None:
     """
     Ensure a parsed_resumes row is linked to candidate_id.
-    Only rebinds rows that are unowned or already owned by this candidate / uploader.
     Returns the parsed resume record or None.
+
+    Public apply often hits content-hash cache: client gets an existing parsed_id
+    plus a fresh PUB* uploader id. Do not require raw_files.uploader_id to match
+    that new PUB id — UUID parsed_id from the parse response is sufficient to
+    bind an unowned row (or reuse a row already owned by this candidate).
     """
     if parsed_id:
         row = db_get(
@@ -310,21 +336,25 @@ def link_parsed_resume(parsed_id: str | None, candidate_id: str, public_uploader
         )
         if row:
             existing_cid = row.get('candidate_id')
-            if existing_cid and str(existing_cid) != str(candidate_id):
-                return None
             if not existing_cid:
-                if not public_uploader_id or not row.get('raw_file_id'):
-                    return None
-                owned = db_get(
-                    "SELECT 1 AS ok FROM raw_files WHERE id = ? AND uploader_id = ?",
-                    (row['raw_file_id'], public_uploader_id),
+                # Prefer proving uploader ownership when available; otherwise allow
+                # content-hash cache reuse (unowned row + explicit parsed_id).
+                if public_uploader_id and row.get('raw_file_id'):
+                    owned = db_get(
+                        "SELECT 1 AS ok FROM raw_files WHERE id = ? AND uploader_id = ?",
+                        (row['raw_file_id'], public_uploader_id),
+                    )
+                    if not owned:
+                        # Cache hit under a prior PUB* uploader — still bind for this apply
+                        pass
+                db_run(
+                    "UPDATE parsed_resumes SET candidate_id = ? WHERE id = ? AND candidate_id IS NULL",
+                    (candidate_id, parsed_id),
                 )
-                if not owned:
-                    return None
-            db_run(
-                "UPDATE parsed_resumes SET candidate_id = ? WHERE id = ? AND (candidate_id IS NULL OR candidate_id = ?)",
-                (candidate_id, parsed_id, candidate_id),
-            )
+            elif str(existing_cid) != str(candidate_id):
+                # Same resume bytes previously linked to another applicant — reuse TOON
+                # for ATS without stealing the foreign candidate_id link.
+                return row
             return row
 
     row = db_get(
@@ -352,8 +382,8 @@ def link_parsed_resume(parsed_id: str | None, candidate_id: str, public_uploader
         )
         if row:
             db_run(
-                "UPDATE parsed_resumes SET candidate_id = ? WHERE id = ?",
-                (candidate_id, row["id"]),
+                "UPDATE parsed_resumes SET candidate_id = ? WHERE id = ? AND (candidate_id IS NULL OR candidate_id = ?)",
+                (candidate_id, row["id"], candidate_id),
             )
             return row
     return None
