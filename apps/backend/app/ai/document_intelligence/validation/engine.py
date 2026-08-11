@@ -163,6 +163,41 @@ def validate_degree(value: str) -> Tuple[bool, str]:
     return True, 'ok'
 
 
+_GEO_BARE_RE = re.compile(
+    r'(?i)^(?:'
+    r'india|usa|uk|uae|remote|hybrid|wfh|work\s+from\s+home|'
+    r'mumbai|delhi|new\s+delhi|pune|thane|hyderabad|chennai|bangalore|bengaluru|'
+    r'noida|gurugram|gurgaon|kolkata|ahmedabad|navi\s+mumbai|kalwa|nashik|'
+    r'surat|vadodara|ambernath|dombivli|dombivili|sindhudurg|sewree|solapur|'
+    r'mulund|kandivali|andheri|powai|kalyan|vasai|virar|panvel|aurangabad|kolhapur'
+    r')$'
+)
+_GEO_CITY_REGION_RE = re.compile(
+    r'(?i)^([A-Za-z][A-Za-z .]{1,40}),\s*'
+    r'(?:India|Maharashtra|Karnataka|Tamil\s+Nadu|Telangana|Gujarat|KA|MH|TN|TS|UP|DL|USA|UK)$'
+)
+_INSTITUTION_AS_JOB_RE = re.compile(
+    r'(?i)\b(?:university|college|institute|polytechnic|iit|nit|school)\b'
+)
+_JOB_TITLE_CUE_RE = re.compile(
+    r'(?i)\b(?:intern|engineer|developer|analyst|trainee|manager|officer|'
+    r'associate|consultant|lead|executive|specialist)\b'
+)
+
+
+def _is_geo_only_token(value: str) -> bool:
+    s = (value or '').strip()
+    if not s or len(s) > 60:
+        return False
+    if re.search(r'(?i)\b(?:labs?|ltd|pvt|inc|corp|technologies|solutions|systems)\b', s):
+        return False
+    if _GEO_BARE_RE.match(s):
+        return True
+    if _GEO_CITY_REGION_RE.match(s):
+        return True
+    return False
+
+
 def validate_company(value: str) -> Tuple[bool, str]:
     s = (value or '').strip()
     if not s:
@@ -177,12 +212,10 @@ def validate_company(value: str) -> Tuple[bool, str]:
         return False, 'company_is_header'
     if re.search(r'(?i)year of passing|board/university|school/college', s):
         return False, 'company_is_edu_table'
-    if re.match(
-        r'(?i)^(india|usa|uk|remote|hybrid|mumbai|pune|thane|delhi|hyderabad|'
-        r'chennai|bangalore|bengaluru|noida)$',
-        s,
-    ):
+    if _is_geo_only_token(s):
         return False, 'company_is_geo'
+    if _INSTITUTION_AS_JOB_RE.search(s) and not _JOB_TITLE_CUE_RE.search(s):
+        return False, 'company_is_institution'
     if len(s) > 120:
         return False, 'company_too_long'
     return True, 'ok'
@@ -205,12 +238,13 @@ def validate_role(value: str) -> Tuple[bool, str]:
         s,
     ):
         return False, 'role_is_edu_table'
-    if re.match(
-        r'(?i)^(india|usa|uk|remote|hybrid|mumbai|pune|thane|delhi|hyderabad|'
-        r'chennai|bangalore|bengaluru|noida|trends|python|sql|java)$',
+    if _is_geo_only_token(s) or re.match(
+        r'(?i)^(trends|python|sql|java)$',
         s,
     ):
         return False, 'role_is_noise'
+    if _INSTITUTION_AS_JOB_RE.search(s) and not _JOB_TITLE_CUE_RE.search(s):
+        return False, 'role_is_institution'
     # Education lines mistaken for jobs
     if re.search(
         r'(?i)\b(?:b\.?\s?tech|b\.?\s?e\b|bca|mca|mba|bsc|msc|bachelor|master|diploma|hsc|ssc)\b',
@@ -241,26 +275,31 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
     company = exp.company.strip()
     role = exp.role.strip()
     desc = (exp.description or '').strip()
-    # Em-dash title — Company  (SDE Intern — Edviron)
-    if '—' in role and not company:
-        left, _, right = role.partition('—')
-        if left.strip() and right.strip():
-            role, company = left.strip(), right.strip()
-    if '—' in company and not role:
-        left, _, right = company.partition('—')
-        if left.strip() and right.strip():
-            role, company = left.strip(), right.strip()
+    loc = (exp.location or '').strip()
+    # Em/en/hyphen title — Company  (SDE Intern — Edviron / Role - Company)
+    for dash in ('—', '–', '-'):
+        if dash in role and not company:
+            left, _, right = role.partition(dash)
+            if left.strip() and right.strip() and len(left.split()) <= 8:
+                role, company = left.strip(), right.strip()
+                break
+        if dash in company and not role:
+            left, _, right = company.partition(dash)
+            if left.strip() and right.strip() and len(left.split()) <= 8:
+                role, company = left.strip(), right.strip()
+                break
 
     # Drop assignment / Coursera / project narratives mistaken for jobs
     if _PROJECT_LIKE_EXP.search(f'{role} {company} {desc}'):
         return ExperienceEntry(company='', role='', start='', end='', is_current=False)
     # Drop duty-sentence fragments mistaken for role/company
+    # VALIDATION_FIX_duty_verbs_align — keep in sync with parser _DUTY_VERB_START
     if re.match(
-        r'(?i)^(managed|executed|coordinated|collaborated|utilized|maintained|'
+        r'(?i)^(?:managed|executed|coordinated|collaborated|utilized|maintained|'
         r'facilitated|developed|designed|created|built|led|drove|implemented|'
         r'optimized|improved|increased|worked|assisted|supported|handled|'
         r'performed|conducted|analyzed|monitored|delivered|owned|spearheaded|'
-        r'identifying|enabling|engineered|gained|'
+        r'identifying|enabling|engineered|gained|helped|wrote|responsible\s+for|'
         r'[•·\*●])',
         role,
     ) or re.match(
@@ -271,6 +310,11 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
         return ExperienceEntry(company='', role='', start='', end='', is_current=False)
     if company and len(company.split()) >= 10:
         company = ''
+    # City stuffed into company → location
+    if company and _is_geo_only_token(company) and not loc:
+        loc, company = company, ''
+    if role and _is_geo_only_token(role) and not loc and not company:
+        loc, role = role, ''
     company_ok, _ = validate_company(company) if company else (False, '')
     role_ok, _ = validate_role(role) if role else (False, '')
 
@@ -310,6 +354,8 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
 
     start_ok, _ = validate_month_year(exp.start)
     end_ok, _ = validate_month_year(exp.end)
+    if loc and _is_geo_only_token(loc) is False and len(loc) > 80:
+        loc = ''
     cleaned = ExperienceEntry(
         company=company if company_ok else '',
         role=role if role_ok else '',
@@ -317,15 +363,20 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
         end=exp.end if end_ok else '',
         is_current=exp.is_current,
         description=desc,
-        location=exp.location.strip(),
+        location=loc[:120],
     )
-    # Prefer rows with a real role; company-only only when dated + org-like
+    # Prefer rows with a real role; company-only when dated + org-like or Company|City
     if cleaned.role:
         return cleaned
     if cleaned.company and cleaned.start and re.search(
         r'(?i)\b(?:pvt|ltd|llc|inc|corp|limited|technologies|solutions|labs|systems)\b',
         cleaned.company,
     ):
+        return cleaned
+    if cleaned.company and cleaned.location:
+        return cleaned
+    # Dated location stub (date-first | Remote) kept for merge/years
+    if cleaned.start and cleaned.location and (cleaned.end or cleaned.is_current):
         return cleaned
     return ExperienceEntry(company='', role='', start='', end='', is_current=False)
 
@@ -373,7 +424,11 @@ def sanitize_skills(skills: list[SkillEntry], *, companies: set[str] | None = No
     return out
 
 
-def sanitize_candidate_profile(profile: CandidateProfile) -> CandidateProfile:
+def sanitize_candidate_profile(
+    profile: CandidateProfile,
+    *,
+    source_text: str = '',
+) -> CandidateProfile:
     """Apply anti-contamination rules; blank invalid fields rather than guess."""
     raw_name = re.sub(
         r'[\u200b\u200c\u200d\u2060\ufeff\u00ad]',
@@ -392,7 +447,14 @@ def sanitize_candidate_profile(profile: CandidateProfile) -> CandidateProfile:
     port_ok, _ = validate_url(port, allow_empty=True) if port else (True, '')
 
     experience = [sanitize_experience_row(e) for e in profile.experience]
-    experience = [e for e in experience if e.role or (e.company and e.start)]
+    experience = [
+        e
+        for e in experience
+        if e.role
+        or (e.company and e.start)
+        or (e.company and e.location)
+        or (e.start and e.location)
+    ]
     education = [sanitize_education_row(e) for e in profile.education]
     education = [e for e in education if e.degree or e.institution]
 
@@ -400,9 +462,15 @@ def sanitize_candidate_profile(profile: CandidateProfile) -> CandidateProfile:
     skills = sanitize_skills(profile.skills, companies=companies)
 
     # Recompute years after experience sanitization (VALIDATION_FIX_years_after_sanitize)
-    from app.ai.parser.enrichment.resume_text_inference import compute_total_experience_years
+    from app.ai.parser.enrichment.resume_text_inference import (
+        compute_total_experience_years,
+        extract_total_experience_years_from_text,
+        heal_location_candidate,
+        is_plausible_location_value,
+        merge_experience_years,
+    )
 
-    years = compute_total_experience_years(
+    date_years = compute_total_experience_years(
         [
             {
                 'from': e.start,
@@ -411,30 +479,21 @@ def sanitize_candidate_profile(profile: CandidateProfile) -> CandidateProfile:
             for e in experience
         ]
     )
+    prose_years = (
+        extract_total_experience_years_from_text(source_text)
+        if source_text
+        else None
+    )
+    years = merge_experience_years(date_years, prose_years)
+    if years is None:
+        years = profile.total_experience_years
 
-    # Sanitize location on contact
-    from app.ai.parser.enrichment.resume_text_inference import is_plausible_location_value
-
-    loc = (profile.contact.location or '').strip()
-    if loc:
-        loc = loc.splitlines()[0].strip()
-        # Prefer city token from "Company | City" or phone⋄City bleed
-        if '|' in loc:
-            parts = [p.strip() for p in loc.split('|') if p.strip()]
-            city_part = next(
-                (
-                    p
-                    for p in reversed(parts)
-                    if is_plausible_location_value(p)
-                ),
-                '',
-            )
-            loc = city_part or ''
-        loc = re.sub(r'(?i)^\+?\d[\d\s\-().]{6,}\s*[⋄·•|]*\s*', '', loc).strip()
-        if not is_plausible_location_value(loc):
-            loc = ''
-    pref = (profile.contact.preferred_location or '').strip()
-    if pref and not is_plausible_location_value(pref.splitlines()[0].strip()):
+    # Sanitize location on contact — heal pipe/phone bleed before reject
+    loc = heal_location_candidate((profile.contact.location or '').strip())
+    if loc and not is_plausible_location_value(loc):
+        loc = ''
+    pref = heal_location_candidate((profile.contact.preferred_location or '').strip())
+    if pref and not is_plausible_location_value(pref):
         pref = ''
     if loc and not pref:
         pref = loc
@@ -466,6 +525,6 @@ def sanitize_candidate_profile(profile: CandidateProfile) -> CandidateProfile:
         languages=profile.languages,
         links=profile.links,
         preferences=profile.preferences,
-        total_experience_years=years if years is not None else profile.total_experience_years,
+        total_experience_years=years,
         field_meta=dict(profile.field_meta or {}),
     )

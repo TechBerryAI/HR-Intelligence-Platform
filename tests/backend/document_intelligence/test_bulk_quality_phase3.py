@@ -329,3 +329,192 @@ BCA - SNDT University
     assert len(updated.experience) >= 1 or any(
         f.key == 'experience' and f.status == 'recovered' for f in report.fields
     )
+
+
+# --- Phase 4: layout fixtures + years / formats ---
+
+
+def test_p4_company_city_sets_location_field():
+    from app.ai.document_intelligence.parsers.resume import parse_experience
+
+    rows = parse_experience(
+        """
+Magic Bus | Thane
+AWS Cloud Intern
+• Built cloud projects
+"""
+    )
+    assert rows
+    assert any('magic' in (e.company or '').lower() for e in rows)
+    assert any('thane' in (e.location or '').lower() for e in rows)
+    assert any('intern' in (e.role or '').lower() for e in rows)
+
+
+def test_p4_zuhair_em_dash_and_hyphen_intern():
+    text = """
+ZUHAIR KHAN
+zuhair@example.com | 9876543210 | Mumbai
+
+SKILLS
+Python
+
+EXPERIENCE
+SDE Intern — Edviron
+Jun 2024 - Aug 2024
+• Wrote APIs
+
+Data Analyst - Acme Labs
+Jan 2023 - May 2023
+
+EDUCATION
+B.Tech - Mumbai University
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text)
+    roles = ' '.join(e.role for e in form.experiences).lower()
+    companies = ' '.join(e.company for e in form.experiences).lower()
+    assert 'intern' in roles or 'analyst' in roles
+    assert 'edviron' in companies or 'acme' in companies
+    assert not any(
+        (e.role or '').lower().startswith('wrote') for e in form.experiences
+    )
+
+
+def test_p4_jorka_date_first_remote():
+    text = """
+JORKA SANDEEP
+jorka@example.com | 9123456789
+
+SKILLS
+DevOps, AWS
+
+EXPERIENCE
+07/2025 – 10/2025 | Remote
+DevOps Intern
+• Engineered CI pipelines
+
+EDUCATION
+B.Tech - JNTU
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text)
+    assert len(form.experiences) >= 1
+    joined = ' '.join(
+        f'{e.role} {e.company}' for e in form.experiences
+    ).lower()
+    locs = ' '.join((e.location or '') for e in profile.experience).lower()
+    assert 'devops' in joined or 'intern' in joined
+    assert 'remote' in locs or 'devops' in joined
+
+
+def test_p4_institution_as_job_rejected():
+    from app.ai.document_intelligence.models.candidate import ExperienceEntry
+    from app.ai.document_intelligence.validation.engine import sanitize_experience_row
+
+    junk = sanitize_experience_row(
+        ExperienceEntry(role='University of Mumbai', company='IIT Bombay')
+    )
+    assert not junk.role and not junk.company
+
+
+def test_p4_geo_city_region_rejected_as_role():
+    from app.ai.document_intelligence.models.candidate import ExperienceEntry
+    from app.ai.document_intelligence.validation.engine import sanitize_experience_row
+
+    geo = sanitize_experience_row(
+        ExperienceEntry(role='Pune, Maharashtra', company='Navi Mumbai')
+    )
+    assert not geo.role
+    assert not geo.company or geo.location
+
+
+def test_p4_prose_years_and_date_years():
+    from app.ai.parser.enrichment.resume_text_inference import (
+        extract_total_experience_years_from_text,
+        merge_experience_years,
+    )
+    from app.ai.document_intelligence.models.candidate import (
+        CandidateProfile,
+        ContactInfo,
+        ExperienceEntry,
+        PersonalInfo,
+        SkillEntry,
+    )
+    from app.ai.document_intelligence.validation.engine import sanitize_candidate_profile
+
+    assert extract_total_experience_years_from_text(
+        'Total Experience: 3 years\nSkills\nPython'
+    ) == 3.0
+    assert extract_total_experience_years_from_text(
+        '5+ years of experience in backend'
+    ) == 5.0
+    assert merge_experience_years(2.0, 3.0) == 3.0
+    assert merge_experience_years(5.0, 1.0) == 5.0  # inconsistent → prefer dates
+
+    text = """
+NAME
+Total Experience: 4 years
+n@example.com | 9876543210 | Pune
+
+SKILLS
+Java
+
+EXPERIENCE
+Backend Engineer - Foo Corp
+Jan 2022 - Dec 2023
+• Built APIs
+
+EDUCATION
+B.Tech - Pune University
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text)
+    assert profile.total_experience_years is not None
+    assert float(profile.total_experience_years) >= 1.5
+    assert form.experienceLevel  # derived from years
+
+    cleaned = sanitize_candidate_profile(
+        CandidateProfile(
+            personal=PersonalInfo(full_name='A'),
+            contact=ContactInfo(email='a@a.com', phone='9876543210', location='Pune'),
+            skills=[SkillEntry(canonical='Java')],
+            experience=[
+                ExperienceEntry(
+                    role='Backend Engineer',
+                    company='Foo Corp',
+                    start='2022-01',
+                    end='2023-12',
+                )
+            ],
+            total_experience_years=None,
+        ),
+        source_text='Total Experience: 4 yrs\n',
+    )
+    assert cleaned.total_experience_years is not None
+    assert cleaned.total_experience_years >= 1.5
+
+
+def test_p4_location_heal_phone_bleed_and_ambernath():
+    from app.ai.parser.enrichment.resume_text_inference import heal_location_candidate
+
+    assert heal_location_candidate('Magic Bus | Thane') == 'Thane'
+    assert 'mumbai' in heal_location_candidate('+91 9967705134 ⋄Mumbai').lower()
+    loc = extract_simple_location(
+        'RIYA\nLocation: Ambernath\nriya@example.com\n\nSKILLS\nHTML\n'
+    )
+    assert loc and 'ambernath' in loc.lower()
+    assert not is_plausible_location_value('Skills')
+    assert not is_plausible_location_value('Education')
+
+
+def test_p4_bulk_allowed_ext_rejects_doc():
+    from app.workers import bulk_parser as bp
+
+    assert 'doc' not in bp.ALLOWED_EXT
+    assert 'pdf' in bp.ALLOWED_EXT and 'docx' in bp.ALLOWED_EXT
+    assert 'png' in bp.ALLOWED_EXT and 'jpg' in bp.ALLOWED_EXT
+    assert 'webp' in bp.ALLOWED_EXT and 'tiff' in bp.ALLOWED_EXT
+    # Staging gate mirrors ALLOWED_EXT (legacy .doc never queued)
+    assert 'doc' not in bp.ALLOWED_EXT
+    assert all(
+        ext in bp.ALLOWED_EXT
+        for ext in ('pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff')
+    )
+

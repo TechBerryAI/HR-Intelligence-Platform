@@ -1000,11 +1000,13 @@ def _build_recruiter_report(
 
 
 @timing
-def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
+def _internal_match(parsed_resume: dict, parsed_jd: dict, *, skip_narrative: bool = False) -> dict:
     """
     Evaluate candidate (TOON resume) vs job (TOON JD). Deterministic, no inflation.
     Returns JSON with: overall_match_score, decision, verdict, evaluation_report, score_breakdown,
     key_strengths, key_gaps, final_reasoning; and mandatory_skills_match_pct for gating.
+
+    skip_narrative: when True (public apply), use deterministic rationale only — no Ollama call.
     """
     cand_skills = _split_skill_list(parsed_resume.get("skills"))
 
@@ -1121,7 +1123,11 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
         decision_explanation,
     )
     llm_narrative = ""
-    if os.getenv("ATS_NARRATIVE_LLM", "1").strip().lower() not in ("0", "false", "no", "off"):
+    # Public apply / submit must stay fast — scoring is deterministic; LLM prose is optional.
+    if (
+        not skip_narrative
+        and os.getenv("ATS_NARRATIVE_LLM", "1").strip().lower() not in ("0", "false", "no", "off")
+    ):
         llm_narrative = _optional_llm_narrative(
             {
                 "verdict": verdict,
@@ -1210,11 +1216,21 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict) -> dict:
 
 
 @timing
-def match_candidate_to_job(candidate_id: str, job_id: str, parsed_resume: dict, parsed_jd: dict, apply_id: str = None):
+def match_candidate_to_job(
+    candidate_id: str,
+    job_id: str,
+    parsed_resume: dict,
+    parsed_jd: dict,
+    apply_id: str = None,
+    *,
+    skip_narrative: bool = False,
+):
     """
     Call HR-ATS-API /api/match when configured; otherwise run internal weighted matcher.
     Returns (success, result_or_error).
     result: dict with json_output (final_score or overall_match_score, decision, verdict, evaluation_report, rationale or final_reasoning), etc.
+
+    skip_narrative: public apply sets True so submit does not wait on Ollama narrative.
     """
     if ATS_API_URL and ATS_API_KEY:
         parsed_resume_str = json.dumps(parsed_resume) if isinstance(parsed_resume, dict) else str(parsed_resume)
@@ -1230,7 +1246,17 @@ def match_candidate_to_job(candidate_id: str, job_id: str, parsed_resume: dict, 
             payload["apply_id"] = apply_id
         headers = {"Content-Type": "application/json", "x-api-key": ATS_API_KEY}
         try:
-            resp = requests.post(f"{ATS_API_URL}/api/match", json=payload, headers=headers, timeout=60)
+            timeout_sec = float(os.getenv("ATS_API_TIMEOUT_SEC", "25"))
+        except ValueError:
+            timeout_sec = 25.0
+        timeout_sec = max(5.0, min(timeout_sec, 60.0))
+        try:
+            resp = requests.post(
+                f"{ATS_API_URL}/api/match",
+                json=payload,
+                headers=headers,
+                timeout=timeout_sec,
+            )
             resp.raise_for_status()
             return True, resp.json()
         except requests.exceptions.Timeout:
@@ -1245,7 +1271,7 @@ def match_candidate_to_job(candidate_id: str, job_id: str, parsed_resume: dict, 
                     pass
             return False, {"error": err_msg}
 
-    json_output = _internal_match(parsed_resume, parsed_jd)
+    json_output = _internal_match(parsed_resume, parsed_jd, skip_narrative=skip_narrative)
     overall = float(json_output.get("overall_match_score") or 0)
     # Auto-shortlist only Strong Match (≥ AUTO_SHORTLIST_MIN, default 80%).
     # Potential Match (40–79%) stays for recruiter review — not auto-shortlisted.

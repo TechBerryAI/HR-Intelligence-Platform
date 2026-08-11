@@ -66,6 +66,7 @@ pip install -r requirements.txt
 pytest
 ```
 
+Scanned PDF / image resumes need **RapidOCR** (`rapidocr-onnxruntime` in `requirements.txt`; Python **3.10–3.12** recommended). Without it, digital PDF/DOCX still parse; OCR pages fall back to Tesseract if installed, else thin-text skips.
 ## Common workflows
 
 ### Run frontend only

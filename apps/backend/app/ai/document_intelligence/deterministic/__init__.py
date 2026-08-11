@@ -235,6 +235,7 @@ def extract_date_range(line: str) -> Tuple[str, str]:
 def extract_simple_location(text: str) -> str:
     from app.ai.parser.enrichment.resume_text_inference import (
         extract_location_from_text,
+        heal_location_candidate,
         is_plausible_location_value,
     )
 
@@ -248,13 +249,14 @@ def extract_simple_location(text: str) -> str:
         text or '',
     )
     if m_label:
-        candidate = m_label.group(1).strip().rstrip(',.;')
+        candidate = heal_location_candidate(m_label.group(1).strip().rstrip(',.;'))
         if candidate and is_plausible_location_value(candidate):
             return candidate
         if candidate and '@' not in candidate and 'http' not in candidate.lower():
             for city in (
                 'Mumbai', 'Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
                 'Pune', 'Thane', 'Navi Mumbai', 'Kolkata', 'Noida', 'Gurugram',
+                'Ambernath', 'Dombivli', 'Sindhudurg', 'Sewree', 'Solapur',
             ):
                 if city.lower() in candidate.lower():
                     return city
@@ -264,7 +266,7 @@ def extract_simple_location(text: str) -> str:
         text or '',
     )
     if m_pipe:
-        cand = m_pipe.group(1).strip().strip(',')
+        cand = heal_location_candidate(m_pipe.group(1).strip().strip(','))
         if cand and is_plausible_location_value(cand):
             return cand
     # City, State / City, Country unlabeled
@@ -277,7 +279,7 @@ def extract_simple_location(text: str) -> str:
         cand = f'{m_cs.group(1)}, {m_cs.group(2)}'.strip().splitlines()[0][:80]
         if is_plausible_location_value(cand):
             return cand
-    # Preamble fallback: short city line between contact and sections
+    # Preamble fallback: short city line before Skills/Summary (not from those sections)
     # VALIDATION_FIX_location_cities
     cities = {
         'mumbai', 'delhi', 'new delhi', 'bangalore', 'bengaluru', 'hyderabad', 'chennai',
@@ -286,19 +288,30 @@ def extract_simple_location(text: str) -> str:
         'vadodara', 'coimbatore', 'kochi', 'thiruvananthapuram', 'chandigarh',
         'mysore', 'mysuru', 'visakhapatnam', 'vijayawada', 'patna', 'ranchi',
         'bhubaneswar', 'guwahati', 'thane', 'navi mumbai', 'andheri', 'powai',
+        'ambernath', 'dombivli', 'dombivili', 'sindhudurg', 'sewree', 'solapur',
+        'kalyan', 'vasai', 'virar', 'panvel', 'aurangabad', 'kolhapur', 'kalwa', 'nashik',
         'austin', 'seattle', 'san francisco',
         'new york', 'london', 'toronto', 'singapore', 'dubai', 'berlin',
         'remote', 'austin, tx', 'san francisco, ca', 'seattle, wa',
     }
-    for line in (text or '').splitlines()[:12]:
+    section_hdr = re.compile(
+        r'(?i)^(?:education|experience|skills|summary|objective|projects|'
+        r'certifications|internship|work\s+history)\b'
+    )
+    for line in (text or '').splitlines()[:20]:
         s = line.strip().strip(',')
         if not s or '@' in s or 'http' in s.lower() or 'linkedin' in s.lower() or 'github' in s.lower():
             continue
+        if section_hdr.match(s):
+            break
         if re.match(r'^\+?\d', s):
             continue
+        healed = heal_location_candidate(s)
+        if healed and is_plausible_location_value(healed):
+            return healed
         low = s.lower()
         if low in cities or any(c in low for c in cities if ',' in c or ' ' in c):
-            return s
+            return s if is_plausible_location_value(s) else healed or ''
         # "City, ST" pattern
         if re.match(r'^[A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*,\s*[A-Z]{2}$', s):
             return s

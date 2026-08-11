@@ -40,7 +40,8 @@ def validate_public_apply_payload(data: dict, has_resume: bool) -> str | None:
             return "Serving notice is required for experienced candidates"
         if not (data.get("noticePeriod") or "").strip():
             return "Notice period is required for experienced candidates"
-    if not has_resume:
+    parsed_id = (data.get("parsedId") or data.get("parsed_id") or "").strip()
+    if not has_resume and not parsed_id:
         return "Resume file is required"
 
     education = data.get("education") or []

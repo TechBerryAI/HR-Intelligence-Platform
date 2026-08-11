@@ -26,7 +26,8 @@ _local_jobs_lock = threading.Lock()
 _BULK_EXPORT_DIR = media_storage.bulk_exports_dir()
 _BULK_UPLOAD_DIR = media_storage.bulk_uploads_dir()
 
-ALLOWED_EXT = {'pdf', 'doc', 'docx'}
+ALLOWED_EXT = {'pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff'}
+# Legacy .doc is not extractable by current text_extraction — reject before staging.
 EXCEL_HEADERS = [
     'Filename',
     'Name',
@@ -986,7 +987,20 @@ def stage_files(job_id: str, files_list: list[tuple[str, bytes]], started_by=Non
         file_bytes_for_db.append(data)
 
     if not staged_names:
-        return False, {'error': 'No valid resume files (PDF/DOC/DOCX)'}
+        # Surface clear reject when only legacy .doc (or other junk) was uploaded
+        rejected_doc = any(
+            (n or '').lower().endswith('.doc') and not (n or '').lower().endswith('.docx')
+            for n, _ in files_list
+        )
+        if rejected_doc:
+            return False, {
+                'error': (
+                    'Unsupported format: legacy .doc is not accepted. '
+                    'Convert to PDF or DOCX (or upload PNG/JPG for scanned resumes).'
+                ),
+                'code': 'unsupported_format',
+            }
+        return False, {'error': 'No valid resume files (PDF/DOCX/PNG/JPG/WEBP/TIFF)'}
 
     with _local_jobs_lock:
         if job_id in _local_jobs:
@@ -1049,7 +1063,7 @@ def extract_zip_to_job(job_id: str, zip_bytes: bytes, started_by=None) -> tuple[
         return False, {'error': f'ZIP extract failed: {e}'}
 
     if not extracted:
-        return False, {'error': 'No valid resume files (PDF/DOC/DOCX) found in ZIP'}
+        return False, {'error': 'No valid resume files (PDF/DOCX/PNG/JPG/WEBP/TIFF) found in ZIP'}
 
     return stage_files(job_id, extracted, started_by=started_by)
 

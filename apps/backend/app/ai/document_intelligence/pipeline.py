@@ -325,7 +325,7 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
             unresolved_text=unresolved,
             allow_experience_fill=allow_experience_fill,
         )
-        profile = sanitize_candidate_profile(profile)
+        profile = sanitize_candidate_profile(profile, source_text=text or '')
         profile, _ = recover_resume_profile_gaps(profile, text)
         record_pipeline_stage(
             'semantic',
@@ -349,7 +349,7 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
                 unresolved_text=unresolved,
                 allow_experience_fill=allow_experience_fill,
             )
-            profile = sanitize_candidate_profile(profile)
+            profile = sanitize_candidate_profile(profile, source_text=text or '')
             profile, _ = recover_resume_profile_gaps(profile, text)
             record_pipeline_stage(
                 'semantic',
@@ -621,7 +621,7 @@ def _run_resume(
                 unresolved_text=unresolved,
                 allow_experience_fill=allow_experience_fill,
             )
-            profile = sanitize_candidate_profile(profile)
+            profile = sanitize_candidate_profile(profile, source_text=raw_text or '')
             profile, _cov = recover_resume_profile_gaps(profile, raw_text)
             used_llm = True
             _emit(parse_job_id, 'semantic', 'completed', 'Coverage gaps', on_stage=on_stage)
@@ -634,14 +634,14 @@ def _run_resume(
             unresolved_text=unresolved,
             allow_experience_fill=allow_experience_fill,
         )
-        profile = sanitize_candidate_profile(profile)
+        profile = sanitize_candidate_profile(profile, source_text=raw_text or '')
         profile, _cov = recover_resume_profile_gaps(profile, raw_text)
         used_llm = True
         _emit(parse_job_id, 'semantic', 'completed', on_stage=on_stage)
 
     _emit(parse_job_id, 'knowledge', 'started', on_stage=on_stage)
     profile = apply_knowledge_to_candidate(profile)
-    profile = sanitize_candidate_profile(profile)
+    profile = sanitize_candidate_profile(profile, source_text=raw_text or '')
     _emit(parse_job_id, 'knowledge', 'completed', on_stage=on_stage)
 
     toon = candidate_to_toon(profile)
