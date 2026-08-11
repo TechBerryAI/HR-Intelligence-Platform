@@ -114,8 +114,10 @@ export default function ResumeUploadWithParsing({
     }
 
     setIsUploading(true);
-    setStageLabel('text');
-    setProgressPct(10);
+    // Leave stage/progress null so the overlay animates through steps (as before).
+    // Live SSE stages take over when the engine reports them.
+    setStageLabel(null);
+    setProgressPct(null);
     
     try {
       const onStage = (ev) => {

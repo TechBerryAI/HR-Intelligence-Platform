@@ -1100,7 +1100,12 @@ def public_apply_to_job(job_id: str):
 
         email = normalize_email(data.get('email'))
         full_name = (data.get('fullName') or '').strip()
-        candidate_id = upsert_passwordless_candidate(full_name, email)
+        org_id = str(job.get('organization_id') or org.get('id') or '').strip()
+        if not org_id:
+            return jsonify({'error': 'Job is missing organization context'}), 400
+        candidate_id = upsert_passwordless_candidate(
+            full_name, email, organization_id=org_id
+        )
 
         existing = db_get(
             'SELECT id FROM applications WHERE candidate_id = ? AND job_id = ?',
@@ -1165,6 +1170,8 @@ def public_apply_to_job(job_id: str):
         if not parsed_resume or not isinstance(parsed_resume, dict) or not isinstance(parsed_jd, dict):
             return jsonify({'error': 'Resume or job description data is not in a valid format'}), 400
 
+        # Public apply: deterministic ATS only (skip Ollama narrative — that blocked
+        # the HTTP response for many seconds while the UI showed "Submitting…").
         ats_success, ats_result = match_candidate_to_job(
             candidate_id,
             job_id,
@@ -1197,8 +1204,11 @@ def public_apply_to_job(job_id: str):
 
         if shortlisted and app_id:
             # Defer email + interview scheduling so the apply response returns immediately.
+            # Must push Flask app context — without it, mail falls back to [DEV EMAIL] console only.
             import threading
+            from flask import current_app
 
+            _app = current_app._get_current_object()
             _app_id = app_id
             _full_name = full_name
             _email = email
@@ -1206,42 +1216,43 @@ def public_apply_to_job(job_id: str):
             _candidate_id = candidate_id
 
             def _shortlist_side_effects() -> None:
-                try:
-                    from app.domains.recruitment.services.interview_trigger import (
-                        trigger_interview_scheduling,
-                    )
-                    from app.domains.recruitment.services.notifications import send_and_get_output
+                with _app.app_context():
+                    try:
+                        from app.domains.recruitment.services.interview_trigger import (
+                            trigger_interview_scheduling,
+                        )
+                        from app.domains.recruitment.services.notifications import send_and_get_output
 
-                    profile = db_get(
-                        'SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?',
-                        (_candidate_id,),
-                    )
-                    signup = db_get('SELECT email FROM candidates WHERE cid = ?', (_candidate_id,))
-                    candidate_email = (
-                        (profile or {}).get('email')
-                        or (signup or {}).get('email')
-                        or _email
-                        or ''
-                    )
-                    if candidate_email:
-                        try:
-                            send_and_get_output(
-                                hr_action='SHORTLISTED',
-                                candidate_name=(profile or {}).get('full_name') or _full_name or '',
-                                candidate_email=candidate_email,
-                                job_title=(_job.get('title') if isinstance(_job, dict) else '') or '',
-                                company_name=(_job.get('company') if isinstance(_job, dict) else '') or '',
-                                application_id=_app_id,
-                                timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-                            )
-                        except Exception as notify_err:
-                            print(f"[PUBLIC_APPLY] SHORTLISTED notification failed: {notify_err}")
-                    trigger_interview_scheduling(
-                        _app_id,
-                        recruiter_hrid=(_job.get('posted_by') if isinstance(_job, dict) else None),
-                    )
-                except Exception as side_err:
-                    print(f"[PUBLIC_APPLY] shortlist side effects failed: {side_err}")
+                        profile = db_get(
+                            'SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?',
+                            (_candidate_id,),
+                        )
+                        signup = db_get('SELECT email FROM candidates WHERE cid = ?', (_candidate_id,))
+                        candidate_email = (
+                            (profile or {}).get('email')
+                            or (signup or {}).get('email')
+                            or _email
+                            or ''
+                        )
+                        if candidate_email:
+                            try:
+                                send_and_get_output(
+                                    hr_action='SHORTLISTED',
+                                    candidate_name=(profile or {}).get('full_name') or _full_name or '',
+                                    candidate_email=candidate_email,
+                                    job_title=(_job.get('title') if isinstance(_job, dict) else '') or '',
+                                    company_name=(_job.get('company') if isinstance(_job, dict) else '') or '',
+                                    application_id=_app_id,
+                                    timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+                                )
+                            except Exception as notify_err:
+                                print(f"[PUBLIC_APPLY] SHORTLISTED notification failed: {notify_err}")
+                        trigger_interview_scheduling(
+                            _app_id,
+                            recruiter_hrid=(_job.get('posted_by') if isinstance(_job, dict) else None),
+                        )
+                    except Exception as side_err:
+                        print(f"[PUBLIC_APPLY] shortlist side effects failed: {side_err}")
 
             threading.Thread(
                 target=_shortlist_side_effects,
