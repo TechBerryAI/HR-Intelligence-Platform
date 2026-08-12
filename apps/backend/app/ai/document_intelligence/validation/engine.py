@@ -243,6 +243,12 @@ def validate_role(value: str) -> Tuple[bool, str]:
         s,
     ):
         return False, 'role_is_noise'
+    # Noun-led KPI / duty fragments (e.g. "Trends, and Revenue KPIs…")
+    if (
+        (',' in s or re.search(r'(?i)\b(?:trends?|kpis?|revenue)\b', s))
+        and not _JOB_TITLE_CUE_RE.search(s)
+    ):
+        return False, 'role_is_duty_fragment'
     if _INSTITUTION_AS_JOB_RE.search(s) and not _JOB_TITLE_CUE_RE.search(s):
         return False, 'role_is_institution'
     # Education lines mistaken for jobs
@@ -475,6 +481,9 @@ def sanitize_candidate_profile(
             {
                 'from': e.start,
                 'to': 'Present' if e.is_current else e.end,
+                'description': e.description or '',
+                'role': e.role or '',
+                'company': e.company or '',
             }
             for e in experience
         ]

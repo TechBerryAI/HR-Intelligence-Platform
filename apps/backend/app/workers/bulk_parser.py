@@ -88,6 +88,58 @@ def _is_retryable_llm_error(err: str) -> bool:
     )
 
 
+def _experience_titles_implausible(toon: dict) -> bool:
+    """True when any experience title fails the hardened job-title gate."""
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_job_title
+
+    exp = toon.get('experience') if isinstance(toon, dict) else None
+    if not isinstance(exp, list):
+        return False
+    for e in exp:
+        if not isinstance(e, dict):
+            continue
+        title = (e.get('title') or e.get('role') or '').strip()
+        if title and not is_plausible_job_title(title):
+            return True
+    return False
+
+
+def _ocr_experience_slice_mushy(raw_text: str) -> bool:
+    """Cheap OCR-quality check on Experience section — refuse det-skip when mushy."""
+    from app.ai.document_intelligence.coverage.resume_coverage import (
+        _experience_section_text,
+        has_experience_section_evidence,
+    )
+
+    if not has_experience_section_evidence(raw_text or ''):
+        return False
+    body = _experience_section_text(raw_text or '')
+    if not body or len(body.strip()) < 40:
+        return False
+    sample = body[:1200]
+    letters = sum(1 for c in sample if c.isalnum())
+    if letters < 20:
+        return True
+    non_alnum_ratio = 1.0 - (letters / max(len(sample), 1))
+    if non_alnum_ratio > 0.45:
+        return True
+    # Broken token density: long glued ALLCAPS / no-space runs
+    glued = re.findall(r'\b[A-Za-z]{20,}\b', sample)
+    if len(glued) >= 3:
+        return True
+    spaced_words = [w for w in re.findall(r'[A-Za-z]{2,}', sample)]
+    if spaced_words:
+        weird = sum(
+            1
+            for w in spaced_words
+            if re.search(r'[a-z]{3,}[A-Z]{3,}', w)
+            or (w.isupper() and len(w) > 12)
+        )
+        if weird >= 4:
+            return True
+    return False
+
+
 def _call_llm_throttled(raw_text: str, doc_type: str = 'resume'):
     """Queue LLM calls so Ollama is not overwhelmed on large batches."""
     from app.integrations.openai.llm_service import call_llm
@@ -335,7 +387,28 @@ def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
 
     years = toon.get('total_experience_years')
     if years is None or years == '':
-        years_out = ''
+        # Phase 6 safety net: recompute from experience dates / description ranges
+        try:
+            from app.ai.parser.enrichment.resume_text_inference import (
+                compute_total_experience_years,
+            )
+
+            recomputed = compute_total_experience_years(
+                [
+                    {
+                        'from': e.get('from') or e.get('start'),
+                        'to': e.get('to') or e.get('end'),
+                        'description': e.get('description') or '',
+                        'role': e.get('title') or e.get('role') or '',
+                        'company': e.get('company') or '',
+                    }
+                    for e in exp
+                    if isinstance(e, dict)
+                ]
+            )
+            years_out = recomputed if recomputed is not None else ''
+        except Exception:
+            years_out = ''
     else:
         years_out = years
 
@@ -676,7 +749,19 @@ def _process_one_file_inner(
                     and isinstance(det_toon, dict)
                     and not (det_toon.get("experience") or [])
                 )
-                if passes and isinstance(det_toon, dict) and not exp_gap:
+                # Phase 6: refuse det-skip on garbled titles or OCR-mushy experience
+                bad_titles = (
+                    isinstance(det_toon, dict)
+                    and _experience_titles_implausible(det_toon)
+                )
+                ocr_mush = _ocr_experience_slice_mushy(raw_text)
+                if (
+                    passes
+                    and isinstance(det_toon, dict)
+                    and not exp_gap
+                    and not bad_titles
+                    and not ocr_mush
+                ):
                     t_val = time.perf_counter()
                     accept, notes, parse_status = validate_toon_format_bulk(det_toon, "resume")
                     _bulk_stage(
@@ -742,11 +827,13 @@ def _process_one_file_inner(
             try:
                 from app.ai.parser.engine import parse_resume_text_via_engine
 
-                toon, source, eng_notes, form_dto = parse_resume_text_via_engine(
-                    raw_text,
-                    allow_llm=True,
-                    skip_llm_when_deterministic=False,
-                )
+                # Gate concurrent Ollama calls (OLLAMA_MAX_CONCURRENT)
+                with _llm_semaphore:
+                    toon, source, eng_notes, form_dto = parse_resume_text_via_engine(
+                        raw_text,
+                        allow_llm=True,
+                        skip_llm_when_deterministic=False,
+                    )
                 if not isinstance(toon, dict):
                     last_err = "Engine returned non-object"
                     toon = None

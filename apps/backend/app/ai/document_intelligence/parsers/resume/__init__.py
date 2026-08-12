@@ -665,7 +665,10 @@ def _is_bullet_or_duty_line(line: str) -> bool:
         return True
     if _DUTY_VERB_START.match(stripped):
         return True
-    # Long prose with comma clauses is a duty sentence, not a title
+    # Mid/long prose with comma clauses is a duty sentence, not a title
+    # (Saloni-style: "Trends, and Revenue KPIs, enabling data…")
+    if ',' in stripped and len(stripped) > 40:
+        return True
     if len(stripped) > 90 and ',' in stripped:
         return True
     return False
