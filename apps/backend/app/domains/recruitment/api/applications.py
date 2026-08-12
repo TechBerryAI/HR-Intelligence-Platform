@@ -435,30 +435,24 @@ def receive_ats_result():
 
         if new_status == STATUS_SHORTLISTED:
             from datetime import datetime
-            from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
-            from app.domains.recruitment.services.notifications import send_and_get_output
+            from app.domains.recruitment.services.notifications import notify_shortlisted_with_booking
             job_row = db_get('SELECT title, company, posted_by FROM jobs WHERE jdid = ?', (job_id,))
             profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
             signup = db_get('SELECT email FROM candidates WHERE cid = ?', (candidate_id,))
             candidate_email = (profile or {}).get('email') or (signup or {}).get('email') or ''
-            if candidate_email:
-                try:
-                    send_and_get_output(
-                        hr_action='SHORTLISTED',
-                        candidate_name=(profile or {}).get('full_name') or '',
-                        candidate_email=candidate_email,
-                        job_title=(job_row or {}).get('title') or '',
-                        company_name=(job_row or {}).get('company') or '',
-                        application_id=application['id'],
-                        timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-                    )
-                except Exception as notify_err:
-                    print(f"[ATS_RESULT] SHORTLISTED notification failed: {notify_err}")
-            trigger_interview_scheduling(
-                application['id'],
-                recruiter_hrid=(job_row or {}).get('posted_by'),
-            )
-        
+            try:
+                notify_shortlisted_with_booking(
+                    application_id=application['id'],
+                    candidate_name=(profile or {}).get('full_name') or '',
+                    candidate_email=candidate_email,
+                    job_title=(job_row or {}).get('title') or '',
+                    company_name=(job_row or {}).get('company') or '',
+                    recruiter_hrid=(job_row or {}).get('posted_by'),
+                    timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+                )
+            except Exception as notify_err:
+                print(f"[ATS_RESULT] shortlist+booking notify failed: {notify_err}")
+       
         return jsonify({
             'status': 'ok',
             'message': 'ATS results and detailed analysis recorded successfully',

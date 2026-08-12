@@ -680,24 +680,17 @@ def list_job_emails(jdid):
         infer_shortlist = shortlisted or app_status in ('Shortlisted', 'Interview')
         infer_interview = interview_status in ('Invited', 'Scheduled')
 
-        shortlist = _email_status_payload(
-            row.get('shortlist_email_status'),
-            row.get('shortlist_email_sent_at'),
-            inferred_sent=infer_shortlist,
-            inferred_at=row.get('interview_created_at') or row.get('applied_at'),
+        has_email_log = bool(
+            row.get('shortlist_email_status') or row.get('interview_email_status')
         )
-        interview = _email_status_payload(
-            row.get('interview_email_status'),
-            row.get('interview_email_sent_at'),
-            inferred_sent=infer_interview,
-            inferred_at=row.get('interview_created_at'),
+        invite = _email_status_payload(
+            row.get('interview_email_status') or row.get('shortlist_email_status'),
+            row.get('interview_email_sent_at') or row.get('shortlist_email_sent_at'),
+            inferred_sent=has_email_log or (infer_shortlist and infer_interview),
+            inferred_at=row.get('interview_email_sent_at') or row.get('shortlist_email_sent_at')
+            or row.get('interview_created_at') or row.get('scheduled_at'),
         )
-
-        if shortlist['sent'] and interview['sent']:
-            overall = 'Sent'
-        else:
-            # Any unsent mail → Pending (including only one of the two sent)
-            overall = 'Pending'
+        overall = 'Sent' if invite['sent'] else 'Pending'
 
         emails.append({
             'applicationId': row.get('application_id'),
@@ -705,8 +698,7 @@ def list_job_emails(jdid):
             'candidateName': row.get('candidate_name') or row.get('candidate_id') or '—',
             'candidateEmail': row.get('candidate_email') or '',
             'applicationStatus': app_status,
-            'shortlistEmail': shortlist,
-            'interviewEmail': interview,
+            'inviteEmail': invite,
             'overallStatus': overall,
         })
     return jsonify({'emails': emails, 'count': len(emails)})

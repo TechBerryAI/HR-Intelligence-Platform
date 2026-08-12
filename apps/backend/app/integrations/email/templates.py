@@ -221,18 +221,21 @@ def interview_invite_html(
     booking_url: str,
     ttl_hours: int = 72,
 ) -> str:
-    """Invite candidate to book an interview slot."""
+    """Combined shortlist + interview booking invite."""
     name = _escape(candidate_name) or "there"
     job = _escape(job_title) or "the position"
     company = _escape(company_name) or "the company"
     recruiter = _escape(recruiter_name) or "the recruiter"
     url = _escape(booking_url)
+    title = "You've been shortlisted — book your interview"
     content = f"""
-    <h2 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 700; color: #0f172a;">Schedule your interview</h2>
+    <h2 style="margin: 0 0 16px 0; font-size: 18px; font-weight: 700; color: #0f172a;">{title}</h2>
     <p style="margin: 0 0 16px 0;">Hi {name},</p>
+    <p style="margin: 0 0 12px 0;">
+      Great news — you have been <strong>shortlisted</strong> for <strong>{job}</strong> at <strong>{company}</strong>.
+    </p>
     <p style="margin: 0 0 16px 0;">
-      You have been shortlisted for <strong>{job}</strong> at <strong>{company}</strong>.
-      Please choose a time to meet with <strong>{recruiter}</strong>.
+      Please book an interview slot with <strong>{recruiter}</strong> using the button below.
     </p>
     <p style="margin: 0 0 24px 0; text-align: center;">
       <a href="{url}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;">
@@ -244,7 +247,7 @@ def interview_invite_html(
       <a href="{url}" style="color:#2563eb;word-break:break-all;">{url}</a>
     </p>
     """
-    return _wrap_content("Schedule your interview", content, preheader="Book your interview slot")
+    return _wrap_content(title, content, preheader="Shortlisted — book your interview slot")
 
 
 def interview_confirmation_html(
