@@ -45,9 +45,10 @@ function validate(form, parseError = '') {
   if (!form.experienceLevel) errors.experienceLevel = 'Required'
   if (form.experienceLevel === 'experienced') {
     if (!form.servingNotice) errors.servingNotice = 'Required'
-    if (!form.noticePeriod?.trim()) errors.noticePeriod = 'Required'
-    if (form.servingNotice === 'yes' && !form.lastWorkingDay) {
-      errors.lastWorkingDay = 'Required'
+    // Serving period + last working date only apply while currently serving notice
+    if (form.servingNotice === 'yes') {
+      if (!form.noticePeriod?.trim()) errors.noticePeriod = 'Required'
+      if (!form.lastWorkingDay) errors.lastWorkingDay = 'Required'
     }
   }
   if (!form.resumeFile && !form.resumeFileName) {
@@ -459,8 +460,19 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                         setForm((prev) => ({
                           ...prev,
                           servingNotice: v,
+                          // Period / LWD only relevant when currently serving notice
+                          noticePeriod: v === 'yes' ? prev.noticePeriod : '',
                           lastWorkingDay: v === 'yes' ? prev.lastWorkingDay : '',
                         }))
+                        setErrors((prev) => {
+                          const next = { ...prev }
+                          delete next.servingNotice
+                          if (v !== 'yes') {
+                            delete next.noticePeriod
+                            delete next.lastWorkingDay
+                          }
+                          return next
+                        })
                       }}
                     >
                       <option value="">Select</option>
@@ -471,18 +483,30 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                   </div>
                   <div data-apply-field="noticePeriod">
                     <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1">
-                      Serving period <span className="text-[#FF6B81]">*</span>
+                      Serving period
+                      {form.servingNotice === 'yes' && <span className="text-[#FF6B81]"> *</span>}
                     </label>
                     <select
                       className={`premium-input w-full text-sm ${errors.noticePeriod ? 'border-red-500' : ''}`}
                       value={form.noticePeriod}
-                      onChange={(e) => setField('noticePeriod', e.target.value)}
+                      disabled={form.servingNotice !== 'yes'}
+                      onChange={(e) => {
+                        setField('noticePeriod', e.target.value)
+                        setErrors((prev) => {
+                          const next = { ...prev }
+                          delete next.noticePeriod
+                          return next
+                        })
+                      }}
                     >
                       <option value="">Select</option>
                       <option value="<30 days">&lt;30 days</option>
                       <option value="<60 days">&lt;60 days</option>
                       <option value="<90 days">&lt;90 days</option>
                     </select>
+                    {form.servingNotice === 'no' && (
+                      <p className="mt-1 text-xs text-[var(--ei-text-muted)]">Not required when not serving notice</p>
+                    )}
                     {errors.noticePeriod && <p className="mt-1 text-sm text-red-600">{errors.noticePeriod}</p>}
                   </div>
                   {form.servingNotice === 'yes' && (

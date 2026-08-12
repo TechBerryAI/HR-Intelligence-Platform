@@ -578,6 +578,140 @@ def job_detail_or_delete(jdid):
     })
 
 
+@head_hr_bp.get('/jobs/<jdid>/interviews')
+@require_analytics_read
+def list_job_interviews(jdid):
+    """Interview schedule for a job (Invited + Scheduled)."""
+    org_id, _org, err = _caller_org()
+    if err:
+        return err
+    job = db_get(
+        'SELECT jdid FROM jobs WHERE jdid = ? AND organization_id = ?',
+        (jdid, org_id),
+    )
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+
+    from app.domains.recruitment.repository import interview_repository as interview_repo
+
+    rows = interview_repo.list_interviews_for_job(jdid, org_id) or []
+    interviews = []
+    for row in rows:
+        interviews.append({
+            'id': str(row.get('id')),
+            'applicationId': row.get('application_id'),
+            'candidateId': row.get('candidate_id'),
+            'candidateName': row.get('candidate_name') or row.get('candidate_id') or '—',
+            'candidateEmail': row.get('candidate_email') or '',
+            'status': row.get('status') or '',
+            'applicationStatus': row.get('application_status') or '',
+            'scheduledAt': row.get('scheduled_at').isoformat()
+            if getattr(row.get('scheduled_at'), 'isoformat', None)
+            else row.get('scheduled_at'),
+            'meetLink': row.get('meeting_link') or '',
+            'inviteExpiresAt': row.get('invite_expires_at').isoformat()
+            if getattr(row.get('invite_expires_at'), 'isoformat', None)
+            else row.get('invite_expires_at'),
+            'assignedTo': row.get('assigned_to') or '',
+            'recruiterName': row.get('recruiter_name') or '',
+            'durationMinutes': row.get('duration_minutes'),
+            'openSlots': int(row.get('open_slots') or 0),
+            'createdAt': row.get('created_at').isoformat()
+            if getattr(row.get('created_at'), 'isoformat', None)
+            else row.get('created_at'),
+        })
+    return jsonify({'interviews': interviews, 'count': len(interviews)})
+
+
+def _iso(value):
+    if value is None:
+        return None
+    if getattr(value, 'isoformat', None):
+        return value.isoformat()
+    return value
+
+
+def _email_status_payload(raw_status, sent_at, *, inferred_sent: bool, inferred_at=None):
+    if raw_status:
+        label = 'Sent' if str(raw_status).lower() == 'sent' else 'Failed'
+        return {
+            'status': label,
+            'sent': str(raw_status).lower() == 'sent',
+            'sentAt': _iso(sent_at),
+            'source': 'log',
+        }
+    if inferred_sent:
+        return {
+            'status': 'Sent',
+            'sent': True,
+            'sentAt': _iso(inferred_at),
+            'source': 'inferred',
+        }
+    return {
+        'status': 'Pending',
+        'sent': False,
+        'sentAt': None,
+        'source': 'none',
+    }
+
+
+@head_hr_bp.get('/jobs/<jdid>/emails')
+@require_analytics_read
+def list_job_emails(jdid):
+    """Per-candidate email send status for a job (shortlist + interview invite)."""
+    org_id, _org, err = _caller_org()
+    if err:
+        return err
+    job = db_get(
+        'SELECT jdid FROM jobs WHERE jdid = ? AND organization_id = ?',
+        (jdid, org_id),
+    )
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+
+    from app.domains.recruitment.repository import email_event_repository as email_events
+
+    rows = email_events.list_email_status_for_job(jdid, org_id) or []
+    emails = []
+    for row in rows:
+        app_status = (row.get('application_status') or '').strip()
+        shortlisted = row.get('shortlisted') in (True, 1, 't', 'true', '1')
+        interview_status = (row.get('interview_status') or '').strip()
+        infer_shortlist = shortlisted or app_status in ('Shortlisted', 'Interview')
+        infer_interview = interview_status in ('Invited', 'Scheduled')
+
+        shortlist = _email_status_payload(
+            row.get('shortlist_email_status'),
+            row.get('shortlist_email_sent_at'),
+            inferred_sent=infer_shortlist,
+            inferred_at=row.get('interview_created_at') or row.get('applied_at'),
+        )
+        interview = _email_status_payload(
+            row.get('interview_email_status'),
+            row.get('interview_email_sent_at'),
+            inferred_sent=infer_interview,
+            inferred_at=row.get('interview_created_at'),
+        )
+
+        if shortlist['sent'] and interview['sent']:
+            overall = 'Sent'
+        else:
+            # Any unsent mail → Pending (including only one of the two sent)
+            overall = 'Pending'
+
+        emails.append({
+            'applicationId': row.get('application_id'),
+            'candidateId': row.get('candidate_id'),
+            'candidateName': row.get('candidate_name') or row.get('candidate_id') or '—',
+            'candidateEmail': row.get('candidate_email') or '',
+            'applicationStatus': app_status,
+            'shortlistEmail': shortlist,
+            'interviewEmail': interview,
+            'overallStatus': overall,
+        })
+    return jsonify({'emails': emails, 'count': len(emails)})
+
+
 # ---------------------------------------------------------------------------
 # Applications
 # ---------------------------------------------------------------------------
