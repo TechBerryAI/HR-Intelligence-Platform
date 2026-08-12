@@ -1,0 +1,15 @@
+KARAN MEHTA
+Address: Plot 12, Sector 5, Navi Mumbai, Maharashtra 400706
+Email: karan@example.com
+Phone: 9123456789
+
+SKILLS
+Python, SQL
+
+EXPERIENCE
+Data Analyst - Bar Corp
+Mar 2021 - Present
+• Built dashboards
+
+EDUCATION
+B.Sc Computer Science - Mumbai University

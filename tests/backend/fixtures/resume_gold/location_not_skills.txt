@@ -1,0 +1,15 @@
+POLLUTED LOC CHECK
+polluted@example.com | 9000011111
+
+SKILLS
+HTML, JS, TypeScript, Node.js
+
+EXPERIENCE
+Frontend Intern - Soft Co
+Jan 2024 - Jun 2024
+• Built UI
+
+EDUCATION
+BCA - Delhi University
+
+Location: Bangalore

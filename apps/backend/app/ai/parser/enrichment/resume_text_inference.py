@@ -170,6 +170,20 @@ def is_biodata_or_address_line(line: str | None) -> bool:
     return False
 
 
+# Real title cue — comma / KPI list fragments may pass length checks without these.
+_JOB_TITLE_CUE = re.compile(
+    r'(?i)\b(?:'
+    r'intern(?:ship)?|trainee|engineer|developer|analyst|architect|manager|lead|'
+    r'consultant|specialist|administrator|scientist|designer|officer|executive|'
+    r'associate|coordinator|director|founder|ceo|cto|cfo|sde|swe|qa|devops|'
+    r'programmer|technician|support|recruiter|hr\b|teacher|professor|researcher'
+    r')\b'
+)
+_TITLE_KPI_LIST = re.compile(
+    r'(?i)(?:,\s*and\b)|(?:\bkpis?\b)|(?:\brevenue\b)|(?:\btrends?\b)'
+)
+
+
 def is_plausible_job_title(title: str | None) -> bool:
     """Reject summary/objective/biodata/address fragments that are not job titles."""
     t = (title or '').strip().lstrip(':').strip()
@@ -190,6 +204,11 @@ def is_plausible_job_title(title: str | None) -> bool:
         return False
     # Lowercase multi-word prose (e.g. "to help the company achieve…")
     if t[0].islower() and len(words) >= 4:
+        return False
+    # Duty/KPI fragments: "Trends, and Revenue KPIs…" — require a real title cue
+    if ',' in t and not _JOB_TITLE_CUE.search(t):
+        return False
+    if _TITLE_KPI_LIST.search(t) and not _JOB_TITLE_CUE.search(t):
         return False
     return True
 
@@ -572,19 +591,31 @@ def _parse_year_month(token: str) -> tuple[int, int] | None:
 
 
 def compute_total_experience_years(experience: list[dict[str, Any]]) -> float | None:
-    """Approximate total years from experience date ranges."""
+    """Approximate total years from experience date ranges (from/to, start/end, or description)."""
     if not experience:
         return None
     total_months = 0
     for exp in experience:
         if not isinstance(exp, dict):
             continue
-        start = _parse_year_month(str(exp.get('from') or ''))
-        end_raw = str(exp.get('to') or '')
-        if re.match(r'(?i)^(present|current|now)$', end_raw.strip()):
+        start_tok = str(exp.get('from') or exp.get('start') or '').strip()
+        end_tok = str(exp.get('to') or exp.get('end') or '').strip()
+        # Peel dates from description when structured dates missing (Excel safety net)
+        if not start_tok:
+            blob = ' '.join(
+                str(exp.get(k) or '')
+                for k in ('description', 'title', 'role', 'company')
+            )
+            fr, to = extract_date_range_from_line(blob)
+            if fr:
+                start_tok = fr
+                if to and not end_tok:
+                    end_tok = to
+        start = _parse_year_month(start_tok) if start_tok else None
+        if re.match(r'(?i)^(present|current|now)$', end_tok):
             end = _parse_year_month('Present')
         else:
-            end = _parse_year_month(end_raw)
+            end = _parse_year_month(end_tok) if end_tok else None
         if not start or not end:
             years = exp.get('years')
             if isinstance(years, (int, float)):
@@ -663,10 +694,10 @@ def heal_location_candidate(value: str) -> str:
         for p in reversed(parts):
             healed = heal_location_candidate(p) if ('|' in p or '⋄' in p) else p
             if healed and is_plausible_location_value(healed):
-                return healed
+                return canonicalize_location_city(healed)
             for city in _KNOWN_LOCATION_CITIES:
                 if city.lower() == healed.lower() or city.lower() == p.lower():
-                    return city
+                    return canonicalize_location_city(city)
         return ''
     # Prefer known city substring from polluted strings
     if not is_plausible_location_value(s):
@@ -675,9 +706,9 @@ def heal_location_candidate(value: str) -> str:
             if city.lower() in low and not _LOCATION_TECH_NOISE.search(city):
                 # Avoid matching short tokens inside tech words
                 if re.search(rf'(?i)\b{re.escape(city)}\b', s):
-                    return city
+                    return canonicalize_location_city(city)
         return ''
-    return s
+    return canonicalize_location_city(s)
 
 
 def is_section_header_line(line: str) -> bool:
@@ -873,16 +904,110 @@ _KNOWN_LOCATION_CITIES = (
     'Indore', 'Thane', 'Navi Mumbai', 'Mulund', 'Kandivali', 'Andheri', 'Powai',
     'Faridabad', 'Jaipur', 'Lucknow', 'Bhopal', 'Surat', 'Vadodara', 'Coimbatore',
     'Kochi', 'Chandigarh', 'Mysore', 'Mysuru', 'Visakhapatnam', 'Mehdipatnam',
-    'Kalwa', 'Nashik', 'Ambernath', 'Dombivli', 'Dombivili', 'Sindhudurg', 'Sewree',
-    'Solapur', 'Kalyan', 'Vasai', 'Virar', 'Panvel', 'Aurangabad', 'Kolhapur',
+    'Kalwa', 'Nashik', 'Nasik', 'Ambernath', 'Dombivli', 'Dombivili', 'Sindhudurg',
+    'Sewree', 'Solapur', 'Kalyan', 'Vasai', 'Virar', 'Panvel', 'Aurangabad', 'Kolhapur',
+    'Bhubaneswar', 'Vellore', 'Berhampur', 'Kanpur', 'Mangalore',
     'Austin', 'Seattle', 'San Francisco', 'New York', 'London',
     'Toronto', 'Singapore', 'Dubai',
+)
+# Spelling / OCR aliases → canonical city for Excel
+_LOCATION_ALIASES = {
+    'nasik': 'Nashik',
+    'bengaluru': 'Bengaluru',
+    'bangalore': 'Bangalore',
+    'gurgaon': 'Gurugram',
+    'gurugram': 'Gurugram',
+    'bombay': 'Mumbai',
+    'calcutta': 'Kolkata',
+    'madras': 'Chennai',
+    'bhubaneshwar': 'Bhubaneswar',
+}
+# Institute / university cues → city (only when structured peel needs it)
+_INSTITUTE_CITY_PEEL = (
+    (re.compile(r'(?i)\bvellore\s+institute\s+of\s+technology\b|\bvit\b'), 'Vellore'),
+    (re.compile(r'(?i)\biit\s+bombay\b|\biitb\b'), 'Mumbai'),
+    (re.compile(r'(?i)\biit\s+madras\b'), 'Chennai'),
+    (re.compile(r'(?i)\biit\s+delhi\b'), 'Delhi'),
+    (re.compile(r'(?i)\biit\s+kanpur\b'), 'Kanpur'),
+    (re.compile(r'(?i)\bnitk?\s+surathkal\b'), 'Mangalore'),
 )
 _KNOWN_REGIONS = frozenset({
     'maharashtra', 'karnataka', 'tamil nadu', 'telangana', 'andhra pradesh',
     'gujarat', 'rajasthan', 'uttar pradesh', 'west bengal', 'kerala', 'punjab',
-    'haryana', 'india', 'usa', 'uk', 'uae', 'tx', 'ca', 'wa', 'ny',
+    'haryana', 'odisha', 'india', 'usa', 'uk', 'uae', 'tx', 'ca', 'wa', 'ny',
 })
+
+
+def known_location_cities() -> tuple[str, ...]:
+    """Shared city allowlist for location heal / evidence / extract."""
+    return _KNOWN_LOCATION_CITIES
+
+
+def canonicalize_location_city(value: str) -> str:
+    """Map aliases (Nasik→Nashik) and return best known city token if present."""
+    s = (value or '').strip()
+    if not s:
+        return ''
+    low = s.lower()
+    if low in _LOCATION_ALIASES:
+        return _LOCATION_ALIASES[low]
+    for alias, canon in _LOCATION_ALIASES.items():
+        if re.search(rf'(?i)\b{re.escape(alias)}\b', s):
+            return canon
+    for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+        if re.search(rf'(?i)\b{re.escape(city)}\b', s):
+            return _LOCATION_ALIASES.get(city.lower(), city)
+    return s
+
+
+def peel_location_from_structured(
+    *,
+    experience: list | None = None,
+    education: list | None = None,
+    raw_text: str = '',
+) -> str:
+    """
+    Recover current location from job/edu structured fields then institute peel.
+    Never invents from random body prose.
+    """
+    for e in experience or []:
+        if not isinstance(e, dict):
+            continue
+        loc = str(e.get('location') or '').strip()
+        if not loc:
+            continue
+        healed = heal_location_candidate(loc)
+        cand = canonicalize_location_city(healed or loc)
+        if cand and is_plausible_location_value(cand):
+            return cand
+        for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+            if re.search(rf'(?i)\b{re.escape(city)}\b', loc):
+                return canonicalize_location_city(city)
+
+    for e in education or []:
+        if not isinstance(e, dict):
+            continue
+        blob = ' '.join(
+            str(e.get(k) or '')
+            for k in ('institution', 'university', 'college', 'location', 'degree', 'field')
+        )
+        if not blob.strip():
+            continue
+        for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+            if re.search(rf'(?i)\b{re.escape(city)}\b', blob):
+                return canonicalize_location_city(city)
+        for pat, city in _INSTITUTE_CITY_PEEL:
+            if pat.search(blob):
+                return city
+
+    head = '\n'.join((raw_text or '').splitlines()[:12])
+    for pat, city in _INSTITUTE_CITY_PEEL:
+        if pat.search(head):
+            return city
+    for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+        if re.search(rf'(?i)\b{re.escape(city)}\b', head):
+            return canonicalize_location_city(city)
+    return ''
 
 
 def is_plausible_location_value(value: str) -> bool:

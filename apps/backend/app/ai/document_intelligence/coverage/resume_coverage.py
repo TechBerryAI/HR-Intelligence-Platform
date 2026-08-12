@@ -48,14 +48,19 @@ def _has_phone_evidence(text: str) -> bool:
 
 
 def _has_location_evidence(text: str) -> bool:
-    return bool(
-        re.search(
-            r'(?i)(?:location|address|based\s+in|residing)|'
-            r'\b(?:mumbai|delhi|bangalore|bengaluru|hyderabad|chennai|pune|thane|'
-            r'noida|gurugram|kolkata|remote|hybrid)\b',
-            text or '',
-        )
-    )
+    from app.ai.parser.enrichment.resume_text_inference import known_location_cities
+
+    if re.search(
+        r'(?i)(?:location|address|based\s+in|residing|current\s+location)',
+        text or '',
+    ):
+        return True
+    if re.search(r'(?i)\b(?:remote|hybrid|vellore\s+institute)\b', text or ''):
+        return True
+    for city in known_location_cities():
+        if re.search(rf'(?i)\b{re.escape(city)}\b', text or ''):
+            return True
+    return False
 
 
 def _has_education_evidence(text: str) -> bool:
@@ -101,8 +106,39 @@ def recover_resume_profile_gaps(
     text = raw_text or ''
     data = profile.model_dump()
     contact = data.get('contact') or {}
+    personal = data.get('personal') or {}
     recovered: list[str] = []
     fields: list[FieldCoverage] = []
+
+    # Full name — report only (never invent); recover via existing parsers elsewhere
+    from app.ai.parser.enrichment.resume_text_inference import (
+        extract_name_from_text,
+        is_plausible_person_name,
+    )
+
+    full_name = str(personal.get('full_name') or '').strip()
+    name_ev = bool(extract_name_from_text(text[:2500]) if text else '')
+    if full_name and is_plausible_person_name(full_name):
+        fields.append(FieldCoverage('fullName', 'filled', True))
+    elif name_ev:
+        found = extract_name_from_text(text[:2500])
+        if found and is_plausible_person_name(found) and not full_name:
+            personal['full_name'] = found
+            data['personal'] = personal
+            recovered.append('fullName')
+            fields.append(FieldCoverage('fullName', 'recovered', True, found[:80]))
+        elif not full_name:
+            fields.append(FieldCoverage('fullName', 'missing_with_evidence', True))
+        else:
+            fields.append(FieldCoverage('fullName', 'filled', True, 'unvalidated'))
+    else:
+        fields.append(
+            FieldCoverage(
+                'fullName',
+                'filled' if full_name else 'missing_no_evidence',
+                bool(full_name),
+            )
+        )
 
     # Email
     email = str(contact.get('email') or '').strip()
@@ -142,19 +178,29 @@ def recover_resume_profile_gaps(
             contact['phone'] = ''
         fields.append(FieldCoverage('phone', 'missing_no_evidence', False))
 
-    # Location — clear polluted values then re-extract
+    # Location — clear polluted values then re-extract / peel from edu+job
+    from app.ai.parser.enrichment.resume_text_inference import (
+        peel_location_from_structured,
+    )
+
     loc = str(contact.get('location') or '').strip()
     loc_ok = _is_plausible_location(loc) if loc else False
     loc_ev = _has_location_evidence(text)
     if loc and loc_ok:
         fields.append(FieldCoverage('location', 'filled', True))
-    elif loc_ev:
+    else:
         if loc and not loc_ok:
             contact['location'] = ''
             if str(contact.get('preferred_location') or '').strip() == loc:
                 contact['preferred_location'] = ''
             loc = ''
-        found = extract_simple_location(text)
+        found = extract_simple_location(text) if (loc_ev or text) else ''
+        if not (found and _is_plausible_location(found)):
+            found = peel_location_from_structured(
+                experience=list(data.get('experience') or []),
+                education=list(data.get('education') or []),
+                raw_text=text,
+            )
         if found and _is_plausible_location(found):
             contact['location'] = found
             if not str(contact.get('preferred_location') or '').strip() or not _is_plausible_location(
@@ -163,14 +209,10 @@ def recover_resume_profile_gaps(
                 contact['preferred_location'] = found
             recovered.append('location')
             fields.append(FieldCoverage('location', 'recovered', True, found[:80]))
-        else:
+        elif loc_ev:
             fields.append(FieldCoverage('location', 'missing_with_evidence', True))
-    else:
-        if loc and not loc_ok:
-            contact['location'] = ''
-            if str(contact.get('preferred_location') or '').strip() == loc:
-                contact['preferred_location'] = ''
-        fields.append(FieldCoverage('location', 'missing_no_evidence', False))
+        else:
+            fields.append(FieldCoverage('location', 'missing_no_evidence', False))
 
     # Preferred location: mirror current when empty (grounded copy only)
     pref = str(contact.get('preferred_location') or '').strip()
@@ -276,8 +318,16 @@ def recover_resume_profile_gaps(
 
 def resume_has_recoverable_gaps(profile: CandidateProfile, raw_text: str) -> bool:
     """True when contact/location/education/experience incomplete but source has evidence."""
+    from app.ai.parser.enrichment.resume_text_inference import (
+        extract_name_from_text,
+        is_plausible_person_name,
+    )
+
     contact = profile.contact
     text = raw_text or ''
+    name = (profile.personal.full_name or '').strip()
+    if (not name or not is_plausible_person_name(name)) and extract_name_from_text(text[:2500]):
+        return True
     if not (contact.email or '').strip() and _has_email_evidence(text):
         return True
     phone = (contact.phone or '').strip()

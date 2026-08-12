@@ -253,13 +253,15 @@ def extract_simple_location(text: str) -> str:
         if candidate and is_plausible_location_value(candidate):
             return candidate
         if candidate and '@' not in candidate and 'http' not in candidate.lower():
-            for city in (
-                'Mumbai', 'Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
-                'Pune', 'Thane', 'Navi Mumbai', 'Kolkata', 'Noida', 'Gurugram',
-                'Ambernath', 'Dombivli', 'Sindhudurg', 'Sewree', 'Solapur',
-            ):
+            from app.ai.parser.enrichment.resume_text_inference import known_location_cities
+
+            for city in known_location_cities():
                 if city.lower() in candidate.lower():
-                    return city
+                    from app.ai.parser.enrichment.resume_text_inference import (
+                        canonicalize_location_city,
+                    )
+
+                    return canonicalize_location_city(city)
     # Pipe-header city before phone/email
     m_pipe = re.search(
         r'(?im)^([A-Za-z][A-Za-z .,]{2,40})\s*[|•·]\s*(?:mobile|phone|tel|\+?\d|[a-z0-9._%+\-]+@)',
@@ -280,19 +282,11 @@ def extract_simple_location(text: str) -> str:
         if is_plausible_location_value(cand):
             return cand
     # Preamble fallback: short city line before Skills/Summary (not from those sections)
-    # VALIDATION_FIX_location_cities
-    cities = {
-        'mumbai', 'delhi', 'new delhi', 'bangalore', 'bengaluru', 'hyderabad', 'chennai',
-        'kolkata', 'pune', 'ahmedabad', 'gurgaon', 'gurugram', 'noida',
-        'faridabad', 'jaipur', 'lucknow', 'nagpur', 'indore', 'bhopal', 'surat',
-        'vadodara', 'coimbatore', 'kochi', 'thiruvananthapuram', 'chandigarh',
-        'mysore', 'mysuru', 'visakhapatnam', 'vijayawada', 'patna', 'ranchi',
-        'bhubaneswar', 'guwahati', 'thane', 'navi mumbai', 'andheri', 'powai',
-        'ambernath', 'dombivli', 'dombivili', 'sindhudurg', 'sewree', 'solapur',
-        'kalyan', 'vasai', 'virar', 'panvel', 'aurangabad', 'kolhapur', 'kalwa', 'nashik',
-        'austin', 'seattle', 'san francisco',
-        'new york', 'london', 'toronto', 'singapore', 'dubai', 'berlin',
-        'remote', 'austin, tx', 'san francisco, ca', 'seattle, wa',
+    # VALIDATION_FIX_location_cities — shared allowlist
+    from app.ai.parser.enrichment.resume_text_inference import known_location_cities
+
+    cities = {c.lower() for c in known_location_cities()} | {
+        'remote', 'austin, tx', 'san francisco, ca', 'seattle, wa', 'new delhi',
     }
     section_hdr = re.compile(
         r'(?i)^(?:education|experience|skills|summary|objective|projects|'
