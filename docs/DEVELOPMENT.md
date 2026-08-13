@@ -127,10 +127,32 @@ Copy from the matching `.env.example`, then fill secrets. Never commit `.env` fi
 
 Optional integration vars (see `apps/backend/.env.example`):
 
-- `INTEGRATION_SECRETS_KEY` — Fernet key (or any secret string) for encrypting job-board credentials
+- `INTEGRATION_SECRETS_KEY` — Fernet key (or any secret string) for encrypting job-board / OAuth credentials (required in production; do not rely on plaintext fallback)
 - `INTEGRATION_MAX_RETRIES` — default `3`
 - `INTEGRATION_RETRY_BASE_SECONDS` — default `1.0`
 - `INTEGRATION_WORKER_MAX_WORKERS` — default `4`
+- `INTEGRATION_AUTO_SYNC_INTERVAL_SECONDS` — default `900` (min 60)
+- `RUN_INTEGRATION_AUTO_SYNC` — set `1` only in the dedicated scheduler process (not in Gunicorn web workers)
+- `REDIS_URL` — set when `GUNICORN_WORKERS>1` **and** you use Google Calendar OAuth or need a **global** public resume-parse rate limit. JWT/OTP/outbox do not need Redis. If unset, OAuth `state` and parse rate limits are per-worker memory.
+
+### Production processes (Gunicorn + scheduler)
+
+Full sequenced release (stop stale writers, migrate once, Gunicorn **with** `-c`, one scheduler, optional outbox): **[PRODUCTION_RELEASE.md](PRODUCTION_RELEASE.md)**.
+
+Gunicorn runs multiple web workers. Integration **auto-sync** is singleton work and must not start inside every worker. **Never** omit `-c gunicorn.conf.py`. Production web processes require `MIGRATIONS_ALREADY_APPLIED=true` and verify `alembic current == head`; they never run migrations. Without `-c` and without the flag, production startup fails closed.
+
+```bash
+# Web API (from apps/backend)
+gunicorn -c gunicorn.conf.py wsgi:app
+
+# Dedicated auto-sync (separate process)
+RUN_INTEGRATION_AUTO_SYNC=1 python -m app.domains.integrations.scheduler
+
+# Optional dedicated outbox drain (web workers already drain via SKIP LOCKED)
+python -m app.domains.integrations.worker
+```
+
+Web workers still start the in-memory integration task queue (request-path publish). Only the auto-sync loop is gated.
 
 ### Google Calendar interview scheduling (Current)
 
@@ -148,6 +170,14 @@ After an application becomes **Shortlisted** (manual or ATS), if the assigned re
 Recruiter connect UI: **Settings → Integrations → Google Calendar**.
 
 **Future:** interview reminder workers (hooks stubbed as `on_invite_sent` / `on_interview_scheduled`).
+
+### External job boards (LinkedIn / Naukri / custom HTTP)
+
+PostgreSQL `external_jobs` is the durable outbox. Do not add Celery/RabbitMQ/Kafka for this.
+
+- **LinkedIn:** official Job Posting API adapter (`POST /rest/simpleJobPostings`, operations CREATE/UPDATE/CLOSE/RENEW, correlation id `externalJobPostingId`). Live publish requires LinkedIn Talent Solutions partner access. Until then the UI shows **Provider access required**, never Published.
+- **Naukri:** no public posting API in this repo. Same access-required status.
+- **Custom HTTP:** real outbound HTTP using company `baseUrl` + endpoints. CREATE is at-least-once if the remote response is lost.
 
 ### Media storage
 

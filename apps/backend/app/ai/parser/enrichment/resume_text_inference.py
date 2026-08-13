@@ -505,7 +505,11 @@ def split_list_items(text: str) -> list[str]:
             if '|' in p2:
                 expanded.extend(x.strip() for x in p2.split('|'))
             elif ',' in p2 and not _is_institutionish(p2):
-                expanded.extend(x.strip() for x in p2.split(','))
+                from app.ai.parser.enrichment.jd_text_inference import (
+                    _split_skill_list_preserving_parens,
+                )
+
+                expanded.extend(_split_skill_list_preserving_parens(p2))
             else:
                 expanded.append(p)
         parts = expanded

@@ -113,14 +113,18 @@ def parse_requirements(section_text: str, full_text: str) -> list[str]:
 
 def parse_preferred_skills(section_text: str, full_text: str) -> list[str]:
     if section_text.strip():
-        return normalize_skill_tokens(_bullets(section_text), max_items=30)
+        return normalize_skill_tokens(
+            _bullets(section_text), max_items=30, from_skill_section=True
+        )
     _, preferred, _ = extract_skills_from_text(full_text)
     return preferred
 
 
 def parse_mandatory_skills(section_text: str, full_text: str) -> list[str]:
     if section_text.strip():
-        skills = normalize_skill_tokens(_bullets(section_text), max_items=40)
+        skills = normalize_skill_tokens(
+            _bullets(section_text), max_items=40, from_skill_section=True
+        )
         if skills:
             return skills
     mandatory, preferred, general = extract_skills_from_text(full_text)

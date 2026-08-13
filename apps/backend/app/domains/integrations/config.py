@@ -41,8 +41,20 @@ def get_auto_sync_interval_seconds() -> int:
 
 # Fixed built-in adapters only. Everything else is a custom HTTP platform.
 PROVIDER_CATALOG = (
-    {'id': 'linkedin', 'name': 'LinkedIn', 'id_prefix': 'LI', 'adapter': 'linkedin'},
-    {'id': 'naukri', 'name': 'Naukri', 'id_prefix': 'NK', 'adapter': 'naukri'},
+    {
+        'id': 'linkedin',
+        'name': 'LinkedIn',
+        'id_prefix': 'LI',
+        'adapter': 'linkedin',
+        'access_required': True,
+    },
+    {
+        'id': 'naukri',
+        'name': 'Naukri',
+        'id_prefix': 'NK',
+        'adapter': 'naukri',
+        'access_required': True,
+    },
 )
 
 BUILTIN_PROVIDERS = {p['id'] for p in PROVIDER_CATALOG}

@@ -11,6 +11,7 @@ _PLACEHOLDER_JWT_SECRETS = {
     'your-jwt-secret-change-in-production',
     'changeme',
     'secret',
+    'replace-with-a-unique-secret-at-least-32-chars',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE',
 }
 

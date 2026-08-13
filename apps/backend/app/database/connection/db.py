@@ -47,10 +47,26 @@ except ImportError:
     dict_row = None
 
 
+def postgres_application_name() -> str:
+    """pg_stat_activity.application_name for this process (max 63 chars)."""
+    raw_role = (os.getenv('HCIP_PROCESS_ROLE') or 'app').strip().lower() or 'app'
+    role = ''.join(ch if ch.isalnum() or ch in '-_' else '-' for ch in raw_role)[:24]
+    raw_rel = (os.getenv('HCIP_RELEASE_ID') or '').strip()
+    rel = ''.join(ch if ch.isalnum() or ch in '-_.' else '-' for ch in raw_rel)[:16]
+    name = f'hcip-{role}'
+    if rel:
+        name = f'{name}-{rel}'
+    return name[:63]
+
+
 def _create_connection():
     if psycopg is None:
         raise RuntimeError("psycopg is required for PostgreSQL. Install with: pip install psycopg[binary]")
-    return psycopg.connect(DATABASE_URL, connect_timeout=CONNECTION_TIMEOUT)
+    return psycopg.connect(
+        DATABASE_URL,
+        connect_timeout=CONNECTION_TIMEOUT,
+        application_name=postgres_application_name(),
+    )
 
 
 class ConnectionPool:

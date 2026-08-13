@@ -299,7 +299,7 @@ def _head_hr_profile_payload(cid):
                cp.experience_level, cp.serving_notice, cp.notice_period, cp.last_working_day,
                cp.linkedin_url, cp.portfolio_url, cp.current_location, cp.preferred_location,
                cp.completed, cp.updated_at,
-               CASE WHEN cp.resume IS NOT NULL THEN 1 ELSE 0 END as has_resume,
+               CASE WHEN cp.resume IS NOT NULL OR cp.resume_raw_file_id IS NOT NULL THEN 1 ELSE 0 END as has_resume,
                cs.name AS signup_name, cs.created_at AS signup_created_at
         FROM candidate_profiles cp
         LEFT JOIN candidates cs ON cs.cid = cp.candidate_id
@@ -423,6 +423,8 @@ def _resume_bytes(data):
 def get_candidate_resume(cid):
     """Serve candidate resume PDF for Head HR (org applicants only)."""
     from flask import Response
+    from app.domains.recruitment.services.parsing_storage import load_profile_resume_bytes
+
     org_id, _org, err = _caller_org()
     if err:
         return err
@@ -437,12 +439,9 @@ def get_candidate_resume(cid):
     )
     if not linked:
         return jsonify({'error': 'Resume not found'}), 404
-    profile = db_get('SELECT resume FROM candidate_profiles WHERE candidate_id = ?', (cid,))
-    if not profile or not profile.get('resume'):
-        return jsonify({'error': 'Resume not found'}), 404
-    data = _resume_bytes(profile.get('resume'))
+    data = load_profile_resume_bytes(cid)
     if not data:
-        return jsonify({'error': 'Invalid resume data'}), 500
+        return jsonify({'error': 'Resume not found'}), 404
     return Response(
         data,
         mimetype='application/pdf',

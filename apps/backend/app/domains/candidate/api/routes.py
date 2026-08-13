@@ -124,7 +124,7 @@ def get_profile_admin(candidate_id: str):
                    experience_level, serving_notice, notice_period, last_working_day,
                    linkedin_url, portfolio_url, current_location, preferred_location,
                    completed, updated_at,
-                   CASE WHEN resume IS NOT NULL THEN 1 ELSE 0 END as has_resume
+                   CASE WHEN resume IS NOT NULL OR resume_raw_file_id IS NOT NULL THEN 1 ELSE 0 END as has_resume
             FROM candidate_profiles
             WHERE candidate_id = ?
             ''',

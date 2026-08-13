@@ -15,7 +15,9 @@ Alembic is the **only** source of truth for database schema changes.
 1. Every schema change = `alembic revision -m "…"` with real `upgrade()` / `downgrade()`.
 2. Prefer expand → migrate data → contract (nullable columns before drops).
 3. Do **not** add parallel SQL schema trees or startup fallbacks that stamp `head` while skipping revisions.
-4. App startup (`init_db`) runs `alembic upgrade head` only.
+4. Development Flask startup may run `alembic upgrade head`. Production web
+   processes verify `alembic current == head` and never migrate. Release mutate
+   path: `HCIP_PROCESS_ROLE=migrate alembic upgrade head`.
 
 ## Commands
 
@@ -38,12 +40,7 @@ cd apps/backend
 alembic upgrade head
 ```
 
-If you see `Can't locate revision identified by '…'`, wipe/recreate the DB (preferred) or, for empty salvage only:
-
-```bash
-alembic stamp 20260810_s001
-alembic upgrade head
-```
+If you see `Can't locate revision identified by '…'`, wipe/recreate the DB (preferred). Production (`FLASK_DEBUG=false`) **never** rewrites `alembic_version` for an unknown revision. Local/debug salvage of documented pre-squash stamps may retarget to `20260810_s001` then `upgrade head`. Do not `alembic stamp head` to hide drift.
 
 **Do not** add numbered `NN_*.sql` under `app/database/migrations/` (legacy folder retired).
 

@@ -118,10 +118,11 @@ def parse_resume_public():
             return jsonify({
                 'status': 'error',
                 'error': 'Too many resume parse requests. Please try again later.',
+                'pid': os.getpid(),
             }), 429
 
         if 'file' not in request.files:
-            return jsonify({'status': 'error', 'error': 'No file provided'}), 400
+            return jsonify({'status': 'error', 'error': 'No file provided', 'pid': os.getpid()}), 400
 
         file = request.files['file']
         if file.filename == '':

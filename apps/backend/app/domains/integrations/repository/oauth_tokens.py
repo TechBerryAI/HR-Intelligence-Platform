@@ -11,6 +11,18 @@ from app.domains.integrations.security.secrets import decrypt_secret, encrypt_se
 
 PROVIDER_GOOGLE_CALENDAR = 'google_calendar'
 
+# Only non-sensitive OAuth metadata may be stored in raw_json.
+_RAW_JSON_ALLOWLIST = frozenset({'token_type', 'scope', 'expires_in'})
+
+
+def sanitize_oauth_raw_json(raw_json: dict | None) -> dict | None:
+    """Strip secrets from provider token responses before JSONB persistence."""
+    if raw_json is None:
+        return None
+    if not isinstance(raw_json, dict):
+        return {}
+    return {k: raw_json[k] for k in _RAW_JSON_ALLOWLIST if k in raw_json}
+
 
 def get_oauth_row(provider: str, hrid: str) -> dict | None:
     return db_get(
@@ -43,7 +55,8 @@ def upsert_oauth_tokens(
 ) -> None:
     enc_access = encrypt_secret(access_token)
     enc_refresh = encrypt_secret(refresh_token) if refresh_token else None
-    raw = json.dumps(raw_json) if raw_json is not None else None
+    safe_raw = sanitize_oauth_raw_json(raw_json)
+    raw = json.dumps(safe_raw) if safe_raw is not None else None
     existing = get_oauth_row(provider, hrid)
     if existing:
         # Preserve refresh_token if Google omitted it on refresh
@@ -114,10 +127,10 @@ def row_to_token_bundle(row: dict | None) -> OAuthTokenBundle | None:
     raw: dict[str, Any] = {}
     raw_json = row.get('raw_json')
     if isinstance(raw_json, dict):
-        raw = raw_json
+        raw = sanitize_oauth_raw_json(raw_json) or {}
     elif isinstance(raw_json, str) and raw_json:
         try:
-            raw = json.loads(raw_json) or {}
+            raw = sanitize_oauth_raw_json(json.loads(raw_json) or {}) or {}
         except json.JSONDecodeError:
             raw = {}
     return OAuthTokenBundle(

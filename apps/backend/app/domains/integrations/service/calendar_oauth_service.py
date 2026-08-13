@@ -102,6 +102,14 @@ def start_oauth(user: dict, return_to: str | None = None) -> tuple[str | None, s
     if not company_key:
         return None, 'Company context required'
     state = secrets.token_urlsafe(24)
+    if shared_store.redis_status() != 'ok':
+        flask_debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+        if not flask_debug:
+            logger.warning(
+                '[calendar_oauth] OAuth CSRF state is process-local '
+                '(REDIS_URL not connected). Multi-worker Gunicorn callbacks '
+                'can fail; set REDIS_URL when GUNICORN_WORKERS>1.'
+            )
     shared_store.set_json(
         f'{_OAUTH_STATE_PREFIX}{state}',
         {

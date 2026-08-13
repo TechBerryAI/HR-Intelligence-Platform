@@ -32,7 +32,7 @@ function StatusPill({ status }) {
   const s = String(status || '').toLowerCase()
   const ok = s === 'success' || s === 'connected' || s === 'published'
   const bad = s === 'failed' || s === 'error' || s === 'dead'
-  const muted = s === 'disconnected' || s === 'pending'
+  const muted = s === 'disconnected' || s === 'pending' || s === 'provider_access_required' || s === 'not connected'
   return (
     <span
       className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium capitalize ${

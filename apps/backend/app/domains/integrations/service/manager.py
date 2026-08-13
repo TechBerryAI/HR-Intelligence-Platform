@@ -112,13 +112,28 @@ class IntegrationManagerService:
         existing = repo.get_external_job(job.job_id, config.provider)
         start = time.perf_counter()
         try:
-            if existing and existing.get('external_job_id') and existing.get('sync_status') not in ('dead', 'failed', 'closed'):
+            # Idempotent: if we already know the remote id, always update —
+            # never create a second listing after crash/retry redelivery.
+            if existing and existing.get('external_job_id'):
                 result = provider.update(job, existing['external_job_id'], config)
             else:
                 result = provider.publish(job, config)
         except Exception as exc:
             logger.exception('[integrations] publish failed for %s', config.provider)
             result = PublishResult(success=False, provider=config.provider, error=str(exc))
+        # Bind remote id immediately so a crash before final status cannot
+        # redelivery-create a second remote listing.
+        if result.success and result.external_job_id:
+            repo.upsert_external_job(
+                job.company_key,
+                job.job_id,
+                config.provider,
+                external_job_id=result.external_job_id,
+                sync_status='pending',
+                pending_operation='update',
+                retry_count=retry_count,
+                clear_lease=False,
+            )
         ms = int((time.perf_counter() - start) * 1000)
         _log_call(
             job.company_key,

@@ -89,6 +89,52 @@ def load_raw_file_bytes(raw_file_id: str) -> bytes | None:
     return blob
 
 
+def profile_has_resume(row: Dict[str, Any] | None) -> bool:
+    """True when profile has media-backed or legacy BYTEA resume content."""
+    if not row:
+        return False
+    if row.get('resume_raw_file_id'):
+        return True
+    if row.get('has_resume') not in (None, '', 0, False):
+        return True
+    return _as_bytes(row.get('resume')) is not None
+
+
+def load_profile_resume_bytes(candidate_id: str) -> bytes | None:
+    """
+    Load a candidate's resume bytes.
+
+    Prefer media via ``resume_raw_file_id``; fall back to legacy BYTEA ``resume``.
+    """
+    from app.database.connection.db import db_get
+
+    profile = db_get(
+        '''
+        SELECT resume, resume_raw_file_id
+        FROM candidate_profiles
+        WHERE candidate_id = ?
+        ''',
+        (candidate_id,),
+    )
+    if not profile:
+        return None
+    raw_id = profile.get('resume_raw_file_id')
+    if raw_id:
+        data = load_raw_file_bytes(str(raw_id))
+        if data:
+            return data
+    return _as_bytes(profile.get('resume'))
+
+
+# SQL fragment: media-backed or legacy BYTEA counts as having a resume.
+HAS_RESUME_SQL = (
+    'CASE WHEN resume IS NOT NULL OR resume_raw_file_id IS NOT NULL THEN 1 ELSE 0 END'
+)
+HAS_RESUME_SQL_ALIASED = (
+    'CASE WHEN cp.resume IS NOT NULL OR cp.resume_raw_file_id IS NOT NULL THEN 1 ELSE 0 END'
+)
+
+
 @timing
 def store_raw_file(
     uploader_id: str,

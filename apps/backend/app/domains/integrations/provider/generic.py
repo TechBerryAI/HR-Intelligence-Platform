@@ -284,6 +284,50 @@ class GenericHttpProvider(JobProvider):
             payload={'response': body},
         )
 
+    def get_job_status(self, external_job_id: str, config: ProviderConfig) -> PublishResult:
+        if not has_credentials(config):
+            return credentials_missing_publish(self.provider_type)
+        if not self._endpoints(config).get('status'):
+            return PublishResult(
+                success=False,
+                provider=self.provider_type,
+                external_job_id=external_job_id,
+                error='Endpoint "status" is not configured',
+                message='Not supported',
+            )
+        ok, body, err, _ = self._request(
+            config, 'status', path_vars={'externalJobId': external_job_id}
+        )
+        if not ok:
+            return PublishResult(
+                success=False,
+                provider=self.provider_type,
+                external_job_id=external_job_id,
+                error=err or 'Status lookup failed',
+                payload={'response': body},
+            )
+        status = None
+        if isinstance(body, dict):
+            status = body.get('status') or body.get('externalStatus')
+        return PublishResult(
+            success=True,
+            provider=self.provider_type,
+            external_job_id=external_job_id,
+            external_status=str(status) if status is not None else None,
+            payload={'response': body},
+        )
+
+    def reconcile_job(self, job: JobSnapshot, config: ProviderConfig) -> PublishResult:
+        return PublishResult(
+            success=False,
+            provider=self.provider_type,
+            error=(
+                'Generic HTTP has no documented lookup-by-reference. '
+                'A lost CREATE response can duplicate on retry (at-least-once).'
+            ),
+            message='Not supported',
+        )
+
     def sync_applications(self, config: ProviderConfig) -> SyncResult:
         if not has_credentials(config):
             return SyncResult(

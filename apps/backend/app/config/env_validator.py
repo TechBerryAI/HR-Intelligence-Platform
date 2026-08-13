@@ -5,9 +5,13 @@ Validates that all required environment variables are set before the application
 PostgreSQL: DATABASE_URL or POSTGRES_USER + POSTGRES_PASSWORD.
 """
 
+from __future__ import annotations
+
 import os
 import sys
 from typing import List, Tuple
+
+_EXAMPLE_JWT = 'replace-with-a-unique-secret-at-least-32-chars'
 
 _PLACEHOLDER_JWT = {
     '',
@@ -16,7 +20,33 @@ _PLACEHOLDER_JWT = {
     'secret',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyIjoiZXhhbXBsZSJ9.lGrIa8yMwsB_ZSrgoniyr5FF34e9tE7TJboLqTfvifE',
     'dev-only-insecure-jwt-secret-do-not-use-in-prod',
+    _EXAMPLE_JWT,
 }
+
+_PLACEHOLDER_INTEGRATION_KEYS = {
+    '',
+    'dev-integration-secrets',
+}
+
+_PLACEHOLDER_DB_PASSWORDS = {
+    'your_postgres_password',
+    'changeme',
+    'password',
+}
+
+
+def _truthy(name: str, default: str = 'false') -> bool:
+    return (os.getenv(name, default) or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def under_gunicorn() -> bool:
+    if 'gunicorn' in sys.modules:
+        return True
+    return 'gunicorn' in (os.getenv('SERVER_SOFTWARE') or '').lower()
+
+
+def is_production_like() -> bool:
+    return not _truthy('FLASK_DEBUG') and not _truthy('ALLOW_INSECURE_JWT')
 
 
 class EnvValidator:
@@ -41,28 +71,96 @@ class EnvValidator:
 
     @classmethod
     def _is_production_like(cls) -> bool:
-        flask_debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
-        allow_insecure = os.getenv('ALLOW_INSECURE_JWT', 'false').lower() in (
-            '1', 'true', 'yes', 'on',
-        )
-        return not flask_debug and not allow_insecure
+        return is_production_like()
+
+    @classmethod
+    def _parse_int_env(cls, name: str) -> Tuple[int | None, str | None]:
+        raw = (os.getenv(name) or '').strip()
+        if not raw:
+            return None, None
+        try:
+            return int(raw), None
+        except ValueError:
+            return None, f"  ❌ {name}: must be an integer (got {raw!r})"
+
+    @classmethod
+    def _worker_count(cls) -> Tuple[int | None, str | None]:
+        n, err = cls._parse_int_env('GUNICORN_WORKERS')
+        if err:
+            return None, err
+        if n is not None:
+            if n < 1:
+                return None, "  ❌ GUNICORN_WORKERS: must be >= 1"
+            return n, None
+        if under_gunicorn():
+            return 4, None
+        return 1, None
+
+    @classmethod
+    def _ping_redis(cls, url: str) -> str | None:
+        try:
+            import redis
+
+            client = redis.Redis.from_url(
+                url,
+                decode_responses=True,
+                socket_connect_timeout=2,
+                socket_timeout=2,
+            )
+            client.ping()
+            return None
+        except Exception as exc:
+            return f"  ❌ REDIS_URL: Redis is not reachable ({exc})"
 
     @classmethod
     def validate(cls, strict: bool = False) -> Tuple[bool, List[str], List[str]]:
         errors = []
         warnings = []
 
-        if not os.getenv('DATABASE_URL') and not (os.getenv('POSTGRES_USER') and os.getenv('POSTGRES_PASSWORD')):
+        db_url = (os.getenv('DATABASE_URL') or '').strip()
+        pg_user = (os.getenv('POSTGRES_USER') or '').strip()
+        pg_password = (os.getenv('POSTGRES_PASSWORD') or '').strip()
+        if not db_url and not (pg_user and pg_password):
             errors.append(f"  ❌ {cls.DB_REQUIRED}")
+
+        port_val, port_err = cls._parse_int_env('POSTGRES_PORT')
+        if port_err:
+            errors.append(port_err)
+        elif port_val is not None and not (1 <= port_val <= 65535):
+            errors.append("  ❌ POSTGRES_PORT: must be between 1 and 65535")
+
+        workers, workers_err = cls._worker_count()
+        if workers_err:
+            errors.append(workers_err)
+
+        gunicorn = under_gunicorn()
+        flask_debug = _truthy('FLASK_DEBUG')
+        developer_mode = _truthy('DEVELOPER_MODE')
+
+        if gunicorn and flask_debug:
+            errors.append(
+                "  ❌ FLASK_DEBUG: must be false when running under Gunicorn"
+            )
+        if gunicorn and developer_mode:
+            errors.append(
+                "  ❌ DEVELOPER_MODE: must be false when running under Gunicorn"
+            )
 
         jwt_secret = (os.getenv('JWT_SECRET') or '').strip()
         if cls._is_production_like():
+            if developer_mode:
+                errors.append(
+                    "  ❌ DEVELOPER_MODE: must be false in production (FLASK_DEBUG=false)"
+                )
             if not jwt_secret or jwt_secret in _PLACEHOLDER_JWT or len(jwt_secret) < 32:
                 errors.append(
                     "  ❌ JWT_SECRET: required unique secret (≥32 chars); placeholders are blocked in production"
                 )
+            if pg_password and pg_password.lower() in _PLACEHOLDER_DB_PASSWORDS:
+                errors.append(
+                    "  ❌ POSTGRES_PASSWORD: placeholder/weak default is not allowed in production"
+                )
             if not (os.getenv('N8N_CALLBACK_SECRET') or '').strip():
-                # Only required if webhook URL is configured; otherwise warn
                 if (os.getenv('N8N_WEBHOOK_URL') or '').strip():
                     errors.append(
                         "  ❌ N8N_CALLBACK_SECRET: required when N8N_WEBHOOK_URL is set"
@@ -72,10 +170,22 @@ class EnvValidator:
                         "  ⚠️  N8N_CALLBACK_SECRET: set before enabling ATS callbacks"
                     )
             integ = (os.getenv('INTEGRATION_SECRETS_KEY') or '').strip()
-            if not integ or integ in ('dev-integration-secrets',):
-                warnings.append(
-                    "  ⚠️  INTEGRATION_SECRETS_KEY: set a dedicated Fernet key for provider credentials"
+            if not integ or integ in _PLACEHOLDER_INTEGRATION_KEYS:
+                errors.append(
+                    "  ❌ INTEGRATION_SECRETS_KEY: required dedicated key for provider credentials in production"
                 )
+
+            redis_url = (os.getenv('REDIS_URL') or '').strip()
+            oauth_configured = bool((os.getenv('GOOGLE_OAUTH_CLIENT_ID') or '').strip())
+            redis_required = bool(workers and workers > 1 and oauth_configured)
+            if redis_required and not redis_url:
+                errors.append(
+                    "  ❌ REDIS_URL: required when GUNICORN_WORKERS>1 and Google Calendar OAuth is configured"
+                )
+            elif redis_url:
+                ping_err = cls._ping_redis(redis_url)
+                if ping_err:
+                    errors.append(ping_err)
         else:
             if not jwt_secret or jwt_secret in _PLACEHOLDER_JWT or len(jwt_secret) < 32:
                 warnings.append(
@@ -111,7 +221,8 @@ class EnvValidator:
             print("   1. Copy apps/backend/.env.example to apps/backend/.env")
             print("   2. Set DATABASE_URL or POSTGRES_* variables")
             print("   3. Set a unique JWT_SECRET (≥32 chars)")
-            print("   4. Restart the application")
+            print("   4. Set INTEGRATION_SECRETS_KEY (production)")
+            print("   5. Restart the application")
 
         if warnings:
             print("\n⚠️  RECOMMENDED CONFIGURATION:")

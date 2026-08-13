@@ -67,10 +67,14 @@ def upsert_passwordless_candidate(
     email: str,
     *,
     organization_id: str | None = None,
-) -> str:
+) -> tuple[str, bool]:
     """
     Find or create applicant (candidates) by email within an organization — no password / no login.
-    Returns cid.
+
+    Returns ``(cid, created)`` where ``created`` is True only when a new row was inserted.
+
+    On an existing email hit this function MUST NOT mutate the candidate row. Anonymous
+    email knowledge is not ownership proof; shared profile updates happen only on first create.
     """
     email_norm = normalize_email(email)
     org_id = str(organization_id or "").strip() or None
@@ -86,13 +90,7 @@ def upsert_passwordless_candidate(
         (org_id, email_norm),
     )
     if existing:
-        cid = existing["cid"]
-        if name and name.strip() and name.strip() != (existing.get("name") or ""):
-            db_run(
-                "UPDATE candidates SET name = ? WHERE cid = ?",
-                (name.strip(), cid),
-            )
-        return cid
+        return existing["cid"], False
 
     db_run(
         "INSERT INTO candidates (name, email, organization_id) VALUES (?, ?, ?)",
@@ -108,7 +106,7 @@ def upsert_passwordless_candidate(
     )
     if not row:
         raise RuntimeError("Failed to create candidates row")
-    return row["cid"]
+    return row["cid"], True
 
 
 def save_candidate_profile(

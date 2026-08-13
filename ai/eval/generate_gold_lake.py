@@ -11,10 +11,18 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'dataset' / 'lake' / 'benchmark' / 'parsing' / 'v1'
+BACKEND = ROOT.parent / 'apps' / 'backend'
+if str(BACKEND) not in sys.path:
+    sys.path.insert(0, str(BACKEND))
+
+from app.ai.parser.enrichment.resume_text_inference import (  # noqa: E402
+    heal_location_candidate,
+)
 
 SKILLS_POOL = [
     'Python', 'Java', 'JavaScript', 'TypeScript', 'React', 'Node.js',
@@ -55,6 +63,11 @@ LAST = [
 ]
 
 
+def _expected_resume_location(city: str) -> str:
+    """Resume expected form/toon follow parse/heal: city+state → city token."""
+    return heal_location_candidate(city) or city
+
+
 def _resume_case(i: int) -> tuple[str, dict, dict]:
     first = FIRST[(i - 1) % len(FIRST)]
     last = LAST[(i - 1) % len(LAST)]
@@ -64,6 +77,7 @@ def _resume_case(i: int) -> tuple[str, dict, dict]:
     title = TITLES[i % len(TITLES)]
     company = COMPANIES[i % len(COMPANIES)]
     city = CITIES[i % len(CITIES)]
+    expected_city = _expected_resume_location(city)
     skills = SKILLS_POOL[i % 8 : (i % 8) + 5]
     if len(skills) < 4:
         skills = SKILLS_POOL[:5]
@@ -96,7 +110,7 @@ B.Tech Computer Science, State University, {year - 4}
             'name': name,
             'email': email,
             'phone': phone,
-            'location': city,
+            'location': expected_city,
             'linkedin': f'https://linkedin.com/in/{first.lower()}{last.lower()}{i:02d}',
             'github': f'https://github.com/{first.lower()}{last.lower()}{i:02d}',
             'portfolio': '',
@@ -130,7 +144,7 @@ B.Tech Computer Science, State University, {year - 4}
         'fullName': name,
         'email': email,
         'phone': phone,
-        'currentLocation': city,
+        'currentLocation': expected_city,
         'linkedinUrl': f'https://linkedin.com/in/{first.lower()}{last.lower()}{i:02d}',
         'githubUrl': f'https://github.com/{first.lower()}{last.lower()}{i:02d}',
         'skills': ', '.join(skills),

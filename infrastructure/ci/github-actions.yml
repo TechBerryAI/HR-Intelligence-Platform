@@ -64,8 +64,43 @@ jobs:
           JWT_SECRET: "ci-test-jwt-secret-at-least-32-characters-long"
         run: |
           alembic upgrade head
-          alembic heads | grep -q 20260810_s001
-          alembic current | grep -q 20260810_s001
+          alembic heads | grep -q 20260812_ext_outbox
+          alembic current | grep -q 20260812_ext_outbox
+          python - <<'PY'
+          import os
+          import psycopg
+          url = os.environ["DATABASE_URL"]
+          with psycopg.connect(url) as conn:
+              with conn.cursor() as cur:
+                  cur.execute(
+                      """
+                      SELECT column_name FROM information_schema.columns
+                      WHERE table_schema = 'public' AND table_name = 'external_jobs'
+                        AND column_name IN (
+                          'leased_until', 'leased_by', 'pending_operation', 'next_attempt_at'
+                        )
+                      """
+                  )
+                  cols = {r[0] for r in cur.fetchall()}
+                  expected = {
+                      'leased_until', 'leased_by', 'pending_operation', 'next_attempt_at',
+                  }
+                  assert cols == expected, cols
+                  cur.execute(
+                      "SELECT 1 FROM pg_indexes WHERE indexname = 'ux_candidates_org_normalized_email'"
+                  )
+                  assert cur.fetchone(), 'missing ux_candidates_org_normalized_email'
+                  cur.execute(
+                      "SELECT 1 FROM pg_indexes WHERE indexname = 'ix_external_jobs_outbox_claim'"
+                  )
+                  assert cur.fetchone(), 'missing ix_external_jobs_outbox_claim'
+                  cur.execute(
+                      "SELECT 1 FROM information_schema.columns "
+                      "WHERE table_name = 'bulk_parse_files' AND column_name = 'leased_until'"
+                  )
+                  assert cur.fetchone(), 'missing bulk_parse_files.leased_until'
+          print('schema markers ok')
+          PY
 
   frontend-build:
     runs-on: ubuntu-latest

@@ -24,4 +24,5 @@ def job_row_to_snapshot(job: dict, company_key: str | None = None) -> JobSnapsho
         description=(job.get('description') or None),
         keywords=(job.get('keywords') or None),
         enabled=enabled_flag,
+        posted_on=job.get('posted_on') or job.get('postedOn'),
     )

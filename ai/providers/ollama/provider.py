@@ -41,7 +41,10 @@ class OllamaProvider(BaseProvider):
             )
 
         messages = build_messages(prompt=request.prompt, input_text=request.input_text)
-        response_format = resolve_response_format(request.schema_id)
+        schema_doc = request.metadata.get("json_schema") if request.metadata else None
+        if not isinstance(schema_doc, dict):
+            schema_doc = None
+        response_format = resolve_response_format(request.schema_id, schema_doc)
         timeout_seconds = request.timeout_seconds or self._ollama_config.default_timeout_seconds
         use_stream = bool(self._ollama_config.stream)
 

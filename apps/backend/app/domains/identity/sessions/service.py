@@ -27,35 +27,7 @@ def _token_fingerprint(token: str) -> str:
     return hashlib.sha256(token.encode('utf-8')).hexdigest()
 
 
-def _ensure_refresh_table() -> None:
-    """Idempotent create for environments that have not run the latest migration yet."""
-    try:
-        db_run(
-            """
-            CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
-                jti VARCHAR(64) PRIMARY KEY,
-                user_id VARCHAR(50) NOT NULL,
-                token_hash VARCHAR(64) NOT NULL,
-                expires_at TIMESTAMPTZ NOT NULL,
-                revoked_at TIMESTAMPTZ NULL,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-            )
-            """,
-            (),
-        )
-        db_run(
-            """
-            CREATE INDEX IF NOT EXISTS idx_auth_refresh_tokens_user
-            ON auth_refresh_tokens (user_id)
-            """,
-            (),
-        )
-    except Exception as exc:
-        print(f"[SESSIONS] refresh table ensure skipped: {exc}")
-
-
 def register_refresh_token(token: str, user_id: str, expires_at: datetime | None = None) -> Dict:
-    _ensure_refresh_table()
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False})
     except Exception:
@@ -80,7 +52,6 @@ def register_refresh_token(token: str, user_id: str, expires_at: datetime | None
 
 
 def is_refresh_token_active(token: str) -> bool:
-    _ensure_refresh_table()
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
     except Exception:
@@ -110,7 +81,6 @@ def is_refresh_token_active(token: str) -> bool:
 
 
 def revoke_refresh_token(token: str) -> Dict:
-    _ensure_refresh_table()
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False})
         jti = payload.get('jti')
@@ -131,6 +101,8 @@ def revoke_refresh_token(token: str) -> Dict:
 
 def deactivate_session(token: str) -> Dict:
     """Revoke a refresh token (or access token's sibling via body refresh)."""
+    if not token:
+        return {"success": False, "error": "Token is required"}
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False})
         if payload.get('type') == 'refresh':
@@ -139,13 +111,12 @@ def deactivate_session(token: str) -> Dict:
         user_id = payload.get('user_id')
         if user_id:
             return deactivate_all_user_sessions(user_id, payload.get('role') or 'HR')
+        return {"success": False, "error": "Token is missing user identity"}
     except Exception:
-        pass
-    return {"success": True}
+        return {"success": False, "error": "Invalid token"}
 
 
 def deactivate_all_user_sessions(user_id, user_type: str) -> Dict:
-    _ensure_refresh_table()
     if user_id:
         db_run(
             "UPDATE auth_refresh_tokens SET revoked_at = NOW() WHERE user_id = ? AND revoked_at IS NULL",

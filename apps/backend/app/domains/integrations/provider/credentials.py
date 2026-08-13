@@ -3,6 +3,26 @@ from __future__ import annotations
 
 from app.domains.integrations.dto import ConnectionResult, ProviderConfig, PublishResult
 
+PROVIDER_ACCESS_REQUIRED = 'PROVIDER ACCESS REQUIRED'
+
+
+def provider_access_publish(provider: str, detail: str) -> PublishResult:
+    return PublishResult(
+        success=False,
+        provider=provider,
+        error=f'{PROVIDER_ACCESS_REQUIRED}: {detail}',
+        message=PROVIDER_ACCESS_REQUIRED,
+    )
+
+
+def provider_access_connection(provider: str, detail: str) -> ConnectionResult:
+    return ConnectionResult(
+        success=False,
+        provider=provider,
+        error=f'{PROVIDER_ACCESS_REQUIRED}: {detail}',
+        message=PROVIDER_ACCESS_REQUIRED,
+    )
+
 
 def has_credentials(config: ProviderConfig | None) -> bool:
     if not config:
