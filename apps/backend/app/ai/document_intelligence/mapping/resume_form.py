@@ -92,7 +92,10 @@ def _trace(
     )
 
 
-def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
+def map_candidate_to_form(
+    profile: CandidateProfile,
+    coverage: list[dict] | None = None,
+) -> ApplicationFormDTO:
     """Map CandidateProfile → ApplicationFormDTO with explicit one-to-one sources."""
     traces: list[FieldTrace] = []
 
@@ -442,6 +445,31 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
     if not cert_rows:
         cert_rows = [CertificationFormRow()]
 
+    # Merge coverage into field traces for UI visibility (JD parity)
+    coverage_rows = list(coverage or [])
+    cov_by_field = {c.get('field'): c for c in coverage_rows if isinstance(c, dict)}
+    for form_field, cov_key in (
+        ('fullName', 'fullName'),
+        ('email', 'email'),
+        ('phone', 'phone'),
+        ('currentLocation', 'location'),
+        ('education', 'education'),
+        ('experiences', 'experience'),
+    ):
+        c = cov_by_field.get(cov_key)
+        if not c:
+            continue
+        traces.append(
+            _trace(
+                form_field,
+                f'coverage.{cov_key}',
+                source='coverage_gate',
+                validator=str(c.get('status') or ''),
+                confidence=0.95 if c.get('status') in ('filled', 'recovered') else 0.4,
+                reason=str(c.get('detail') or c.get('status') or ''),
+            )
+        )
+
     return ApplicationFormDTO(
         fullName=full_name,
         email=email,
@@ -460,4 +488,5 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
         skillsList=skill_names,
         summaryText=summary,
         trace=traces,
+        coverage=coverage_rows,
     )

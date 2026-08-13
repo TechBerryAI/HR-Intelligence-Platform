@@ -1,0 +1,17 @@
+PRIYA SHARMA
+Email: priya.sharma@example.com
+Phone: 9876543210
+Location: Mumbai
+
+SUMMARY
+Software engineer with Python experience.
+
+SKILLS
+Python, Django, PostgreSQL, AWS
+
+EXPERIENCE
+Software Engineer - Acme Labs - (Jan 2022 - Dec 2024)
+● Built REST APIs
+
+EDUCATION
+B.Tech Computer Science - Mumbai University

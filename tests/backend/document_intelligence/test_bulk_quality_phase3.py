@@ -234,6 +234,11 @@ B.Tech - Test University
 def test_experience_rejects_edu_table_and_duty_bleed():
     from app.ai.document_intelligence.models.candidate import ExperienceEntry
     from app.ai.document_intelligence.validation.engine import sanitize_experience_row
+    from app.ai.document_intelligence.parsers.resume import (
+        _is_bullet_or_duty_line,
+        parse_experience,
+    )
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_job_title
 
     junk = sanitize_experience_row(
         ExperienceEntry(role='Degree/Certificate: School/College', company='Board/University')
@@ -250,6 +255,27 @@ def test_experience_rejects_edu_table_and_duty_bleed():
     assert 'intern' in em.role.lower()
     assert 'edviron' in em.company.lower()
 
+    # Phase 6: Saloni-style noun-led KPI fragment must never become a title
+    saloni = 'Trends, and Revenue KPIs, enabling data driven business decision-making'
+    assert not is_plausible_job_title(saloni)
+    assert _is_bullet_or_duty_line(saloni)
+    saloni_san = sanitize_experience_row(
+        ExperienceEntry(role=saloni, company='Codenera')
+    )
+    assert not (saloni_san.role or '').strip() or 'intern' in (saloni_san.role or '').lower()
+    # Company | City stub + next duty line must not promote KPI fragment to role
+    from app.ai.document_intelligence.models.candidate import ExperienceEntry as EE  # noqa: F401
+    text = (
+        "Experience\n"
+        "Codenera | Pune\n"
+        "Trends, and Revenue KPIs, enabling data\n"
+        "Data Analyst Intern\n"
+        "Jan 2024 - Present\n"
+    )
+    # Prefer that no experience role equals the KPI fragment
+    entries = parse_experience(text)
+    roles = [(e.role or '').strip() for e in entries]
+    assert all('Trends' not in r and 'KPI' not in r for r in roles)
 
 def test_location_rejects_pipe_phone_and_section_headers():
     assert not is_plausible_location_value('Magic Bus | Thane')
@@ -257,6 +283,54 @@ def test_location_rejects_pipe_phone_and_section_headers():
     assert not is_plausible_location_value('Education')
     assert is_plausible_location_value('Thane')
     assert is_plausible_location_value('Mumbai')
+
+
+def test_location_peel_edu_job_and_institute():
+    """Phase 6: Nasik/edu, Bhubaneswar/job, VIT→Vellore."""
+    from app.ai.document_intelligence.coverage.resume_coverage import (
+        recover_resume_profile_gaps,
+    )
+    from app.ai.document_intelligence.models.candidate import (
+        CandidateProfile,
+        ContactInfo,
+        EducationEntry,
+        ExperienceEntry,
+        PersonalInfo,
+        SkillEntry,
+    )
+    from app.ai.parser.enrichment.resume_text_inference import (
+        canonicalize_location_city,
+        peel_location_from_structured,
+    )
+
+    assert canonicalize_location_city('Nasik') == 'Nashik'
+    assert peel_location_from_structured(
+        education=[{'institution': 'Savitribai Phule University, Nasik, India'}],
+    ) == 'Nashik'
+    assert peel_location_from_structured(
+        experience=[{'role': 'DBA', 'company': 'LTI', 'location': 'Bhubaneswar'}],
+    ) == 'Bhubaneswar'
+    assert peel_location_from_structured(
+        raw_text='ADAWET RATH\nVellore Institute of Technology\n+91990\n',
+    ) == 'Vellore'
+
+    profile = CandidateProfile(
+        personal=PersonalInfo(full_name='Saloni Khivansara'),
+        contact=ContactInfo(email='s@example.com', phone='8080234411', location=''),
+        skills=[SkillEntry(canonical='Python')],
+        education=[
+            EducationEntry(
+                degree='BE',
+                institution='Savitribai Phule University Nasik, India',
+            )
+        ],
+    )
+    text = (
+        'Saloni Khivansara\n+91-8080234411\nEducation\n'
+        'Savitribai Phule University\nNasik, India\n'
+    )
+    cleaned, _cov = recover_resume_profile_gaps(profile, text)
+    assert cleaned.contact.location == 'Nashik'
 
 
 def test_sanitize_profile_heals_pipe_location_and_years():
@@ -268,6 +342,7 @@ def test_sanitize_profile_heals_pipe_location_and_years():
         SkillEntry,
     )
     from app.ai.document_intelligence.validation.engine import sanitize_candidate_profile
+    from app.workers.bulk_parser import _flatten_toon
 
     profile = CandidateProfile(
         personal=PersonalInfo(full_name='Om Gharte'),
@@ -287,6 +362,23 @@ def test_sanitize_profile_heals_pipe_location_and_years():
     assert all(e.role != 'Pune' for e in cleaned.experience)
     assert cleaned.total_experience_years is not None
     assert cleaned.total_experience_years > 0
+
+    # Phase 6: years from description date range when structured from/to empty
+    toon = {
+        'person': {'name': 'Shravya', 'email': 's@x.com', 'phone': '8108332848'},
+        'skills': ['AWS'],
+        'experience': [
+            {
+                'title': 'AWS Cloud Intern',
+                'company': 'Magic Bus',
+                'description': 'Worked Jan 2024 - Jun 2024 on EC2 and S3.',
+            }
+        ],
+        'total_experience_years': None,
+    }
+    row = _flatten_toon(toon, 'shravya.pdf')
+    assert row['Total Experience Years'] not in ('', None)
+    assert float(row['Total Experience Years']) > 0
 
 
 def test_coverage_clears_polluted_location():
@@ -517,4 +609,37 @@ def test_p4_bulk_allowed_ext_rejects_doc():
         ext in bp.ALLOWED_EXT
         for ext in ('pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff')
     )
+
+
+def test_p6_bulk_gate_refuses_bad_titles_and_ocr_mush():
+    from app.workers.bulk_parser import (
+        _experience_titles_implausible,
+        _ocr_experience_slice_mushy,
+    )
+
+    assert _experience_titles_implausible(
+        {
+            'experience': [
+                {'title': 'Trends, and Revenue KPIs enabling data', 'company': 'X'},
+            ]
+        }
+    )
+    assert not _experience_titles_implausible(
+        {'experience': [{'title': 'Data Analyst Intern', 'company': 'Codenera'}]}
+    )
+    mush = (
+        "Experience\n"
+        "ITLINUXBASEDCLOUDAPPLICATIONSJNTERNA GLOBALINFOCOMMNETWORKSLLP\n"
+        "REGRESSIONTESTINGSMOKEAPPLICATIONSJNTERNAABCDEFGHIJKLMNOP\n"
+        "MOREGLUEDTOKENSWITHOUTSPACESXXXXXXXXXXXXXXXXXXXX\n"
+        "Education\n"
+    )
+    assert _ocr_experience_slice_mushy(mush)
+    clean = (
+        "Experience\n"
+        "Data Analyst Intern at Codenera (2024-01-Present)\n"
+        "Built dashboards and cleaned datasets for revenue KPIs.\n"
+        "Education\n"
+    )
+    assert not _ocr_experience_slice_mushy(clean)
 

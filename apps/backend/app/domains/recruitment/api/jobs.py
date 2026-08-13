@@ -708,24 +708,28 @@ def update_application_status(job_id: str, candidate_id: str):
         if not app['email']:
             return jsonify({'error': 'Candidate email not found; cannot send notification'}), 400
         ts = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-        out = _send_notification(
-            hr_action='SHORTLISTED',
+        # Persist shortlist first so interview scheduling accepts the application.
+        _sl_val = True if BACKEND == 'postgresql' else 1
+        db_run(
+            'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
+            (STATUS_SHORTLISTED, _sl_val, app['id'])
+        )
+        from app.domains.recruitment.services.notifications import notify_shortlisted_with_booking
+        notify_out = notify_shortlisted_with_booking(
+            application_id=app['id'],
             candidate_name=app.get('full_name') or '',
             candidate_email=app.get('email') or '',
             job_title=job.get('title') or '',
             company_name=job.get('company') or '',
-            application_id=app['id'],
+            recruiter_hrid=get_user_id(request.user),
             timestamp=ts,
         )
-        status_db = out['profile_update'].get('status_db') or STATUS_SHORTLISTED
-        _sl_val = True if BACKEND == 'postgresql' else 1
-        db_run(
-            'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
-            (status_db, _sl_val, app['id'])
-        )
-        from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
-        trigger_interview_scheduling(app['id'], recruiter_hrid=get_user_id(request.user))
-        return jsonify({'status': 'ok', 'profile_update': out['profile_update']}), 200
+        profile_update = notify_out.get('profile_update') or {
+            'status': 'Shortlisted',
+            'status_db': STATUS_SHORTLISTED,
+            'status_label': 'Shortlisted',
+        }
+        return jsonify({'status': 'ok', 'profile_update': profile_update}), 200
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
@@ -1189,10 +1193,9 @@ def public_apply_to_job(job_id: str):
             def _shortlist_side_effects() -> None:
                 with _app.app_context():
                     try:
-                        from app.domains.recruitment.services.interview_trigger import (
-                            trigger_interview_scheduling,
+                        from app.domains.recruitment.services.notifications import (
+                            notify_shortlisted_with_booking,
                         )
-                        from app.domains.recruitment.services.notifications import send_and_get_output
 
                         profile = db_get(
                             'SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?',
@@ -1205,22 +1208,14 @@ def public_apply_to_job(job_id: str):
                             or _email
                             or ''
                         )
-                        if candidate_email:
-                            try:
-                                send_and_get_output(
-                                    hr_action='SHORTLISTED',
-                                    candidate_name=(profile or {}).get('full_name') or _full_name or '',
-                                    candidate_email=candidate_email,
-                                    job_title=(_job.get('title') if isinstance(_job, dict) else '') or '',
-                                    company_name=(_job.get('company') if isinstance(_job, dict) else '') or '',
-                                    application_id=_app_id,
-                                    timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-                                )
-                            except Exception as notify_err:
-                                print(f"[PUBLIC_APPLY] SHORTLISTED notification failed: {notify_err}")
-                        trigger_interview_scheduling(
-                            _app_id,
+                        notify_shortlisted_with_booking(
+                            application_id=_app_id,
+                            candidate_name=(profile or {}).get('full_name') or _full_name or '',
+                            candidate_email=candidate_email,
+                            job_title=(_job.get('title') if isinstance(_job, dict) else '') or '',
+                            company_name=(_job.get('company') if isinstance(_job, dict) else '') or '',
                             recruiter_hrid=(_job.get('posted_by') if isinstance(_job, dict) else None),
+                            timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
                         )
                     except Exception as side_err:
                         print(f"[PUBLIC_APPLY] shortlist side effects failed: {side_err}")
