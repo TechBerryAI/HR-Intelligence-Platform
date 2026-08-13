@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -590,6 +592,33 @@ def test_location_parse_contract_is_city_canonical():
     assert heal_location_candidate('Austin, TX') == 'Austin'
     assert heal_location_candidate('San Francisco, CA') == 'San Francisco'
     assert heal_location_candidate('Seattle, WA') == 'Seattle'
+
+
+def test_gold_generator_resume_location_is_city_canonical():
+    """Generator writes city-only resume expected; source and JD keep city+state."""
+    eval_dir = Path(__file__).resolve().parents[3] / 'ai' / 'eval'
+    if str(eval_dir) not in sys.path:
+        sys.path.insert(0, str(eval_dir))
+    from generate_gold_lake import _jd_case, _resume_case
+
+    expected = {
+        5: ('Austin, TX', 'Austin'),
+        6: ('San Francisco, CA', 'San Francisco'),
+        7: ('Seattle, WA', 'Seattle'),
+        15: ('Austin, TX', 'Austin'),
+        16: ('San Francisco, CA', 'San Francisco'),
+        17: ('Seattle, WA', 'Seattle'),
+    }
+    for i, (raw, canon) in expected.items():
+        text, toon, form = _resume_case(i)
+        assert raw in text
+        assert form['currentLocation'] == canon
+        assert toon['person']['location'] == canon
+
+    text, toon, form = _jd_case(5)
+    assert 'Austin, TX' in text
+    assert form['location'] == 'Austin, TX'
+    assert toon['location'] == 'Austin, TX'
 
 
 def test_p4_location_heal_phone_bleed_and_ambernath():
