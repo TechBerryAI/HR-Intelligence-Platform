@@ -80,6 +80,7 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
   const [clientSecret, setClientSecret] = useState('')
   const [accessToken, setAccessToken] = useState('')
   const [refreshToken, setRefreshToken] = useState('')
+  const [baseUrl, setBaseUrl] = useState(settings.baseUrl || '')
   const [companyApplyUrl, setCompanyApplyUrl] = useState(settings.companyApplyUrl || '')
   const [logoUrl, setLogoUrl] = useState(settings.logoUrl || item.logoUrl || '')
   const [epTest, setEpTest] = useState(endpoints.test || 'GET /health')
