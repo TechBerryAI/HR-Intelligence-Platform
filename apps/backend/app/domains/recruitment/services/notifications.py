@@ -175,10 +175,89 @@ def send_and_get_output(
         hr_action, candidate_name, candidate_email, job_title, company_name,
         application_id, timestamp,
     )
-    send_notification_email(
+    ok = send_notification_email(
         out["email"]["to"],
         out["email"]["subject"],
         out["email"]["body"],
         html=out["email"].get("html"),
     )
+    try:
+        from app.domains.recruitment.repository import email_event_repository as email_events
+
+        email_events.log_email_event(
+            application_id=application_id,
+            email_kind=(hr_action or '').strip().upper(),
+            recipient=out["email"]["to"],
+            subject=out["email"]["subject"],
+            status=email_events.STATUS_SENT if ok else email_events.STATUS_FAILED,
+        )
+    except Exception as log_err:
+        print(f"[EMAIL_EVENT] shortlist/action log failed: {log_err}")
     return out
+
+
+def notify_shortlisted_with_booking(
+    *,
+    application_id: int,
+    candidate_name: str,
+    candidate_email: str,
+    job_title: str,
+    company_name: str,
+    recruiter_hrid: str | None = None,
+    timestamp: str | None = None,
+) -> dict:
+    """
+    Prefer one combined shortlist + calendar booking email.
+    Falls back to shortlist-only when booking invite cannot be emailed.
+    """
+    from datetime import datetime
+
+    from app.domains.recruitment.services import interview_scheduling_service as scheduling
+
+    ts = timestamp or datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    scheduling_result: dict = {}
+    try:
+        scheduling_result = scheduling.on_shortlisted(
+            int(application_id),
+            recruiter_hrid=recruiter_hrid,
+        ) or {}
+    except Exception as sched_err:
+        print(f"[SHORTLIST_NOTIFY] interview scheduling failed: {sched_err}")
+        scheduling_result = {'ok': False, 'reason': 'scheduling_exception'}
+
+    if scheduling_result.get('emailSent'):
+        # Combined shortlist + booking email already sent.
+        return {
+            'combined': True,
+            'scheduling': scheduling_result,
+            'profile_update': {
+                'application_id': str(application_id),
+                'status': STATUS_LABELS['shortlisted'],
+                'status_db': STATUS_SHORTLISTED,
+                'status_label': STATUS_LABELS['shortlisted'],
+                'updated_at': ts,
+            },
+        }
+
+    out = None
+    if candidate_email:
+        out = send_and_get_output(
+            hr_action='SHORTLISTED',
+            candidate_name=candidate_name or '',
+            candidate_email=candidate_email,
+            job_title=job_title or '',
+            company_name=company_name or '',
+            application_id=application_id,
+            timestamp=ts,
+        )
+    return {
+        'combined': False,
+        'scheduling': scheduling_result,
+        'profile_update': (out or {}).get('profile_update') or {
+            'application_id': str(application_id),
+            'status': STATUS_LABELS['shortlisted'],
+            'status_db': STATUS_SHORTLISTED,
+            'status_label': STATUS_LABELS['shortlisted'],
+            'updated_at': ts,
+        },
+    }

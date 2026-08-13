@@ -9,11 +9,7 @@ from app.domains.identity.authorization.rbac import (
     can_access_job,
     can_modify_job,
     is_read_only,
-    get_role,
     get_user_id,
-    ROLE_CEO,
-    ROLE_HEAD_HR,
-    ROLE_RECRUITER,
 )
 from app.ai.toon.runtime import toon_loads_flex
 from app.domains.candidate.services.profile_service import (
@@ -30,37 +26,30 @@ from app.domains.recruitment.api.applications import (
 )
 from app.domains.recruitment.services.job_delete import cascade_delete_job
 from app.domains.recruitment.services.ats_service import match_candidate_to_job, sync_application_match_score
-from app.domains.recruitment.services.company_scope import companies_related
+from app.domains.identity.services.organizations import (
+    attach_organization_id,
+    get_organization,
+    require_organization_id,
+    resolve_public_organization,
+)
 from app.domains.integrations.events import emit_job_closed, emit_job_created, emit_job_updated
 from app.core.timing import timing
 
 jobs_bp = Blueprint('jobs', __name__)
 
 
-def _jobs_for_recruiter_company(user) -> list:
-    """Recruiters see org/company postings, not only rows they personally posted."""
-    uid = get_user_id(user)
-    hr_company = (user.get('company') or '').strip()
-    if not hr_company and uid:
-        row = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (uid,))
-        hr_company = ((row or {}).get('company') or '').strip()
-    jobs = db_all(
+def _jobs_for_organization(org_id: str) -> list:
+    """All jobs belonging to an organization."""
+    return db_all(
         '''
         SELECT j.*, hs.company as company_name
         FROM jobs j
         LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+        WHERE j.organization_id = ?
         ORDER BY j.posted_on DESC
-        '''
+        ''',
+        (org_id,),
     )
-    if not hr_company:
-        return [j for j in jobs if j.get('posted_by') == uid]
-    return [
-        j
-        for j in jobs
-        if j.get('posted_by') == uid
-        or companies_related(hr_company, j.get('company'))
-        or companies_related(hr_company, j.get('company_name'))
-    ]
 
 
 def _job_enabled_flag(job: dict) -> bool:
@@ -75,32 +64,32 @@ def _get_job_for_user(job_id, user, require_write=False):
     job = db_get('SELECT * FROM jobs WHERE jdid = ?', (job_id,))
     if not job:
         return None
+    org_id = job.get('organization_id')
     posted_by = job.get('posted_by')
     if require_write:
-        if can_modify_job(user, posted_by):
+        if can_modify_job(user, posted_by=posted_by, organization_id=org_id):
             return job
-        # Team/company fallback: allow same-org recruiters to manage this posting
-        if get_role(user) == ROLE_RECRUITER and not is_read_only(user):
-            uid = get_user_id(user)
-            row = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (uid,)) if uid else None
-            my_co = (user or {}).get('company') or (row or {}).get('company')
-            owner = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (posted_by,)) if posted_by else None
-            if companies_related(my_co, job.get('company')) or companies_related(
-                my_co, (owner or {}).get('company')
-            ):
-                return job
         return None
-    elif user and get_user_id(user):
-        if not can_access_job(user, posted_by):
-            # Same company fallback for read
-            if get_role(user) == ROLE_RECRUITER:
-                uid = get_user_id(user)
-                row = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (uid,)) if uid else None
-                my_co = (user or {}).get('company') or (row or {}).get('company')
-                if companies_related(my_co, job.get('company')):
-                    return job
+    if user and get_user_id(user):
+        if not can_access_job(user, posted_by=posted_by, organization_id=org_id):
             return None
     return job
+
+
+def _public_org_from_request():
+    """
+    Resolve the public board company automatically.
+    Optional ?company= / ?slug= overrides; otherwise DEFAULT_PUBLIC_COMPANY_SLUG
+    or the sole org with jobs.
+    """
+    slug = (request.args.get('company') or request.args.get('slug') or '').strip().lower()
+    return resolve_public_organization(slug or None)
+
+
+def _job_matches_public_org(job: dict, org: dict | None) -> bool:
+    if not job or not org:
+        return False
+    return str(job.get('organization_id') or '') == str(org.get('id') or '')
 
 
 def _normalize_keywords(value) -> Optional[str]:
@@ -257,19 +246,45 @@ def generate_jdid_from_title(title):
 @optional_authenticate_token
 def get_jobs_public():
     """
-    Public job board: always return enabled jobs (NULL enabled = visible).
-    Staff dashboards should use GET /api/jobs/all for org-scoped lists.
-    Auth is optional and does not change this listing.
+    Public job board: enabled jobs for the integrated/default company.
+    Staff dashboards use GET /api/jobs/all (org from login).
     """
     try:
+        user = getattr(request, 'user', None)
+        # Logged-in staff: show their own company's jobs on /jobs as well
+        if user and get_user_id(user):
+            org_id, err = require_organization_id(user)
+            if err:
+                return err
+            jobs = db_all(
+                '''
+                SELECT j.*, hs.company as company_name
+                FROM jobs j
+                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
+                WHERE j.organization_id = ?
+                  AND (j.enabled = ''' + TRUE_SQL + ''' OR j.enabled IS NULL)
+                ORDER BY j.posted_on DESC
+                ''',
+                (org_id,),
+            )
+            return jsonify([_serialize_job(j) for j in jobs])
+
+        org = _public_org_from_request()
+        if not org:
+            return jsonify({
+                'error': 'No company configured for the public job board',
+                'hint': 'Set DEFAULT_PUBLIC_COMPANY_SLUG or ensure one organization has jobs',
+            }), 400
         jobs = db_all(
             '''
             SELECT j.*, hs.company as company_name
             FROM jobs j
             LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-            WHERE (j.enabled = ''' + TRUE_SQL + ''' OR j.enabled IS NULL)
+            WHERE j.organization_id = ?
+              AND (j.enabled = ''' + TRUE_SQL + ''' OR j.enabled IS NULL)
             ORDER BY j.posted_on DESC
-            '''
+            ''',
+            (str(org['id']),),
         )
         formatted = [_serialize_job(j) for j in jobs]
         return jsonify(formatted)
@@ -281,21 +296,12 @@ def get_jobs_public():
 @authenticate_token
 @require_recruiter
 def get_jobs_all():
-    """Staff job list: CEO/Head HR see all; recruiters see company postings."""
+    """Staff job list: scoped to caller's organization."""
     try:
-        user = request.user
-        role = get_role(user)
-        if role in (ROLE_CEO, ROLE_HEAD_HR):
-            jobs = db_all(
-                '''
-                SELECT j.*, hs.company as company_name
-                FROM jobs j
-                LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
-                ORDER BY j.posted_on DESC
-                '''
-            )
-        else:
-            jobs = _jobs_for_recruiter_company(user)
+        org_id, err = require_organization_id(request.user)
+        if err:
+            return err
+        jobs = _jobs_for_organization(org_id)
         formatted = [_serialize_job(j) for j in jobs]
         return jsonify(formatted)
     except Exception:
@@ -305,7 +311,7 @@ def get_jobs_all():
 @jobs_bp.get('/<string:job_id>')
 @optional_authenticate_token
 def get_job(job_id: str):
-    """Get one job. HR sees only their own; candidates/public see enabled jobs only."""
+    """Get one job. Staff: same org only. Public: enabled + matching ?company=slug."""
     try:
         job = db_get(
             '''
@@ -319,11 +325,17 @@ def get_job(job_id: str):
             return jsonify({'error': 'Job not found'}), 404
         user = getattr(request, 'user', None)
         if user and get_user_id(user):
-            if not can_access_job(user, job.get('posted_by')):
+            if not can_access_job(
+                user,
+                posted_by=job.get('posted_by'),
+                organization_id=job.get('organization_id'),
+            ):
                 return jsonify({'error': 'Job not found or access denied'}), 404
         else:
-            # Candidate/public: only enabled jobs
-            if not job.get('enabled'):
+            org = _public_org_from_request()
+            if not org or not _job_matches_public_org(job, org):
+                return jsonify({'error': 'Job not found'}), 404
+            if not job.get('enabled') and job.get('enabled') is not None:
                 return jsonify({'error': 'Job not found'}), 404
         return jsonify(_serialize_job(job))
     except Exception:
@@ -516,27 +528,31 @@ def get_candidate_resume(job_id: str, candidate_id: str):
         if not application:
             return jsonify({'error': 'Application not found'}), 404
         
-        # Get resume (prefer media via resume_raw_file_id, fallback BYTEA)
-        profile = db_get(
-            '''
-            SELECT resume, resume_raw_file_id
-            FROM candidate_profiles
-            WHERE candidate_id = ?
-            ''',
-            (candidate_id,)
-        )
-        if not profile:
-            return jsonify({'error': 'Resume not found'}), 404
-
+        # Get resume: prefer this application's match parse (apply-specific),
+        # then profile media / legacy BYTEA.
         from flask import Response
-        from app.domains.recruitment.services.parsing_storage import load_raw_file_bytes
+        from app.domains.recruitment.services.parsing_storage import (
+            load_profile_resume_bytes,
+            load_raw_file_bytes,
+        )
 
         resume_data = None
-        raw_id = profile.get('resume_raw_file_id')
-        if raw_id:
-            resume_data = load_raw_file_bytes(str(raw_id))
+        match_row = db_get(
+            '''
+            SELECT pr.raw_file_id
+            FROM matches m
+            LEFT JOIN parsed_resumes pr ON pr.id = m.parsed_resume_id
+            WHERE m.job_id = ? AND m.candidate_id = ? AND m.is_latest = ''' + TRUE_SQL + '''
+            ORDER BY m.created_at DESC
+            LIMIT 1
+            ''',
+            (job_id, candidate_id),
+        )
+        raw_from_match = (match_row or {}).get('raw_file_id')
+        if raw_from_match:
+            resume_data = load_raw_file_bytes(str(raw_from_match))
         if not resume_data:
-            resume_data = _resume_bytes(profile.get('resume'))
+            resume_data = load_profile_resume_bytes(candidate_id)
         if resume_data:
             return Response(
                 resume_data,
@@ -564,6 +580,8 @@ def get_candidate_resume(job_id: str, candidate_id: str):
 def record_profile_viewed(job_id: str, candidate_id: str):
     """Record that HR viewed this candidate's profile for this job. Sends email and updates status."""
     try:
+        from app.common.application_status import STATUS_SCREENING, normalize_status
+
         job = _get_job_for_user(job_id, request.user, require_write=True)
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
@@ -573,14 +591,14 @@ def record_profile_viewed(job_id: str, candidate_id: str):
         )
         if not app:
             return jsonify({'error': 'Application not found'}), 404
-        current_status = (app.get('status') or '').lower()
+        current_status = normalize_status(app.get('status'))
         is_shortlisted = app.get('shortlisted') in (True, 1, 't', 'true', '1')
-        if current_status == 'shortlisted' or current_status == 'rejected' or is_shortlisted:
+        if current_status in ('Shortlisted', 'Rejected') or is_shortlisted:
             return jsonify({
                 'status': 'ok',
                 'profile_update': {
                     'application_id': str(app['id']),
-                    'status': 'Shortlisted' if (current_status == 'shortlisted' or is_shortlisted) else 'Rejected',
+                    'status': 'Shortlisted' if (current_status == 'Shortlisted' or is_shortlisted) else 'Rejected',
                     'updated_at': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
                     'unchanged': True,
                 }
@@ -590,7 +608,8 @@ def record_profile_viewed(job_id: str, candidate_id: str):
         app['full_name'] = (profile or {}).get('full_name') or ''
         app['email'] = (profile or {}).get('email') or (signup or {}).get('email') or ''
         ts = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-        status_db = 'profile_viewed'
+        # Never write legacy 'profile_viewed' — CHECK constraint requires Screening.
+        status_db = STATUS_SCREENING
         if app['email']:
             out = _send_notification(
                 hr_action='PROFILE_VIEWED',
@@ -601,12 +620,20 @@ def record_profile_viewed(job_id: str, candidate_id: str):
                 application_id=app['id'],
                 timestamp=ts,
             )
-            status_db = out['profile_update']['status_db']
+            status_db = out['profile_update'].get('status_db') or STATUS_SCREENING
         db_run(
             'UPDATE applications SET status = ? WHERE id = ?',
             (status_db, app['id'])
         )
-        return jsonify({'status': 'ok', 'profile_update': {'application_id': str(app['id']), 'status': 'Profile Viewed', 'updated_at': ts}}), 200
+        return jsonify({
+            'status': 'ok',
+            'profile_update': {
+                'application_id': str(app['id']),
+                'status': 'Profile Viewed',
+                'status_db': status_db,
+                'updated_at': ts,
+            },
+        }), 200
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
@@ -623,9 +650,18 @@ def update_application_status(job_id: str, candidate_id: str):
     """Shortlist or reject candidate. Body: { "action": "shortlist" | "reject" }.
 
     Shortlist: send SHORTLISTED email + interview scheduling.
-    Reject: update DB only (no email) so candidates stay available for future roles.
+    Reject: update DB only (no email) so candidates stay available for future roles;
+    also cancel open interviews and invalidate booking tokens.
     """
     try:
+        from app.common.application_status import (
+            STATUS_REJECTED,
+            STATUS_SHORTLISTED,
+            can_transition,
+            normalize_status,
+        )
+        from app.domains.recruitment.repository import interview_repository as interview_repo
+
         data = request.get_json(force=True) or {}
         action = (data.get('action') or '').strip().lower()
         if action not in ('shortlist', 'reject'):
@@ -633,11 +669,21 @@ def update_application_status(job_id: str, candidate_id: str):
         job = _get_job_for_user(job_id, request.user, require_write=True)
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
-        app = db_get('SELECT id FROM applications WHERE job_id = ? AND candidate_id = ?', (job_id, candidate_id))
+        app = db_get(
+            'SELECT id, status FROM applications WHERE job_id = ? AND candidate_id = ?',
+            (job_id, candidate_id),
+        )
         if not app:
             return jsonify({'error': 'Application not found'}), 404
 
-        from app.common.application_status import STATUS_REJECTED
+        current = normalize_status(app.get('status'))
+        target = STATUS_REJECTED if action == 'reject' else STATUS_SHORTLISTED
+        if not can_transition(current, target):
+            return jsonify({
+                'error': f'Cannot transition from {current} to {target}',
+                'from': current,
+                'to': target,
+            }), 409
 
         if action == 'reject':
             _sl_val = False if BACKEND == 'postgresql' else 0
@@ -645,6 +691,7 @@ def update_application_status(job_id: str, candidate_id: str):
                 'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
                 (STATUS_REJECTED, _sl_val, app['id'])
             )
+            interview_repo.cancel_open_interviews_for_application(int(app['id']))
             return jsonify({
                 'status': 'ok',
                 'profile_update': {
@@ -661,23 +708,28 @@ def update_application_status(job_id: str, candidate_id: str):
         if not app['email']:
             return jsonify({'error': 'Candidate email not found; cannot send notification'}), 400
         ts = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
-        out = _send_notification(
-            hr_action='SHORTLISTED',
+        # Persist shortlist first so interview scheduling accepts the application.
+        _sl_val = True if BACKEND == 'postgresql' else 1
+        db_run(
+            'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
+            (STATUS_SHORTLISTED, _sl_val, app['id'])
+        )
+        from app.domains.recruitment.services.notifications import notify_shortlisted_with_booking
+        notify_out = notify_shortlisted_with_booking(
+            application_id=app['id'],
             candidate_name=app.get('full_name') or '',
             candidate_email=app.get('email') or '',
             job_title=job.get('title') or '',
             company_name=job.get('company') or '',
-            application_id=app['id'],
+            recruiter_hrid=get_user_id(request.user),
             timestamp=ts,
         )
-        _sl_val = True if BACKEND == 'postgresql' else 1
-        db_run(
-            'UPDATE applications SET status = ?, shortlisted = ? WHERE id = ?',
-            (out['profile_update']['status_db'], _sl_val, app['id'])
-        )
-        from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
-        trigger_interview_scheduling(app['id'], recruiter_hrid=get_user_id(request.user))
-        return jsonify({'status': 'ok', 'profile_update': out['profile_update']}), 200
+        profile_update = notify_out.get('profile_update') or {
+            'status': 'Shortlisted',
+            'status_db': STATUS_SHORTLISTED,
+            'status_label': 'Shortlisted',
+        }
+        return jsonify({'status': 'ok', 'profile_update': profile_update}), 200
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
@@ -694,13 +746,7 @@ def create_job():
     try:
         if is_read_only(request.user):
             return jsonify({'error': 'Read-only access'}), 403
-        print("CREATE JOB ENDPOINT CALLED")
-        print(f"Request method: {request.method}")
-        print(f"Request URL: {request.url}")
-        print(f"Headers: {dict(request.headers)}")
         data = request.get_json(force=True) or {}
-        print(f"Received data: {data}")
-        print(f"User from token: {request.user}")
         title = (data.get('title') or '').strip()
         company = (data.get('company') or '').strip()
         location = (data.get('location') or '').strip()
@@ -751,13 +797,20 @@ def create_job():
             data.get('preferredSkills') or data.get('preferred_skills')
         )
         
-        # Company is always taken from the HR account
+        # Company + org always taken from the HR account
         hr_id = get_user_id(request.user)
-        if hr_id:
-            hr_profile = db_get('SELECT company FROM hr_signup WHERE hrid = ?', (hr_id,))
+        org_id, err = require_organization_id(request.user)
+        if err:
+            return err
+        org = get_organization(org_id)
+        company = ((org or {}).get('name') or '').strip()
+        if hr_id and not company:
+            hr_profile = db_get(
+                'SELECT company, organization_id FROM hr_signup WHERE hrid = ?',
+                (hr_id,),
+            )
             if hr_profile and (hr_profile.get('company') or '').strip():
                 company = (hr_profile.get('company') or '').strip()
-            # else keep company from request only if HR has no company set (e.g. legacy)
         
         if not title or not company or not location or not description:
             missing_fields = []
@@ -780,12 +833,14 @@ def create_job():
         print("Executing INSERT query...")
         
         _enabled_val = True if BACKEND == 'postgresql' else 1
+        # status='Published' keeps jobs_status_enabled_sync from forcing enabled=false
+        # (INSERT with Draft default would set enabled := (status = 'Published') → false).
         result = db_run(
             '''
-            INSERT INTO jobs (jdid, title, company, location, salary, experience, description, keywords, posted_by, enabled, parsed_jd_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO jobs (jdid, title, company, location, salary, experience, description, keywords, posted_by, enabled, status, parsed_jd_id, organization_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''',
-            (jdid, title, company, location, salary, experience, description, keywords, hr_id, _enabled_val, parsed_jd_id)
+            (jdid, title, company, location, salary, experience, description, keywords, hr_id, _enabled_val, 'Published', parsed_jd_id, org_id)
         )
         print(f"INSERT result: {result}")
         
@@ -796,6 +851,10 @@ def create_job():
         if not job:
             print("ERROR: Job created but could not be retrieved")
             return jsonify({'error': 'Job created but could not be retrieved'}), 500
+
+        if not job.get('organization_id'):
+            attach_organization_id('jobs', 'jdid', jdid, org_id)
+            job = db_get('SELECT * FROM jobs WHERE jdid = ?', (jdid,)) or job
 
         if parsed_jd_id:
             try:
@@ -891,44 +950,10 @@ def update_job(job_id: str):
         else:
             keywords = job.get('keywords')
 
-        # Determine if jdid needs to be regenerated
-        # Regenerate if title, experience, or salary changed
-        old_title = (job.get('title') or '').strip()
-        old_experience = (job.get('experience') or '').strip()
-        old_salary = (job.get('salary') or '').strip() or None
-        new_title = title or old_title
-        new_experience = experience or old_experience
-        new_salary = salary if salary is not None else old_salary
-        
-        should_regenerate_jdid = (
-            (title and title.strip() and title.strip().upper() != old_title.upper()) or
-            (experience and experience.strip() != old_experience) or
-            (salary is not None and salary != old_salary)
-        )
-        
-        new_jdid = job_id  # Keep same jdid by default
-        
-        if should_regenerate_jdid:
-            # Generate new jdid from title
-            new_jdid = generate_jdid_from_title(new_title)
-            print(f"Regenerating jdid: {job_id} -> {new_jdid} (title/experience/salary changed)")
-            
-            # If jdid changed, update foreign keys in other tables
-            if new_jdid != job_id:
-                # Update applications table
-                db_run('UPDATE applications SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
-                db_run('UPDATE matches SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
-                db_run('UPDATE parsed_jds SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
-                db_run(
-                    'UPDATE external_jobs SET job_id = ? WHERE job_id = ?',
-                    (new_jdid, job_id),
-                )
-
-        # Update job with new jdid if it changed
+        # jdid is the immutable primary key / foreign-key target — never regenerate on edit.
         db_run(
             '''
             UPDATE jobs SET
-              jdid = ?,
               title = COALESCE(?, title),
               location = COALESCE(?, location),
               salary = ?,
@@ -937,9 +962,9 @@ def update_job(job_id: str):
               keywords = ?
             WHERE jdid = ?
             ''',
-            (new_jdid, title, location, salary, experience, description, keywords, job_id)
+            (title, location, salary, experience, description, keywords, job_id)
         )
-        updated = db_get('SELECT * FROM jobs WHERE jdid = ?', (new_jdid,))
+        updated = db_get('SELECT * FROM jobs WHERE jdid = ?', (job_id,))
         if updated:
             emit_job_updated(updated, request.user)
         return jsonify(_serialize_job(updated))
@@ -1025,7 +1050,8 @@ def public_apply_to_job(job_id: str):
                     resume_binary = bytes(resume_binary) if resume_binary else None
 
         has_resume = bool(resume_binary and len(resume_binary) > 0)
-        err = validate_public_apply_payload(data, has_resume)
+        parsed_id_early = (data.get('parsedId') or data.get('parsed_id') or '').strip() or None
+        err = validate_public_apply_payload(data, has_resume or bool(parsed_id_early))
         if err:
             return jsonify({'error': err}), 400
 
@@ -1036,9 +1062,18 @@ def public_apply_to_job(job_id: str):
         if not job:
             return jsonify({'error': 'Job not found or not available for applications'}), 404
 
+        org = _public_org_from_request()
+        if not org or not _job_matches_public_org(job, org):
+            return jsonify({'error': 'Job not found or not available for applications'}), 404
+
         email = normalize_email(data.get('email'))
         full_name = (data.get('fullName') or '').strip()
-        candidate_id = upsert_passwordless_candidate(full_name, email)
+        org_id = str(job.get('organization_id') or org.get('id') or '').strip()
+        if not org_id:
+            return jsonify({'error': 'Job is missing organization context'}), 400
+        candidate_id, candidate_created = upsert_passwordless_candidate(
+            full_name, email, organization_id=org_id
+        )
 
         existing = db_get(
             'SELECT id FROM applications WHERE candidate_id = ? AND job_id = ?',
@@ -1047,10 +1082,32 @@ def public_apply_to_job(job_id: str):
         if existing:
             return jsonify({'error': 'Applicant already applied'}), 400
 
-        data = {**data, 'email': email, 'fullName': full_name, 'completed': True}
-        save_candidate_profile(candidate_id, data, resume_binary, completed=True)
+        # Prefer already-catalogued resume from parse (avoid re-writing PDF on submit)
+        resume_raw_file_id = None
+        if parsed_id_early:
+            pr_row = db_get(
+                'SELECT raw_file_id FROM parsed_resumes WHERE id = ?',
+                (parsed_id_early,),
+            )
+            resume_raw_file_id = (pr_row or {}).get('raw_file_id') or None
 
-        parsed_id = (data.get('parsedId') or data.get('parsed_id') or '').strip() or None
+        data = {**data, 'email': email, 'fullName': full_name, 'completed': True}
+        # Freeze shared profile for existing candidates — email alone is not ownership proof.
+        # Apply-specific resume/ATS still bind via parsed_resume → matches.
+        existing_profile = db_get(
+            'SELECT candidate_id FROM candidate_profiles WHERE candidate_id = ?',
+            (candidate_id,),
+        )
+        if candidate_created or not existing_profile:
+            save_candidate_profile(
+                candidate_id,
+                data,
+                None if resume_raw_file_id else resume_binary,
+                completed=True,
+                resume_raw_file_id=resume_raw_file_id,
+            )
+
+        parsed_id = parsed_id_early
         public_uploader_id = (data.get('publicUploaderId') or data.get('public_uploader_id') or '').strip() or None
         parsed_resume_record = link_parsed_resume(parsed_id, candidate_id, public_uploader_id)
         if not parsed_resume_record:
@@ -1058,6 +1115,15 @@ def public_apply_to_job(job_id: str):
                 'error': 'No parsed resume found. Please upload your resume and wait for AI parsing to finish.'
             }), 400
 
+        # Only bind resume onto the shared profile when we are allowed to create it (first write).
+        if (candidate_created or not existing_profile) and not resume_raw_file_id and parsed_resume_record.get('raw_file_id'):
+            save_candidate_profile(
+                candidate_id,
+                data,
+                None,
+                completed=True,
+                resume_raw_file_id=parsed_resume_record.get('raw_file_id'),
+            )
         parsed_jd_record = db_get(
             """
             SELECT toon, confidence, id
@@ -1079,8 +1145,14 @@ def public_apply_to_job(job_id: str):
         if not parsed_resume or not isinstance(parsed_resume, dict) or not isinstance(parsed_jd, dict):
             return jsonify({'error': 'Resume or job description data is not in a valid format'}), 400
 
+        # Public apply: deterministic ATS only (skip Ollama narrative — that blocked
+        # the HTTP response for many seconds while the UI showed "Submitting…").
         ats_success, ats_result = match_candidate_to_job(
-            candidate_id, job_id, parsed_resume, parsed_jd
+            candidate_id,
+            job_id,
+            parsed_resume,
+            parsed_jd,
+            skip_narrative=True,  # submit must not wait on Ollama narrative
         )
         if not ats_success or not ats_result:
             err_msg = (
@@ -1106,25 +1178,53 @@ def public_apply_to_job(job_id: str):
         )
 
         if shortlisted and app_id:
-            from app.domains.recruitment.services.interview_trigger import trigger_interview_scheduling
-            from app.domains.recruitment.services.notifications import send_and_get_output
-            profile = db_get('SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?', (candidate_id,))
-            signup = db_get('SELECT email FROM candidates WHERE cid = ?', (candidate_id,))
-            candidate_email = (profile or {}).get('email') or (signup or {}).get('email') or email or ''
-            if candidate_email:
-                try:
-                    send_and_get_output(
-                        hr_action='SHORTLISTED',
-                        candidate_name=(profile or {}).get('full_name') or full_name or '',
-                        candidate_email=candidate_email,
-                        job_title=job.get('title') or '',
-                        company_name=job.get('company') or '',
-                        application_id=app_id,
-                        timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-                    )
-                except Exception as notify_err:
-                    print(f"[PUBLIC_APPLY] SHORTLISTED notification failed: {notify_err}")
-            trigger_interview_scheduling(app_id, recruiter_hrid=job.get('posted_by'))
+            # Defer email + interview scheduling so the apply response returns immediately.
+            # Must push Flask app context — without it, mail falls back to [DEV EMAIL] console only.
+            import threading
+            from flask import current_app
+
+            _app = current_app._get_current_object()
+            _app_id = app_id
+            _full_name = full_name
+            _email = email
+            _job = dict(job) if isinstance(job, dict) else job
+            _candidate_id = candidate_id
+
+            def _shortlist_side_effects() -> None:
+                with _app.app_context():
+                    try:
+                        from app.domains.recruitment.services.notifications import (
+                            notify_shortlisted_with_booking,
+                        )
+
+                        profile = db_get(
+                            'SELECT full_name, email FROM candidate_profiles WHERE candidate_id = ?',
+                            (_candidate_id,),
+                        )
+                        signup = db_get('SELECT email FROM candidates WHERE cid = ?', (_candidate_id,))
+                        candidate_email = (
+                            (profile or {}).get('email')
+                            or (signup or {}).get('email')
+                            or _email
+                            or ''
+                        )
+                        notify_shortlisted_with_booking(
+                            application_id=_app_id,
+                            candidate_name=(profile or {}).get('full_name') or _full_name or '',
+                            candidate_email=candidate_email,
+                            job_title=(_job.get('title') if isinstance(_job, dict) else '') or '',
+                            company_name=(_job.get('company') if isinstance(_job, dict) else '') or '',
+                            recruiter_hrid=(_job.get('posted_by') if isinstance(_job, dict) else None),
+                            timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+                        )
+                    except Exception as side_err:
+                        print(f"[PUBLIC_APPLY] shortlist side effects failed: {side_err}")
+
+            threading.Thread(
+                target=_shortlist_side_effects,
+                name=f'apply-shortlist-{_app_id}',
+                daemon=True,
+            ).start()
 
         return jsonify({
             'message': 'Application submitted successfully',

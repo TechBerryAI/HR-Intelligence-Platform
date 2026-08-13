@@ -1,0 +1,16 @@
+RIYA PATEL
+Thane, Mumbai | Mobile: 7016707933 | Email: riya@example.com
+
+SUMMARY
+Engineer
+
+SKILLS
+Java, Spring
+
+EXPERIENCE
+Backend Engineer - Foo Corp
+Jan 2022 - Dec 2023
+• Built APIs
+
+EDUCATION
+B.Tech Computer Science - Mumbai University

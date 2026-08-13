@@ -304,3 +304,21 @@ def test_reconcile_legacy_string_skills_matched():
     assert recon["match_score"] >= 95
     assert recon["verdict"] == "Strong Match"
 
+
+def test_skip_narrative_does_not_call_llm(monkeypatch):
+    """Public apply sets skip_narrative=True so submit never waits on Ollama."""
+    called = {"n": 0}
+
+    def _boom(_evidence):
+        called["n"] += 1
+        raise AssertionError("LLM narrative must not run when skip_narrative=True")
+
+    monkeypatch.setenv("ATS_NARRATIVE_LLM", "1")
+    monkeypatch.setattr(
+        "app.domains.recruitment.services.ats_service._optional_llm_narrative",
+        _boom,
+    )
+    result = _internal_match(BASE_RESUME, BASE_JD, skip_narrative=True)
+    assert called["n"] == 0
+    assert result["overall_match_score"] >= 80
+    assert result.get("narrative") or result.get("final_reasoning")

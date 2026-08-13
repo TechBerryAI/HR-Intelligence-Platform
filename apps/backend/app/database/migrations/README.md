@@ -1,9 +1,13 @@
-Legacy numbered SQL migrations were consolidated into `apps/backend/schema_pg/`:
+# Database migrations
 
-- `01_core.sql`
-- `02_domain.sql`
-- `03_integrations.sql`
-- `04_seeds.sql`
+Legacy numbered SQL under this folder was retired.
 
-Schema is applied by Alembic (see `apps/backend/alembic/`).
-Do not add new files here.
+**Source of truth:** Alembic under [`apps/backend/alembic/`](../../alembic/).
+
+```bash
+cd apps/backend
+alembic upgrade head
+alembic revision -m "describe_change"
+```
+
+See [`alembic/README.md`](../../alembic/README.md).

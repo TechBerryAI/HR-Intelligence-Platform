@@ -156,6 +156,14 @@ class TaskExecutor:
 
             max_attempts = max(1, runtime_config.retries + 1)
 
+        if kwargs.get("max_attempts") is not None:
+
+            max_attempts = max(1, int(kwargs["max_attempts"]))
+
+        elif kwargs.get("retries") is not None:
+
+            max_attempts = max(1, int(kwargs["retries"]) + 1)
+
 
 
         attempts = 0
@@ -202,7 +210,11 @@ class TaskExecutor:
 
                     timeout_seconds=timeout_seconds,
 
-                    metadata={"attempt": attempt, **kwargs.get("metadata", {})},
+                    metadata={
+                        "attempt": attempt,
+                        "json_schema": schema,
+                        **kwargs.get("metadata", {}),
+                    },
 
                 )
 

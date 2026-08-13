@@ -71,13 +71,14 @@ class ApplicationFormDTO(BaseModel):
     skillsList: list[str] = Field(default_factory=list, serialization_alias='_skills')
     summaryText: str = Field(default='', serialization_alias='_summary')
     trace: list[FieldTrace] = Field(default_factory=list)
+    coverage: list[dict[str, Any]] = Field(default_factory=list)
 
     def to_autofill_dict(self) -> dict[str, Any]:
         """Plain dict for JSON — includes `_skills` / `_summary` aliases for FE."""
-        data = self.model_dump(by_alias=True, exclude={'trace'})
+        data = self.model_dump(by_alias=True, exclude={'trace', 'coverage'})
         data['trace'] = [t.model_dump() for t in self.trace]
+        data['coverage'] = list(self.coverage or [])
         return data
-
 
 class JobCreateFormDTO(BaseModel):
     """Recruiter job-create form autofill payload."""

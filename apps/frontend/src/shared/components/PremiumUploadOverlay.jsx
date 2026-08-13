@@ -69,10 +69,7 @@ export default function PremiumUploadOverlay({
     return () => clearInterval(interval);
   }, [isVisible, steps.length, stageLabel, stageIndex]);
 
-  const displayText = stageLabel
-    ? (stageLabel.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) +
-      (steps[currentStep] ? ` · ${steps[currentStep].text}` : ''))
-    : steps[currentStep].text;
+  const displayText = steps[currentStep]?.text || 'Processing';
 
   const barPct =
     progressPct != null
@@ -244,7 +241,7 @@ export default function PremiumUploadOverlay({
             fontWeight: '500',
             lineHeight: '1.4'
           }}>
-            {stageLabel ? 'Live pipeline progress' : 'Takes 10-30 seconds'}
+            {stageLabel ? 'Live pipeline progress' : 'Takes 10–30 seconds'}
           </p>
         </div>
 

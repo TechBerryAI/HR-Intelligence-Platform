@@ -80,7 +80,7 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
   const [clientSecret, setClientSecret] = useState('')
   const [accessToken, setAccessToken] = useState('')
   const [refreshToken, setRefreshToken] = useState('')
-  const [baseUrl, setBaseUrl] = useState(settings.baseUrl || '')
+  const [companyApplyUrl, setCompanyApplyUrl] = useState(settings.companyApplyUrl || '')
   const [logoUrl, setLogoUrl] = useState(settings.logoUrl || item.logoUrl || '')
   const [epTest, setEpTest] = useState(endpoints.test || 'GET /health')
   const [epPublish, setEpPublish] = useState(endpoints.publish || 'POST /jobs')
@@ -99,6 +99,7 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
     setAccessToken('')
     setRefreshToken('')
     setBaseUrl(settings.baseUrl || '')
+    setCompanyApplyUrl(settings.companyApplyUrl || '')
     setLogoUrl(settings.logoUrl || item.logoUrl || '')
     setEpTest(endpoints.test || 'GET /health')
     setEpPublish(endpoints.publish || 'POST /jobs')
@@ -107,7 +108,13 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
     setEpApps(endpoints.applications || 'GET /jobs/{externalJobId}/applications')
   }, [item.id, item.logoUrl, cfg.enabled, cfg.autoPublish, cfg.autoSync, cfg.clientId, settings.baseUrl, settings.logoUrl])
 
-  const statusOk = cfg.status === 'connected'
+  const accessRequired = item.accessRequired === true
+  const statusOk = !accessRequired && cfg.status === 'connected'
+  const statusLabel = accessRequired
+    ? 'Provider access required'
+    : statusOk
+      ? 'Connected'
+      : 'Not connected'
 
   const buildBody = () => {
     const body = {
@@ -115,7 +122,7 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
       autoPublish,
       autoSync,
       clientId,
-      status: enabled ? 'connected' : 'disconnected',
+      status: accessRequired ? 'provider_access_required' : enabled ? 'connected' : 'disconnected',
     }
     if (clientSecret.trim()) body.clientSecret = clientSecret.trim()
     if (accessToken.trim()) body.accessToken = accessToken.trim()
@@ -138,6 +145,13 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
       else body.settings.logoUrl = ''
       body.baseUrl = baseUrl.trim()
       body.logoUrl = logoUrl.trim()
+    }
+    if (item.id === 'linkedin') {
+      body.settings = {
+        ...(cfg.settings || {}),
+        ...(body.settings || {}),
+        companyApplyUrl: companyApplyUrl.trim(),
+      }
     }
     return body
   }
@@ -162,7 +176,7 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
       const body = buildBody()
       if (!enabled) body.status = 'disconnected'
       await saveProviderConfig(item.id, body)
-      if (enabled) await connectProvider(item.id, body).catch(() => null)
+      if (enabled && !accessRequired) await connectProvider(item.id, body).catch(() => null)
       setMsg({ type: 'success', text: 'Configuration saved.' })
       setClientSecret('')
       setAccessToken('')
@@ -257,7 +271,7 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
               }`}
             >
               <FiLink className="w-3 h-3" />
-              {statusOk ? 'Connected' : 'Disconnected'}
+              {statusLabel}
             </p>
           </div>
         </div>
@@ -273,6 +287,28 @@ function ProviderCard({ item, enterprise, canEdit, onSaved, showHttpFields }) {
         )}
       </div>
 
+      {accessRequired && (
+        <p
+          className={
+            enterprise
+              ? 'text-xs text-[var(--ei-text-muted)]'
+              : 'text-xs text-slate-500 dark:text-slate-400'
+          }
+        >
+          {item.id === 'linkedin'
+            ? 'LinkedIn Job Posting API requires Talent Solutions partner approval. Saving credentials does not publish jobs until LinkedIn grants API access.'
+            : 'Naukri has no public job-posting API here. Remote publish needs a Naukri Amplify / partner integration.'}
+        </p>
+      )}
+      {item.id === 'linkedin' && (
+        <PremiumInput
+          label="Company apply URL (required for LinkedIn API)"
+          value={companyApplyUrl}
+          onChange={(e) => setCompanyApplyUrl(e.target.value)}
+          disabled={!canEdit}
+          placeholder="https://your-careers-site.example/apply"
+        />
+      )}
       <div className="flex flex-wrap gap-4">
         <Toggle checked={enabled} onChange={setEnabled} disabled={!canEdit} enterprise={enterprise} label="Enabled" />
         <Toggle
@@ -618,8 +654,9 @@ export default function IntegrationsSettingsPanel({ enterprise = false }) {
         id,
         name: id === 'linkedin' ? 'LinkedIn' : 'Naukri',
         builtin: true,
+        accessRequired: true,
         configured: false,
-        config: {},
+        config: { status: 'provider_access_required' },
       }
     })
   }, [builtins])
@@ -634,7 +671,9 @@ export default function IntegrationsSettingsPanel({ enterprise = false }) {
               : 'text-sm text-slate-500 dark:text-slate-400'
           }
         >
-          LinkedIn and Naukri are built-in. Connect Google Calendar (your account) for interview scheduling after shortlist.
+          LinkedIn and Naukri require partner API access before jobs can be published remotely.
+          Status shows Provider access required until that access exists — not Published.
+          Connect Google Calendar (your account) for interview scheduling after shortlist.
           Add any other job board with its API Base URL and endpoints.
           {!canEdit && ' Only Head HR can edit provider settings.'}
         </p>

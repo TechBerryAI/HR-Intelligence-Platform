@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -78,7 +79,7 @@ def test_runtime_run_task_resume_parsing(tmp_path: Path) -> None:
         result = runtime.run_task("resume_parsing", "Senior Python Engineer resume")
     assert result.task == "resume_parsing"
     assert result.provider_id == "ollama"
-    assert result.model == "qwen2.5:7b-instruct"
+    assert result.model == os.getenv("OLLAMA_MODEL", "qwen2.5:14b-instruct")
     assert result.validation_passed is True
     assert result.output["type"] == "resume"
 
@@ -121,7 +122,7 @@ def test_model_alias_resolution_from_config(tmp_path: Path) -> None:
     config_file = _runtime_config_path(tmp_path)
     runtime = AIRuntime(load_runtime_config(config_file))
     resolved = runtime.models.resolve("resume-parser", provider_id="ollama")
-    assert resolved == "qwen2.5:7b-instruct"
+    assert resolved == os.getenv("OLLAMA_MODEL", "qwen2.5:14b-instruct")
 
 
 def test_structured_output_schema_validation(tmp_path: Path) -> None:

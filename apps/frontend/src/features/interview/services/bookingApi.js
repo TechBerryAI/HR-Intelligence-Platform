@@ -1,4 +1,5 @@
-import { BASE_URL } from '@/core/api/api.js'
+import { BASE_URL, apiRequest } from '@/core/api/api.js'
+import { tokenService } from '@/core/auth/tokenService.js'
 
 function join(path) {
   const p = path.startsWith('/') ? path : `/${path}`
@@ -39,5 +40,12 @@ export function bookSlot(token, slotId) {
   return publicJson(`/api/interviews/book/${encodeURIComponent(token)}`, {
     method: 'POST',
     body: JSON.stringify({ slotId }),
+  })
+}
+
+/** Recruiter: interview row for an application (auth required). */
+export function fetchInterviewByApplication(applicationId) {
+  return apiRequest(`/api/interviews/by-application/${encodeURIComponent(applicationId)}`, {
+    token: tokenService.getToken(),
   })
 }

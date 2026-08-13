@@ -15,6 +15,10 @@ export default defineConfig(({ mode }) => {
         '@': path.resolve(__dirname, './src'),
       },
     },
+    test: {
+      environment: 'jsdom',
+      include: ['src/**/*.{test,spec}.{js,jsx}'],
+    },
     build: {
       sourcemap: false,
       target: 'es2018',

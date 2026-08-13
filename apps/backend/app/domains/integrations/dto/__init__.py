@@ -19,6 +19,7 @@ class JobSnapshot:
     description: str | None = None
     keywords: str | None = None
     enabled: bool = True
+    posted_on: Any = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

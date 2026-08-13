@@ -34,13 +34,14 @@ export default function HeadHrAdmins() {
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [toast, setToast] = useState(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [createForm, setCreateForm] = useState({ email: '', fullName: '', company: '', password: '' })
+  const [createForm, setCreateForm] = useState({ email: '', fullName: '', password: '' })
   const [creating, setCreating] = useState(false)
   const [editingAdmin, setEditingAdmin] = useState(null)
-  const [editForm, setEditForm] = useState({ fullName: '', company: '', password: '' })
+  const [editForm, setEditForm] = useState({ fullName: '', password: '' })
   const [editSaving, setEditSaving] = useState(false)
   const canManageAdmins = isHeadHr(auth)
   const [idOrder, setIdOrder] = useState('desc') // 'asc' | 'desc'
+  const [companyName, setCompanyName] = useState(auth?.company || '')
 
   const load = async () => {
     setLoading(true)
@@ -49,6 +50,7 @@ export default function HeadHrAdmins() {
       const token = tokenService.getToken()
       const data = await apiRequest('/api/head-hr/admins', { method: 'GET', token })
       setAdmins(data.admins || [])
+      if (data.company) setCompanyName(data.company)
     } catch (err) {
       setError(err?.message || 'Failed to load admins')
     } finally {
@@ -65,7 +67,7 @@ export default function HeadHrAdmins() {
 
   const handleCreateAdmin = async (e) => {
     e.preventDefault()
-    if (!createForm.email?.trim() || !createForm.fullName?.trim() || !createForm.company?.trim() || !createForm.password || createForm.password.length < 6) {
+    if (!createForm.email?.trim() || !createForm.fullName?.trim() || !createForm.password || createForm.password.length < 6) {
       showToast('Please fill all fields; password must be at least 6 characters', 'error')
       return
     }
@@ -78,12 +80,11 @@ export default function HeadHrAdmins() {
         body: {
           email: createForm.email.trim().toLowerCase(),
           fullName: createForm.fullName.trim(),
-          company: createForm.company.trim(),
           password: createForm.password,
         },
       })
       setShowCreate(false)
-      setCreateForm({ email: '', fullName: '', company: '', password: '' })
+      setCreateForm({ email: '', fullName: '', password: '' })
       load()
       showToast('Admin account created successfully')
     } catch (err) {
@@ -112,21 +113,20 @@ export default function HeadHrAdmins() {
     setEditingAdmin(admin)
     setEditForm({
       fullName: admin.full_name || '',
-      company: admin.company || '',
       password: '',
     })
   }
 
   const closeEditAdmin = () => {
     setEditingAdmin(null)
-    setEditForm({ fullName: '', company: '', password: '' })
+    setEditForm({ fullName: '', password: '' })
   }
 
   const handleEditAdmin = async (e) => {
     e.preventDefault()
     if (!editingAdmin?.hrid) return
-    if (!editForm.fullName?.trim() || !editForm.company?.trim()) {
-      showToast('Full name and company are required', 'error')
+    if (!editForm.fullName?.trim()) {
+      showToast('Full name is required', 'error')
       return
     }
     if (editForm.password && editForm.password.length < 6) {
@@ -138,7 +138,6 @@ export default function HeadHrAdmins() {
       const token = tokenService.getToken()
       const body = {
         fullName: editForm.fullName.trim(),
-        company: editForm.company.trim(),
       }
       if (editForm.password) body.password = editForm.password
       await apiRequest(`/api/head-hr/admins/${encodeURIComponent(editingAdmin.hrid)}`, {
@@ -219,12 +218,11 @@ export default function HeadHrAdmins() {
                 <label className="block text-xs font-medium text-[var(--ei-text-muted)] mb-1">Company</label>
                 <input
                   type="text"
-                  value={createForm.company}
-                  onChange={(e) => setCreateForm((f) => ({ ...f, company: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] text-[var(--ei-text-primary)] placeholder:text-[var(--ei-text-placeholder)] focus:outline-none focus:border-white/40 text-sm"
-                  placeholder="Acme Inc"
-                  required
+                  value={companyName || auth?.company || ''}
+                  disabled
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] text-[var(--ei-text-muted)] opacity-70 text-sm"
                 />
+                <p className="mt-1 text-[11px] text-[var(--ei-text-muted)]">Admins are created in your company only.</p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-[var(--ei-text-muted)] mb-1">Password (min 6 characters)</label>
@@ -240,7 +238,7 @@ export default function HeadHrAdmins() {
               <div className="flex gap-3 justify-end pt-2">
                 <button
                   type="button"
-                  onClick={() => { setShowCreate(false); setCreateForm({ email: '', fullName: '', company: '', password: '' }) }}
+                  onClick={() => { setShowCreate(false); setCreateForm({ email: '', fullName: '', password: '' }) }}
                   className="px-4 py-2 rounded-lg text-sm font-medium text-zinc-300 bg-zinc-800 hover:bg-zinc-700 transition-colors"
                 >
                   Cancel
@@ -290,10 +288,9 @@ export default function HeadHrAdmins() {
                 <label className="block text-xs font-medium text-[var(--ei-text-muted)] mb-1">Company</label>
                 <input
                   type="text"
-                  value={editForm.company}
-                  onChange={(e) => setEditForm((f) => ({ ...f, company: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] text-[var(--ei-text-primary)] placeholder:text-[var(--ei-text-placeholder)] focus:outline-none focus:border-white/40 text-sm"
-                  required
+                  value={companyName || editingAdmin.company || auth?.company || ''}
+                  disabled
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--ei-surface-input)] border border-[var(--ei-border-primary)] text-[var(--ei-text-muted)] opacity-70 text-sm"
                 />
               </div>
               <div>

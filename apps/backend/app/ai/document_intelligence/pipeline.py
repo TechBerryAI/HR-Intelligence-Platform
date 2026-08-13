@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import re
 from typing import Any, Optional
 
 from app.ai.document_intelligence.knowledge import (
@@ -77,6 +78,37 @@ def _jd_deterministic_is_strong(profile, coverage=None) -> bool:
     return True
 
 
+_RESUME_CORE_COVERAGE = frozenset(
+    {'fullName', 'email', 'phone', 'location', 'education', 'experience'}
+)
+
+
+def _resume_deterministic_is_strong(profile, coverage=None) -> bool:
+    """Skip residual LLM only when identity+body look solid and no core coverage gaps."""
+    has_id = bool(
+        (getattr(getattr(profile, 'personal', None), 'full_name', '') or '').strip()
+        and (getattr(getattr(profile, 'contact', None), 'email', '') or '').strip()
+    )
+    has_body = bool(
+        getattr(profile, 'skills', None)
+        and (getattr(profile, 'experience', None) or getattr(profile, 'education', None))
+    )
+    if not (has_id and has_body):
+        return False
+    if coverage is not None:
+        missing = getattr(coverage, 'missing_with_evidence', None) or []
+        if any(f in _RESUME_CORE_COVERAGE for f in missing):
+            return False
+    try:
+        from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+        if experience_is_incomplete(getattr(profile, 'experience', None) or [], ''):
+            return False
+    except Exception:
+        pass
+    return True
+
+
 def _apply_jd_repair(profile, raw_text: str):
     """Always run structural JD repair, then remap profile from repaired TOON."""
     from app.ai.adapter.runtime_adapter import repair_jd_toon
@@ -90,6 +122,90 @@ def _apply_jd_repair(profile, raw_text: str):
         pass
     return profile, toon
 
+
+def _apply_resume_repair(profile, raw_text: str):
+    """
+    Run structural resume repair on DI path, then merge conservatively.
+    Prefer already-filled deterministic contact/edu/experience over repair mutations.
+    """
+    from app.ai.adapter.runtime_adapter import repair_resume_toon
+    from app.ai.document_intelligence.canonical.from_toon import candidate_profile_from_toon
+    from app.ai.document_intelligence.models.candidate import CandidateProfile
+
+    original = profile
+    toon = candidate_to_toon(profile)
+    try:
+        toon, _repair_actions = repair_resume_toon(toon, raw_resume_text=raw_text or '')
+        repaired = candidate_profile_from_toon(toon)
+    except Exception:
+        return original, toon
+
+    oc, rc = original.contact, repaired.contact
+    contact = oc.model_copy(
+        update={
+            'email': (oc.email or '').strip() or (rc.email or '').strip(),
+            'phone': (oc.phone or '').strip() or (rc.phone or '').strip(),
+            'linkedin': (oc.linkedin or '').strip() or (rc.linkedin or '').strip(),
+            'github': (oc.github or '').strip() or (rc.github or '').strip(),
+            'portfolio': (oc.portfolio or '').strip() or (rc.portfolio or '').strip(),
+            'location': (oc.location or '').strip() or (rc.location or '').strip(),
+            'preferred_location': (oc.preferred_location or '').strip()
+            or (rc.preferred_location or '').strip(),
+        }
+    )
+    personal = original.personal.model_copy(
+        update={
+            'full_name': (original.personal.full_name or '').strip()
+            or (repaired.personal.full_name or '').strip(),
+            'summary': (original.personal.summary or '').strip()
+            or (repaired.personal.summary or '').strip(),
+        }
+    )
+    from app.ai.document_intelligence.experience_quality import merge_experience_rows
+
+    experience = merge_experience_rows(
+        list(original.experience or []),
+        list(repaired.experience or []),
+    )
+    if not experience:
+        experience = list(original.experience or repaired.experience or [])
+    education = list(original.education) if original.education else list(repaired.education)
+    skills = list(original.skills) if original.skills else list(repaired.skills)
+    # Ignore repair-invented junk links (e.g. https://B.Tech)
+    links = list(original.links) if original.links else []
+    if not links:
+        for link in repaired.links or []:
+            url = (getattr(link, 'url', '') or '').strip()
+            if url.startswith('http') and '://' in url and not re.search(
+                r'(?i)https?://(?:b\.?tech|m\.?tech|bca|mca|mba)\b',
+                url,
+            ):
+                links.append(link)
+
+    years = original.total_experience_years
+    if years is None:
+        years = repaired.total_experience_years
+
+    merged = CandidateProfile(
+        schema_version=original.schema_version,
+        personal=personal,
+        contact=contact,
+        education=education,
+        experience=experience,
+        projects=original.projects or repaired.projects,
+        skills=skills,
+        certificates=original.certificates or repaired.certificates,
+        languages=original.languages or repaired.languages,
+        links=links,
+        preferences=original.preferences or repaired.preferences,
+        total_experience_years=years,
+        field_meta=dict(original.field_meta or {}),
+    )
+    return merged, candidate_to_toon(merged)
+
+def _resume_core_missing(coverage) -> list[str]:
+    missing = list(getattr(coverage, 'missing_with_evidence', None) or [])
+    return [f for f in missing if f in _RESUME_CORE_COVERAGE]
 
 def _mime_type(filename: str) -> str:
     ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
@@ -145,13 +261,15 @@ def _emit(
         if status_l not in ('completed', 'failed', 'skipped'):
             return
         elapsed = take_pipeline_stage_elapsed_ms(stage)
+        # Missing start mark → unknown duration. Still record outcome for the checklist;
+        # the UI formats measured 0 / sub-ms as "<1 ms" (never a misleading "0 ms").
         if elapsed is None:
             elapsed = 0.0
         timing_collector.record(
             make_timing_event(
                 function=stage,
                 module='app.ai.document_intelligence.pipeline',
-                duration_ms=elapsed,
+                duration_ms=max(0.0, float(elapsed)),
                 success=status_l != 'failed',
                 exception_name='StageFailed' if status_l == 'failed' else None,
                 depth=2,
@@ -298,19 +416,39 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
         module='app.ai.document_intelligence.pipeline',
     )
 
+    from app.ai.document_intelligence.coverage import (
+        recover_resume_profile_gaps,
+    )
+    from app.ai.document_intelligence.coverage.resume_coverage import (
+        has_experience_section_evidence,
+    )
+
+    t0 = _time.perf_counter()
+    profile, coverage = recover_resume_profile_gaps(profile, text)
+    record_pipeline_stage(
+        'coverage',
+        'completed',
+        duration_ms=(_time.perf_counter() - t0) * 1000.0,
+        module='app.ai.document_intelligence.pipeline',
+    )
+    allow_experience_fill = bool(profile.experience) or has_experience_section_evidence(text)
+
     t0 = _time.perf_counter()
     profile = apply_knowledge_to_candidate(profile)
     knowledge_ms = (_time.perf_counter() - t0) * 1000.0
 
-    if not _SKIP_LLM:
+    run_semantic = (not _SKIP_LLM) or (not _resume_deterministic_is_strong(profile, coverage))
+    if run_semantic:
         t0 = _time.perf_counter()
         unresolved = unresolved_semantic_text(sections, 'resume') or text
         profile = enrich_resume_semantic(
             profile,
             unresolved_text=unresolved,
-            allow_experience_fill=bool(profile.experience),
+            allow_experience_fill=allow_experience_fill
+            or ('experience' in (coverage.missing_with_evidence or [])),
         )
-        profile = sanitize_candidate_profile(profile)
+        profile = sanitize_candidate_profile(profile, source_text=text or '')
+        profile, coverage = recover_resume_profile_gaps(profile, text)
         record_pipeline_stage(
             'semantic',
             'completed',
@@ -321,34 +459,16 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
         profile = apply_knowledge_to_candidate(profile)
         knowledge_ms += (_time.perf_counter() - t0) * 1000.0
     else:
-        # Gate: only call AI if critical gaps (fresher OK with education+skills)
-        has_id = bool(profile.personal.full_name and profile.contact.email)
-        has_body = bool(profile.skills and (profile.experience or profile.education))
-        if not (has_id and has_body):
-            t0 = _time.perf_counter()
-            unresolved = unresolved_semantic_text(sections, 'resume') or text
-            profile = enrich_resume_semantic(
-                profile,
-                unresolved_text=unresolved,
-                allow_experience_fill=bool(profile.experience),
-            )
-            profile = sanitize_candidate_profile(profile)
-            record_pipeline_stage(
-                'semantic',
-                'completed',
-                duration_ms=(_time.perf_counter() - t0) * 1000.0,
-                module='app.ai.document_intelligence.pipeline',
-            )
-            t0 = _time.perf_counter()
-            profile = apply_knowledge_to_candidate(profile)
-            knowledge_ms += (_time.perf_counter() - t0) * 1000.0
-        else:
-            record_pipeline_stage(
-                'semantic',
-                'skipped',
-                duration_ms=0.0,
-                module='app.ai.document_intelligence.pipeline',
-            )
+        record_pipeline_stage(
+            'semantic',
+            'skipped',
+            duration_ms=0.0,
+            module='app.ai.document_intelligence.pipeline',
+        )
+
+    profile, toon = _apply_resume_repair(profile, text)
+    profile = sanitize_candidate_profile(profile, source_text=text or '')
+    profile, coverage = recover_resume_profile_gaps(profile, text)
 
     record_pipeline_stage(
         'knowledge',
@@ -357,7 +477,7 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
         module='app.ai.document_intelligence.pipeline',
     )
 
-    form = map_candidate_to_form(profile)
+    form = map_candidate_to_form(profile, coverage=coverage.as_dicts())
     toon = candidate_to_toon(profile)
     return profile, form, toon
 
@@ -390,6 +510,23 @@ def parse_jd_text_to_canonical(text: str, *, max_workers: int | None = None):
     return profile, form, toon
 
 
+def _refresh_resume_from_cached_text(raw_text: str):
+    """Re-run deterministic resume parse on cached extract so parser fixes apply immediately."""
+    from app.ai.document_intelligence.coverage import recover_resume_profile_gaps
+
+    text = (raw_text or '').strip()
+    if len(text) < 30:
+        return None
+    sections = detect_sections(text, 'resume')
+    profile = parse_resume_from_sections(sections, text)
+    profile = apply_knowledge_to_candidate(profile)
+    profile, _ = recover_resume_profile_gaps(profile, text)
+    profile = sanitize_candidate_profile(profile, source_text=text)
+    form = map_candidate_to_form(profile)
+    toon = candidate_to_toon(profile)
+    return profile, form, toon
+
+
 def _cache_hit_response(
     cached: dict,
     *,
@@ -406,12 +543,24 @@ def _cache_hit_response(
             'UPDATE parsed_resumes SET candidate_id = ? WHERE id = ?',
             (candidate_id, cached['parsed_id']),
         )
+    toon = cached['toon']
+    form = None
+    canonical = None
+    if kind == 'resume':
+        try:
+            refreshed = _refresh_resume_from_cached_text(cached.get('raw_text') or '')
+            if refreshed:
+                profile, form_dto, toon = refreshed
+                canonical = profile.model_dump()
+                form = form_dto.to_autofill_dict()
+        except Exception:
+            toon = cached['toon']
     body = {
         'status': 'ok',
         'raw_file_id': cached['raw_file_id'],
         'parsed_id': cached['parsed_id'],
         'confidence': cached['confidence'],
-        'toon': cached['toon'],
+        'toon': toon,
         'is_duplicate': True,
         'model_version': cached['model_version'],
         'partial': 'text-fallback' in str(cached.get('model_version') or ''),
@@ -422,6 +571,10 @@ def _cache_hit_response(
             (cached.get('raw_text') or '').encode('utf-8', errors='ignore')
         ).hexdigest(),
     }
+    if form is not None:
+        body['form'] = form
+    if canonical is not None:
+        body['canonical'] = canonical
     if kind == 'resume':
         body['public_uploader_id'] = uploader_id if uploader_role == 'public' else None
     return body, 200
@@ -449,7 +602,9 @@ def _run_resume(
     _emit(parse_job_id, 'cache', 'started', 'Checking parse cache', on_stage=on_stage)
     file_hash = compute_file_hash(file_data)
     cached = get_cached_parsing_result(file_hash, uploader_id, 'resume')
-    if not cached and use_content_hash_cache and uploader_role == 'public':
+    # Public apply uses a new uploader id each time. Do not reuse another
+    # visitor's cached TOON — stale experience mapping survives parser fixes.
+    if not cached and use_content_hash_cache and uploader_role != 'public':
         cached = get_cached_parsing_result_by_hash(file_hash, 'resume')
     if cached:
         _emit(parse_job_id, 'cache', 'completed', 'Cache hit', on_stage=on_stage)
@@ -472,38 +627,76 @@ def _run_resume(
 
     from app.ai.parser.text_extraction import extract_text
 
-    _emit(parse_job_id, 'layout', 'started', 'Layout + text extraction', on_stage=on_stage)
+    # Time text and layout separately (layout must not include extract_text wall time)
     _emit(parse_job_id, 'text', 'started', on_stage=on_stage)
+    text_done_msg = ''
+    extract_err: Exception | None = None
     try:
         raw_text = extract_text(file_data, filename)
     except Exception as e:
-        _emit(parse_job_id, 'text', 'failed', str(e), on_stage=on_stage)
-        return {'status': 'error', 'error': f'Text extraction failed: {str(e)}'}, 400
+        extract_err = e
+        raw_text = ''
 
-    # PostgreSQL text columns reject NUL bytes from some PDF/DOCX extractors
+    # VALIDATION_FIX_nul_strip — PostgreSQL text columns reject NUL bytes
     if raw_text and '\x00' in raw_text:
         raw_text = raw_text.replace('\x00', '')
 
     text_length = len(raw_text.strip()) if raw_text else 0
-    # VALIDATION_FIX_ocr_dpi_retry
-    if (not raw_text or text_length < 30) and filename.lower().rsplit('.', 1)[-1] in (
-        'pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp',
-    ):
+    _IMAGE_EXTS = ('pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp')
+
+    def _looks_like_garbage_extract(s: str) -> bool:
+        """Narrow heuristic: enough chars but almost no signal (bad OCR)."""
+        t = (s or '').strip()
+        if len(t) < 30:
+            return True
+        if len(t) > 400:
+            return False
+        alnum = sum(1 for c in t if c.isalnum())
+        ratio = alnum / max(len(t), 1)
+        has_token = bool(
+            re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', t)
+            or re.search(r'\b[6-9]\d{9}\b|\+\d[\d\s\-()]{8,}\d', t)
+            or re.search(r'(?i)\b(?:experience|education|skills|summary)\b', t)
+        )
+        return ratio < 0.35 and not has_token
+
+    # VALIDATION_FIX_ocr_dpi_retry — thin, failed, or garbage extract on scan-friendly formats
+    needs_dpi_retry = filename.lower().rsplit('.', 1)[-1] in _IMAGE_EXTS and (
+        extract_err is not None
+        or not raw_text
+        or text_length < 30
+        or _looks_like_garbage_extract(raw_text)
+    )
+    if needs_dpi_retry:
         try:
             raw_text = extract_text(file_data, filename, dpi=300) or ''
             if raw_text and '\x00' in raw_text:
                 raw_text = raw_text.replace('\x00', '')
             text_length = len(raw_text.strip()) if raw_text else 0
-            _emit(parse_job_id, 'text', 'completed', f'OCR DPI retry → {text_length} chars', on_stage=on_stage)
+            text_done_msg = f'OCR DPI retry → {text_length} chars'
+            extract_err = None
         except Exception as retry_err:
-            _emit(parse_job_id, 'text', 'failed', f'DPI retry: {retry_err}', on_stage=on_stage)
+            if extract_err is not None and (not raw_text or text_length < 30):
+                _emit(parse_job_id, 'text', 'failed', f'DPI retry: {retry_err}', on_stage=on_stage)
+                return {'status': 'error', 'error': f'Text extraction failed: {retry_err}'}, 400
+
+    if extract_err is not None and (not raw_text or text_length < 30):
+        _emit(parse_job_id, 'text', 'failed', str(extract_err), on_stage=on_stage)
+        return {'status': 'error', 'error': f'Text extraction failed: {str(extract_err)}'}, 400
 
     if not raw_text or text_length < 30:
         error_msg = 'Could not extract sufficient text from document'
         _emit(parse_job_id, 'text', 'failed', error_msg, on_stage=on_stage)
         return {'status': 'error', 'error': error_msg}, 400
-    _emit(parse_job_id, 'text', 'completed', f'Extracted {text_length} chars', on_stage=on_stage)
+    _emit(
+        parse_job_id,
+        'text',
+        'completed',
+        text_done_msg or f'Extracted {text_length} chars',
+        on_stage=on_stage,
+    )
 
+    _emit(parse_job_id, 'layout', 'started', 'Layout analysis', on_stage=on_stage)
     try:
         from app.ai.parser.layout.detector import enhance_resume_text, is_layout_enabled
 
@@ -539,30 +732,57 @@ def _run_resume(
     )
     _emit(parse_job_id, 'deterministic', 'completed', on_stage=on_stage)
 
+    from app.ai.document_intelligence.coverage import recover_resume_profile_gaps
+    from app.ai.document_intelligence.coverage.resume_coverage import (
+        has_experience_section_evidence,
+    )
+
+    _emit(parse_job_id, 'coverage', 'started', on_stage=on_stage)
+    profile, coverage = recover_resume_profile_gaps(profile, raw_text)
+    _emit(
+        parse_job_id,
+        'coverage',
+        'completed',
+        f'recovered={len(coverage.recovered_fields)} missing_evidence={len(coverage.missing_with_evidence)}',
+        on_stage=on_stage,
+    )
+    allow_experience_fill = bool(profile.experience) or has_experience_section_evidence(
+        raw_text
+    )
+
     used_llm = False
-    has_id = bool(profile.personal.full_name and profile.contact.email)
-    has_body = bool(profile.skills and (profile.experience or profile.education))
     _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
-    if _SKIP_LLM and has_id and has_body:
-        _emit(parse_job_id, 'semantic', 'skipped', 'Deterministic coverage sufficient', on_stage=on_stage)
+    if _SKIP_LLM and _resume_deterministic_is_strong(profile, coverage):
+        _emit(
+            parse_job_id,
+            'semantic',
+            'skipped',
+            'Deterministic coverage sufficient',
+            on_stage=on_stage,
+        )
     else:
         unresolved = unresolved_semantic_text(sections, 'resume') or raw_text
         profile = enrich_resume_semantic(
             profile,
             unresolved_text=unresolved,
-            allow_experience_fill=bool(profile.experience),
+            allow_experience_fill=allow_experience_fill
+            or ('experience' in (coverage.missing_with_evidence or [])),
         )
-        profile = sanitize_candidate_profile(profile)
+        profile = sanitize_candidate_profile(profile, source_text=raw_text or '')
+        profile, coverage = recover_resume_profile_gaps(profile, raw_text)
         used_llm = True
         _emit(parse_job_id, 'semantic', 'completed', on_stage=on_stage)
 
     _emit(parse_job_id, 'knowledge', 'started', on_stage=on_stage)
     profile = apply_knowledge_to_candidate(profile)
-    profile = sanitize_candidate_profile(profile)
+    profile, toon = _apply_resume_repair(profile, raw_text)
+    profile = sanitize_candidate_profile(profile, source_text=raw_text or '')
+    profile, coverage = recover_resume_profile_gaps(profile, raw_text)
     _emit(parse_job_id, 'knowledge', 'completed', on_stage=on_stage)
 
     toon = candidate_to_toon(profile)
-    form = map_candidate_to_form(profile)
+    missing_ev = _resume_core_missing(coverage)
+    form = map_candidate_to_form(profile, coverage=coverage.as_dicts())
 
     _emit(parse_job_id, 'validate', 'started', on_stage=on_stage)
     validation_issues = collect_toon_validation_issues(toon, 'resume')
@@ -582,12 +802,13 @@ def _run_resume(
             'status': 'error',
             'error': f'Invalid parse: {error_msg or "; ".join(validation_issues)}',
             'missing_fields': validation_issues,
+            'coverage': coverage.as_dicts(),
         }, 400
     _emit(parse_job_id, 'validate', 'completed', on_stage=on_stage)
 
     confidence = calculate_confidence(toon, 'resume')
     model_version = _model_version_label()
-    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v6-jd-coverage')
+    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v8-exp-layout')
     if not used_llm:
         model_version = f'{model_version}+{cache_tag}+deterministic'
     else:
@@ -604,6 +825,7 @@ def _run_resume(
     )
     _emit(parse_job_id, 'persist', 'completed', on_stage=on_stage)
 
+    missing_fields = list(dict.fromkeys([*missing_ev, *(validation_issues if not is_valid else [])]))
     return {
         'status': 'ok',
         'raw_file_id': raw_file_id,
@@ -615,8 +837,9 @@ def _run_resume(
         'is_duplicate': False,
         'model_version': model_version,
         'public_uploader_id': uploader_id if uploader_role == 'public' else None,
-        'partial': (not is_valid),
-        'missing_fields': validation_issues if not is_valid else [],
+        'partial': (not is_valid) or bool(missing_ev),
+        'missing_fields': missing_fields,
+        'coverage': coverage.as_dicts(),
         'parse_job_id': parse_job_id,
         'raw_text': raw_text or '',
         'raw_text_chars': len(raw_text or ''),
@@ -720,6 +943,13 @@ def _run_jd(
 
     _emit(parse_job_id, 'coverage', 'started', on_stage=on_stage)
     profile, coverage = recover_jd_profile_gaps(profile, raw_text)
+    _emit(
+        parse_job_id,
+        'coverage',
+        'completed',
+        f'recovered={len(coverage.recovered_fields)} missing_evidence={len(coverage.missing_with_evidence)}',
+        on_stage=on_stage,
+    )
 
     used_llm = False
     _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
@@ -740,13 +970,6 @@ def _run_jd(
     profile, coverage = recover_jd_profile_gaps(profile, raw_text)
     toon = job_to_toon(profile)
     missing_ev = coverage.missing_with_evidence
-    _emit(
-        parse_job_id,
-        'coverage',
-        'completed',
-        f'recovered={len(coverage.recovered_fields)} missing_evidence={len(missing_ev)}',
-        on_stage=on_stage,
-    )
     form = map_job_to_form(profile, coverage=coverage.as_dicts(), raw_text=raw_text)
 
     _emit(parse_job_id, 'validate', 'started', on_stage=on_stage)

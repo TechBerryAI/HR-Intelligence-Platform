@@ -24,7 +24,7 @@ Schemas sit between contracts and TOON. They specify fields, nesting, and valida
 
 - TOON ontology definitions → `ai/toon/v1/`
 - Runtime JSON Schema → `ai/capabilities/*/schema.json`
-- SQL table definitions → `backend/schema_pg/`
+- SQL table definitions → `apps/backend/alembic/` (migrations)
 
 ## Authority chain position
 
@@ -38,7 +38,7 @@ contracts/ → schemas/ (this) → knowledge/ → toon/v1/ → backend/toon.py
 |----------|-------|
 | TOON mappings | `ai/toon/v1/mappings/*.yaml` reference schemas |
 | Dataset normalization (future) | `dataset/factory/normalizer/` |
-| Documentation | `ai/docs/DATA_CONTRACTS.md` |
+| Documentation | `docs/ADRS.md` · YAML schemas in this package |
 
 ## Related documentation
 

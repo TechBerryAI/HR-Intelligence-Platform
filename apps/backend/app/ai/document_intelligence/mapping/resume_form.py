@@ -20,6 +20,7 @@ from app.ai.document_intelligence.models.form_dtos import (
 from app.ai.document_intelligence.validation.engine import (
     validate_email,
     validate_nonempty,
+    validate_location,
     validate_phone,
     validate_url,
 )
@@ -91,7 +92,10 @@ def _trace(
     )
 
 
-def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
+def map_candidate_to_form(
+    profile: CandidateProfile,
+    coverage: list[dict] | None = None,
+) -> ApplicationFormDTO:
     """Map CandidateProfile → ApplicationFormDTO with explicit one-to-one sources."""
     traces: list[FieldTrace] = []
 
@@ -174,33 +178,51 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
         )
     )
 
-    loc_ok, loc_reason = validate_nonempty(profile.contact.location, 'location')
+    loc_ok, loc_reason = validate_location(profile.contact.location)
     current_location = (profile.contact.location if loc_ok else '').strip()
     current_location = re.sub(r'^[\-–—•·]+\s*', '', current_location).strip()
+    if current_location:
+        current_location = current_location.splitlines()[0].strip()
+        # "Hyderabad, India" — drop trailing bleed after country
+        current_location = re.split(r'(?i)(?<=\bIndia)\s+', current_location, maxsplit=1)[0].strip()
+        loc_ok, loc_reason = validate_location(current_location)
+    if current_location and not loc_ok:
+        current_location = ''
     if not current_location:
         loc_ok = False
-        loc_reason = 'empty'
+        loc_reason = loc_reason if loc_reason != 'ok' else 'empty'
     traces.append(
         _trace(
             'currentLocation',
             'contact.location',
             source=_meta_source(profile, 'person.location', 'deterministic'),
-            validator='validate_nonempty' if loc_ok else 'none',
+            validator='validate_location' if loc_ok else 'none',
             confidence=0.85 if loc_ok else 0.0,
-            reason=loc_reason if loc_ok else 'empty',
+            reason=loc_reason if loc_ok else (loc_reason or 'empty'),
         )
     )
 
-    # preferredLocation: only contact.preferred_location (no fallback to current)
+    # preferredLocation: preferred_location, else current location
+    # VALIDATION_FIX_preferred_location_fallback
     pref = (profile.contact.preferred_location or '').strip()
-    pref_ok, pref_reason = validate_nonempty(pref, 'preferred_location')
+    pref_ok, pref_loc_reason = validate_location(pref) if pref else (False, 'empty')
+    if not pref_ok:
+        pref = ''
+    if not pref and current_location:
+        pref = current_location
+        pref_source_path = 'contact.location'
+        pref_reason = 'fallback_current_location'
+        pref_ok = True
+    else:
+        pref_source_path = 'contact.preferred_location'
+        pref_reason = pref_loc_reason if pref else 'empty'
     preferred_location = pref if pref_ok else ''
     traces.append(
         _trace(
             'preferredLocation',
-            'contact.preferred_location',
+            pref_source_path,
             source=_meta_source(profile, 'person.preferred_location', 'deterministic'),
-            validator='validate_nonempty' if pref_ok else 'none',
+            validator='validate_location' if pref_ok else 'none',
             confidence=0.85 if pref_ok else 0.0,
             reason=pref_reason if pref_ok else 'empty',
         )
@@ -320,23 +342,11 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
                 parts = _re.split(r'\s*[-–—]\s*', degree, maxsplit=1)
                 if len(parts) == 2 and len(parts[1].strip()) >= 3:
                     degree, institution = parts[0].strip()[:200], parts[1].strip()[:200]
-        # Still missing one side: keep row if the other is strong enough for ATS,
-        # and fill the blank with a grounded placeholder from the same string.
+        # Still missing one side: only keep when both sides are grounded (no invented placeholders)
         if (degree or '').strip() and not (institution or '').strip():
-            institution = degree.strip()[:200]
+            continue
         if (institution or '').strip() and not (degree or '').strip():
-            # Only invent generic degree when institution looks academic, not job duty text
-            inst_l = institution.lower()
-            if any(
-                tok in inst_l
-                for tok in (
-                    'university', 'college', 'school', 'institute', 'academy',
-                    'board', 'vidyalaya', 'polytechnic',
-                )
-            ):
-                degree = 'Education'
-            else:
-                continue
+            continue
         # Drop experience/project pollution rows
         blob = f'{degree} {institution}'.lower()
         if any(
@@ -344,8 +354,12 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
             for tok in (
                 'configured mysql', 'master-slave', 'project name', 'duration',
                 'organizational experience', 'replication setup',
+                'responsibilities', 'client name', 'technologies used',
+                'executed on-page', 'managed and optimized', 'facilitated smooth',
             )
         ):
+            continue
+        if degree.strip().lower() in {'education', 'educational', 'qualification', 'qualifications'}:
             continue
         if not (degree or institution or edu.gpa or edu.start or edu.end):
             continue
@@ -431,6 +445,31 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
     if not cert_rows:
         cert_rows = [CertificationFormRow()]
 
+    # Merge coverage into field traces for UI visibility (JD parity)
+    coverage_rows = list(coverage or [])
+    cov_by_field = {c.get('field'): c for c in coverage_rows if isinstance(c, dict)}
+    for form_field, cov_key in (
+        ('fullName', 'fullName'),
+        ('email', 'email'),
+        ('phone', 'phone'),
+        ('currentLocation', 'location'),
+        ('education', 'education'),
+        ('experiences', 'experience'),
+    ):
+        c = cov_by_field.get(cov_key)
+        if not c:
+            continue
+        traces.append(
+            _trace(
+                form_field,
+                f'coverage.{cov_key}',
+                source='coverage_gate',
+                validator=str(c.get('status') or ''),
+                confidence=0.95 if c.get('status') in ('filled', 'recovered') else 0.4,
+                reason=str(c.get('detail') or c.get('status') or ''),
+            )
+        )
+
     return ApplicationFormDTO(
         fullName=full_name,
         email=email,
@@ -449,4 +488,5 @@ def map_candidate_to_form(profile: CandidateProfile) -> ApplicationFormDTO:
         skillsList=skill_names,
         summaryText=summary,
         trace=traces,
+        coverage=coverage_rows,
     )

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -364,3 +365,422 @@ def test_dash_role_company_dates_line_parses():
     assert e.start == '2024-09'
     assert e.is_current is True
     assert e.end == ''
+
+
+def test_contact_recall_labeled_email_phone_location():
+    """Labeled contact lines and broken email must fill apply Form DTO."""
+    text = """
+PRIYA SHARMA
+Location: Navi Mumbai, Maharashtra
+Mobile: 98 76 54 32 10
+E-mail: priya.sharma
+@gmail.com
+
+SUMMARY
+Software engineer with 3 years experience.
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text)
+    assert form.email.lower() == 'priya.sharma@gmail.com'
+    assert re.sub(r'\D', '', form.phone).endswith('9876543210') or '9876543210' in re.sub(
+        r'\D', '', form.phone
+    )
+    assert 'mumbai' in (form.currentLocation or '').lower()
+    assert form.preferredLocation == form.currentLocation
+
+
+def test_contact_recall_footer_email_when_header_thin():
+    text = """
+AMIT KUMAR
+Bangalore
+
+EXPERIENCE
+Engineer at Acme
+
+EDUCATION
+B.Tech Computer Science
+IIT Bombay
+
+Contact: amit.kumar@example.com | Phone: +91-9876543210
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text)
+    assert form.email == 'amit.kumar@example.com'
+    digits = re.sub(r'\D', '', form.phone or '')
+    assert digits.endswith('9876543210')
+    assert 'bangalore' in (form.currentLocation or '').lower()
+    assert form.preferredLocation == form.currentLocation
+
+
+def test_education_institution_then_degree_coalesce():
+    section = """
+S.K Somaiya College of Arts, Science and Commerce - Mumbai            Aug 2022 to April  2024
+Masters of Arts in Entertainment Media and Advertising
+
+The SIA College of Higher Education - Mumbai              June 2019 to June 2022
+Bachelors of Mass Media - Advertising
+"""
+    rows = coalesce_education(parse_education(section))
+    assert len(rows) >= 2
+    assert rows[0].institution
+    assert rows[0].degree
+    assert 'somaiya' in rows[0].institution.lower()
+    assert 'master' in rows[0].degree.lower()
+    assert rows[1].institution and rows[1].degree
+
+
+def test_education_rejects_duty_lines_and_no_placeholder_degree():
+    from app.ai.document_intelligence.canonical.from_toon import candidate_profile_from_toon
+    from app.ai.document_intelligence.mapping.resume_form import map_candidate_to_form
+
+    section = """
+Mumbai University
+Configured MySQL master-slave replication setup
+B.Tech Computer Science - IIT Bombay
+● Managed and optimized social media platforms
+"""
+    rows = coalesce_education(parse_education(section))
+    blobs = ' '.join(f'{r.degree} {r.institution}' for r in rows).lower()
+    assert 'configured' not in blobs
+    assert 'managed and optimized' not in blobs
+    assert any('b.tech' in (r.degree or '').lower() or 'tech' in (r.degree or '').lower() for r in rows)
+
+    # Institution-only with no degree evidence must not invent degree="Education"
+    toon = {
+        'type': 'resume',
+        'person': {
+            'name': 'Test User',
+            'email': 't@example.com',
+            'phone': '9999999999',
+            'location': 'Mumbai',
+            'preferred_location': '',
+        },
+        'skills': ['Python'],
+        'experience': [],
+        'education': [
+            {'degree': '', 'institution': 'Some University of Arts', 'field': '', 'gpa': '', 'from': '', 'to': ''},
+            {'degree': 'B.Tech', 'institution': 'IIT Bombay', 'field': '', 'gpa': '', 'from': '', 'to': ''},
+        ],
+        'certifications': [],
+        'summary': '',
+    }
+    form = map_candidate_to_form(candidate_profile_from_toon(toon))
+    assert all(e.degree.strip().lower() != 'education' for e in form.education)
+    assert any('iit' in (e.institution or '').lower() for e in form.education)
+
+
+def test_location_pipe_header_and_address_label():
+    text = """
+RIYA PATEL
+Thane, Mumbai | Mobile: 7016707933 | Email: riya@example.com
+
+SUMMARY
+Engineer
+
+EDUCATION
+B.Tech Computer Science - Mumbai University
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text)
+    assert form.currentLocation
+    assert 'thane' in form.currentLocation.lower() or 'mumbai' in form.currentLocation.lower()
+    assert form.preferredLocation == form.currentLocation
+
+    text2 = """
+KARAN MEHTA
+Address: Plot 12, Sector 5, Navi Mumbai, Maharashtra 400706
+Email: karan@example.com
+Phone: 9123456789
+
+SKILLS
+Python, SQL
+"""
+    profile2, form2, _ = parse_resume_text_to_canonical(text2)
+    loc = (form2.currentLocation or '').lower()
+    assert 'mumbai' in loc or 'navi' in loc
+    assert form2.preferredLocation == form2.currentLocation
+
+
+def test_internship_section_maps_to_experience():
+    text = """
+ANANYA SHAH
+ananya@example.com | 9876543210 | Pune
+
+SKILLS
+Python, SQL
+
+INTERNSHIP
+Software Intern - Acme Labs - (Jun 2023 - Aug 2023)
+● Built internal tools
+
+EDUCATION
+B.Tech Computer Science - Pune University
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text)
+    assert len(form.experiences) >= 1
+    roles = ' '.join(e.role for e in form.experiences).lower()
+    companies = ' '.join(e.company for e in form.experiences).lower()
+    assert 'intern' in roles or 'acme' in companies
+
+
+def test_resume_coverage_recovers_footer_phone():
+    from app.ai.document_intelligence.coverage.resume_coverage import recover_resume_profile_gaps
+    from app.ai.document_intelligence.models.candidate import (
+        CandidateProfile,
+        ContactInfo,
+        PersonalInfo,
+        SkillEntry,
+    )
+
+    profile = CandidateProfile(
+        personal=PersonalInfo(full_name='Test User'),
+        contact=ContactInfo(email='t@example.com', phone='', location=''),
+        skills=[SkillEntry(canonical='Python')],
+    )
+    text = """
+Test User
+t@example.com
+Location: Hyderabad
+
+Skills: Python
+
+Phone: +91-9988776655
+"""
+    updated, report = recover_resume_profile_gaps(profile, text)
+    assert updated.contact.phone
+    assert '9988776655' in re.sub(r'\D', '', updated.contact.phone)
+    assert updated.contact.location
+    assert 'hyderabad' in updated.contact.location.lower()
+    assert 'phone' in report.recovered_fields or 'location' in report.recovered_fields
+
+
+INFOSENSE_STACKED = """
+RAHUL SHARMA
+rahul@example.com | 9876543210 | Mumbai
+
+SKILLS
+Oracle, PostgreSQL, SQL Server, MySQL
+
+PROFESSIONAL EXPERIENCE
+Database Administrator
+Infosenseglobal | Dec 2024 – Present
+• Administer Oracle, PostgreSQL, SQL Server, and MySQL databases across multiple environments.
+• Led PostgreSQL 12 to 16 upgrade projects including planning, testing, migration, and validation.
+• Improved query performance by 40% through SQL tuning, indexing optimization, and execution plan analysis.
+• Managed backup, recovery, disaster recovery, and database security activities.
+• Supported production incidents, root cause analysis, and release management.
+
+Senior Database Administrator
+Techberry Infotech Pvt. Ltd. | Jun 2022 – Nov 2024
+• Administered production Oracle and PostgreSQL estates.
+• Implemented backup and recovery procedures.
+
+Oracle DBA
+Acme Systems | Jan 2020 – May 2022
+• Supported Oracle RAC clusters.
+
+CERTIFICATIONS
+Oracle Certified Professional
+"""
+
+
+def test_infosense_role_then_company_pipe_dates_and_later_jobs():
+    from app.ai.document_intelligence.parsers.resume import parse_experience
+    from app.ai.document_intelligence.validation.engine import sanitize_experience_row
+
+    rows = parse_experience(
+        """
+Database Administrator
+Infosenseglobal | Dec 2024 – Present
+• Administer Oracle, PostgreSQL, SQL Server, and MySQL databases across multiple environments.
+• Led PostgreSQL 12 to 16 upgrade projects including planning, testing, migration, and validation.
+
+Senior Database Administrator
+Techberry Infotech Pvt. Ltd. | Jun 2022 – Nov 2024
+• Administered production Oracle and PostgreSQL estates.
+"""
+    )
+    assert len(rows) >= 2, [(e.role, e.company, e.start) for e in rows]
+    first = rows[0]
+    assert first.role == 'Database Administrator'
+    assert first.company == 'Infosenseglobal'
+    assert first.start.startswith('2024-12')
+    assert first.is_current is True
+    assert 'Administer Oracle' in (first.description or '')
+    assert rows[1].role == 'Senior Database Administrator'
+    assert 'Techberry' in rows[1].company
+    assert rows[1].start.startswith('2022-06')
+
+    cleaned = sanitize_experience_row(first)
+    assert cleaned.role == 'Database Administrator'
+    assert cleaned.company == 'Infosenseglobal'
+
+    _p, form, _ = parse_resume_text_to_canonical(INFOSENSE_STACKED)
+    roles = [e.role for e in form.experiences]
+    companies = [e.company for e in form.experiences]
+    assert len(form.experiences) >= 3, list(zip(roles, companies))
+    assert roles[0] == 'Database Administrator'
+    assert companies[0] == 'Infosenseglobal'
+    assert form.experiences[0].startMonth.startswith('2024-12')
+    assert 'Infosenseglobal' not in roles
+    assert any('Techberry' in (c or '') for c in companies)
+    assert any('Acme' in (c or '') for c in companies)
+    assert 'Administer Oracle' in (form.experiences[0].description or '')
+
+
+SAVAN_LIKE_STACKED = """
+SAVAN D. PATEL
+Database Administrator | Oracle DBA
+Ahmedabad, Gujarat, India | +91 7600266367
+savanpatel.oracle@gmail.com
+
+Summary
+Database Administrator with 9.6+ years of experience.
+
+Skills
+Oracle, PostgreSQL, SQL Server
+
+Experience
+Database Administrator
+Infosenseglobal | Dec 2024 – Present
+• Administer Oracle, PostgreSQL, SQL Server, and MySQL databases across multiple environments.
+• Led PostgreSQL 12 to 16 upgrade projects including planning, testing, migration, and validation.
+
+Oracle Database Administrator
+Dev IT | May 2024 – Nov 2024
+• Administered Oracle production databases supporting business-critical applications.
+
+Database Administrator
+Infosense Services | May 2022 – Apr 2024
+• Managed Oracle, PostgreSQL, SQL Server, and MySQL databases.
+
+Executive Database Administrator
+Solutions Enterprises | Aug 2020 – Apr 2022
+• Administered Oracle, PostgreSQL, SQL Server, and MySQL databases.
+
+Database Analyst
+Light Microfinance Pvt. Ltd. | Feb 2019 – Aug 2020
+• Administered MySQL databases and supported daily operations.
+
+Professional Development | Jul 2018 – Jan 2019
+• Pursued advanced Oracle Database Administration training and hands-on lab practice.
+• Completed self-directed learning focused on enterprise database management.
+
+Database Administrator
+SABSE Technologies Inc. | Jun 2017 – Jun 2018
+• Managed MySQL databases across development and production environments.
+
+Database Administrator
+F3 Infotech Pvt. Ltd. | May 2016 – Jun 2017
+• Administered Oracle databases across multiple environments.
+
+KEY PROJECT
+PostgreSQL 12 to PostgreSQL 16 Upgrade
+Role: Primary DBA
+• Conducted compatibility assessment and migration planning.
+• Result: Successful migration with zero critical post-migration issues.
+"""
+
+
+def test_savan_like_stacked_company_pipe_dates_all_jobs():
+    _p, form, _ = parse_resume_text_to_canonical(SAVAN_LIKE_STACKED)
+    companies = [e.company for e in form.experiences]
+    roles = [e.role for e in form.experiences]
+    assert len(form.experiences) >= 7, list(zip(roles, companies))
+    assert roles[0] == 'Database Administrator'
+    assert companies[0] == 'Infosenseglobal'
+    assert form.experiences[0].isCurrent is True
+    assert 'Infosenseglobal' not in roles
+    assert 'Dev IT' in companies
+    assert 'Infosense Services' in companies
+    assert 'SABSE Technologies Inc.' in companies
+    assert 'F3 Infotech Pvt. Ltd.' in companies
+    assert not any('self' in (r or '').lower() and 'directed' in (c or '').lower() for r, c in zip(roles, companies))
+    assert not any('primary dba' in (r or '').lower() for r in roles)
+    assert 'Administer Oracle' in (form.experiences[0].description or '')
+
+
+def test_experience_quality_detects_swap_and_prefers_complete_ai_rows():
+    from app.ai.document_intelligence.experience_quality import (
+        experience_is_incomplete,
+        ground_experience_rows,
+        merge_experience_rows,
+    )
+    from app.ai.document_intelligence.models.candidate import ExperienceEntry
+
+    swapped = [ExperienceEntry(role='Infosenseglobal', company='', start='2024-12', is_current=True)]
+    assert experience_is_incomplete(swapped, SAVAN_LIKE_STACKED)
+
+    good = [
+        ExperienceEntry(role='Database Administrator', company='Infosenseglobal', start='2024-12', is_current=True),
+        ExperienceEntry(role='Oracle Database Administrator', company='Dev IT', start='2024-05', end='2024-11'),
+    ]
+    assert not experience_is_incomplete(good, '')
+
+    det = [ExperienceEntry(role='Infosenseglobal', start='2024-12', is_current=True)]
+    ai = [
+        ExperienceEntry(
+            role='Database Administrator',
+            company='Infosenseglobal',
+            start='2024-12',
+            is_current=True,
+            description='Administer Oracle databases.',
+        ),
+        ExperienceEntry(role='Oracle Database Administrator', company='Dev IT', start='2024-05', end='2024-11'),
+    ]
+    merged = merge_experience_rows(det, ai)
+    assert len(merged) == 2
+    assert merged[0].role == 'Database Administrator'
+    assert merged[0].company == 'Infosenseglobal'
+
+    invented = ground_experience_rows(
+        [ExperienceEntry(role='CEO', company='FakeCorpNotInResume', start='2020-01')],
+        SAVAN_LIKE_STACKED,
+    )
+    assert invented == []
+
+
+ADAWET_WRAPPED_DATES = """
+ADAWET RATH
+adawet2001@gmail.com | +919905819526 | Vellore
+
+SKILLS
+Python, Java, SQL
+
+Experience
+Testing Intern,Steel Authority of India
+May
+2024
+–
+July
+2024
+Performed man ual testing of web applications, wrote and executed test cases, reported and tracked bugs using JIRA, and collaborated
+with the development team to ensure timely resolution and quality assurance.
+AI Trainee, Heavy Engineering Corporation
+June 2025 - July 2025
+· Built rapid prototypes showcasing AI-driven creative generation for marketing and packaging workflows.
+· Integrated APIs from image generation tools (DALL-E, Midjourney, Adobe Firefly).
+· Applied OpenCV for visual region extraction and layout detection from packaging artwork.
+
+Projects
+Toxic Comment Classifier | Python, Scikit-learn, NLP, ML |
+May 2025
+• Developed a machine learning-based system to detect toxic comments.
+"""
+
+
+def test_adawet_role_comma_company_wrapped_dates_two_jobs():
+    _p, form, _ = parse_resume_text_to_canonical(ADAWET_WRAPPED_DATES)
+    rows = [(e.role, e.company, e.startMonth, e.endMonth) for e in form.experiences]
+    assert len(form.experiences) >= 2, rows
+    assert form.experiences[0].role == 'Testing Intern'
+    assert 'Steel Authority' in form.experiences[0].company
+    assert form.experiences[0].startMonth.startswith('2024-05')
+    assert form.experiences[0].endMonth.startswith('2024-07')
+    assert 'JIRA' in (form.experiences[0].description or '').upper() or 'testing' in (
+        form.experiences[0].description or ''
+    ).lower()
+    assert form.experiences[1].role == 'AI Trainee'
+    assert 'Heavy Engineering' in form.experiences[1].company
+    assert form.experiences[1].startMonth.startswith('2025-06')
+    assert form.experiences[1].endMonth.startswith('2025-07')
+    assert 'OpenCV' in (form.experiences[1].description or '') or 'prototype' in (
+        form.experiences[1].description or ''
+    ).lower()

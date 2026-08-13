@@ -8,8 +8,10 @@
     document.documentElement.setAttribute('data-theme', t)
     document.documentElement.classList.toggle('dark', t === 'dark')
     document.documentElement.classList.toggle('light', t === 'light')
+    document.documentElement.style.colorScheme = t
   } catch (e) {
     document.documentElement.setAttribute('data-theme', DEFAULT_THEME)
     document.documentElement.classList.add('dark')
+    document.documentElement.style.colorScheme = DEFAULT_THEME
   }
 })()

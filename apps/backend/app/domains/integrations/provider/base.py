@@ -30,6 +30,23 @@ class JobProvider(ABC):
     def close(self, external_job_id: str, config: ProviderConfig) -> PublishResult:
         ...
 
+    def get_job_status(self, external_job_id: str, config: ProviderConfig) -> PublishResult:
+        return PublishResult(
+            success=False,
+            provider=self.provider_type,
+            external_job_id=external_job_id,
+            error='get_job_status is not supported for this provider',
+            message='Not supported',
+        )
+
+    def reconcile_job(self, job: JobSnapshot, config: ProviderConfig) -> PublishResult:
+        return PublishResult(
+            success=False,
+            provider=self.provider_type,
+            error='reconcile_job is not supported for this provider',
+            message='Not supported',
+        )
+
     @abstractmethod
     def sync_applications(self, config: ProviderConfig) -> SyncResult:
         ...

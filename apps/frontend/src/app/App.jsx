@@ -12,6 +12,7 @@ import AppRoutes from '@/routes/index.jsx'
 function isEnterpriseAppPath(pathname) {
   return (
     pathname.startsWith('/jobs') ||
+    pathname.startsWith('/c/') ||
     pathname.startsWith('/dashboard') ||
     pathname.startsWith('/candidates') ||
     pathname.startsWith('/admin') ||

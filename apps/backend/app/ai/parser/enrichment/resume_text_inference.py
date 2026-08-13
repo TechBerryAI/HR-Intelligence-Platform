@@ -52,10 +52,14 @@ SECTION_HEADERS = frozenset({
     'technical skill', 'core skills', 'core skill', 'key skills', 'key skill',
     'skill set', 'skills set', 'skills and abilities', 'abilities',
     'tools', 'technologies', 'tech stack', 'project', 'projects',
+    'key project', 'key projects',
     'certifications', 'certificates', 'certifications and licenses', 'licenses',
     'languages', 'awards', 'interests',
     'references', 'contact', 'resume', 'curriculum vitae', 'cv', 'about me',
     'work history', 'qualifications', 'achievements',
+    'internship', 'internships', 'internship experience', 'industrial training',
+    'summer internship', 'trainings', 'training', 'apprenticeship',
+    'internship / training',
     'academic details', 'academic background', 'academics',
     'educational qualifications', 'educational background',
     'personal details', 'personal information', 'biodata', 'bio data', 'contact details',
@@ -167,6 +171,20 @@ def is_biodata_or_address_line(line: str | None) -> bool:
     return False
 
 
+# Real title cue — comma / KPI list fragments may pass length checks without these.
+_JOB_TITLE_CUE = re.compile(
+    r'(?i)\b(?:'
+    r'intern(?:ship)?|trainee|engineer|developer|analyst|architect|manager|lead|'
+    r'consultant|specialist|administrator|scientist|designer|officer|executive|'
+    r'associate|coordinator|director|founder|ceo|cto|cfo|sde|swe|qa|devops|'
+    r'programmer|technician|support|recruiter|hr\b|teacher|professor|researcher'
+    r')\b'
+)
+_TITLE_KPI_LIST = re.compile(
+    r'(?i)(?:,\s*and\b)|(?:\bkpis?\b)|(?:\brevenue\b)|(?:\btrends?\b)'
+)
+
+
 def is_plausible_job_title(title: str | None) -> bool:
     """Reject summary/objective/biodata/address fragments that are not job titles."""
     t = (title or '').strip().lstrip(':').strip()
@@ -185,8 +203,13 @@ def is_plausible_job_title(title: str | None) -> bool:
         return False
     if is_biodata_or_address_line(t):
         return False
-    # Lowercase multi-word prose (e.g. "to help the company achieve…")
-    if t[0].islower() and len(words) >= 4:
+    # Lowercase lines are duty wrap / prose, not titles
+    if t[0].islower():
+        return False
+    # Duty/KPI fragments: "Trends, and Revenue KPIs…" — require a real title cue
+    if ',' in t and not _JOB_TITLE_CUE.search(t):
+        return False
+    if _TITLE_KPI_LIST.search(t) and not _JOB_TITLE_CUE.search(t):
         return False
     return True
 
@@ -482,7 +505,11 @@ def split_list_items(text: str) -> list[str]:
             if '|' in p2:
                 expanded.extend(x.strip() for x in p2.split('|'))
             elif ',' in p2 and not _is_institutionish(p2):
-                expanded.extend(x.strip() for x in p2.split(','))
+                from app.ai.parser.enrichment.jd_text_inference import (
+                    _split_skill_list_preserving_parens,
+                )
+
+                expanded.extend(_split_skill_list_preserving_parens(p2))
             else:
                 expanded.append(p)
         parts = expanded
@@ -569,19 +596,31 @@ def _parse_year_month(token: str) -> tuple[int, int] | None:
 
 
 def compute_total_experience_years(experience: list[dict[str, Any]]) -> float | None:
-    """Approximate total years from experience date ranges."""
+    """Approximate total years from experience date ranges (from/to, start/end, or description)."""
     if not experience:
         return None
     total_months = 0
     for exp in experience:
         if not isinstance(exp, dict):
             continue
-        start = _parse_year_month(str(exp.get('from') or ''))
-        end_raw = str(exp.get('to') or '')
-        if re.match(r'(?i)^(present|current|now)$', end_raw.strip()):
+        start_tok = str(exp.get('from') or exp.get('start') or '').strip()
+        end_tok = str(exp.get('to') or exp.get('end') or '').strip()
+        # Peel dates from description when structured dates missing (Excel safety net)
+        if not start_tok:
+            blob = ' '.join(
+                str(exp.get(k) or '')
+                for k in ('description', 'title', 'role', 'company')
+            )
+            fr, to = extract_date_range_from_line(blob)
+            if fr:
+                start_tok = fr
+                if to and not end_tok:
+                    end_tok = to
+        start = _parse_year_month(start_tok) if start_tok else None
+        if re.match(r'(?i)^(present|current|now)$', end_tok):
             end = _parse_year_month('Present')
         else:
-            end = _parse_year_month(end_raw)
+            end = _parse_year_month(end_tok) if end_tok else None
         if not start or not end:
             years = exp.get('years')
             if isinstance(years, (int, float)):
@@ -593,6 +632,88 @@ def compute_total_experience_years(experience: list[dict[str, Any]]) -> float | 
     if total_months <= 0:
         return None
     return round(total_months / 12.0, 1)
+
+
+_PROSE_YEARS_RE = re.compile(
+    r'(?i)(?:'
+    r'(?:total\s+)?(?:work\s+)?experience\s*(?:of|:)?\s*(\d{1,2}(?:\.\d)?)\+?\s*(?:years?|yrs?)'
+    r'|'
+    r'(\d{1,2}(?:\.\d)?)\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:total\s+)?(?:work\s+)?experience'
+    r'|'
+    r'(?:total\s+experience|overall\s+experience)\s*[:\-–—]\s*(\d{1,2}(?:\.\d)?)\+?\s*(?:years?|yrs?)?'
+    r')'
+)
+
+
+def extract_total_experience_years_from_text(text: str) -> float | None:
+    """Grounded prose years only when explicit 'N years' evidence exists in source text."""
+    if not text:
+        return None
+    # Prefer header/summary zone to avoid project "2 years" noise mid-body
+    window = text[:3500]
+    best: float | None = None
+    for m in _PROSE_YEARS_RE.finditer(window):
+        raw = next((g for g in m.groups() if g), None)
+        if not raw:
+            continue
+        try:
+            val = float(raw)
+        except ValueError:
+            continue
+        if val <= 0 or val > 45:
+            continue
+        if best is None or val > best:
+            best = val
+    return round(best, 1) if best is not None else None
+
+
+def merge_experience_years(
+    date_years: float | None,
+    prose_years: float | None,
+) -> float | None:
+    """Prefer date-sum; use prose when dates missing; max when both consistent."""
+    if date_years is None and prose_years is None:
+        return None
+    if date_years is None:
+        return prose_years
+    if prose_years is None:
+        return date_years
+    # Consistent if within ~2 years; otherwise trust dated ranges
+    if abs(date_years - prose_years) <= 2.0:
+        return max(date_years, prose_years)
+    return date_years
+
+
+def heal_location_candidate(value: str) -> str:
+    """Strip Company|City / phone⋄City bleed and return a city-like token when possible."""
+    s = (value or '').strip()
+    if not s:
+        return ''
+    if '\n' in s or '\r' in s:
+        s = s.splitlines()[0].strip()
+    # phone ⋄ City / +91…·City
+    s = re.sub(r'(?i)^\+?\d[\d\s\-().]{6,}\s*[⋄·•|]*\s*', '', s).strip()
+    s = re.sub(r'(?i)[⋄·•]\s*', ' ', s).strip()
+    if '|' in s:
+        parts = [p.strip() for p in s.split('|') if p.strip()]
+        for p in reversed(parts):
+            healed = heal_location_candidate(p) if ('|' in p or '⋄' in p) else p
+            if healed and is_plausible_location_value(healed):
+                return canonicalize_location_city(healed)
+            for city in _KNOWN_LOCATION_CITIES:
+                if city.lower() == healed.lower() or city.lower() == p.lower():
+                    return canonicalize_location_city(city)
+        return ''
+    # Prefer known city substring from polluted strings
+    if not is_plausible_location_value(s):
+        low = s.lower()
+        for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+            if city.lower() in low and not _LOCATION_TECH_NOISE.search(city):
+                # Avoid matching short tokens inside tech words
+                if re.search(rf'(?i)\b{re.escape(city)}\b', s):
+                    return canonicalize_location_city(city)
+        return ''
+    return canonicalize_location_city(s)
 
 
 def is_section_header_line(line: str) -> bool:
@@ -772,6 +893,194 @@ def extract_summary_from_text(text: str, max_len: int = 2000) -> str:
     return ''
 
 
+_LOCATION_TECH_NOISE = re.compile(
+    r'(?i)\b(?:html|css|javascript|typescript|python|java|react|node\.?js|sql|aws|'
+    r'docker|kubernetes|devops|ci/?cd|nlp|ml|ai|excel|bootstrap|bitbucket|postman|'
+    r'jupyter|mongodb|postgresql|mysql|linux|git|github|vscode|vs\s*code|'
+    r'technical\s+support|incident\s+management|cloud\s+devops|net\s+development)\b'
+)
+_LOCATION_PROSE_NOISE = re.compile(
+    r'(?i)\b(?:analyzed|building|practice|automation|dashboards?|binaries|'
+    r'process|workflow|objective|summary|experience\s+in|hands[- ]on)\b'
+)
+_KNOWN_LOCATION_CITIES = (
+    'Mumbai', 'Delhi', 'New Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
+    'Kolkata', 'Pune', 'Ahmedabad', 'Gurgaon', 'Gurugram', 'Noida', 'Nagpur',
+    'Indore', 'Thane', 'Navi Mumbai', 'Mulund', 'Kandivali', 'Andheri', 'Powai',
+    'Faridabad', 'Jaipur', 'Lucknow', 'Bhopal', 'Surat', 'Vadodara', 'Coimbatore',
+    'Kochi', 'Chandigarh', 'Mysore', 'Mysuru', 'Visakhapatnam', 'Mehdipatnam',
+    'Kalwa', 'Nashik', 'Nasik', 'Ambernath', 'Dombivli', 'Dombivili', 'Sindhudurg',
+    'Sewree', 'Solapur', 'Kalyan', 'Vasai', 'Virar', 'Panvel', 'Aurangabad', 'Kolhapur',
+    'Bhubaneswar', 'Vellore', 'Berhampur', 'Kanpur', 'Mangalore',
+    'Austin', 'Seattle', 'San Francisco', 'New York', 'London',
+    'Toronto', 'Singapore', 'Dubai',
+)
+# Spelling / OCR aliases → canonical city for Excel
+_LOCATION_ALIASES = {
+    'nasik': 'Nashik',
+    'bengaluru': 'Bengaluru',
+    'bangalore': 'Bangalore',
+    'gurgaon': 'Gurugram',
+    'gurugram': 'Gurugram',
+    'bombay': 'Mumbai',
+    'calcutta': 'Kolkata',
+    'madras': 'Chennai',
+    'bhubaneshwar': 'Bhubaneswar',
+}
+# Institute / university cues → city (only when structured peel needs it)
+_INSTITUTE_CITY_PEEL = (
+    (re.compile(r'(?i)\bvellore\s+institute\s+of\s+technology\b|\bvit\b'), 'Vellore'),
+    (re.compile(r'(?i)\biit\s+bombay\b|\biitb\b'), 'Mumbai'),
+    (re.compile(r'(?i)\biit\s+madras\b'), 'Chennai'),
+    (re.compile(r'(?i)\biit\s+delhi\b'), 'Delhi'),
+    (re.compile(r'(?i)\biit\s+kanpur\b'), 'Kanpur'),
+    (re.compile(r'(?i)\bnitk?\s+surathkal\b'), 'Mangalore'),
+)
+_KNOWN_REGIONS = frozenset({
+    'maharashtra', 'karnataka', 'tamil nadu', 'telangana', 'andhra pradesh',
+    'gujarat', 'rajasthan', 'uttar pradesh', 'west bengal', 'kerala', 'punjab',
+    'haryana', 'odisha', 'india', 'usa', 'uk', 'uae', 'tx', 'ca', 'wa', 'ny',
+})
+
+
+def known_location_cities() -> tuple[str, ...]:
+    """Shared city allowlist for location heal / evidence / extract."""
+    return _KNOWN_LOCATION_CITIES
+
+
+def canonicalize_location_city(value: str) -> str:
+    """Map aliases (Nasik→Nashik) and return best known city token if present."""
+    s = (value or '').strip()
+    if not s:
+        return ''
+    low = s.lower()
+    if low in _LOCATION_ALIASES:
+        return _LOCATION_ALIASES[low]
+    for alias, canon in _LOCATION_ALIASES.items():
+        if re.search(rf'(?i)\b{re.escape(alias)}\b', s):
+            return canon
+    for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+        if re.search(rf'(?i)\b{re.escape(city)}\b', s):
+            return _LOCATION_ALIASES.get(city.lower(), city)
+    return s
+
+
+def peel_location_from_structured(
+    *,
+    experience: list | None = None,
+    education: list | None = None,
+    raw_text: str = '',
+) -> str:
+    """
+    Recover current location from job/edu structured fields then institute peel.
+    Never invents from random body prose.
+    """
+    for e in experience or []:
+        if not isinstance(e, dict):
+            continue
+        loc = str(e.get('location') or '').strip()
+        if not loc:
+            continue
+        healed = heal_location_candidate(loc)
+        cand = canonicalize_location_city(healed or loc)
+        if cand and is_plausible_location_value(cand):
+            return cand
+        for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+            if re.search(rf'(?i)\b{re.escape(city)}\b', loc):
+                return canonicalize_location_city(city)
+
+    for e in education or []:
+        if not isinstance(e, dict):
+            continue
+        blob = ' '.join(
+            str(e.get(k) or '')
+            for k in ('institution', 'university', 'college', 'location', 'degree', 'field')
+        )
+        if not blob.strip():
+            continue
+        for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+            if re.search(rf'(?i)\b{re.escape(city)}\b', blob):
+                return canonicalize_location_city(city)
+        for pat, city in _INSTITUTE_CITY_PEEL:
+            if pat.search(blob):
+                return city
+
+    head = '\n'.join((raw_text or '').splitlines()[:12])
+    for pat, city in _INSTITUTE_CITY_PEEL:
+        if pat.search(head):
+            return city
+    for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+        if re.search(rf'(?i)\b{re.escape(city)}\b', head):
+            return canonicalize_location_city(city)
+    return ''
+
+
+def is_plausible_location_value(value: str) -> bool:
+    """True for city/region/remote strings; false for skill/summary pollution."""
+    s = (value or '').strip()
+    if not s or len(s) < 2 or len(s) > 80:
+        return False
+    if '\n' in s or '\r' in s:
+        s = s.splitlines()[0].strip()
+        if not s or len(s) > 80:
+            return False
+    low = s.lower()
+    if '@' in s or 'http' in low or 'linkedin' in low or 'github' in low:
+        return False
+    if '|' in s or '⋄' in s or re.search(r'\+?\d[\d\s\-]{8,}\d', s):
+        return False
+    if low in (
+        'education', 'experience', 'skills', 'summary', 'objective', 'projects',
+        'certifications', 'internship', 'profile',
+    ):
+        return False
+    # Reject person-name lines mistaken for location (header bleed)
+    if (
+        not any(c.lower() == low or c.lower() in low for c in _KNOWN_LOCATION_CITIES)
+        and low not in ('remote', 'hybrid', 'wfh', 'work from home', 'india')
+        and ',' not in s
+    ):
+        try:
+            if is_plausible_person_name(s) and len(s.split()) >= 2:
+                return False
+        except Exception:
+            pass
+    # Reject if line looks like a person name glued after city
+    if re.search(r'(?i),\s*india\s+\w+', s):
+        return False
+    if _LOCATION_TECH_NOISE.search(s) and not any(c.lower() in low for c in _KNOWN_LOCATION_CITIES):
+        return False
+    if _LOCATION_PROSE_NOISE.search(s) and not any(c.lower() in low for c in _KNOWN_LOCATION_CITIES):
+        return False
+    if low in ('remote', 'hybrid', 'wfh', 'work from home', 'india'):
+        return True
+    if any(c.lower() == low or c.lower() in low for c in _KNOWN_LOCATION_CITIES):
+        return True
+    # City, Region where both sides look geographic (not HTML, JS)
+    m = re.match(
+        r'^([A-Za-z][A-Za-z .]{1,40}),\s*([A-Za-z][A-Za-z .]{1,40})$',
+        s,
+    )
+    if m:
+        a, b = m.group(1).strip().lower(), m.group(2).strip().lower()
+        if _LOCATION_TECH_NOISE.search(a) or _LOCATION_TECH_NOISE.search(b):
+            return False
+        if a in _KNOWN_REGIONS or b in _KNOWN_REGIONS:
+            return True
+        if any(c.lower() == a or c.lower() == b for c in _KNOWN_LOCATION_CITIES):
+            return True
+        # Short Title Case place names without tech tokens
+        if len(a.split()) <= 3 and len(b.split()) <= 3 and not re.search(r'\d', s):
+            return a[0].isalpha() and b[0].isalpha() and len(a) >= 3 and len(b) >= 2
+        return False
+    # Single short place token
+    if re.match(r'^[A-Z][a-zA-Z .]{1,40}$', s) and len(s.split()) <= 4:
+        if _LOCATION_TECH_NOISE.search(s) or _LOCATION_PROSE_NOISE.search(s):
+            return False
+        return True
+    return False
+
+
 def extract_location_from_text(text: str) -> str:
     """Labeled location, Remote/Hybrid, City ST, or common city names in header."""
     if not text:
@@ -806,38 +1115,41 @@ def extract_location_from_text(text: str) -> str:
                 'school', 'cgpi', 'sgpi',
             )
         ):
-            # Still allow bare city if present inside a noisy line
-            for city in (
-                'Mumbai', 'Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
-                'Kolkata', 'Pune', 'Nagpur', 'Noida', 'Gurugram', 'Gurgaon',
-            ):
+            for city in _KNOWN_LOCATION_CITIES:
                 if city.lower() in low:
                     return city
             return ''
-        # Long address → prefer known city token inside it
-        cities = (
-            'Mumbai', 'Delhi', 'New Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
-            'Kolkata', 'Pune', 'Ahmedabad', 'Gurgaon', 'Gurugram', 'Noida', 'Nagpur',
-            'Indore', 'Thane', 'Navi Mumbai', 'Mulund', 'Kandivali', 'Andheri', 'Powai',
-        )
+        if _LOCATION_TECH_NOISE.search(s) or _LOCATION_PROSE_NOISE.search(s):
+            for city in _KNOWN_LOCATION_CITIES:
+                if city.lower() in low:
+                    return city
+            return ''
         if len(s) > 50:
-            for city in cities:
+            for city in _KNOWN_LOCATION_CITIES:
                 if city.lower() in low:
                     return city
             return ''
         if len(s) < 2:
             return ''
+        if not is_plausible_location_value(s):
+            for city in _KNOWN_LOCATION_CITIES:
+                if city.lower() in low:
+                    return city
+            return ''
         return s
 
+    header = text[:800]
     patterns = [
-        r'(?i)(?:location|current\s*location|address|city|based\s*in|place)\s*[:\-]\s*([^\n]+)',
-        r'(?i)\b(remote|hybrid|work\s+from\s+home|wfh)\b',
+        # Require delimiter after label to avoid "…location … skills…" prose
+        r'(?i)(?:location|current\s*location|address|city|based\s+in|place|residing\s+(?:in|at))\s*[:\-–—]\s*([^\n]+)',
         r'\b([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*),\s*([A-Z]{2})\b',
+        # Pipe header: City | phone | email
+        r'(?im)^([A-Za-z][A-Za-z .,]{2,40})\s*[|•·]\s*(?:mobile|phone|tel|\+?\d)',
         # Emoji / pin style: 📍 Nagpur, Maharashtra, India
         r'(?:📍|📌)\s*([^\n]+)',
     ]
     for pat in patterns:
-        m = re.search(pat, text[:1200])
+        m = re.search(pat, header)
         if not m:
             continue
         if m.lastindex and m.lastindex >= 2 and '([A-Z]{2})' in pat:
@@ -845,31 +1157,69 @@ def extract_location_from_text(text: str) -> str:
         else:
             loc = m.group(1).strip().strip('.,;:')
         cleaned = _clean_loc(loc)
-        if cleaned:
+        if cleaned and is_plausible_location_value(cleaned):
             return cleaned
 
-    cities = [
-        'Mumbai', 'Delhi', 'New Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
-        'Kolkata', 'Pune', 'Ahmedabad', 'Gurgaon', 'Gurugram', 'Noida',
-        'Faridabad', 'Jaipur', 'Lucknow', 'Nagpur', 'Indore', 'Bhopal', 'Surat',
-        'Vadodara', 'Coimbatore', 'Kochi', 'Chandigarh', 'Mysore', 'Mysuru',
-        'Visakhapatnam', 'Thane', 'Navi Mumbai', 'Mehdipatnam',
-        'Austin', 'Seattle', 'San Francisco',
-        'New York', 'London', 'Toronto', 'Singapore', 'Dubai',
-    ]
-    for window in (text[:800], text[:5000]):
-        for city in cities:
+    # City, Region only when at least one side is a known city/region (header lines)
+    m_cs = re.search(
+        r'(?im)^([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*),\s*'
+        r'([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*)\s*$',
+        '\n'.join((text or '').splitlines()[:20]),
+    )
+    if m_cs:
+        loc = f'{m_cs.group(1)}, {m_cs.group(2)}'.strip()
+        if is_plausible_location_value(loc):
+            return loc[:80]
+
+    # Prefer known cities in the contact header over job-line "Remote"
+    for window in (header, text[:5000]):
+        for city in _KNOWN_LOCATION_CITIES:
             if city not in window:
                 continue
             for line in window.splitlines():
                 if city in line and len(line.strip()) <= 100 and '@' not in line:
+                    if _LOCATION_TECH_NOISE.search(line) and city.lower() not in line.lower():
+                        continue
                     cleaned = _clean_loc(line)
-                    if cleaned and city in cleaned:
-                        # Prefer city alone when line is noisy
+                    if cleaned and is_plausible_location_value(cleaned):
                         if len(cleaned) > 60:
                             return city
                         return cleaned
             return city
+
+    # Remote/Hybrid only from header/contact zone (not experience "Remote" job lines)
+    m_remote = re.search(r'(?i)\b(remote|hybrid|work\s+from\s+home|wfh)\b', header)
+    if m_remote:
+        return m_remote.group(1).strip()
+
+    # Single allowlisted city from early body when not inside Skills/Summary sections
+    section_break = re.search(
+        r'(?im)^(?:education|experience|skills|summary|objective|projects|'
+        r'certifications|internship|work\s+history)\b',
+        text[:4000],
+    )
+    body_end = section_break.start() if section_break else min(len(text), 2500)
+    early_body = text[:body_end]
+    for city in _KNOWN_LOCATION_CITIES:
+        if re.search(rf'(?i)\b{re.escape(city)}\b', early_body):
+            # Prefer labeled hits; otherwise single short-line hit
+            labeled = re.search(
+                rf'(?i)(?:location|address|based\s+in|city)\s*[:\-–—]\s*[^\n]*\b{re.escape(city)}\b',
+                early_body,
+            )
+            if labeled:
+                return city
+            for line in early_body.splitlines()[:25]:
+                if city.lower() in line.lower() and len(line.strip()) <= 60:
+                    if _LOCATION_TECH_NOISE.search(line) or _LOCATION_PROSE_NOISE.search(line):
+                        continue
+                    if is_section_header_line(line):
+                        continue
+                    cleaned = heal_location_candidate(line)
+                    if cleaned and is_plausible_location_value(cleaned):
+                        return cleaned if len(cleaned) <= 60 else city
+            return city
+
     # Country-only last resort when clearly labeled
     if re.search(r'(?i)(?:^|\n)\s*India\s*(?:\n|$)', text[:600]):
         return 'India'
@@ -883,16 +1233,22 @@ def extract_experience_from_text(text: str, max_items: int = 10) -> list[dict[st
     experiences: list[dict[str, Any]] = []
     # Require section header at line start so mid-sentence "experience" (e.g. objective) is ignored.
     block_match = re.search(
-        r'(?i)(?:^|\n)\s*(?:\*\*)?(?:work\s+experience|professional\s+experience|experience|'
-        r'employment|work\s+history)(?:\*\*)?\s*:?\s*'
+        r'(?im)(?:^|\n)\s*(?:\*\*)?(?:work\s+experience|professional\s+experience|experience|'
+        r'employment|work\s+history|internships?|industrial\s+training|summer\s+internship)'
+        r'(?:\*\*)?\s*:?\s*'
         r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:education|academic\s+background|skills|skill\s*sets?|'
         r'technical\s+skills?|projects?|certifications?|'
-        r'personal\s+details|personal\s+information|biodata|declaration)\b|\Z)',
+        r'personal\s+details|personal\s+information|biodata|declaration)(?:\*\*)?\s*:?\s*$|\Z)',
         text,
     )
     if not block_match:
         return []
     raw = block_match.group(1) or ''
+    _title_cue = re.compile(
+        r'(?i)\b(?:intern|engineer|developer|analyst|trainee|manager|officer|'
+        r'associate|consultant|lead|executive|specialist|administrator|admin|'
+        r'dba|architect|designer|scientist|director)\b'
+    )
     for line in raw.split('\n'):
         stripped = re.sub(r'^[\s•·\-\*]+', '', line.strip())
         stripped = re.sub(r'^\d+[\.\)]\s*', '', stripped).strip()
@@ -901,14 +1257,36 @@ def extract_experience_from_text(text: str, max_items: int = 10) -> list[dict[st
         if is_biodata_or_address_line(stripped):
             continue
         from_d, to_d = extract_date_range_from_line(stripped)
-        line_wo_dates = DATE_RANGE_PATTERN.sub('', stripped).strip(' |-–—,')
-        parts = re.split(r'\s+at\s+|\s+@\s+|,\s+', line_wo_dates, maxsplit=1)
-        title = parts[0].strip() if parts else line_wo_dates
+        leftover = DATE_RANGE_PATTERN.sub('', stripped).strip(' |-–—,')
+        has_cue = bool(_title_cue.search(leftover) or re.search(r'(?i)\bintern\b', leftover))
+        if from_d and leftover and not has_cue:
+            if experiences and not str(experiences[-1].get('company') or '').strip():
+                experiences[-1]['company'] = leftover[:200]
+                if not experiences[-1].get('from'):
+                    experiences[-1]['from'] = from_d
+                    experiences[-1]['to'] = to_d
+            else:
+                experiences.append({
+                    'title': '',
+                    'company': leftover[:200],
+                    'from': from_d,
+                    'to': to_d,
+                    'years': None,
+                    'description': '',
+                })
+            if len(experiences) >= max_items:
+                break
+            continue
+        if not has_cue:
+            if leftover and experiences and not str(experiences[-1].get('company') or '').strip() and len(leftover.split()) <= 6:
+                experiences[-1]['company'] = leftover[:200]
+            continue
+        parts = re.split(r'\s+at\s+|\s+@\s+|,\s+', leftover, maxsplit=1)
+        title = parts[0].strip() if parts else leftover
         company = parts[1].strip() if len(parts) > 1 else ''
         if company and is_biodata_or_address_line(company):
             company = ''
-        if not is_plausible_job_title(title):
-            # Description / objective / biodata bullets are not roles
+        if not is_plausible_job_title(title) and not re.search(r'(?i)\bintern\b', title):
             continue
         if title:
             experiences.append({

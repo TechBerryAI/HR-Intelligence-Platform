@@ -50,6 +50,71 @@ def _frontend_base() -> str:
     return (os.getenv('FRONTEND_URL') or 'http://localhost:5173').rstrip('/')
 
 
+def _send_booking_invite_email(ctx: dict, invite_token: str, *, application_id: int) -> dict:
+    """
+    Send one combined shortlist + booking email.
+    Returns {bookingUrl, emailSent}.
+    """
+    booking_url = f'{_frontend_base()}/book/{invite_token}'
+    candidate_name = ctx.get('candidate_name') or 'there'
+    candidate_email = (ctx.get('candidate_email') or '').strip()
+    job_title = ctx.get('job_title') or 'the position'
+    company_name = ctx.get('company_name') or 'the company'
+    assigned = (ctx.get('job_posted_by') or '').strip()
+    recruiter_row = repo.get_hr_row(assigned) or {} if assigned else {}
+    recruiter_name = recruiter_row.get('full_name') or ctx.get('recruiter_name') or 'the recruiter'
+
+    if not candidate_email:
+        logger.warning('[interview_scheduling] no candidate email for app=%s', application_id)
+        return {'bookingUrl': booking_url, 'emailSent': False}
+
+    subject = f"You've been shortlisted — book your interview for {job_title}"
+    body = (
+        f'Hi {candidate_name},\n\n'
+        f'Great news — you have been shortlisted for {job_title} at {company_name}.\n\n'
+        f'Please book an interview slot with {recruiter_name}:\n\n'
+        f'{booking_url}\n\n'
+        f'This link expires in {_invite_ttl_hours()} hours.\n\n'
+        f'— HR Intelligence Team'
+    )
+    html = interview_invite_html(
+        candidate_name=candidate_name,
+        job_title=job_title,
+        company_name=company_name,
+        recruiter_name=recruiter_name,
+        booking_url=booking_url,
+        ttl_hours=_invite_ttl_hours(),
+    )
+    email_sent = False
+    try:
+        ok = send_notification_email(candidate_email, subject, body, html=html)
+        email_sent = bool(ok)
+        try:
+            from app.domains.recruitment.repository import email_event_repository as email_events
+
+            status = email_events.STATUS_SENT if ok else email_events.STATUS_FAILED
+            # One combined message — log both kinds so Email status shows both as Sent.
+            email_events.log_email_event(
+                application_id=application_id,
+                email_kind=email_events.KIND_SHORTLISTED,
+                recipient=candidate_email,
+                subject=subject,
+                status=status,
+            )
+            email_events.log_email_event(
+                application_id=application_id,
+                email_kind=email_events.KIND_INTERVIEW_INVITE,
+                recipient=candidate_email,
+                subject=subject,
+                status=status,
+            )
+        except Exception as log_err:
+            logger.warning('[interview_scheduling] email event log failed: %s', log_err)
+    except Exception:
+        logger.exception('[interview_scheduling] invite email failed app=%s', application_id)
+    return {'bookingUrl': booking_url, 'emailSent': email_sent}
+
+
 def _overlaps(start: datetime, end: datetime, busy: list) -> bool:
     for b in busy:
         if start < b.end and end > b.start:
@@ -146,8 +211,15 @@ def on_shortlisted(application_id: int, recruiter_hrid: str | None = None) -> di
     if existing and existing.get('status') == repo.STATUS_INVITED:
         remaining = repo.list_available_slots(str(existing['id']))
         if remaining:
+            # Resend combined shortlist + booking email.
+            token = (existing.get('invite_token') or '').strip()
+            mail = {'bookingUrl': None, 'emailSent': False}
+            if token:
+                mail = _send_booking_invite_email(
+                    ctx, token, application_id=application_id
+                )
             logger.info(
-                '[interview_scheduling] invite already open for app=%s',
+                '[interview_scheduling] invite already open for app=%s (combined email resent)',
                 application_id,
             )
             return {
@@ -155,6 +227,8 @@ def on_shortlisted(application_id: int, recruiter_hrid: str | None = None) -> di
                 'skipped': True,
                 'reason': 'invite_exists',
                 'interviewId': str(existing['id']),
+                'bookingUrl': mail.get('bookingUrl'),
+                'emailSent': bool(mail.get('emailSent')),
             }
 
     tz = _interview_tz()
@@ -217,45 +291,17 @@ def on_shortlisted(application_id: int, recruiter_hrid: str | None = None) -> di
 
     repo.insert_slots(interview_id, assigned, slot_pairs)
 
-    booking_url = f'{_frontend_base()}/book/{invite_token}'
-    candidate_name = ctx.get('candidate_name') or 'there'
-    candidate_email = (ctx.get('candidate_email') or '').strip()
-    job_title = ctx.get('job_title') or 'the position'
-    company_name = ctx.get('company_name') or 'the company'
-    recruiter_row = repo.get_hr_row(assigned) or {}
-    recruiter_name = recruiter_row.get('full_name') or ctx.get('recruiter_name') or 'the recruiter'
-
-    if candidate_email:
-        subject = f'Schedule your interview — {job_title}'
-        body = (
-            f'Hi {candidate_name},\n\n'
-            f'You have been shortlisted for {job_title} at {company_name}.\n'
-            f'Please book an interview slot with {recruiter_name}:\n\n'
-            f'{booking_url}\n\n'
-            f'This link expires in {_invite_ttl_hours()} hours.\n\n'
-            f'— HR Intelligence Team'
-        )
-        html = interview_invite_html(
-            candidate_name=candidate_name,
-            job_title=job_title,
-            company_name=company_name,
-            recruiter_name=recruiter_name,
-            booking_url=booking_url,
-            ttl_hours=_invite_ttl_hours(),
-        )
-        try:
-            send_notification_email(candidate_email, subject, body, html=html)
-        except Exception:
-            logger.exception('[interview_scheduling] invite email failed app=%s', application_id)
-    else:
-        logger.warning('[interview_scheduling] no candidate email for app=%s', application_id)
+    mail = _send_booking_invite_email(
+        ctx, invite_token, application_id=application_id
+    )
 
     reminder_hooks.on_invite_sent(interview_id)
     return {
         'ok': True,
         'interviewId': interview_id,
         'slotCount': len(slot_pairs),
-        'bookingUrl': booking_url,
+        'bookingUrl': mail.get('bookingUrl'),
+        'emailSent': bool(mail.get('emailSent')),
     }
 
 
@@ -368,6 +414,11 @@ def book_slot(token: str, slot_id: str) -> tuple[dict | None, str | None, int]:
     company_name = ctx.get('company_name') or ''
     tz_name = (os.getenv('INTERVIEW_TZ') or 'Asia/Kolkata').strip()
 
+    # Claim slot before creating the calendar event to prevent double-booking races.
+    if not repo.claim_slot(slot_id):
+        remaining = [repo.serialize_slot(s) for s in repo.list_available_slots(interview_id)]
+        return {'slots': remaining, 'reason': 'slot_unavailable'}, 'Slot is no longer available', 409
+
     result = provider.create_event(
         tokens,
         summary=f'Interview: {candidate_name} — {job_title}',
@@ -379,9 +430,9 @@ def book_slot(token: str, slot_id: str) -> tuple[dict | None, str | None, int]:
         create_meet=True,
     )
     if not result.success:
+        repo.release_slot_claim(slot_id)
         return None, result.error or 'Failed to create calendar event', 502
 
-    repo.mark_slot_booked(slot_id)
     repo.confirm_interview_scheduled(
         interview_id,
         scheduled_at=start,

@@ -45,9 +45,10 @@ function validate(form, parseError = '') {
   if (!form.experienceLevel) errors.experienceLevel = 'Required'
   if (form.experienceLevel === 'experienced') {
     if (!form.servingNotice) errors.servingNotice = 'Required'
-    if (!form.noticePeriod?.trim()) errors.noticePeriod = 'Required'
-    if (form.servingNotice === 'yes' && !form.lastWorkingDay) {
-      errors.lastWorkingDay = 'Required'
+    // Serving period + last working date only apply while currently serving notice
+    if (form.servingNotice === 'yes') {
+      if (!form.noticePeriod?.trim()) errors.noticePeriod = 'Required'
+      if (!form.lastWorkingDay) errors.lastWorkingDay = 'Required'
     }
   }
   if (!form.resumeFile && !form.resumeFileName) {
@@ -103,7 +104,7 @@ function focusFirstApplyError(errs) {
   }, 280)
 }
 
-export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
+export default function ApplyJobModal({ open, job, onClose, onSuccess, companySlug }) {
   const [form, setForm] = useState(initialForm)
   const [errors, setErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
@@ -245,12 +246,34 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
       fd.append('certifications', JSON.stringify(form.certifications || []))
       if (form._parsedId) fd.append('parsedId', form._parsedId)
       if (form._publicUploaderId) fd.append('publicUploaderId', form._publicUploaderId)
-      if (form.resumeFile) fd.append('resume', form.resumeFile)
+      // Resume was already stored during AI parse — re-uploading the PDF only slows submit.
+      if (!form._parsedId && form.resumeFile) fd.append('resume', form.resumeFile)
 
-      const res = await fetch(`${BASE_URL}/api/jobs/${encodeURIComponent(job.id)}/apply`, {
-        method: 'POST',
-        body: fd,
-      })
+      const applyQs = companySlug
+        ? `?company=${encodeURIComponent(companySlug)}`
+        : ''
+      // Submit is deterministic ATS only — keep a hard client timeout so the UI never hangs.
+      const applyTimeoutMs = Number(import.meta.env?.VITE_API_TIMEOUT_MS) || 30000
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), applyTimeoutMs)
+      let res
+      try {
+        res = await fetch(
+          `${BASE_URL}/api/jobs/${encodeURIComponent(job.id || job.jdid)}/apply${applyQs}`,
+          {
+            method: 'POST',
+            body: fd,
+            signal: controller.signal,
+          },
+        )
+      } catch (fetchErr) {
+        if (fetchErr?.name === 'AbortError') {
+          throw new Error('Submit timed out. Please try again — parsing is already done; submit should be quick.')
+        }
+        throw fetchErr
+      } finally {
+        clearTimeout(timeoutId)
+      }
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         const raw = String(data.error || '')
@@ -290,21 +313,21 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
             initial={{ y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 40, opacity: 0 }}
-            className="apply-modal relative w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl bg-white shadow-xl"
+            className="apply-modal relative w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-[var(--ei-border-primary)] bg-[var(--ei-bg-secondary)] shadow-xl"
           >
-            <div className="shrink-0 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 z-20">
+            <div className="shrink-0 flex items-start justify-between gap-4 border-b border-[var(--ei-border-primary)] bg-[var(--ei-bg-secondary)] px-5 py-4 z-20">
               <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Apply for</p>
-                <h2 id="apply-job-title" className="text-xl font-semibold !text-slate-900 flex items-center gap-2">
-                  <FiBriefcase className="text-slate-500 shrink-0" />
-                  <span className="truncate !text-slate-900">{job.title}</span>
+                <p className="text-xs font-medium uppercase tracking-wide text-[var(--ei-text-muted)]">Apply for</p>
+                <h2 id="apply-job-title" className="text-xl font-semibold text-[var(--ei-text-primary)] flex items-center gap-2">
+                  <FiBriefcase className="text-[var(--ei-text-muted)] shrink-0" />
+                  <span className="truncate text-[var(--ei-text-primary)]">{job.title}</span>
                 </h2>
-                <p className="text-sm text-slate-500 mt-0.5">{job.company} · {job.location}</p>
+                <p className="text-sm text-[var(--ei-text-muted)] mt-0.5">{job.company} · {job.location}</p>
               </div>
               <button
                 type="button"
                 onClick={() => !submitting && onClose?.()}
-                className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+                className="shrink-0 rounded-lg p-2 text-[var(--ei-text-muted)] hover:bg-[var(--ei-surface-hover)] hover:text-[var(--ei-text-primary)]"
                 aria-label="Close apply form"
               >
                 <FiX className="w-5 h-5" />
@@ -313,7 +336,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
 
             <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-5 space-y-6">
               <div data-apply-field="resume">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-2">
                   Resume (AI autofill) <span className="text-[#FF6B81]">*</span>
                 </label>
                 <ResumeUploadWithParsing
@@ -407,11 +430,11 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                   onChange={(e) => setField('githubUrl', e.target.value)}
                 />
                 <div data-apply-field="experienceLevel">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1">
                     Experience level <span className="text-[#FF6B81]">*</span>
                   </label>
                   <select
-                    className={`w-full rounded-xl border px-3 py-2.5 text-sm ${errors.experienceLevel ? 'border-red-500' : 'border-slate-200'}`}
+                    className={`premium-input w-full text-sm ${errors.experienceLevel ? 'border-red-500' : ''}`}
                     value={form.experienceLevel}
                     onChange={(e) => setField('experienceLevel', e.target.value)}
                   >
@@ -426,7 +449,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
               {form.experienceLevel === 'experienced' && (
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div data-apply-field="servingNotice">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1">
                       Serving notice <span className="text-[#FF6B81]">*</span>
                     </label>
                     <select
@@ -437,8 +460,19 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                         setForm((prev) => ({
                           ...prev,
                           servingNotice: v,
+                          // Period / LWD only relevant when currently serving notice
+                          noticePeriod: v === 'yes' ? prev.noticePeriod : '',
                           lastWorkingDay: v === 'yes' ? prev.lastWorkingDay : '',
                         }))
+                        setErrors((prev) => {
+                          const next = { ...prev }
+                          delete next.servingNotice
+                          if (v !== 'yes') {
+                            delete next.noticePeriod
+                            delete next.lastWorkingDay
+                          }
+                          return next
+                        })
                       }}
                     >
                       <option value="">Select</option>
@@ -448,29 +482,41 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                     {errors.servingNotice && <p className="mt-1 text-sm text-red-600">{errors.servingNotice}</p>}
                   </div>
                   <div data-apply-field="noticePeriod">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Serving period <span className="text-[#FF6B81]">*</span>
+                    <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1">
+                      Serving period
+                      {form.servingNotice === 'yes' && <span className="text-[#FF6B81]"> *</span>}
                     </label>
                     <select
                       className={`premium-input w-full text-sm ${errors.noticePeriod ? 'border-red-500' : ''}`}
                       value={form.noticePeriod}
-                      onChange={(e) => setField('noticePeriod', e.target.value)}
+                      disabled={form.servingNotice !== 'yes'}
+                      onChange={(e) => {
+                        setField('noticePeriod', e.target.value)
+                        setErrors((prev) => {
+                          const next = { ...prev }
+                          delete next.noticePeriod
+                          return next
+                        })
+                      }}
                     >
                       <option value="">Select</option>
                       <option value="<30 days">&lt;30 days</option>
                       <option value="<60 days">&lt;60 days</option>
                       <option value="<90 days">&lt;90 days</option>
                     </select>
+                    {form.servingNotice === 'no' && (
+                      <p className="mt-1 text-xs text-[var(--ei-text-muted)]">Not required when not serving notice</p>
+                    )}
                     {errors.noticePeriod && <p className="mt-1 text-sm text-red-600">{errors.noticePeriod}</p>}
                   </div>
                   {form.servingNotice === 'yes' && (
                     <div className="sm:col-span-2" data-apply-field="lastWorkingDay">
-                      <label className="block text-sm font-medium text-slate-700 mb-1">
+                      <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1">
                         Last working date <span className="text-[#FF6B81]">*</span>
                       </label>
                       <input
                         type="date"
-                        className={`premium-input w-full text-sm text-slate-900 ${errors.lastWorkingDay ? 'border-red-500' : ''}`}
+                        className={`premium-input w-full text-sm text-[var(--ei-text-primary)] ${errors.lastWorkingDay ? 'border-red-500' : ''}`}
                         value={form.lastWorkingDay || ''}
                         onChange={(e) => setField('lastWorkingDay', e.target.value)}
                       />
@@ -498,7 +544,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
 
               <div data-apply-field="education">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-slate-800">
+                  <h3 className="text-sm font-semibold text-[var(--ei-text-primary)]">
                     Education <span className="text-[#FF6B81]">*</span>
                   </h3>
                   <button type="button" className="text-sm text-accent-blue" onClick={() => addListItem('education', emptyEducation)}>
@@ -508,16 +554,16 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                 {errors.education && <p className="mb-2 text-sm text-red-600">{errors.education}</p>}
                 <div className="space-y-3">
                   {(form.education || []).map((edu, i) => (
-                    <div key={i} className="rounded-xl border border-slate-200 p-3 grid sm:grid-cols-2 gap-3">
+                    <div key={i} className="rounded-xl border border-[var(--ei-border-primary)] p-3 grid sm:grid-cols-2 gap-3">
                       <PremiumInput label="Degree" value={edu.degree} onChange={(e) => updateList('education', i, 'degree', e.target.value)} />
                       <PremiumInput label="Institution" value={edu.institution} onChange={(e) => updateList('education', i, 'institution', e.target.value)} />
                       <PremiumInput label="CGPA" value={edu.cgpa} onChange={(e) => updateList('education', i, 'cgpa', e.target.value)} />
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Start</label>
+                        <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1">Start</label>
                         <MonthYearPicker value={edu.startMonth} onChange={(v) => updateList('education', i, 'startMonth', v)} />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">End</label>
+                        <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1">End</label>
                         <MonthYearPicker value={edu.endMonth} onChange={(v) => updateList('education', i, 'endMonth', v)} />
                       </div>
                       {(form.education || []).length > 1 && (
@@ -532,17 +578,17 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-slate-800">Experience</h3>
+                  <h3 className="text-sm font-semibold text-[var(--ei-text-primary)]">Experience</h3>
                   <button type="button" className="text-sm text-accent-blue" onClick={() => addListItem('experiences', emptyExperience)}>
                     + Add
                   </button>
                 </div>
                 <div className="space-y-3">
                   {(form.experiences || []).map((exp, i) => (
-                    <div key={i} className="rounded-xl border border-slate-200 p-3 grid sm:grid-cols-2 gap-3">
+                    <div key={i} className="rounded-xl border border-[var(--ei-border-primary)] p-3 grid sm:grid-cols-2 gap-3">
                       <PremiumInput label="Company" value={exp.company} onChange={(e) => updateList('experiences', i, 'company', e.target.value)} />
                       <PremiumInput label="Role" value={exp.role} onChange={(e) => updateList('experiences', i, 'role', e.target.value)} />
-                      <label className="flex items-center gap-2 text-sm text-slate-600 sm:col-span-2">
+                      <label className="flex items-center gap-2 text-sm text-[var(--ei-text-secondary)] sm:col-span-2">
                         <input
                           type="checkbox"
                           checked={!!exp.isCurrent}
@@ -551,19 +597,19 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                         Currently working here
                       </label>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Start</label>
+                        <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1">Start</label>
                         <MonthYearPicker value={exp.startMonth} onChange={(v) => updateList('experiences', i, 'startMonth', v)} />
                       </div>
                       {exp.isCurrent ? (
                         <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">End</label>
-                          <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+                          <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1">End</label>
+                          <div className="w-full rounded-xl border border-[var(--ei-border-primary)] bg-[var(--ei-surface-input)] px-3 py-2.5 text-sm text-[var(--ei-text-secondary)]">
                             Present
                           </div>
                         </div>
                       ) : (
                         <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-1">End</label>
+                          <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1">End</label>
                           <MonthYearPicker value={exp.endMonth} onChange={(v) => updateList('experiences', i, 'endMonth', v)} />
                         </div>
                       )}
@@ -586,14 +632,14 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-slate-800">Certifications</h3>
+                  <h3 className="text-sm font-semibold text-[var(--ei-text-primary)]">Certifications</h3>
                   <button type="button" className="text-sm text-accent-blue" onClick={() => addListItem('certifications', emptyCerts)}>
                     + Add
                   </button>
                 </div>
                 <div className="space-y-3">
                   {(form.certifications || []).map((cert, i) => (
-                    <div key={i} className="rounded-xl border border-slate-200 p-3 grid sm:grid-cols-2 gap-3">
+                    <div key={i} className="rounded-xl border border-[var(--ei-border-primary)] p-3 grid sm:grid-cols-2 gap-3">
                       <PremiumInput label="Name" value={cert.name} onChange={(e) => updateList('certifications', i, 'name', e.target.value)} />
                       <PremiumInput label="Issuer" value={cert.issuer} onChange={(e) => updateList('certifications', i, 'issuer', e.target.value)} />
                       <PremiumInput label="Valid till" value={cert.validTill} onChange={(e) => updateList('certifications', i, 'validTill', e.target.value)} />
@@ -609,7 +655,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
               </div>
 
               {submitError && (
-                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <div className="rounded-xl border border-[var(--ei-tone-danger-border)] bg-[var(--ei-tone-danger-bg)] px-4 py-3 text-sm text-[var(--ei-tone-danger)]">
                   {submitError}
                 </div>
               )}
@@ -652,31 +698,31 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
             initial={{ scale: 0.96, opacity: 0, y: 10 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.96, opacity: 0, y: 10 }}
-            className="relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+            className="apply-modal relative flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--ei-border-primary)] bg-[var(--ei-bg-secondary)] shadow-xl"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
             aria-labelledby="apply-preview-title"
           >
-            <div className="flex-shrink-0 border-b border-slate-200 px-6 pb-4 pt-5">
+            <div className="flex-shrink-0 border-b border-[var(--ei-border-primary)] px-6 pb-4 pt-5">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-sky-700">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--ei-tone-info-bg)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--ei-tone-info)] border border-[var(--ei-tone-info-border)]">
                   <FiEye className="h-3.5 w-3.5" />
                   Application preview
                 </span>
                 <button
                   type="button"
                   onClick={() => setShowPreview(false)}
-                  className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                  className="rounded-xl p-2 text-[var(--ei-text-muted)] transition-colors hover:bg-[var(--ei-surface-hover)] hover:text-[var(--ei-text-primary)]"
                   aria-label="Close preview"
                 >
                   <FiX className="h-5 w-5" />
                 </button>
               </div>
-              <h3 id="apply-preview-title" className="text-xl font-semibold tracking-tight text-slate-900">
+              <h3 id="apply-preview-title" className="text-xl font-semibold tracking-tight text-[var(--ei-text-primary)]">
                 {form.fullName.trim() || 'Applicant'}
               </h3>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-[var(--ei-text-muted)]">
                 Applying for {job.title} · {job.company}
                 {job.location ? ` · ${job.location}` : ''}
               </p>
@@ -725,9 +771,9 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
 
               <PreviewSection title="Professional summary">
                 {(form.summary || '').trim() ? (
-                  <p className="text-slate-700 whitespace-pre-wrap">{form.summary.trim()}</p>
+                  <p className="text-[var(--ei-text-label)] whitespace-pre-wrap">{form.summary.trim()}</p>
                 ) : (
-                  <p className="text-slate-400">Not provided</p>
+                  <p className="text-[var(--ei-text-muted)]">Not provided</p>
                 )}
               </PreviewSection>
 
@@ -737,14 +783,14 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                     {form.skills.split(',').map((s) => s.trim()).filter(Boolean).map((skill) => (
                       <span
                         key={skill}
-                        className="rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-medium text-slate-700"
+                        className="rounded-md border border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)] px-2 py-0.5 text-xs font-medium text-[var(--ei-text-primary)]"
                       >
                         {skill}
                       </span>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-slate-400">Not provided</p>
+                  <p className="text-[var(--ei-text-muted)]">Not provided</p>
                 )}
               </PreviewSection>
 
@@ -753,11 +799,11 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                   const rows = (form.education || []).filter((e) =>
                     [e.degree, e.institution, e.cgpa, e.startMonth, e.endMonth].some((v) => String(v || '').trim())
                   )
-                  if (!rows.length) return <p className="text-slate-400">Not provided</p>
+                  if (!rows.length) return <p className="text-[var(--ei-text-muted)]">Not provided</p>
                   return (
                     <ul className="space-y-3">
                       {rows.map((edu, i) => (
-                        <li key={i} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-1">
+                        <li key={i} className="rounded-lg border border-[var(--ei-border-primary)] bg-[var(--ei-surface-input)] px-3 py-2.5 space-y-1">
                           <PreviewRow label="Degree" value={edu.degree} />
                           <PreviewRow label="Institution" value={edu.institution} />
                           <PreviewRow label="CGPA" value={edu.cgpa} />
@@ -776,11 +822,11 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                     [e.company, e.role, e.startMonth, e.endMonth, e.description].some((v) => String(v || '').trim())
                     || e.isCurrent
                   )
-                  if (!rows.length) return <p className="text-slate-400">Not provided</p>
+                  if (!rows.length) return <p className="text-[var(--ei-text-muted)]">Not provided</p>
                   return (
                     <ul className="space-y-3">
                       {rows.map((exp, i) => (
-                        <li key={i} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-1">
+                        <li key={i} className="rounded-lg border border-[var(--ei-border-primary)] bg-[var(--ei-surface-input)] px-3 py-2.5 space-y-1">
                           <PreviewRow label="Company" value={exp.company} />
                           <PreviewRow label="Role" value={exp.role} />
                           <PreviewRow
@@ -794,8 +840,8 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                           />
                           {exp.description?.trim() ? (
                             <div className="pt-1">
-                              <p className="text-slate-500 mb-0.5">Description</p>
-                              <p className="text-slate-700 whitespace-pre-wrap">{exp.description.trim()}</p>
+                              <p className="text-[var(--ei-text-muted)] mb-0.5">Description</p>
+                              <p className="text-[var(--ei-text-label)] whitespace-pre-wrap">{exp.description.trim()}</p>
                             </div>
                           ) : null}
                         </li>
@@ -810,11 +856,11 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
                   const rows = (form.certifications || []).filter((c) =>
                     [c.name, c.issuer, c.validTill, c.validationUrl, c.status].some((v) => String(v || '').trim())
                   )
-                  if (!rows.length) return <p className="text-slate-400">Not provided</p>
+                  if (!rows.length) return <p className="text-[var(--ei-text-muted)]">Not provided</p>
                   return (
                     <ul className="space-y-3">
                       {rows.map((cert, i) => (
-                        <li key={i} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-1">
+                        <li key={i} className="rounded-lg border border-[var(--ei-border-primary)] bg-[var(--ei-surface-input)] px-3 py-2.5 space-y-1">
                           <PreviewRow label="Name" value={cert.name} />
                           <PreviewRow label="Issuer" value={cert.issuer} />
                           <PreviewRow label="Valid till" value={cert.validTill} />
@@ -828,7 +874,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
               </PreviewSection>
             </div>
 
-            <div className="flex-shrink-0 border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row gap-3 sm:justify-end">
+            <div className="flex-shrink-0 border-t border-[var(--ei-border-primary)] px-6 py-4 flex flex-col sm:flex-row gap-3 sm:justify-end">
               <PremiumButton
                 type="button"
                 variant="secondary"
@@ -861,7 +907,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess }) {
 function PreviewSection({ title, children }) {
   return (
     <div>
-      <h4 className="mb-2 text-sm font-semibold text-slate-700">{title}</h4>
+      <h4 className="mb-2 text-sm font-semibold text-[var(--ei-text-label)]">{title}</h4>
       {children}
     </div>
   )
@@ -872,8 +918,8 @@ function PreviewRow({ label, value }) {
   if (!text) return null
   return (
     <div className="flex flex-col sm:flex-row sm:gap-3 py-0.5">
-      <span className="sm:w-40 shrink-0 text-slate-500">{label}</span>
-      <span className="text-slate-800 break-all">{text}</span>
+      <span className="sm:w-40 shrink-0 text-[var(--ei-text-muted)]">{label}</span>
+      <span className="text-[var(--ei-text-primary)] break-all">{text}</span>
     </div>
   )
 }

@@ -67,6 +67,8 @@ export function applyThemeToDocument(theme) {
   root.setAttribute('data-theme', theme)
   root.classList.toggle('dark', theme === 'dark')
   root.classList.toggle('light', theme === 'light')
+  // Native <select> popups follow OS color-scheme (fixes white-on-white options)
+  root.style.colorScheme = theme
 }
 
 export function isDarkOnlyPath(pathname) {

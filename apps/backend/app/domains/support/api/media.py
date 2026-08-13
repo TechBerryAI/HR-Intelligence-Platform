@@ -1,7 +1,5 @@
-"""Public media routes — landing hero video from Postgres ``site_assets``."""
+"""Public media routes — landing hero video from MEDIA_ROOT + ``site_assets`` catalog."""
 from __future__ import annotations
-
-import io
 
 from flask import Blueprint, abort, send_file
 
@@ -12,36 +10,34 @@ media_bp = Blueprint('media', __name__)
 
 @media_bp.get('/public/hero-video')
 def hero_video():
-    """Stream landing hero MP4 from Postgres (no auth).
+    """Stream landing hero MP4 from disk (no auth).
 
-    Seeded into ``site_assets`` from MEDIA_ROOT / legacy disk when missing.
-    Falls back to disk file if the DB row is unavailable.
+    Self-heals ``MEDIA_ROOT/public/website-hero.mp4`` from the committed
+    frontend seed and upserts the ``site_assets`` catalog when missing.
     """
     packed = None
     try:
-        packed = site_assets.hero_video_bytes()
+        packed = site_assets.hero_video_path()
     except Exception as e:
-        print(f'[MEDIA] DB hero read failed, trying disk: {e}')
+        print(f'[MEDIA] hero resolve failed, trying disk: {e}')
 
     if packed:
-        data, content_type, filename, meta = packed
-        buf = io.BytesIO(data)
+        path, content_type, filename, meta = packed
         resp = send_file(
-            buf,
+            path,
             mimetype=content_type,
             conditional=True,
             max_age=86400,
             download_name=filename,
             etag=True,
-            last_modified=meta.get('updated_at'),
+            last_modified=(meta or {}).get('updated_at'),
         )
         resp.headers['Accept-Ranges'] = 'bytes'
         return resp
 
-    # Disk fallback (seed source / offline recovery)
-    media_storage.ensure_hero_video()
-    path = media_storage.get_media_root() / media_storage.HERO_VIDEO_REL
-    if not path.is_file():
+    # Direct disk fallback if catalog helpers raised earlier
+    path = media_storage.ensure_hero_video()
+    if not path or not path.is_file():
         abort(404, description='Hero video not configured (site_assets.landing.hero_video)')
     return send_file(
         path,
@@ -55,21 +51,29 @@ def hero_video():
 @media_bp.get('/health')
 def media_health():
     root = media_storage.get_media_root()
+    # Self-heal so health reflects a post-boot / post-pull reality
+    try:
+        media_storage.ensure_hero_video()
+        site_assets.ensure_hero_video_in_db()
+    except Exception as e:
+        print(f'[MEDIA] health ensure warning: {e}')
+
     disk_hero = root / media_storage.HERO_VIDEO_REL
+    disk_ok = disk_hero.is_file() and disk_hero.stat().st_size > 0
+    db_ok = False
     db_row = None
     db_err = None
     try:
-        db_row = site_assets.get_asset(site_assets.HERO_ASSET_KEY, include_data=False)
+        db_ok, db_row = site_assets.hero_catalog_healthy()
     except Exception as e:
         db_err = str(e)
-    db_ok = bool(db_row and int(db_row.get('byte_size') or 0) > 0)
     return {
         'status': 'ok',
         'mediaRoot': str(root),
-        'heroVideoDisk': disk_hero.is_file(),
+        'heroVideoDisk': disk_ok,
         'heroVideoDb': db_ok,
         'heroVideoBytes': int(db_row.get('byte_size') or 0) if db_row else 0,
         'dbError': db_err,
         # Back-compat for older probes
-        'heroVideo': db_ok or disk_hero.is_file(),
+        'heroVideo': db_ok or disk_ok,
     }

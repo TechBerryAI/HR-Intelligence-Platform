@@ -225,6 +225,46 @@ _CONNECTOR_WORDS = frozenset({
 })
 
 
+def _split_skill_list_preserving_parens(text: str) -> list[str]:
+    """Split comma/pipe lists without breaking 'AWS (EC2, EKS, VPC)'."""
+    parts: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    for ch in text or '':
+        if ch == '(':
+            depth += 1
+            buf.append(ch)
+        elif ch == ')':
+            depth = max(0, depth - 1)
+            buf.append(ch)
+        elif ch in ',|•·' and depth == 0:
+            part = ''.join(buf).strip()
+            if part:
+                parts.append(part)
+            buf = []
+        else:
+            buf.append(ch)
+    tail = ''.join(buf).strip()
+    if tail:
+        parts.append(tail)
+    return parts or ([text.strip()] if (text or '').strip() else [])
+
+
+def _expand_parenthetical_skill(tok: str) -> list[str]:
+    """'AWS (EC2, EKS, VPC)' → ['AWS', 'EC2', 'EKS', 'VPC']."""
+    raw = (tok or '').strip()
+    match = re.match(r'^(.{1,40}?)\s*\(([^()]{2,80})\)\s*$', raw)
+    if not match:
+        return [raw] if raw else []
+    outer, inner = match.group(1).strip(), match.group(2).strip()
+    if not outer or len(outer.split()) > 3:
+        return [raw]
+    inner_parts = [p.strip() for p in re.split(r'[,/|]', inner) if p.strip()]
+    if len(inner_parts) < 2:
+        return [raw]
+    return [outer, *inner_parts]
+
+
 def _looks_like_skill_token_list(line: str) -> bool:
     """True when a comma/pipe line is a short skill list, not prose."""
     text = (line or '').strip()
@@ -233,7 +273,7 @@ def _looks_like_skill_token_list(line: str) -> bool:
     if re.search(r'(?i)\b(?:is|are|was|were|have|has|will|should|must|looking|seeking)\b', text):
         if len(text.split()) >= 5:
             return False
-    parts = [p.strip() for p in re.split(r'[,•·|]', text) if p.strip()]
+    parts = _split_skill_list_preserving_parens(text)
     if len(parts) < 2:
         return False
     short = sum(1 for p in parts if len(p.split()) <= 4 and len(p) <= 40)
@@ -323,10 +363,10 @@ def normalize_skill_tokens(
 
         parts = [item]
         if (',' in item or '|' in item or '•' in item) and _looks_like_skill_token_list(item):
-            parts = [p.strip() for p in re.split(r'[,•·|]', item) if p.strip()]
+            parts = _split_skill_list_preserving_parens(item)
         elif ',' in item and len(item) < 160 and from_skill_section:
             # Skill-section comma lists — only split when parts stay short
-            maybe = [p.strip() for p in item.split(',') if p.strip()]
+            maybe = _split_skill_list_preserving_parens(item)
             if maybe and all(len(p.split()) <= 4 for p in maybe):
                 parts = maybe
 
@@ -337,18 +377,26 @@ def normalize_skill_tokens(
                 continue
             # "Proficiency in Figma…" / "Experience with Terraform" → pull the tool
             prof = re.match(
-                r'(?i)^(?:proficiency\s+in|experience\s+with|knowledge\s+of|hands[- ]?on\s+(?:with\s+)?)\s*(.+)$',
+                r'(?i)^(?:(?:strong|solid|good|excellent|proven|hands[- ]?on)\s+)?'
+                r'(?:proficiency\s+in|experience\s+(?:with|in)|knowledge\s+of|'
+                r'hands[- ]?on\s+(?:with\s+)?)\s*(.+)$',
                 tok,
             )
             if prof:
                 rest = prof.group(1).strip()
-                # Prefer "Figma" from "Figma and other design tools"
-                head = re.split(r'(?i)\s+(?:and|or|with|,)\s+', rest, maxsplit=1)[0].strip()
-                if head and len(head.split()) <= 4:
-                    if _add(head):
-                        return out
+                for piece in _expand_parenthetical_skill(rest):
+                    head = re.split(r'(?i)\s+(?:and|or|with)\s+', piece, maxsplit=1)[0].strip()
+                    if head and len(head.split()) <= 4:
+                        if _add(head):
+                            return out
                 for embedded in extract_tech_keywords_from_text(tok, max_items=6):
                     if _add(embedded):
+                        return out
+                continue
+            expanded = _expand_parenthetical_skill(tok)
+            if len(expanded) > 1:
+                for piece in expanded:
+                    if _add(piece):
                         return out
                 continue
             # Soft-skill-only phrases: keep only if no tech can be salvaged
@@ -368,8 +416,11 @@ def normalize_skill_tokens(
                     if _add(embedded):
                         return out
                 continue
+            before = len(out)
             if _add(tok):
                 return out
+            if len(out) > before:
+                continue
             # Failed plausibility as a phrase — try embedded tech
             if from_skill_section:
                 for embedded in extract_tech_keywords_from_text(tok, max_items=6):
@@ -685,9 +736,15 @@ def extract_tech_keywords_from_text(text: str, max_items: int = 20) -> list[str]
         'final cut', 'after effects', 'photoshop', 'illustrator', 'sketch',
         'weblogic', 'websphere', 'terraform', 'cloudformation',
     ]
+    def _phrase_in_text(phrase: str) -> bool:
+        """Whole-token match so 'java' does not fire inside 'JavaScript'."""
+        if phrase.startswith('.'):
+            return phrase in lower
+        return re.search(rf'(?i)(?<![A-Za-z0-9_]){re.escape(phrase)}(?![A-Za-z0-9_])', text) is not None
+
     lower = text.lower()
     for phrase in phrases:
-        if phrase in lower and phrase not in seen and is_plausible_keyword(phrase):
+        if _phrase_in_text(phrase) and phrase not in seen and is_plausible_keyword(phrase):
             display = phrase.upper() if len(phrase) <= 5 and ' ' not in phrase else phrase.title() if ' ' in phrase else phrase.capitalize()
             if phrase in {'rag', 'llm', 'nlp', 'aws', 'gcp', 'genai', 'mlops'}:
                 display = phrase.upper() if phrase != 'genai' else 'GenAI'

@@ -70,8 +70,8 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
 
     // Start AI parsing - show premium overlay
     setIsUploading(true);
-    setStageLabel('text');
-    setProgressPct(10);
+    setStageLabel(null);
+    setProgressPct(null);
     
     try {
       const onStage = (ev) => {

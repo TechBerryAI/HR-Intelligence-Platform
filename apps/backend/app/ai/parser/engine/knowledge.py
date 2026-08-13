@@ -31,7 +31,9 @@ _BUILTIN_SKILLS = {
     'mongo': 'MongoDB',
     'mongodb': 'MongoDB',
     'aws': 'Amazon Web Services',
+    'amazon web services': 'Amazon Web Services',
     'gcp': 'Google Cloud Platform',
+    'google cloud platform': 'Google Cloud Platform',
     'ml': 'Machine Learning',
     'ai': 'Artificial Intelligence',
     'nlp': 'Natural Language Processing',
@@ -134,8 +136,14 @@ def _domain_map(domain: str) -> dict[str, tuple[str, Optional[str]]]:
             builtins = {k: (v, None) for k, v in _BUILTIN_DEGREES.items()}
         elif domain == 'job_titles':
             builtins = {k: (v, None) for k, v in _BUILTIN_TITLES.items()}
-        # File aliases override builtins
-        return {**builtins, **file_map}
+        # File aliases override builtins; index canonical display for reverse lookup
+        merged = {**builtins, **file_map}
+        extra: dict[str, tuple[str, Optional[str]]] = {}
+        for _alias, pair in merged.items():
+            display = (pair[0] or '').strip().lower()
+            if display and display not in merged:
+                extra[display] = pair
+        return {**merged, **extra}
 
 
 def normalize_skill(value: str) -> tuple[str, Optional[str]]:
@@ -153,6 +161,31 @@ def normalize_skill(value: str) -> tuple[str, Optional[str]]:
         if alias.replace('.', '').replace(' ', '') == compact:
             return pair
     return raw, None
+
+
+def canonical_skill_key(value: str) -> str:
+    """Stable compare key so AWS and Amazon Web Services match."""
+    display, _cid = normalize_skill(value)
+    return (display or value or '').strip().lower()
+
+
+def skill_values_equivalent(left: str, right: str) -> bool:
+    """True when two skill labels are the same alias or the same canonical name."""
+    a, b = (left or '').strip(), (right or '').strip()
+    if not a or not b:
+        return a.lower() == b.lower()
+    if a.lower() == b.lower():
+        return True
+    return canonical_skill_key(a) == canonical_skill_key(b)
+
+
+def skill_csv_equivalent(expected: str, actual: str) -> bool:
+    """Compare comma-separated skill lists using alias-aware equality (order preserved)."""
+    exp = [p.strip() for p in (expected or '').split(',') if p.strip()]
+    act = [p.strip() for p in (actual or '').split(',') if p.strip()]
+    if len(exp) != len(act):
+        return False
+    return all(skill_values_equivalent(e, a) for e, a in zip(exp, act))
 
 
 def normalize_job_title(value: str) -> tuple[str, Optional[str]]:

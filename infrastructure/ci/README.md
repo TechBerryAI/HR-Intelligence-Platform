@@ -1,13 +1,13 @@
 # CI/CD
 
-GitHub Actions workflow: [`github-actions.yml`](github-actions.yml)
+Live workflow: [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml)
 
-Copy to `.github/workflows/ci.yml` when enabling CI on the remote repository.
+Template (kept in sync as reference): [`github-actions.yml`](github-actions.yml)
 
 ## Pipelines
 
 | Job | Command |
 |-----|---------|
-| backend-tests | `pytest tests/backend/` (unit tests, no integration) |
-| frontend-build | `cd apps/frontend && npm run build` |
-| ai-tests | `cd ai && pytest` |
+| backend-tests | `pytest tests/backend/` (unit tests; ignores Ollama/smoke that need live services) |
+| frontend-build | `cd apps/frontend && npm ci && npm run build` |
+| ai-tests | `cd ai && pytest runtime/tests` (mocked providers; `requirements-runtime.txt` only) |

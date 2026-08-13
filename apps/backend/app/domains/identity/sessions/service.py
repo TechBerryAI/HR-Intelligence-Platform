@@ -1,7 +1,19 @@
+from __future__ import annotations
+
+import hashlib
+import hmac
+import secrets
+from datetime import datetime, timezone
 from typing import Optional, List, Dict
 
+import jwt
+
+from app.core.auth import JWT_SECRET
 from app.database.connection.db import db_run, db_get, db_all
 from app.domains.identity.authorization.rbac import STAFF_ROLES
+
+MAX_FAILED_LOGIN_ATTEMPTS = 8
+LOGIN_LOCKOUT_MINUTES = 15
 
 
 def audit_user_type(role: str) -> str:
@@ -11,12 +23,131 @@ def audit_user_type(role: str) -> str:
     return role or 'HR'
 
 
-def deactivate_session(token: str) -> Dict:
+def _token_fingerprint(token: str) -> str:
+    return hashlib.sha256(token.encode('utf-8')).hexdigest()
+
+
+def register_refresh_token(token: str, user_id: str, expires_at: datetime | None = None) -> Dict:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False})
+    except Exception:
+        return {"success": False, "error": "invalid token"}
+    jti = payload.get('jti')
+    if not jti:
+        return {"success": False, "error": "missing jti"}
+    exp = expires_at
+    if exp is None and payload.get('exp'):
+        exp = datetime.fromtimestamp(payload['exp'], tz=timezone.utc)
+    if exp is None:
+        exp = datetime.now(timezone.utc)
+    db_run(
+        """
+        INSERT INTO auth_refresh_tokens (jti, user_id, token_hash, expires_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (jti) DO NOTHING
+        """,
+        (jti, str(user_id), _token_fingerprint(token), exp),
+    )
+    return {"success": True, "jti": jti}
+
+
+def is_refresh_token_active(token: str) -> bool:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+    except Exception:
+        return False
+    if payload.get('type') != 'refresh':
+        return False
+    jti = payload.get('jti')
+    if not jti:
+        return False
+    row = db_get(
+        """
+        SELECT jti FROM auth_refresh_tokens
+        WHERE jti = ? AND revoked_at IS NULL AND expires_at > NOW()
+          AND token_hash = ?
+        """,
+        (jti, _token_fingerprint(token)),
+    )
+    if row:
+        return True
+    # Backward-compatible: accept first-use tokens issued before table existed,
+    # then register them so logout can revoke thereafter.
+    existing = db_get("SELECT jti FROM auth_refresh_tokens WHERE jti = ?", (jti,))
+    if existing:
+        return False
+    register_refresh_token(token, str(payload.get('user_id') or ''))
+    return True
+
+
+def revoke_refresh_token(token: str) -> Dict:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False})
+        jti = payload.get('jti')
+    except Exception:
+        jti = None
+    if jti:
+        db_run(
+            "UPDATE auth_refresh_tokens SET revoked_at = NOW() WHERE jti = ? AND revoked_at IS NULL",
+            (jti,),
+        )
+    else:
+        db_run(
+            "UPDATE auth_refresh_tokens SET revoked_at = NOW() WHERE token_hash = ? AND revoked_at IS NULL",
+            (_token_fingerprint(token),),
+        )
     return {"success": True}
+
+
+def deactivate_session(token: str) -> Dict:
+    """Revoke a refresh token (or access token's sibling via body refresh)."""
+    if not token:
+        return {"success": False, "error": "Token is required"}
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False})
+        if payload.get('type') == 'refresh':
+            return revoke_refresh_token(token)
+        # Access token logout: revoke all sessions for this user.
+        user_id = payload.get('user_id')
+        if user_id:
+            return deactivate_all_user_sessions(user_id, payload.get('role') or 'HR')
+        return {"success": False, "error": "Token is missing user identity"}
+    except Exception:
+        return {"success": False, "error": "Invalid token"}
 
 
 def deactivate_all_user_sessions(user_id, user_type: str) -> Dict:
+    if user_id:
+        db_run(
+            "UPDATE auth_refresh_tokens SET revoked_at = NOW() WHERE user_id = ? AND revoked_at IS NULL",
+            (str(user_id),),
+        )
     return {"success": True}
+
+
+def rotate_refresh_token(old_token: str, new_token: str, user_id: str) -> Dict:
+    revoke_refresh_token(old_token)
+    return register_refresh_token(new_token, user_id)
+
+
+def is_login_rate_limited(email: str, user_type: str = 'HR') -> bool:
+    return get_recent_failed_attempts(email, user_type, LOGIN_LOCKOUT_MINUTES) >= MAX_FAILED_LOGIN_ATTEMPTS
+
+
+def hash_otp(otp: str) -> str:
+    pepper = (JWT_SECRET or 'otp-pepper').encode('utf-8')
+    return hmac.new(pepper, str(otp).strip().encode('utf-8'), hashlib.sha256).hexdigest()
+
+
+def verify_otp_hash(stored: str | None, input_otp: str) -> bool:
+    if not stored:
+        return False
+    stored = str(stored).strip()
+    candidate = str(input_otp).strip()
+    # Legacy plaintext OTP support during migration
+    if len(stored) != 64:
+        return secrets.compare_digest(stored, candidate)
+    return secrets.compare_digest(stored, hash_otp(candidate))
 
 
 def get_user_sessions(user_id, user_type: str) -> List[Dict]:

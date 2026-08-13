@@ -175,7 +175,15 @@ export function AppProvider({ children }) {
         if (data.refresh_token) tokenService.setRefreshToken(data.refresh_token)
         setUser(data.user)
         const role = data.user.role || 'RECRUITER'
-        const nextAuth = { isLoggedIn: true, role, email: data.user.email || email, fullName: data.user.fullName, company: data.user.company }
+        const nextAuth = {
+          isLoggedIn: true,
+          role,
+          email: data.user.email || email,
+          fullName: data.user.fullName,
+          company: data.user.company,
+          organizationId: data.user.organizationId || null,
+          orgSlug: data.user.orgSlug || null,
+        }
         setAuth(nextAuth)
         writeJson(STORAGE_KEYS.auth, nextAuth)
         return { ok: true, user: data.user }
@@ -412,7 +420,7 @@ export function AppProvider({ children }) {
     }
   }
 
-  // Public board: GET /api/jobs (enabled jobs). Staff dashboard: GET /api/jobs/all (company / org scope).
+  // Staff: GET /api/jobs/all (login org). Public: GET /api/jobs (auto company).
   const fetchJobs = async () => {
     setJobsLoading(true)
     setJobsError('')

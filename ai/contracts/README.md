@@ -24,7 +24,7 @@ Contracts are the first layer in the authority chain. Schemas compose contracts;
 
 - JSON Schema for runtime validation → `ai/capabilities/*/schema.json`
 - TOON wire mappings → `ai/toon/v1/mappings/`
-- PostgreSQL DDL → `backend/schema_pg/`
+- PostgreSQL DDL → `apps/backend/alembic/` (migrations)
 
 ## Authority chain position
 
@@ -38,7 +38,7 @@ contracts/ → schemas/ → knowledge/ → toon/v1/ → backend/toon.py
 |----------|-------|
 | Document schemas | `ai/schemas/*.yaml` reference contracts |
 | Knowledge bases | Alias lookup during normalization |
-| Documentation | `ai/docs/DATA_CONTRACTS.md` |
+| Documentation | `docs/ADRS.md` · YAML contracts in this package |
 
 ## Extension points
 

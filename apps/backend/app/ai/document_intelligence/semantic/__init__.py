@@ -22,7 +22,7 @@ def semantic_ai_enabled() -> bool:
     return _ENABLED
 
 
-def _needs_resume_semantic(profile_dict: dict[str, Any]) -> bool:
+def _needs_resume_semantic(profile_dict: dict[str, Any], raw_text: str = '') -> bool:
     personal = profile_dict.get('personal') or {}
     contact = profile_dict.get('contact') or {}
     has_identity = bool(str(personal.get('full_name') or '').strip() and str(contact.get('email') or '').strip())
@@ -30,7 +30,30 @@ def _needs_resume_semantic(profile_dict: dict[str, Any]) -> bool:
     has_edu = bool(profile_dict.get('education'))
     has_skills = bool(profile_dict.get('skills'))
     # Skip AI when deterministic coverage is strong (fresher: education+skills OK)
-    return not (has_identity and has_skills and (has_exp or has_edu))
+    if not (has_identity and has_skills and (has_exp or has_edu)):
+        return True
+    if raw_text:
+        try:
+            from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+            if experience_is_incomplete(profile_dict.get('experience') or [], raw_text):
+                return True
+        except Exception:
+            pass
+    # Still run residual LLM when contact/location/edu incomplete but source has evidence
+    if raw_text:
+        try:
+            from app.ai.document_intelligence.coverage.resume_coverage import (
+                resume_has_recoverable_gaps,
+            )
+            from app.ai.document_intelligence.models.candidate import CandidateProfile
+
+            profile = CandidateProfile.model_validate(profile_dict)
+            if resume_has_recoverable_gaps(profile, raw_text):
+                return True
+        except Exception:
+            pass
+    return False
 
 
 def _needs_jd_semantic(profile_dict: dict[str, Any]) -> bool:
@@ -68,14 +91,19 @@ def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
 
     from app.core.request_context import get_timing_context, run_in_timing_context
 
-    timeout_sec = float(os.getenv('DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC', '25'))
+    timeout_sec = float(os.getenv('DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC', '90'))
     timing_ctx = get_timing_context()
 
     def _invoke() -> Optional[dict[str, Any]]:
         try:
             from app.ai.adapter.runtime_adapter import parse_via_runtime
 
-            result = parse_via_runtime(prompt, 'resume' if doc_kind == 'resume' else 'jd')
+            result = parse_via_runtime(
+                prompt,
+                'resume' if doc_kind == 'resume' else 'jd',
+                timeout_seconds=timeout_sec,
+                max_attempts=1,
+            )
             if isinstance(result, dict):
                 return result
         except Exception as exc:
@@ -121,25 +149,24 @@ def enrich_resume_semantic(
     if not semantic_ai_enabled() and not force:
         return profile
     data = profile.model_dump()
-    if not force and not _needs_resume_semantic(data):
+    if not force and not _needs_resume_semantic(data, unresolved_text or ''):
         return profile
     if not unresolved_text or len(unresolved_text.strip()) < 40:
         return profile
 
-    exp_key = (
-        'experience (list of {role,company,start,end,description}), '
-        if allow_experience_fill
-        else ''
-    )
-    prompt = (
-        'Extract ONLY missing structured resume fields as JSON with keys: '
-        f'{exp_key}'
-        'education (list of {degree,institution,field,start,end}), '
-        'skills (string list), summary (string). '
-        'Do not invent email/phone/urls. Do not treat projects or assignments as jobs. '
-        f'Text:\n\n{unresolved_text[:6000]}'
-    )
-    raw = _call_section_llm(prompt, 'resume')
+    from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+    if allow_experience_fill and experience_is_incomplete(profile.experience, unresolved_text):
+        from app.ai.document_intelligence.semantic.experience import extract_and_merge_experience
+
+        profile = extract_and_merge_experience(profile, unresolved_text)
+        data = profile.model_dump()
+        if not force and not _needs_resume_semantic(data, unresolved_text):
+            return sanitize_candidate_profile(profile, source_text=unresolved_text)
+
+    # Same resume_parser_v1 prompt + resume_milestone_v1 schema as parse_via_runtime.
+    # Do not send a competing fragment-JSON instruction.
+    raw = _call_section_llm(unresolved_text[:6000], 'resume')
     if not isinstance(raw, dict):
         return profile
 
@@ -182,12 +209,13 @@ def enrich_resume_semantic(
             or raw.get('education')
             or [],
         }
-        # Only fill experience from AI when Experience section had content
-        if (
-            allow_experience_fill
-            and not profile.experience
-            and isinstance(raw.get('experience'), list)
-        ):
+        # Fill or replace weak experience from AI when the Experience section exists
+        from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+        exp_weak = allow_experience_fill and experience_is_incomplete(
+            profile.experience, unresolved_text or ''
+        )
+        if exp_weak and isinstance(raw.get('experience'), list):
             partial_toon['experience'] = []
             for item in raw['experience']:
                 if not isinstance(item, dict):
@@ -207,8 +235,16 @@ def enrich_resume_semantic(
             partial_toon['summary'] = str(raw['summary'])
 
         merged = candidate_profile_from_toon(partial_toon)
-        # Always prefer deterministic contact; lock experience when section was empty
-        exp_keep = profile.experience if not allow_experience_fill else merged.experience
+        from app.ai.document_intelligence.experience_quality import (
+            ground_experience_rows,
+            merge_experience_rows,
+        )
+
+        if not allow_experience_fill:
+            exp_keep = profile.experience
+        else:
+            ai_exp = ground_experience_rows(list(merged.experience or []), unresolved_text or '')
+            exp_keep = merge_experience_rows(list(profile.experience or []), ai_exp)
         merged = merged.model_copy(
             update={
                 'personal': merged.personal.model_copy(
@@ -221,7 +257,7 @@ def enrich_resume_semantic(
                 'experience': exp_keep,
             }
         )
-        return sanitize_candidate_profile(merged)
+        return sanitize_candidate_profile(merged, source_text=unresolved_text or '')
     except Exception as exc:
         logger.debug('semantic merge failed: %s', exc)
         return profile
@@ -242,13 +278,7 @@ def enrich_jd_semantic(profile, *, unresolved_text: str, force: bool = False):
     if not unresolved_text or len(unresolved_text.strip()) < 40:
         return profile
 
-    prompt = (
-        'Extract job description fields as JSON: title, company, location, '
-        'mandatory_skills, preferred_skills, responsibilities, qualifications, '
-        'min_experience_years, max_experience_years, salary_range, employment_type. '
-        f'Text:\n\n{unresolved_text[:6000]}'
-    )
-    raw = _call_section_llm(prompt, 'jd')
+    raw = _call_section_llm(unresolved_text[:6000], 'jd')
     if not isinstance(raw, dict):
         return profile
     try:

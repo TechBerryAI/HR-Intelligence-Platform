@@ -917,13 +917,17 @@ def repair_jd_toon(data: dict[str, Any], raw_jd_text: str | None = None) -> tupl
 
 
 @timing
-def parse_via_runtime(text: str, doc_type: Literal["resume", "jd"]) -> dict[str, Any]:
+def parse_via_runtime(
+    text: str,
+    doc_type: Literal["resume", "jd"],
+    **kwargs: Any,
+) -> dict[str, Any]:
     """Run AI Runtime task and return validated structured output dict."""
     global _last_model_version
 
     task_name = _TASK_MAP[doc_type]
     runtime = _ensure_runtime()
-    result = runtime.run_task(task_name, text)
+    result = runtime.run_task(task_name, text, **kwargs)
     _last_model_version = f"{result.provider_id}/{result.model}"
     output = _parse_json_output(result.output)
     # Resume/JD repair runs in resume_toon_pipeline / jd_toon_pipeline (single repair path)

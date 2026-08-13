@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect, useState, useRef } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
 import FilterBar from '@/shared/components/FilterBar.jsx'
 import JobCard from '@/shared/components/JobCard.jsx'
@@ -7,7 +7,7 @@ import ApplyJobModal from '@/features/jobs/components/ApplyJobModal.jsx'
 import AnimatedContainer from '@/shared/components/AnimatedContainer.jsx'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FiAlertCircle, FiRefreshCw, FiCheck, FiBriefcase, FiChevronDown } from 'react-icons/fi'
-import { isStaffRecruiter } from '@/core/permissions/rbac.js'
+import { isStaff } from '@/core/permissions/rbac.js'
 import { apiRequest } from '@/core/api/api.js'
 import { useTheme } from '@/core/context/ThemeContext.jsx'
 
@@ -40,6 +40,7 @@ export default function Jobs() {
   const { surfaceTheme } = useTheme()
   const location = useLocation()
   const navigate = useNavigate()
+  const { companySlug } = useParams()
   const params = new URLSearchParams(location.search)
   const query = {
     keywords: params.get('q') || '',
@@ -54,12 +55,14 @@ export default function Jobs() {
   const [sortBy, setSortBy] = useState('relevance')
   const [sortOpen, setSortOpen] = useState(false)
   const sortRef = useRef(null)
+  const staffViewer = isStaff(auth)
 
   const fetchPublicJobs = async () => {
     setJobsLoading(true)
     setJobsError('')
     try {
-      const data = await apiRequest('/api/jobs', { method: 'GET' })
+      const qs = companySlug ? `?company=${encodeURIComponent(companySlug)}` : ''
+      const data = await apiRequest(`/api/jobs${qs}`, { method: 'GET' })
       if (Array.isArray(data)) setJobs(data)
       else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)
       else setJobs([])
@@ -72,7 +75,7 @@ export default function Jobs() {
 
   useEffect(() => {
     fetchPublicJobs()
-  }, [location.key, jobsBoardRevision])
+  }, [location.key, jobsBoardRevision, companySlug])
 
   useEffect(() => {
     const onVisible = () => {
@@ -135,7 +138,8 @@ export default function Jobs() {
     const sp = new URLSearchParams()
     if (keywords) sp.set('q', keywords)
     if (loc) sp.set('loc', loc)
-    navigate({ pathname: '/jobs', search: `?${sp.toString()}` }, { replace: false })
+    const pathname = companySlug ? `/c/${encodeURIComponent(companySlug)}/jobs` : '/jobs'
+    navigate({ pathname, search: `?${sp.toString()}` }, { replace: false })
   }
 
   useEffect(() => {
@@ -306,11 +310,11 @@ export default function Jobs() {
                   key={job.id}
                   theme={surfaceTheme}
                   job={job}
-                  isAdmin={isStaffRecruiter(auth)}
+                  isAdmin={staffViewer}
                   onApply={() => {
                     setApplyError('')
                     setApplySuccess('')
-                    if (isStaffRecruiter(auth)) return
+                    if (staffViewer) return
                     setApplyJob(job)
                   }}
                 />
@@ -323,6 +327,7 @@ export default function Jobs() {
       <ApplyJobModal
         open={!!applyJob}
         job={applyJob}
+        companySlug={companySlug}
         onClose={() => setApplyJob(null)}
         onSuccess={(data) => {
           setApplySuccess(

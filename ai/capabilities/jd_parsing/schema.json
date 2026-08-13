@@ -103,11 +103,11 @@
       }
     },
     "min_experience_years": {
-      "type": "number",
+      "type": ["number", "null"],
       "minimum": 0
     },
     "max_experience_years": {
-      "type": "number",
+      "type": ["number", "null"],
       "minimum": 0
     },
     "salary_range": {

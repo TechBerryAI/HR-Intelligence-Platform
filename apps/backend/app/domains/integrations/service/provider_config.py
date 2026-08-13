@@ -43,13 +43,18 @@ def catalog_with_status(company_key: str) -> list[dict]:
     out = []
     for meta in PROVIDER_CATALOG:
         row = rows.get(meta['id'])
+        access_required = bool(meta.get('access_required'))
+        public = _row_public(row, meta['id'])
+        if access_required and (public.get('status') or '').lower() == 'connected':
+            public = {**public, 'status': 'provider_access_required'}
         out.append({
             'id': meta['id'],
             'name': meta['name'],
             'idPrefix': meta['id_prefix'],
             'builtin': True,
+            'accessRequired': access_required,
             'configured': bool(row),
-            'config': _row_public(row, meta['id']),
+            'config': public,
         })
         rows.pop(meta['id'], None)
 
@@ -191,7 +196,11 @@ def save_provider_config(
 
     status = data.get('status')
     if connect:
-        status = 'connected'
+        meta = next((m for m in PROVIDER_CATALOG if m['id'] == provider), None)
+        if meta and meta.get('access_required'):
+            status = 'provider_access_required'
+        else:
+            status = 'connected'
     enabled = data.get('enabled')
     auto_publish = data.get('autoPublish') if 'autoPublish' in data else data.get('auto_publish')
     auto_sync = data.get('autoSync') if 'autoSync' in data else data.get('auto_sync')

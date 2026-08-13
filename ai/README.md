@@ -1,8 +1,10 @@
 # HRMS AI Platform
 
-Enterprise AI platform for the HR Job Portal — designed for long-term maintainability. Powers parsing, matching, ranking, search, summarization, interview generation, chat, and future HR intelligence.
+Enterprise AI workspace for the HR Job Portal — maintainable capability library under `ai/`.
 
-**Independent of the HRMS application** until Milestone 9. No backend, frontend, or API changes in current milestones.
+**Production HRMS path today:** resume/JD document intelligence (parsing) plus ATS scoring via the app adapter. Matching, chat, and interview-generation live as **capability packs** in `ai/capabilities/` — not fully productized end-user services in the Flask/React app.
+
+**Workspace isolation:** the `ai/` tree stays independent of day-to-day HRMS routes except where the backend explicitly adapters into parsing/ATS.
 
 ## Directory map
 
@@ -22,10 +24,10 @@ ai/
 ├── knowledge/            # Reference datasets (skills, titles, degrees, …)
 ├── configs/              # Platform YAML templates
 ├── registry/             # Registry schema (models, datasets, benchmarks)
-├── docs/                 # Architecture, ADRs, handbook, archive
-│   └── adr/              # ADR-001 through ADR-006
 └── foundation.json       # Machine-readable foundation manifest (M2)
 ```
+
+Docs (centralized, flat): [`docs/AI_WORKFLOW.md`](../docs/AI_WORKFLOW.md), [`docs/AI_DATA_PIPELINE.md`](../docs/AI_DATA_PIPELINE.md), [`docs/ADRS.md`](../docs/ADRS.md).
 
 ## HR Intelligence Foundation (M2)
 
@@ -61,13 +63,12 @@ Entry points:
 
 | Document | Purpose |
 |----------|---------|
-| [docs/DATA_PIPELINE.md](docs/DATA_PIPELINE.md) | End-to-end pipeline |
-| [docs/DATA_CONTRACTS.md](docs/DATA_CONTRACTS.md) | Domain schemas |
-| [docs/PLATFORM_VISION.md](docs/PLATFORM_VISION.md) | Platform thinking |
-| [docs/AI_ENGINEERING.md](docs/AI_ENGINEERING.md) | Engineering handbook |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | M1–M11 milestones |
-| [docs/adr/](docs/adr/) | Architecture Decision Records |
+| [docs/AI_WORKFLOW.md](../docs/AI_WORKFLOW.md) | Engineering workflow loop |
+| [docs/AI_DATA_PIPELINE.md](../docs/AI_DATA_PIPELINE.md) | End-to-end dataset pipeline |
+| [docs/ADRS.md](../docs/ADRS.md) | Architecture Decision Records |
+| [docs/WORKFLOWS.md](../docs/WORKFLOWS.md) | App + AI unique workflows index |
 | [toon/README.md](toon/README.md) | TOON ontology package |
+| Domain contracts / schemas | `contracts/`, `schemas/` (YAML is SoT) |
 
 ## Quick start
 
@@ -87,6 +88,8 @@ python -m runtime.cli.main --help
 | M2 Foundation (contracts, schemas, TOON, knowledge) | Active — manifests in place |
 | M7 Runtime + capabilities + providers | **Implemented** — `pytest` passes |
 | M3 Dataset platform | Inspector + extraction + proposals implemented; other factory stages interface-only |
-| M9 HRMS integration | Planned |
+| HRMS production path | Resume/JD parsing + ATS via adapter (shipped in app) |
+| Capability packs (matching / chat / interview gen) | Library / runtime — **not** fully productized product services |
+| M9 broader HRMS integration | Ongoing for additional features |
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for full milestone timeline. Roadmap status labels may lag implementation — verify against code and tests.
+Milestone labels may lag implementation — verify against code, tests, and [docs/AI_WORKFLOW.md](../docs/AI_WORKFLOW.md).

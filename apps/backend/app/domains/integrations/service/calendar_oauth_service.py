@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+from app.core import shared_store
 from app.domains.integrations.company_context import resolve_company_for_user
 from app.domains.integrations.provider.calendar_factory import get_calendar_provider
 from app.domains.integrations.provider.google_calendar import (
@@ -20,17 +23,75 @@ from app.domains.identity.authorization.rbac import get_user_id
 logger = logging.getLogger(__name__)
 
 PROVIDER = oauth_repo.PROVIDER_GOOGLE_CALENDAR
+_OAUTH_STATE_TTL_SEC = int(os.getenv('OAUTH_STATE_TTL_SEC', '600'))
+_OAUTH_STATE_PREFIX = 'oauth:calendar:state:'
 
-# In-process OAuth state → hrid (swap-ready for Redis)
-_oauth_states: dict[str, dict] = {}
+_ALLOWED_RETURN_PATHS = frozenset({'/settings', '/head-hr/settings'})
+_DEBUG_ORIGIN_RE = re.compile(
+    r'^http://('
+    r'localhost|'
+    r'127\.0\.0\.1|'
+    r'192\.168\.\d{1,3}\.\d{1,3}|'
+    r'10\.\d{1,3}\.\d{1,3}\.\d{1,3}|'
+    r'172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}'
+    r'):\d+$'
+)
 
 
-def _frontend_settings_url() -> str:
+def _configured_frontend_origins() -> list[str]:
+    raw = os.getenv('FRONTEND_URLS') or os.getenv('FRONTEND_URL') or ''
+    origins = [o.strip().rstrip('/') for o in raw.split(',') if o.strip()]
+    primary = (os.getenv('FRONTEND_URL') or '').strip().rstrip('/')
+    if primary and primary not in origins:
+        origins.insert(0, primary)
+    if not origins:
+        origins = ['http://localhost:5173', 'http://127.0.0.1:5173']
+    return origins
+
+
+def _origin_allowed(origin: str) -> bool:
+    origin = (origin or '').rstrip('/')
+    if not origin:
+        return False
+    if origin in _configured_frontend_origins():
+        return True
+    if os.getenv('FLASK_DEBUG', 'false').lower() == 'true':
+        return bool(_DEBUG_ORIGIN_RE.match(origin))
+    return False
+
+
+def sanitize_oauth_return_to(return_to: str | None) -> str | None:
+    """Allow only same-app settings URLs on configured (or local-debug) origins."""
+    if not return_to or not isinstance(return_to, str):
+        return None
+    try:
+        parsed = urlparse(return_to.strip())
+    except Exception:
+        return None
+    if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+        return None
+    origin = f'{parsed.scheme}://{parsed.netloc}'.rstrip('/')
+    if not _origin_allowed(origin):
+        return None
+    path = parsed.path or '/'
+    if path.endswith('/') and path != '/':
+        path = path.rstrip('/')
+    if path not in _ALLOWED_RETURN_PATHS:
+        return None
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    query['tab'] = 'integrations'
+    return urlunparse((parsed.scheme, parsed.netloc, path, '', urlencode(query), ''))
+
+
+def _frontend_settings_url(return_to: str | None = None) -> str:
+    sanitized = sanitize_oauth_return_to(return_to)
+    if sanitized:
+        return sanitized
     base = (os.getenv('FRONTEND_URL') or 'http://localhost:5173').rstrip('/')
     return f'{base}/settings?tab=integrations'
 
 
-def start_oauth(user: dict) -> tuple[str | None, str | None]:
+def start_oauth(user: dict, return_to: str | None = None) -> tuple[str | None, str | None]:
     """Return (auth_url, error)."""
     if not google_oauth_configured():
         return None, 'Google OAuth is not configured (GOOGLE_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI)'
@@ -41,11 +102,24 @@ def start_oauth(user: dict) -> tuple[str | None, str | None]:
     if not company_key:
         return None, 'Company context required'
     state = secrets.token_urlsafe(24)
-    _oauth_states[state] = {
-        'hrid': hrid,
-        'company_key': company_key,
-        'created_at': datetime.now(timezone.utc).isoformat(),
-    }
+    if shared_store.redis_status() != 'ok':
+        flask_debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+        if not flask_debug:
+            logger.warning(
+                '[calendar_oauth] OAuth CSRF state is process-local '
+                '(REDIS_URL not connected). Multi-worker Gunicorn callbacks '
+                'can fail; set REDIS_URL when GUNICORN_WORKERS>1.'
+            )
+    shared_store.set_json(
+        f'{_OAUTH_STATE_PREFIX}{state}',
+        {
+            'hrid': hrid,
+            'company_key': company_key,
+            'return_to': sanitize_oauth_return_to(return_to),
+            'created_at': datetime.now(timezone.utc).isoformat(),
+        },
+        ttl_seconds=_OAUTH_STATE_TTL_SEC,
+    )
     return build_google_auth_url(state), None
 
 
@@ -54,10 +128,10 @@ def handle_oauth_callback(code: str | None, state: str | None) -> tuple[str, str
     Exchange code, store tokens.
     Returns (redirect_url, error_message).
     """
-    redirect = _frontend_settings_url()
+    ctx = shared_store.pop_json(f'{_OAUTH_STATE_PREFIX}{state}') if state else None
+    redirect = _frontend_settings_url((ctx or {}).get('return_to'))
     if not code or not state:
         return f'{redirect}&calendar=error', 'Missing code or state'
-    ctx = _oauth_states.pop(state, None)
     if not ctx:
         return f'{redirect}&calendar=error', 'Invalid or expired OAuth state'
     try:

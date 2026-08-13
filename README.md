@@ -42,7 +42,7 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
 - **Frontend:** Single-page app; single AppContext for auth, jobs, applicant state; role-based route guards (Recruiter, Candidate, Head of HR, CEO).
 - **Backend:** Monolithic Flask app; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, head-hr. Connection-pooled PostgreSQL; raw SQL via `db_run`/`db_get`/`db_all`.
 
-Docs: **[docs/README.md](docs/README.md)** · setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** · **media & backups:** **[docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md)** · user manuals: **[docs/user-manual/](docs/user-manual/README.md)**.
+Docs: **[docs/README.md](docs/README.md)** · setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** · **media storage:** **[docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md)** · user manuals: **[docs/user-manual/](docs/user-manual/README.md)**.
 
 ---
 
@@ -109,7 +109,7 @@ npm run dev
 - **Frontend:** http://localhost:5173  
 - **Backend / Health:** http://localhost:3000, http://localhost:3000/health  
 
-Database and tables are created automatically on first backend run from `apps/backend/schema_pg/*.sql`.
+Database and tables are created automatically on first backend run via Alembic (`alembic upgrade head` from `apps/backend`).
 
 ---
 
@@ -172,8 +172,7 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 │   ├── auth.py, jobs.py, candidate.py, applications.py, ...
 │   ├── db.py             # PostgreSQL pool + helpers
 │   ├── utils.py          # JWT, auth decorators
-│   ├── schema_pg/        # Consolidated DDL (01_core … 04_seeds); Alembic applies
-│   ├── alembic/          # Schema migration revisions
+│   ├── alembic/          # Schema migrations (sole DDL source of truth)
 │   └── requirements.txt
 ├── desktop/              # Electron shell (native dialogs, IPC)
 ├── scripts/              # Root utilities (db-preflight, database tests)
@@ -181,12 +180,15 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 ├── packages/             # Shared path helpers (knowledge)
 ├── ai/                   # AI platform (runtime, providers, capabilities, dataset, toon)
 └── docs/
-    ├── README.md            # Documentation index
-    ├── DEVELOPMENT.md       # Local setup
-    ├── MEDIA_AND_BACKUPS.md # Durable media + backup commands
-    ├── ARCHITECTURE.md      # Product & system architecture
-    ├── ENGINEERING.md       # APIs, backend, frontend
-    └── HISTORY.md           # Sprint freeze / migration history
+    ├── README.md
+    ├── WORKFLOWS.md
+    ├── DEVELOPMENT.md
+    ├── MEDIA_AND_BACKUPS.md
+    ├── DOCUMENT_INTELLIGENCE.md
+    ├── AI_WORKFLOW.md
+    ├── AI_DATA_PIPELINE.md
+    ├── ADRS.md
+    └── user-manual/         # Word/PDF + screenshots (only subfolder)
 ```
 
 ---
@@ -203,7 +205,7 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 | Admin | `/api/admin` | `POST /bulk-parse/upload`, `GET /bulk-parse/progress/:id`, `GET /job-matches` |
 | Head of HR | `/api/head-hr` | `GET /stats`, `GET /admins`, `GET /candidates`, `GET /jobs`, `GET /applications` |
 
-For full route details, inspect Flask blueprints under `apps/backend/` (see [docs/ENGINEERING.md](docs/ENGINEERING.md) for narrative).
+For full route details, inspect Flask blueprints under `apps/backend/` (see [docs/WORKFLOWS.md](docs/WORKFLOWS.md)).
 
 ---
 
@@ -243,9 +245,9 @@ Electron opens a window that loads the app and uses OS folder dialogs.
 
 ---
 
-## Media storage & backups (keep this)
+## Media storage (keep this)
 
-Resumes/JDs live in a durable folder **outside** the repo (`…/Projects/hcip-data/`), with automatic Postgres + media backups.
+Resumes/JDs live in a durable folder **outside** the repo (`…/Projects/hcip-data/`). Postgres backups are owned by the DB team.
 
 **Full command reference:** **[docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md)**
 
@@ -254,17 +256,14 @@ Quick commands:
 ```bash
 cd apps/backend
 
-# Force a full backup now (DB + media → hcip-data/backups/)
-python -m app.database.scripts.backup_hcip --force
+# Seed hero video / ensure media dirs
+python ../../scripts/ensure_media_assets.py --force
 
 # Verify media files match DB checksums
 python -m app.database.scripts.offload_blobs --verify-only --limit 200
-
-# Optional: daily cron if the app is not always running
-bash ../../scripts/install_hcip_backup_cron.sh
 ```
 
-Do **not** delete `D:/Projects/hcip-data` (or your `HCIP_DATA_HOME`) — that is the live media + backup store.
+Do **not** delete `D:/Projects/hcip-data` (or your `HCIP_DATA_HOME`) — that is the live media store.
 
 ---
 
@@ -276,7 +275,7 @@ Do **not** delete `D:/Projects/hcip-data` (or your `HCIP_DATA_HOME`) — that is
 - **Email not sending:** Set `MAIL_SUPPRESS_SEND=true` in `apps/backend/.env` for testing.
 - **Other device cannot reach API:** Leave `VITE_API_URL` empty and open the Vite URL (`http://<host-ip>:5173`), not a hardcoded `localhost` API URL. Ensure firewall allows port 5173.
 
-More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · media/backups: [docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md).
+More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · media: [docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md).
 
 ---
 

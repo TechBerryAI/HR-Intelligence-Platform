@@ -1,7 +1,11 @@
-# Media storage & automatic backups
+# Media storage
 
-Reference for durable file storage (resumes, JDs, hero video) and backups.
+Reference for durable file storage (resumes, JDs, hero video).
 **You do not need to manage paths day to day** — defaults keep data outside the project folder.
+
+Postgres backups are owned by the **database team** — this app does not dump or archive the DB.
+
+**Operator runbook:** concrete `pg_dump` + `MEDIA_ROOT` rsync and restore steps → [BACKUP_RUNBOOK.md](BACKUP_RUNBOOK.md).
 
 ---
 
@@ -9,12 +13,11 @@ Reference for durable file storage (resumes, JDs, hero video) and backups.
 
 | Layer | What it holds | Survives deleting the project folder? |
 |-------|----------------|----------------------------------------|
-| **Postgres** | Catalog: ids, filenames, SHA-256 hashes, `storage_url` keys | Yes (if DB host is separate / backed up) |
+| **Postgres** | Catalog: ids, filenames, SHA-256 hashes, `storage_url` keys | Yes (if DB host is separate / backed up by DB team) |
 | **`HCIP_DATA_HOME/media`** | Actual PDF/DOCX/video **bytes** | Yes — this folder is **outside** the repo |
-| **`HCIP_DATA_HOME/backups`** | Automatic copies of DB + media | Yes |
 
 Deleting `HR-Intelligence-Platform/` does **not** delete `hcip-data/`.  
-Losing **both** `hcip-data` and the database **without** a backup = data loss.
+Losing **both** `hcip-data` and the database without a restore path = data loss.
 
 ---
 
@@ -31,13 +34,6 @@ D:/Projects/hcip-data/                    ← durable data (KEEP)
     bulk_uploads/
     bulk_exports/
     public/
-  backups/
-    20260807_070258/                      ← one backup run
-      postgres.dump
-      media.tar.gz                        ← present on full backups
-      MANIFEST.json
-    latest → 20260807_070258              ← pointer / symlink
-    LAST_BACKUP
 ```
 
 Override root with env `HCIP_DATA_HOME` if you want another drive.
@@ -50,26 +46,12 @@ Override root with env `HCIP_DATA_HOME` if you want another drive.
 |-----|---------|---------|
 | `HCIP_DATA_HOME` | `<parent-of-repo>/hcip-data` | Durable root |
 | `MEDIA_ROOT` | `$HCIP_DATA_HOME/media` | File bytes |
-| `BACKUP_DIR` | `$HCIP_DATA_HOME/backups` | Backup archives |
-| `BACKUP_ENABLED` | `true` | App auto-backup scheduler |
-| `BACKUP_INTERVAL_HOURS` | `24` | How often (while app is running) |
-| `BACKUP_KEEP_DAYS` | `14` | Prune older backup folders |
-| `BACKUP_STARTUP_DELAY_SECONDS` | `30` | Wait after boot before first check |
-| `PG_DUMP_PATH` | (auto: newest `pg_dump` found) | Must match Postgres **server** major version |
-| `BACKUP_PG_DOCKER_IMAGE` | `postgres:17` | Optional Docker fallback for `pg_dump` |
 
 Example (already in `.env.example`):
 
 ```bash
 # HCIP_DATA_HOME=/mnt/d/Projects/hcip-data
-BACKUP_ENABLED=true
-BACKUP_INTERVAL_HOURS=24
-BACKUP_KEEP_DAYS=14
-# PG_DUMP_PATH=/home/YOU/miniconda3/bin/pg_dump   # if apt pg_dump is too old
 ```
-
-**Version tip:** server is Postgres 17 → client `pg_dump` must be 17+.  
-If you see `server version mismatch`, install a matching client or set `PG_DUMP_PATH`.
 
 ---
 
@@ -77,50 +59,7 @@ If you see `server version mismatch`, install a matching client or set `PG_DUMP_
 
 All commands from **`apps/backend`** unless noted. Load `.env` is automatic for these modules.
 
-### 1) Automatic backups (normal use)
-
-With the Flask app running (`node start.js` / `python wsgi.py`):
-
-- Scheduler starts on boot when `BACKUP_ENABLED=true`
-- Runs a full backup when the last one is older than `BACKUP_INTERVAL_HOURS`
-- Writes under `$HCIP_DATA_HOME/backups/<timestamp>/`
-
-Startup log lines look like:
-
-```text
-[MEDIA] DATA_HOME=... MEDIA_ROOT=... BACKUPS=...
-[backup] scheduler started (every 24h, first check in 30s)
-```
-
-### 2) Manual backup (force now)
-
-```bash
-cd apps/backend
-
-# Full: Postgres + media
-python -m app.database.scripts.backup_hcip --force
-
-# Database only
-python -m app.database.scripts.backup_hcip --force --db-only
-
-# Media volume only
-python -m app.database.scripts.backup_hcip --force --media-only
-```
-
-### 3) Daily cron (if the app is not always running)
-
-```bash
-# From repo root — installs a 02:15 daily job
-bash scripts/install_hcip_backup_cron.sh
-```
-
-Or add manually:
-
-```cron
-15 2 * * * cd /mnt/d/Projects/HR-Intelligence-Platform/apps/backend && python -m app.database.scripts.backup_hcip --force >> /mnt/d/Projects/hcip-data/backups/cron.log 2>&1
-```
-
-### 4) Media volume: seed / ensure dirs
+### 1) Media volume: seed / ensure dirs
 
 ```bash
 # From repo root
@@ -128,7 +67,7 @@ python scripts/ensure_media_assets.py
 python scripts/ensure_media_assets.py --force   # re-seed hero from disk
 ```
 
-### 5) Offload legacy Postgres BYTEA → media (one-time / ongoing)
+### 2) Offload legacy Postgres BYTEA → media (one-time / ongoing)
 
 New uploads already write to media. Use this for old rows still holding `file_data` / profile `resume` BYTEA:
 
@@ -148,7 +87,7 @@ python -m app.database.scripts.offload_blobs --verify-only --limit 500
 python -m app.database.scripts.offload_blobs --clear-pg --limit 500
 ```
 
-### 6) Alembic (schema), including media catalog columns
+### 3) Alembic (schema), including media catalog columns
 
 ```bash
 cd apps/backend
@@ -156,40 +95,37 @@ alembic upgrade head
 alembic current
 ```
 
-Related revision: `20260807_0012` — `site_assets.content_sha256`.
+Schema includes `site_assets.content_sha256` (media-volume verification) in the squashed baseline `20260810_s001`.
 
 ---
 
-## Restore (disaster recovery)
+## Landing hero video (VM / fresh clone)
 
-1. **Restore Postgres** (custom format dump):
+The seed MP4 is **committed** at `apps/frontend/public/videos/website-hero.mp4`.
+On boot (and on `/api/media/public/hero-video` / health), the app copies it to
+`$MEDIA_ROOT/public/website-hero.mp4` and upserts the Postgres `site_assets`
+catalog row (`landing.hero_video`). Runtime bytes stay on `MEDIA_ROOT`; the
+catalog holds metadata + SHA-256 (not BYTEA).
 
-```bash
-pg_restore --clean --if-exists -h HOST -p PORT -U USER -d hrms \
-  /mnt/d/Projects/hcip-data/backups/latest/postgres.dump
-```
+**Resolve order:**
 
-(Use a matching Postgres 17+ client. Set `PGPASSWORD` or a `.pgpass` file.)
+1. `$MEDIA_ROOT/public/website-hero.mp4` (canonical runtime file)
+2. Else copy from `apps/frontend/public/videos/website-hero.mp4` (in-repo seed)
+3. Upsert `site_assets` so `storage_url` points at that canonical file
 
-2. **Restore media bytes**:
-
-```bash
-# Extract into durable home (creates ./media under the extract dir)
-cd /mnt/d/Projects/hcip-data
-tar -xzf backups/latest/media.tar.gz
-# Ensure apps/backend/.env points at this tree:
-#   HCIP_DATA_HOME=/mnt/d/Projects/hcip-data
-#   (MEDIA_ROOT defaults to $HCIP_DATA_HOME/media)
-```
-
-3. **Verify**:
+**On a VM after `git pull`:**
 
 ```bash
-cd apps/backend
-python -m app.database.scripts.offload_blobs --verify-only --limit 200
+# Pull includes the seed; start the backend (auto-seeds) or run:
+cd /path/to/HR-Intelligence-Platform
+python scripts/ensure_media_assets.py
+
+curl -s http://localhost:<backend-port>/api/media/health
+# expect heroVideoDisk / heroVideoDb true
 ```
 
-4. Start the app and confirm resumes download / hero video loads.
+Optional: `python scripts/ensure_media_assets.py --force` rewrites the catalog
+from the current disk/seed file.
 
 ---
 
@@ -197,11 +133,10 @@ python -m app.database.scripts.offload_blobs --verify-only --limit 200
 
 | Path | Safe to delete? |
 |------|-----------------|
-| `HR-Intelligence-Platform/` (the repo) | Yes for **media/backups** — they live in `hcip-data` |
+| `HR-Intelligence-Platform/` (the repo) | Yes for **media** — it lives in `hcip-data` |
 | `HR-Intelligence-Platform/.media` | Yes after migration (see `MOVED.txt` inside) — already copied to `hcip-data/media` |
 | `hcip-data/media` | **No** — live files |
-| `hcip-data/backups` | Only old dated folders after you confirm newer backups exist |
-| Entire `hcip-data/` | **No** unless you have an off-machine copy |
+| Entire `hcip-data/` | **No** unless you have an off-machine copy of media |
 
 ---
 
@@ -211,11 +146,8 @@ python -m app.database.scripts.offload_blobs --verify-only --limit 200
 |--------|------|
 | `app/core/data_home.py` | Resolves `HCIP_DATA_HOME` |
 | `app/core/media_storage.py` | Put/get + SHA-256 verify; migrates legacy `.media` once |
-| `app/core/backup_scheduler.py` | Background schedule on Flask boot |
-| `app/database/scripts/backup_hcip.py` | Backup CLI |
 | `app/database/scripts/offload_blobs.py` | BYTEA → media + verify |
 | `scripts/ensure_media_assets.py` | Seed hero / dirs |
-| `scripts/install_hcip_backup_cron.sh` | Cron installer |
 
 ---
 

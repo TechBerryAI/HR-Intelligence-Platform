@@ -2,11 +2,13 @@
 
 ## Documentation
 
-- End-user manuals: `docs/user-manual/` (Word/PDF with live screenshots).
-- Local setup: `docs/DEVELOPMENT.md`.
-- Media + backups (commands): `docs/MEDIA_AND_BACKUPS.md`.
-- Docs index: `docs/README.md`.
-- Prefer live code over `docs/ARCHITECTURE.md` / `docs/ENGINEERING.md` when they disagree.
+- **Index:** `docs/README.md` — flat markdown under `docs/` (only subfolder: `user-manual/`).
+- **Workflows:** `docs/WORKFLOWS.md`
+- **Setup:** `docs/DEVELOPMENT.md`
+- **Media storage:** `docs/MEDIA_AND_BACKUPS.md` · **Backups:** `docs/BACKUP_RUNBOOK.md`
+- **Document intelligence:** `docs/DOCUMENT_INTELLIGENCE.md`
+- **AI:** `docs/AI_WORKFLOW.md`, `docs/AI_DATA_PIPELINE.md`, `docs/ADRS.md`
+- **End-user manuals:** `docs/user-manual/`
 
 ## Code
 

@@ -1,0 +1,13 @@
+ZUHAIR KHAN
+zuhair@example.com | 9876501234 | Hyderabad
+
+SKILLS
+Python, FastAPI
+
+EXPERIENCE
+SDE Intern — Edviron
+Jun 2024 - Aug 2024
+• Wrote APIs
+
+EDUCATION
+B.Tech - JNTU Hyderabad

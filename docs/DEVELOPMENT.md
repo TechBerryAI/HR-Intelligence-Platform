@@ -66,6 +66,7 @@ pip install -r requirements.txt
 pytest
 ```
 
+Scanned PDF / image resumes need **RapidOCR** (`rapidocr-onnxruntime` in `requirements.txt`; Python **3.10–3.12** recommended). Without it, digital PDF/DOCX still parse; OCR pages fall back to Tesseract if installed, else thin-text skips.
 ## Common workflows
 
 ### Run frontend only
@@ -101,18 +102,9 @@ node scripts/db-preflight.js
 python scripts/database/test_db_connection.py
 ```
 
-### Schema migrations (Alembic — Current)
+### Schema migrations (Alembic — sole source of truth)
 
-Consolidated SQL lives in `apps/backend/schema_pg/`:
-
-| File | Contents |
-|------|----------|
-| `01_core.sql` | Core tables (auth, jobs, applications, raw_files, parsing, …) |
-| `02_domain.sql` | Domain freeze, interviews, RBAC cleanup, keywords, blobs |
-| `03_integrations.sql` | Job-board integrations, OAuth, site assets |
-| `04_seeds.sql` | Seed admin / CEO accounts |
-
-Alembic applies these and tracks versions:
+Schema changes live only under `apps/backend/alembic/`. The squashed baseline is `20260810_s001` (SQL in `alembic/baseline/`).
 
 ```bash
 cd apps/backend
@@ -121,7 +113,7 @@ alembic current
 alembic revision -m "describe_change"
 ```
 
-Do **not** add new numbered SQL migration files. See `apps/backend/alembic/README.md`.
+Fresh local DB: create an empty Postgres database, then `alembic upgrade head`. Do **not** add parallel SQL schema trees. See `apps/backend/alembic/README.md`.
 
 ## Environment files
 
@@ -135,10 +127,32 @@ Copy from the matching `.env.example`, then fill secrets. Never commit `.env` fi
 
 Optional integration vars (see `apps/backend/.env.example`):
 
-- `INTEGRATION_SECRETS_KEY` — Fernet key (or any secret string) for encrypting job-board credentials
+- `INTEGRATION_SECRETS_KEY` — Fernet key (or any secret string) for encrypting job-board / OAuth credentials (required in production; do not rely on plaintext fallback)
 - `INTEGRATION_MAX_RETRIES` — default `3`
 - `INTEGRATION_RETRY_BASE_SECONDS` — default `1.0`
 - `INTEGRATION_WORKER_MAX_WORKERS` — default `4`
+- `INTEGRATION_AUTO_SYNC_INTERVAL_SECONDS` — default `900` (min 60)
+- `RUN_INTEGRATION_AUTO_SYNC` — set `1` only in the dedicated scheduler process (not in Gunicorn web workers)
+- `REDIS_URL` — set when `GUNICORN_WORKERS>1` **and** you use Google Calendar OAuth or need a **global** public resume-parse rate limit. JWT/OTP/outbox do not need Redis. If unset, OAuth `state` and parse rate limits are per-worker memory.
+
+### Production processes (Gunicorn + scheduler)
+
+Full sequenced release (stop stale writers, migrate once, Gunicorn **with** `-c`, one scheduler, optional outbox): **[PRODUCTION_RELEASE.md](PRODUCTION_RELEASE.md)**.
+
+Gunicorn runs multiple web workers. Integration **auto-sync** is singleton work and must not start inside every worker. **Never** omit `-c gunicorn.conf.py`. Production web processes require `MIGRATIONS_ALREADY_APPLIED=true` and verify `alembic current == head`; they never run migrations. Without `-c` and without the flag, production startup fails closed.
+
+```bash
+# Web API (from apps/backend)
+gunicorn -c gunicorn.conf.py wsgi:app
+
+# Dedicated auto-sync (separate process)
+RUN_INTEGRATION_AUTO_SYNC=1 python -m app.domains.integrations.scheduler
+
+# Optional dedicated outbox drain (web workers already drain via SKIP LOCKED)
+python -m app.domains.integrations.worker
+```
+
+Web workers still start the in-memory integration task queue (request-path publish). Only the auto-sync loop is gated.
 
 ### Google Calendar interview scheduling (Current)
 
@@ -157,17 +171,23 @@ Recruiter connect UI: **Settings → Integrations → Google Calendar**.
 
 **Future:** interview reminder workers (hooks stubbed as `on_invite_sent` / `on_interview_scheduled`).
 
-### Media + automatic backups
+### External job boards (LinkedIn / Naukri / custom HTTP)
 
-Durable files and backups live **outside** the project (`…/hcip-data/`). Full command reference (backup, offload, restore, env keys):
+PostgreSQL `external_jobs` is the durable outbox. Do not add Celery/RabbitMQ/Kafka for this.
+
+- **LinkedIn:** official Job Posting API adapter (`POST /rest/simpleJobPostings`, operations CREATE/UPDATE/CLOSE/RENEW, correlation id `externalJobPostingId`). Live publish requires LinkedIn Talent Solutions partner access. Until then the UI shows **Provider access required**, never Published.
+- **Naukri:** no public posting API in this repo. Same access-required status.
+- **Custom HTTP:** real outbound HTTP using company `baseUrl` + endpoints. CREATE is at-least-once if the remote response is lost.
+
+### Media storage
+
+Durable files live **outside** the project (`…/hcip-data/`). Postgres backups are owned by the DB team. Full command reference (seed, offload, env keys):
 
 → **[MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md)**
 
-Quick force backup:
-
 ```bash
-cd apps/backend
-python -m app.database.scripts.backup_hcip --force
+# From repo root — seed hero / ensure media dirs
+python scripts/ensure_media_assets.py --force
 ```
 
 ## Where to put new code
@@ -218,11 +238,12 @@ Run all AI tests: `cd ai && pytest`
 | Topic | Document |
 |-------|----------|
 | Docs index | [README.md](README.md) |
+| Unique workflows | [WORKFLOWS.md](WORKFLOWS.md) |
 | User manuals (screenshots) | [user-manual/README.md](user-manual/README.md) |
-| Architecture / engineering archive (optional) | [ARCHITECTURE.md](ARCHITECTURE.md) · [ENGINEERING.md](ENGINEERING.md) |
+| Document intelligence | [DOCUMENT_INTELLIGENCE.md](DOCUMENT_INTELLIGENCE.md) |
+| AI workflows / ADRs | [AI_WORKFLOW.md](AI_WORKFLOW.md) · [AI_DATA_PIPELINE.md](AI_DATA_PIPELINE.md) · [ADRS.md](ADRS.md) |
 | AI platform overview | [ai/README.md](../ai/README.md) |
 | TOON ontology | [ai/toon/README.md](../ai/toon/README.md) |
-| Data pipeline | [ai/docs/DATA_PIPELINE.md](../ai/docs/DATA_PIPELINE.md) |
 | Contributing | [CONTRIBUTING.md](../CONTRIBUTING.md) |
 
 ## Troubleshooting

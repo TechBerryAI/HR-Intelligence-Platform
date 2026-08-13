@@ -5,11 +5,62 @@ import { tokenService } from '@/core/auth/tokenService.js'
 import PanelShell, { usePanelBasePath } from '@/features/organization/pages/org/PanelShell.jsx'
 import JobDescriptionView from '@/shared/components/JobDescriptionView.jsx'
 import { getApplicationDisplayMatch } from '@/features/analytics/components/MatchExplanation'
-import { FiArrowLeft, FiBriefcase, FiMapPin, FiDollarSign, FiUser, FiCalendar, FiUsers } from 'react-icons/fi'
+import { FiArrowLeft, FiBriefcase, FiMapPin, FiDollarSign, FiUser, FiCalendar, FiUsers, FiClock, FiVideo } from 'react-icons/fi'
+
+const JOB_TABS = ['details', 'candidates', 'interviews']
 
 function formatDate(ts) {
   if (!ts) return '—'
   return new Date(ts).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+function formatDateTime(ts) {
+  if (!ts) return '—'
+  return new Date(ts).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function formatInterviewWhen(ts) {
+  if (!ts) return { date: '—', time: '' }
+  const d = new Date(ts)
+  return {
+    date: d.toLocaleDateString('en-US', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    }),
+    time: d.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+    }),
+  }
+}
+
+function inviteEmailBadge(payload) {
+  const failed = String(payload?.status || '').toLowerCase() === 'failed'
+  const sent = !!payload?.sent || String(payload?.status || '').toLowerCase() === 'sent'
+  const label = failed ? 'Failed' : sent ? 'Sent' : 'Pending'
+  const cls = failed
+    ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+    : sent
+      ? 'bg-[var(--ei-tone-success-bg)] text-[var(--ei-tone-success)] border border-[var(--ei-tone-success-border)]'
+      : 'bg-[var(--ei-tone-warning-bg,rgba(245,158,11,0.12))] text-[var(--ei-tone-warning)] border border-[var(--ei-tone-warning-border,rgba(245,158,11,0.25))]'
+  return (
+    <div>
+      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
+        {label}
+      </span>
+      {payload?.sentAt && sent && (
+        <p className="text-[11px] text-[var(--ei-text-muted)] mt-1">{formatDateTime(payload.sentAt)}</p>
+      )}
+    </div>
+  )
 }
 
 const SCORE_FILTERS = [
@@ -42,10 +93,15 @@ export default function HeadHrJobDetail() {
   const navigate = useNavigate()
   const basePath = usePanelBasePath()
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = searchParams.get('tab') === 'candidates' ? 'candidates' : 'details'
+  const rawTab = searchParams.get('tab')
+  const tab = rawTab === 'emails' ? 'interviews' : (JOB_TABS.includes(rawTab) ? rawTab : 'details')
   const [job, setJob] = useState(null)
   const [applicants, setApplicants] = useState([])
+  const [interviews, setInterviews] = useState([])
+  const [shortlistedInvites, setShortlistedInvites] = useState([])
   const [loading, setLoading] = useState(true)
+  const [scheduleLoading, setScheduleLoading] = useState(false)
+  const [scheduleError, setScheduleError] = useState('')
   const [error, setError] = useState('')
   const [selectedFilter, setSelectedFilter] = useState('all')
 
@@ -78,6 +134,36 @@ export default function HeadHrJobDetail() {
     return () => { cancelled = true }
   }, [jdid])
 
+  useEffect(() => {
+    if (tab !== 'interviews' || !jdid) return undefined
+    let cancelled = false
+    async function loadSchedule() {
+      setScheduleLoading(true)
+      setScheduleError('')
+      try {
+        const token = tokenService.getToken()
+        const [interviewsRes, emailsRes] = await Promise.all([
+          apiRequest(`/api/head-hr/jobs/${encodeURIComponent(jdid)}/interviews`, { method: 'GET', token }),
+          apiRequest(`/api/head-hr/jobs/${encodeURIComponent(jdid)}/emails`, { method: 'GET', token }),
+        ])
+        if (!cancelled) {
+          setInterviews(interviewsRes?.interviews || [])
+          setShortlistedInvites(emailsRes?.emails || [])
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setInterviews([])
+          setShortlistedInvites([])
+          setScheduleError(err?.message || 'Failed to load interview schedule')
+        }
+      } finally {
+        if (!cancelled) setScheduleLoading(false)
+      }
+    }
+    loadSchedule()
+    return () => { cancelled = true }
+  }, [tab, jdid])
+
   const filterCounts = useMemo(() => {
     const counts = {}
     for (const filter of SCORE_FILTERS) {
@@ -107,6 +193,62 @@ export default function HeadHrJobDetail() {
         return scoreB - scoreA
       })
   }, [applicants, selectedFilter])
+
+  const scheduleRows = useMemo(() => {
+    const byApp = new Map()
+    const appKey = (id) => (id == null ? '' : String(id))
+
+    const resolveInviteEmail = (inviteEmail, interview) => {
+      const payload = inviteEmail || {}
+      const sent = !!payload.sent || String(payload.status || '').toLowerCase() === 'sent'
+      if (sent) return payload
+      const ivStatus = String(interview?.status || '').toLowerCase()
+      if (ivStatus === 'scheduled' || ivStatus === 'invited') {
+        return {
+          status: 'Sent',
+          sent: true,
+          sentAt: interview?.createdAt || interview?.scheduledAt || null,
+          source: 'inferred',
+        }
+      }
+      return payload
+    }
+
+    for (const invite of shortlistedInvites) {
+      const key = appKey(invite.applicationId)
+      if (!key) continue
+      byApp.set(key, {
+        applicationId: invite.applicationId,
+        candidateId: invite.candidateId,
+        candidateName: invite.candidateName,
+        candidateEmail: invite.candidateEmail,
+        inviteEmail: invite.inviteEmail || {},
+        interview: null,
+      })
+    }
+    for (const iv of interviews) {
+      const key = appKey(iv.applicationId)
+      if (!key) continue
+      const existing = byApp.get(key) || {
+        applicationId: iv.applicationId,
+        candidateId: iv.candidateId,
+        candidateName: iv.candidateName,
+        candidateEmail: iv.candidateEmail,
+        inviteEmail: {},
+        interview: null,
+      }
+      existing.interview = iv
+      if (!existing.candidateName) existing.candidateName = iv.candidateName
+      if (!existing.candidateEmail) existing.candidateEmail = iv.candidateEmail
+      if (!existing.candidateId) existing.candidateId = iv.candidateId
+      existing.inviteEmail = resolveInviteEmail(existing.inviteEmail, iv)
+      byApp.set(key, existing)
+    }
+    return Array.from(byApp.values()).map((row) => ({
+      ...row,
+      inviteEmail: resolveInviteEmail(row.inviteEmail, row.interview),
+    }))
+  }, [shortlistedInvites, interviews])
 
   if (loading) {
     return (
@@ -141,7 +283,11 @@ export default function HeadHrJobDetail() {
   const labelClass = 'org-section-label'
 
   const setTab = (next) => {
-    setSearchParams(next === 'candidates' ? { tab: 'candidates' } : {}, { replace: true })
+    if (next === 'details') {
+      setSearchParams({}, { replace: true })
+      return
+    }
+    setSearchParams({ tab: next }, { replace: true })
   }
 
   const openCandidate = (candidateId) => {
@@ -183,6 +329,7 @@ export default function HeadHrJobDetail() {
           {[
             { id: 'details', label: 'Job Details' },
             { id: 'candidates', label: `Candidates (${applicants.length})` },
+            { id: 'interviews', label: 'Interview Schedule' },
           ].map(({ id, label }) => (
             <button
               key={id}
@@ -206,7 +353,7 @@ export default function HeadHrJobDetail() {
           ))}
         </div>
 
-        {tab === 'details' ? (
+        {tab === 'details' && (
           <div className="space-y-4">
             <div className={sectionClass}>
               <h2 className={labelClass}>Details</h2>
@@ -269,7 +416,9 @@ export default function HeadHrJobDetail() {
               </div>
             </div>
           </div>
-        ) : (
+        )}
+
+        {tab === 'candidates' && (
           <div className={sectionClass}>
             <div className="flex items-center justify-between gap-3 mb-4">
               <h2 className={`${labelClass} flex items-center gap-2`}>
@@ -357,6 +506,136 @@ export default function HeadHrJobDetail() {
                   </table>
                 </div>
               </>
+            )}
+          </div>
+        )}
+
+        {tab === 'interviews' && (
+          <div className={sectionClass}>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h2 className={`${labelClass} flex items-center gap-2`}>
+                <FiClock className="w-4 h-4" /> Shortlist invites & scheduling
+              </h2>
+              <span className="text-xs text-[var(--ei-text-muted)]">
+                {scheduleRows.length} shortlisted candidate{scheduleRows.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            {scheduleLoading ? (
+              <div className="space-y-2 py-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="org-skeleton" />
+                ))}
+              </div>
+            ) : scheduleError ? (
+              <p className="text-sm text-red-400 py-4">{scheduleError}</p>
+            ) : scheduleRows.length === 0 ? (
+              <p className="text-sm text-[var(--ei-text-muted)] py-4">
+                No shortlisted candidates yet. When someone is shortlisted, their combined shortlist + booking invite appears here, along with any booked interview slot.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-[var(--ei-border-primary)] text-left">
+                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Candidate</th>
+                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Invite email</th>
+                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Interview</th>
+                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Date</th>
+                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Time</th>
+                      <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Recruiter</th>
+                      <th className="pb-2.5 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Meet</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--ei-border-primary)]">
+                    {scheduleRows.map((row) => {
+                      const iv = row.interview
+                      const status = String(iv?.status || '')
+                      const isScheduled = status.toLowerCase() === 'scheduled'
+                      const when = isScheduled ? formatInterviewWhen(iv.scheduledAt) : null
+                      return (
+                        <tr
+                          key={row.applicationId || row.candidateId}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => row.candidateId && openCandidate(row.candidateId)}
+                          onKeyDown={(e) => {
+                            if ((e.key === 'Enter' || e.key === ' ') && row.candidateId) {
+                              e.preventDefault()
+                              openCandidate(row.candidateId)
+                            }
+                          }}
+                          className="cursor-pointer transition-colors duration-[180ms] hover:bg-[var(--ei-surface-hover)] focus:outline-none focus-visible:bg-[var(--ei-surface-hover)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#3AA9FF]/35"
+                        >
+                          <td className="py-3 pr-3">
+                            <p className="text-[var(--ei-text-primary)] font-medium">{row.candidateName}</p>
+                            <p className="text-xs text-[var(--ei-text-muted)]">{row.candidateEmail || '—'}</p>
+                          </td>
+                          <td className="py-3 pr-3">{inviteEmailBadge(row.inviteEmail)}</td>
+                          <td className="py-3 pr-3">
+                            {iv ? (
+                              <>
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                    isScheduled
+                                      ? 'bg-[var(--ei-tone-success-bg)] text-[var(--ei-tone-success)] border border-[var(--ei-tone-success-border)]'
+                                      : 'bg-[var(--ei-surface-hover)] text-[var(--ei-text-secondary)] border border-[var(--ei-border-primary)]'
+                                  }`}
+                                >
+                                  {status || '—'}
+                                </span>
+                                {!isScheduled && iv.openSlots > 0 && (
+                                  <p className="text-[11px] text-[var(--ei-text-muted)] mt-1">
+                                    {iv.openSlots} open slot{iv.openSlots === 1 ? '' : 's'}
+                                  </p>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-[var(--ei-text-muted)] text-xs">Awaiting slots</span>
+                            )}
+                          </td>
+                          <td className="py-3 pr-3">
+                            {isScheduled ? (
+                              <p className="text-[var(--ei-text-primary)] font-medium">{when.date}</p>
+                            ) : iv?.inviteExpiresAt ? (
+                              <p className="text-[var(--ei-text-muted)] text-xs">
+                                Link expires {formatDateTime(iv.inviteExpiresAt)}
+                              </p>
+                            ) : (
+                              <span className="text-[var(--ei-text-muted)]">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 pr-3">
+                            {isScheduled ? (
+                              <p className="text-[var(--ei-text-primary)] font-semibold tabular-nums">{when.time}</p>
+                            ) : (
+                              <span className="text-[var(--ei-text-muted)]">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 pr-3 text-[var(--ei-text-secondary)]">
+                            {iv?.recruiterName || iv?.assignedTo || '—'}
+                          </td>
+                          <td className="py-3">
+                            {iv?.meetLink ? (
+                              <a
+                                href={iv.meetLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1.5 text-[var(--ei-text-primary)] hover:underline"
+                              >
+                                <FiVideo className="w-3.5 h-3.5" />
+                                Join
+                              </a>
+                            ) : (
+                              <span className="text-[var(--ei-text-muted)]">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}
