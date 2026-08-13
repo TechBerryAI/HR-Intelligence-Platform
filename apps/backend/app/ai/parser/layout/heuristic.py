@@ -51,6 +51,8 @@ _HEADER_ALIASES = {
     'objective': 'Summary',
     'profile': 'Summary',
     'about me': 'Summary',
+    'key project': 'Projects',
+    'key projects': 'Projects',
 }
 
 

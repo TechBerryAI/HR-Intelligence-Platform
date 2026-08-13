@@ -49,7 +49,11 @@ Rules:
 - person.name: extract when clearly a person name; "" if uncertain
 - person.location: city/region if present (e.g. "Austin, TX", "Remote", "Bengaluru")
 - skills: array of skill name strings (deduplicated)
-- experience: every role you can find. Dates as "YYYY-MM" when month known, else "YYYY". Use "Present" for current roles. Include description bullets joined into one string when available.
+- experience: every WORK job in the Experience section (not Projects, not training-only "Professional Development"). Dates as "YYYY-MM" when month known, else "YYYY". Use "Present" for current roles. Include description bullets joined into one string when available.
+- title = job title only (Database Administrator, SDE Intern). company = employer only (Infosenseglobal, Acme Pvt Ltd). NEVER put the employer in title or the title in company.
+- Stacked Indian/PDF layout is common: line 1 = title, line 2 = "Company | Mon YYYY – Mon YYYY|Present". Treat that as one job.
+- "Company | Dec 2024 – Present" is company + dates, not a job title. "11/2022 to Current" on its own line is dates for the nearest title/company.
+- Skip duty sentences (Administered…, Led…, Improved…) — those belong in description, not as extra jobs.
 - education: degree and institution separately. Put major/specialization in "field", NEVER in institution. year/from/to for dates; gpa/cgpa in "gpa"
 - certifications: strings or {"name":"...","issuer":"..."} objects
 - languages: strings or {"language":"","proficiency":""} objects

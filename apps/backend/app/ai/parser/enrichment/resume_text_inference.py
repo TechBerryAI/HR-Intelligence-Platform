@@ -52,6 +52,7 @@ SECTION_HEADERS = frozenset({
     'technical skill', 'core skills', 'core skill', 'key skills', 'key skill',
     'skill set', 'skills set', 'skills and abilities', 'abilities',
     'tools', 'technologies', 'tech stack', 'project', 'projects',
+    'key project', 'key projects',
     'certifications', 'certificates', 'certifications and licenses', 'licenses',
     'languages', 'awards', 'interests',
     'references', 'contact', 'resume', 'curriculum vitae', 'cv', 'about me',
@@ -202,8 +203,8 @@ def is_plausible_job_title(title: str | None) -> bool:
         return False
     if is_biodata_or_address_line(t):
         return False
-    # Lowercase multi-word prose (e.g. "to help the company achieve…")
-    if t[0].islower() and len(words) >= 4:
+    # Lowercase lines are duty wrap / prose, not titles
+    if t[0].islower():
         return False
     # Duty/KPI fragments: "Trends, and Revenue KPIs…" — require a real title cue
     if ',' in t and not _JOB_TITLE_CUE.search(t):
@@ -1228,17 +1229,22 @@ def extract_experience_from_text(text: str, max_items: int = 10) -> list[dict[st
     experiences: list[dict[str, Any]] = []
     # Require section header at line start so mid-sentence "experience" (e.g. objective) is ignored.
     block_match = re.search(
-        r'(?i)(?:^|\n)\s*(?:\*\*)?(?:work\s+experience|professional\s+experience|experience|'
+        r'(?im)(?:^|\n)\s*(?:\*\*)?(?:work\s+experience|professional\s+experience|experience|'
         r'employment|work\s+history|internships?|industrial\s+training|summer\s+internship)'
         r'(?:\*\*)?\s*:?\s*'
         r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:education|academic\s+background|skills|skill\s*sets?|'
         r'technical\s+skills?|projects?|certifications?|'
-        r'personal\s+details|personal\s+information|biodata|declaration)\b|\Z)',
+        r'personal\s+details|personal\s+information|biodata|declaration)(?:\*\*)?\s*:?\s*$|\Z)',
         text,
     )
     if not block_match:
         return []
     raw = block_match.group(1) or ''
+    _title_cue = re.compile(
+        r'(?i)\b(?:intern|engineer|developer|analyst|trainee|manager|officer|'
+        r'associate|consultant|lead|executive|specialist|administrator|admin|'
+        r'dba|architect|designer|scientist|director)\b'
+    )
     for line in raw.split('\n'):
         stripped = re.sub(r'^[\s•·\-\*]+', '', line.strip())
         stripped = re.sub(r'^\d+[\.\)]\s*', '', stripped).strip()
@@ -1247,14 +1253,36 @@ def extract_experience_from_text(text: str, max_items: int = 10) -> list[dict[st
         if is_biodata_or_address_line(stripped):
             continue
         from_d, to_d = extract_date_range_from_line(stripped)
-        line_wo_dates = DATE_RANGE_PATTERN.sub('', stripped).strip(' |-–—,')
-        parts = re.split(r'\s+at\s+|\s+@\s+|,\s+', line_wo_dates, maxsplit=1)
-        title = parts[0].strip() if parts else line_wo_dates
+        leftover = DATE_RANGE_PATTERN.sub('', stripped).strip(' |-–—,')
+        has_cue = bool(_title_cue.search(leftover) or re.search(r'(?i)\bintern\b', leftover))
+        if from_d and leftover and not has_cue:
+            if experiences and not str(experiences[-1].get('company') or '').strip():
+                experiences[-1]['company'] = leftover[:200]
+                if not experiences[-1].get('from'):
+                    experiences[-1]['from'] = from_d
+                    experiences[-1]['to'] = to_d
+            else:
+                experiences.append({
+                    'title': '',
+                    'company': leftover[:200],
+                    'from': from_d,
+                    'to': to_d,
+                    'years': None,
+                    'description': '',
+                })
+            if len(experiences) >= max_items:
+                break
+            continue
+        if not has_cue:
+            if leftover and experiences and not str(experiences[-1].get('company') or '').strip() and len(leftover.split()) <= 6:
+                experiences[-1]['company'] = leftover[:200]
+            continue
+        parts = re.split(r'\s+at\s+|\s+@\s+|,\s+', leftover, maxsplit=1)
+        title = parts[0].strip() if parts else leftover
         company = parts[1].strip() if len(parts) > 1 else ''
         if company and is_biodata_or_address_line(company):
             company = ''
         if not is_plausible_job_title(title) and not re.search(r'(?i)\bintern\b', title):
-            # Description / objective / biodata bullets are not roles
             continue
         if title:
             experiences.append({
