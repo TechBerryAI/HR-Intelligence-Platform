@@ -99,6 +99,13 @@ def _resume_deterministic_is_strong(profile, coverage=None) -> bool:
         missing = getattr(coverage, 'missing_with_evidence', None) or []
         if any(f in _RESUME_CORE_COVERAGE for f in missing):
             return False
+    try:
+        from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+        if experience_is_incomplete(getattr(profile, 'experience', None) or [], ''):
+            return False
+    except Exception:
+        pass
     return True
 
 
@@ -154,7 +161,14 @@ def _apply_resume_repair(profile, raw_text: str):
             or (repaired.personal.summary or '').strip(),
         }
     )
-    experience = list(original.experience) if original.experience else list(repaired.experience)
+    from app.ai.document_intelligence.experience_quality import merge_experience_rows
+
+    experience = merge_experience_rows(
+        list(original.experience or []),
+        list(repaired.experience or []),
+    )
+    if not experience:
+        experience = list(original.experience or repaired.experience or [])
     education = list(original.education) if original.education else list(repaired.education)
     skills = list(original.skills) if original.skills else list(repaired.skills)
     # Ignore repair-invented junk links (e.g. https://B.Tech)
@@ -496,6 +510,23 @@ def parse_jd_text_to_canonical(text: str, *, max_workers: int | None = None):
     return profile, form, toon
 
 
+def _refresh_resume_from_cached_text(raw_text: str):
+    """Re-run deterministic resume parse on cached extract so parser fixes apply immediately."""
+    from app.ai.document_intelligence.coverage import recover_resume_profile_gaps
+
+    text = (raw_text or '').strip()
+    if len(text) < 30:
+        return None
+    sections = detect_sections(text, 'resume')
+    profile = parse_resume_from_sections(sections, text)
+    profile = apply_knowledge_to_candidate(profile)
+    profile, _ = recover_resume_profile_gaps(profile, text)
+    profile = sanitize_candidate_profile(profile, source_text=text)
+    form = map_candidate_to_form(profile)
+    toon = candidate_to_toon(profile)
+    return profile, form, toon
+
+
 def _cache_hit_response(
     cached: dict,
     *,
@@ -512,12 +543,24 @@ def _cache_hit_response(
             'UPDATE parsed_resumes SET candidate_id = ? WHERE id = ?',
             (candidate_id, cached['parsed_id']),
         )
+    toon = cached['toon']
+    form = None
+    canonical = None
+    if kind == 'resume':
+        try:
+            refreshed = _refresh_resume_from_cached_text(cached.get('raw_text') or '')
+            if refreshed:
+                profile, form_dto, toon = refreshed
+                canonical = profile.model_dump()
+                form = form_dto.to_autofill_dict()
+        except Exception:
+            toon = cached['toon']
     body = {
         'status': 'ok',
         'raw_file_id': cached['raw_file_id'],
         'parsed_id': cached['parsed_id'],
         'confidence': cached['confidence'],
-        'toon': cached['toon'],
+        'toon': toon,
         'is_duplicate': True,
         'model_version': cached['model_version'],
         'partial': 'text-fallback' in str(cached.get('model_version') or ''),
@@ -528,6 +571,10 @@ def _cache_hit_response(
             (cached.get('raw_text') or '').encode('utf-8', errors='ignore')
         ).hexdigest(),
     }
+    if form is not None:
+        body['form'] = form
+    if canonical is not None:
+        body['canonical'] = canonical
     if kind == 'resume':
         body['public_uploader_id'] = uploader_id if uploader_role == 'public' else None
     return body, 200
@@ -555,7 +602,9 @@ def _run_resume(
     _emit(parse_job_id, 'cache', 'started', 'Checking parse cache', on_stage=on_stage)
     file_hash = compute_file_hash(file_data)
     cached = get_cached_parsing_result(file_hash, uploader_id, 'resume')
-    if not cached and use_content_hash_cache and uploader_role == 'public':
+    # Public apply uses a new uploader id each time. Do not reuse another
+    # visitor's cached TOON — stale experience mapping survives parser fixes.
+    if not cached and use_content_hash_cache and uploader_role != 'public':
         cached = get_cached_parsing_result_by_hash(file_hash, 'resume')
     if cached:
         _emit(parse_job_id, 'cache', 'completed', 'Cache hit', on_stage=on_stage)
@@ -759,7 +808,7 @@ def _run_resume(
 
     confidence = calculate_confidence(toon, 'resume')
     model_version = _model_version_label()
-    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v7-resume-coverage')
+    cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', 'canonical-v8-exp-layout')
     if not used_llm:
         model_version = f'{model_version}+{cache_tag}+deterministic'
     else:

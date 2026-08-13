@@ -76,13 +76,13 @@ def _has_education_evidence(text: str) -> bool:
 def _experience_section_text(text: str) -> str:
     """Slice Experience/Internship body from raw text for grounded re-parse."""
     m = re.search(
-        r'(?is)(?:^|\n)\s*(?:\*\*)?(?:work\s+experience|professional\s+experience|'
+        r'(?ims)(?:^|\n)\s*(?:\*\*)?(?:work\s+experience|professional\s+experience|'
         r'experience|employment|work\s+history|internships?|internship\s+experience|'
         r'industrial\s+trainings?|summer\s+internship|internship\s*/\s*training[^\n]*|'
         r'trainings?|apprenticeships?)\b[^\n]*\n'
         r'(.*?)(?=\n\s*(?:\*\*)?(?:education|academic|skills|skill\s*sets?|'
         r'technical\s+skills?|projects?|certifications?|personal\s+details|'
-        r'personal\s+information|biodata|declaration)\b|\Z)',
+        r'personal\s+information|biodata|declaration)(?:\*\*)?\s*:?\s*$|\Z)',
         text or '',
     )
     return (m.group(1) if m else '').strip()
@@ -266,12 +266,22 @@ def recover_resume_profile_gaps(
     else:
         fields.append(FieldCoverage('education', 'missing_no_evidence', False))
 
-    # Experience: recover when section evidence exists but rows empty
+    # Experience: recover when empty, or replace incomplete rows with a better section parse
     exp_list = list(data.get('experience') or [])
     exp_ev = has_experience_section_evidence(text)
-    if exp_list:
-        fields.append(FieldCoverage('experience', 'filled', True))
-    elif exp_ev:
+
+    def _complete_exp_count(rows: list) -> int:
+        n = 0
+        for e in rows:
+            if isinstance(e, dict):
+                role, company = str(e.get('role') or '').strip(), str(e.get('company') or '').strip()
+            else:
+                role, company = (getattr(e, 'role', '') or '').strip(), (getattr(e, 'company', '') or '').strip()
+            if role and company:
+                n += 1
+        return n
+
+    if exp_ev:
         section_body = _experience_section_text(text)
         parsed_exp = parse_experience(section_body, text) if section_body else []
         if not parsed_exp:
@@ -295,14 +305,44 @@ def recover_resume_profile_gaps(
                     or str(e.get('company') or '').strip()
                 )
             ]
-        if parsed_exp:
+        parsed_complete = _complete_exp_count(parsed_exp)
+        existing_complete = _complete_exp_count(exp_list)
+        better = parsed_exp and (
+            not exp_list
+            or parsed_complete > existing_complete
+            or (parsed_complete >= existing_complete and len(parsed_exp) > len(exp_list))
+        )
+        if better:
             data['experience'] = [e.model_dump() for e in parsed_exp]
             recovered.append('experience')
-            fields.append(
-                FieldCoverage('experience', 'recovered', True, f'{len(parsed_exp)} rows')
-            )
+            from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+            if experience_is_incomplete(parsed_exp, text):
+                fields.append(
+                    FieldCoverage(
+                        'experience', 'missing_with_evidence', True, f'{len(parsed_exp)} rows'
+                    )
+                )
+            else:
+                fields.append(
+                    FieldCoverage('experience', 'recovered', True, f'{len(parsed_exp)} rows')
+                )
+        elif exp_list:
+            from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+            if experience_is_incomplete(exp_list, text):
+                fields.append(FieldCoverage('experience', 'missing_with_evidence', True))
+            else:
+                fields.append(FieldCoverage('experience', 'filled', True))
         else:
             fields.append(FieldCoverage('experience', 'missing_with_evidence', True))
+    elif exp_list:
+        from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+        if experience_is_incomplete(exp_list, text):
+            fields.append(FieldCoverage('experience', 'missing_with_evidence', True))
+        else:
+            fields.append(FieldCoverage('experience', 'filled', True))
     else:
         fields.append(FieldCoverage('experience', 'missing_no_evidence', False))
 
@@ -341,6 +381,8 @@ def resume_has_recoverable_gaps(profile: CandidateProfile, raw_text: str) -> boo
     )
     if not edu_ok and _has_education_evidence(text):
         return True
-    if not profile.experience and has_experience_section_evidence(text):
+    from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+    if experience_is_incomplete(profile.experience, text):
         return True
     return False

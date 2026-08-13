@@ -32,6 +32,14 @@ def _needs_resume_semantic(profile_dict: dict[str, Any], raw_text: str = '') -> 
     # Skip AI when deterministic coverage is strong (fresher: education+skills OK)
     if not (has_identity and has_skills and (has_exp or has_edu)):
         return True
+    if raw_text:
+        try:
+            from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+            if experience_is_incomplete(profile_dict.get('experience') or [], raw_text):
+                return True
+        except Exception:
+            pass
     # Still run residual LLM when contact/location/edu incomplete but source has evidence
     if raw_text:
         try:
@@ -141,6 +149,16 @@ def enrich_resume_semantic(
     if not unresolved_text or len(unresolved_text.strip()) < 40:
         return profile
 
+    from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+    if allow_experience_fill and experience_is_incomplete(profile.experience, unresolved_text):
+        from app.ai.document_intelligence.semantic.experience import extract_and_merge_experience
+
+        profile = extract_and_merge_experience(profile, unresolved_text)
+        data = profile.model_dump()
+        if not force and not _needs_resume_semantic(data, unresolved_text):
+            return sanitize_candidate_profile(profile, source_text=unresolved_text)
+
     exp_key = (
         'experience (list of {role,company,start,end,description}), '
         if allow_experience_fill
@@ -197,12 +215,13 @@ def enrich_resume_semantic(
             or raw.get('education')
             or [],
         }
-        # Only fill experience from AI when Experience section had content
-        if (
-            allow_experience_fill
-            and not profile.experience
-            and isinstance(raw.get('experience'), list)
-        ):
+        # Fill or replace weak experience from AI when the Experience section exists
+        from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+        exp_weak = allow_experience_fill and experience_is_incomplete(
+            profile.experience, unresolved_text or ''
+        )
+        if exp_weak and isinstance(raw.get('experience'), list):
             partial_toon['experience'] = []
             for item in raw['experience']:
                 if not isinstance(item, dict):
@@ -222,8 +241,16 @@ def enrich_resume_semantic(
             partial_toon['summary'] = str(raw['summary'])
 
         merged = candidate_profile_from_toon(partial_toon)
-        # Always prefer deterministic contact; lock experience when section was empty
-        exp_keep = profile.experience if not allow_experience_fill else merged.experience
+        from app.ai.document_intelligence.experience_quality import (
+            ground_experience_rows,
+            merge_experience_rows,
+        )
+
+        if not allow_experience_fill:
+            exp_keep = profile.experience
+        else:
+            ai_exp = ground_experience_rows(list(merged.experience or []), unresolved_text or '')
+            exp_keep = merge_experience_rows(list(profile.experience or []), ai_exp)
         merged = merged.model_copy(
             update={
                 'personal': merged.personal.model_copy(

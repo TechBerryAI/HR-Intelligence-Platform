@@ -405,10 +405,10 @@ def store_parsed_jd(
     return parsed_id
 
 
-def _cache_model_acceptable(model_version: str | None) -> bool:
+def _cache_model_acceptable(model_version: str | None, document_type: str = 'resume') -> bool:
     """
     Skip stale cache entries from pre-canonical / broken parsers.
-    Require DOCUMENT_INTELLIGENCE_CACHE_TAG (default 'canonical') in model_version.
+    Require DOCUMENT_INTELLIGENCE_CACHE_TAG (or kind-specific default) in model_version.
     Bulk-seeded parses (model_version bulk+...) never feed single-parse cache.
     """
     import os
@@ -416,10 +416,15 @@ def _cache_model_acceptable(model_version: str | None) -> bool:
     mv = str(model_version or '')
     if mv.lower().startswith('bulk+') or '+bulk' in mv.lower():
         return False
-    tag = (os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG') or 'canonical-v6-jd-coverage').strip()
-    if not tag:
-        return True
-    return tag.lower() in mv.lower()
+    env_tag = (os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG') or '').strip()
+    if env_tag:
+        return env_tag.lower() in mv.lower()
+    default = (
+        'canonical-v8-exp-layout'
+        if document_type == 'resume'
+        else 'canonical-v6-jd-coverage'
+    )
+    return default.lower() in mv.lower()
 
 
 def get_cached_parsing_result(
@@ -466,7 +471,7 @@ def get_cached_parsing_result(
         # Older DBs without bulk_session_id — still reject bulk+ model_version below
         result = _fetch('')
     
-    if result and _cache_model_acceptable(result.get('model_version')):
+    if result and _cache_model_acceptable(result.get('model_version'), document_type):
         return {
             'parsed_id': result['id'],
             'raw_file_id': result['raw_file_id'],
@@ -524,7 +529,7 @@ def get_cached_parsing_result_by_hash(
     except Exception:
         result = _fetch('')
 
-    if result and _cache_model_acceptable(result.get('model_version')):
+    if result and _cache_model_acceptable(result.get('model_version'), document_type):
         if str(result.get('uploader_id') or '').startswith('bulk:'):
             return None
         return {

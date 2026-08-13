@@ -181,7 +181,9 @@ _INSTITUTION_AS_JOB_RE = re.compile(
 )
 _JOB_TITLE_CUE_RE = re.compile(
     r'(?i)\b(?:intern|engineer|developer|analyst|trainee|manager|officer|'
-    r'associate|consultant|lead|executive|specialist)\b'
+    r'associate|consultant|lead|executive|specialist|administrator|admin|'
+    r'architect|dba|designer|scientist|director|head|programmer|'
+    r'coordinator|supervisor)\b'
 )
 
 
@@ -294,6 +296,18 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
             if left.strip() and right.strip() and len(left.split()) <= 8:
                 role, company = left.strip(), right.strip()
                 break
+    # Role,Company (PDF often drops the space after the comma)
+    if ',' in role and not company:
+        left, _, right = role.partition(',')
+        if (
+            left.strip()
+            and right.strip()
+            and len(left.split()) <= 6
+            and len(right.split()) <= 8
+            and _JOB_TITLE_CUE_RE.search(left)
+            and not _JOB_TITLE_CUE_RE.search(right)
+        ):
+            role, company = left.strip(), right.strip()
 
     # Drop assignment / Coursera / project narratives mistaken for jobs
     if _PROJECT_LIKE_EXP.search(f'{role} {company} {desc}'):
@@ -306,6 +320,9 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
         r'optimized|improved|increased|worked|assisted|supported|handled|'
         r'performed|conducted|analyzed|monitored|delivered|owned|spearheaded|'
         r'identifying|enabling|engineered|gained|helped|wrote|responsible\s+for|'
+        r'administer(?:ed|ing)?|completed|pursued|strengthened|scheduled|'
+        r'diagnosing|configuring|installing|creating|executing|participating|'
+        r'using|implementing|monitoring|maintaining|query|role:|result:|'
         r'[•·\*●])',
         role,
     ) or re.match(
@@ -326,22 +343,13 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
 
     # Detect swap: role looks like org, company looks like title
     if company and role:
-        company_looks_role = bool(
-            re.search(
-                r'(?i)\b(?:engineer|developer|manager|analyst|consultant|lead|intern|officer|'
-                r'trainee|associate)\b',
-                company,
-            )
-        )
+        company_looks_role = bool(_JOB_TITLE_CUE_RE.search(company))
         role_looks_company = bool(
             re.search(
                 r'(?i)\b(?:inc|llc|ltd|corp|solutions|technologies|labs|systems|pvt)\b',
                 role,
             )
-        ) and not re.search(
-            r'(?i)\b(?:engineer|developer|manager|analyst|intern)\b',
-            role,
-        )
+        ) and not _JOB_TITLE_CUE_RE.search(role)
         if company_looks_role and role_looks_company:
             company, role = role, company
             company_ok, role_ok = True, True
@@ -350,13 +358,18 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
         company = ''
         company_ok = False
 
-    # Role is actually a company name (no title on line)
-    if role and not company and re.search(
-        r'(?i)\b(?:pvt|ltd|llc|inc|corp|limited|technologies|solutions|labs|systems)\b',
-        role,
-    ) and not re.search(r'(?i)\b(?:engineer|developer|manager|analyst|intern|trainee)\b', role):
-        company, role = role, ''
-        company_ok, role_ok = validate_company(company)[0], False
+    # Role is actually a company name (no title cue): "Infosenseglobal", "Acme Pvt Ltd"
+    if role and not company and not _JOB_TITLE_CUE_RE.search(role):
+        org_like = bool(
+            re.search(
+                r'(?i)\b(?:pvt|ltd|llc|inc|corp|limited|technologies|solutions|labs|systems)\b',
+                role,
+            )
+        )
+        single_token = len(role.split()) == 1 and role[:1].isupper()
+        if org_like or single_token:
+            company, role = role, ''
+            company_ok, role_ok = validate_company(company)[0], False
 
     start_ok, _ = validate_month_year(exp.start)
     end_ok, _ = validate_month_year(exp.end)
@@ -371,13 +384,10 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
         description=desc,
         location=loc[:120],
     )
-    # Prefer rows with a real role; company-only when dated + org-like or Company|City
+    # Prefer rows with a real role; keep dated company-only (Infosenseglobal has no Ltd suffix)
     if cleaned.role:
         return cleaned
-    if cleaned.company and cleaned.start and re.search(
-        r'(?i)\b(?:pvt|ltd|llc|inc|corp|limited|technologies|solutions|labs|systems)\b',
-        cleaned.company,
-    ):
+    if cleaned.company and cleaned.start:
         return cleaned
     if cleaned.company and cleaned.location:
         return cleaned
