@@ -32,7 +32,7 @@ def on_starting(server):
 
     from dotenv import load_dotenv
 
-    os.environ.setdefault('HCIP_PROCESS_ROLE', 'web')
+    os.environ['HCIP_PROCESS_ROLE'] = 'web'
     load_dotenv(Path(__file__).resolve().parent / '.env')
     from app.config.env_validator import EnvValidator
 

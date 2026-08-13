@@ -24,7 +24,7 @@ logger = logging.getLogger('integrations.scheduler')
 def main() -> int:
     # Ensure flag is on even if operator forgot it when using this entrypoint.
     os.environ['RUN_INTEGRATION_AUTO_SYNC'] = '1'
-    os.environ.setdefault('HCIP_PROCESS_ROLE', 'scheduler')
+    os.environ['HCIP_PROCESS_ROLE'] = 'scheduler'
 
     # Load .env the same way wsgi does when present.
     try:

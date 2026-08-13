@@ -6,7 +6,7 @@ Local development remains `node start.js` (Flask). That is **not** the productio
 
 Related: [DEVELOPMENT.md](DEVELOPMENT.md) · [WORKFLOWS.md](WORKFLOWS.md) · [BACKUP_RUNBOOK.md](BACKUP_RUNBOOK.md)
 
-Helper (no secrets): `scripts/release-verify.sh pre-deploy` / `post-start`.
+Helper (no secrets): `scripts/release-verify.sh pre-deploy` / `post-start` / `db-sessions`.
 
 ---
 
@@ -48,7 +48,7 @@ AI parse: `OLLAMA_MODEL=qwen2.5:14b-instruct`, `AI_RUNTIME_CONFIG=ai/runtime/con
 
 Optional labels for `pg_stat_activity`:
 
-- `HCIP_PROCESS_ROLE` — `web` / `scheduler` / `outbox` / `migrate` (set automatically by the entrypoints above)
+- `HCIP_PROCESS_ROLE` — `web` / `scheduler` / `outbox` / `migrate` (each entrypoint **forces** its role so a leftover `HCIP_PROCESS_ROLE=migrate` in the same shell cannot relabel web/scheduler/outbox)
 - `HCIP_RELEASE_ID` — short release id (appears in `application_name`)
 
 Copy knobs from `apps/backend/.env.example`. Never commit `.env`.
@@ -80,13 +80,20 @@ SIGTERM `python -m app.domains.integrations.scheduler`.
 
 SIGTERM `python -m app.domains.integrations.worker` if it was started.
 
-#### 5. Confirm processes terminated
+#### 5. Confirm processes terminated and inspect database connections
 
 ```bash
 scripts/release-verify.sh pre-deploy
+scripts/release-verify.sh db-sessions
 ```
 
-Or manually: `pgrep` must print nothing for those patterns. On the database:
+`pre-deploy` confirms this host has no leftover gunicorn / scheduler / outbox / `wsgi.py` and that `alembic current == heads`.
+
+`db-sessions` is read-only. It reports `application_name`, `client_addr`, backend PID, truncated query, long-running transactions, and locks. It never terminates backends and never prints secrets. Unknown (non-`hcip-*`) client sessions fail the check (use `--report-only` to print without failing).
+
+This release sets `application_name` to `hcip-<role>[-<HCIP_RELEASE_ID>]`. Sessions with empty `application_name` or a foreign `client_addr` are **other processes**. **Stop. Do not continue the deploy** until those processes are stopped on their hosts. This tree cannot SIGTERM remote PIDs and will not rewrite `alembic_version` for an unknown revision in production.
+
+Manual equivalent (SELECT only):
 
 ```sql
 SELECT pid, client_addr, application_name, usename, backend_start, state,
@@ -96,13 +103,13 @@ WHERE datname = current_database()
 ORDER BY backend_start;
 ```
 
-This release sets `application_name` to `hcip-<role>[-<HCIP_RELEASE_ID>]`. Sessions with empty `application_name` or a foreign `client_addr` are **other processes**. Stop them on those hosts before continuing. This tree will not rewrite `alembic_version` for an unknown revision in production. This WSL host cannot stop processes on other LAN IPs.
-
 ### DEPLOY
 
 #### 6. Deploy this application revision
 
 Replace the code tree (rsync, package, or git checkout). Keep the production env file out of the repo.
+
+Take a pre-migration backup before step 8. Procedure: [BACKUP_RUNBOOK.md](BACKUP_RUNBOOK.md). Schema changes are forward-only; the backup is the only supported way to restore a previous schema.
 
 #### 7. Validate required production environment variables
 
@@ -181,7 +188,11 @@ curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/ready
 
 #### 14. Verify expected database connections
 
-Re-run the `pg_stat_activity` query. Expect `hcip-web` (one per worker), `hcip-scheduler`, and optional `hcip-outbox`. No leftover writers from the previous release on this host.
+```bash
+scripts/release-verify.sh db-sessions --report-only
+```
+
+Expect `hcip-web` (one per worker), `hcip-scheduler`, and optional `hcip-outbox`. No leftover writers from the previous release on this host. Unknown `client_addr` / empty `application_name` remain an operational stop — do not hide them.
 
 #### 15. Production smoke
 
@@ -203,14 +214,41 @@ SIGTERM Gunicorn (graceful). Start it again with the same `MIGRATIONS_ALREADY_AP
 
 ## Stale-writer cleanup (when `pg_stat_activity` shows foreign clients)
 
-1. Note `client_addr`, `pid`, `application_name`, `backend_start`.
+1. Run `scripts/release-verify.sh db-sessions --report-only`. Note `client_addr`, `pid`, `application_name`, `backend_start`.
 2. On that host: stop Gunicorn / Flask / `start.js` / scheduler / outbox / leftover `python wsgi.py`.
-3. Re-query `pg_stat_activity` until only this release’s `hcip-*` sessions remain.
+3. Re-query until only this release’s `hcip-*` sessions remain (`scripts/release-verify.sh db-sessions` must pass).
 4. `alembic current` / `alembic heads` — must match.
 5. `alembic upgrade head` (idempotent; migrate role only).
 6. Start this release with `MIGRATIONS_ALREADY_APPLIED=true`; verify; SIGTERM; start again; verify again.
 
-Do not invent an in-app workaround that hides foreign writers.
+Do not invent an in-app workaround that hides foreign writers. An unknown process on a remote host is an operational ownership problem, not an application code defect.
+
+---
+
+## ROLLBACK
+
+There is **no automatic rollback**. Do not `alembic downgrade` in production. Reverse migrations are not a supported recovery path (data loss / untested reverse DDL).
+
+### Migration fails (`alembic upgrade head` errors)
+
+- Do **not** start web, scheduler, or outbox.
+- Do **not** `alembic stamp head`.
+- Do **not** `alembic downgrade`.
+- Inspect the error, `alembic current`, and `scripts/release-verify.sh db-sessions --report-only`.
+- Preferred: fix-forward (correct the migration / environment) and retry `HCIP_PROCESS_ROLE=migrate alembic upgrade head`.
+- If the database was partially changed and cannot be repaired: restore the pre-migration backup ([BACKUP_RUNBOOK.md](BACKUP_RUNBOOK.md)), then retry migrate from the restored schema.
+
+### Application fails after a successful migration
+
+- The schema is already at the new head.
+- Preferred: fix-forward (code hotfix) and restart with `MIGRATIONS_ALREADY_APPLIED=true`. Do not migrate again unless a new revision exists.
+- Do not start the previous application version against the upgraded schema.
+
+### Previous application version is incompatible with the new schema
+
+- Do **not** start the old release against the upgraded database.
+- Restore the pre-migration database backup first, then start the previous code.
+- Treat this as restore + previous-code restart, not an Alembic downgrade.
 
 ---
 

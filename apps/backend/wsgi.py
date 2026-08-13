@@ -2,7 +2,7 @@
 import os
 import sys
 
-os.environ.setdefault('HCIP_PROCESS_ROLE', 'web')
+os.environ['HCIP_PROCESS_ROLE'] = 'web'
 
 from app.bootstrap.create_app import create_app
 

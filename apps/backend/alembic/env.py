@@ -17,7 +17,7 @@ if str(_BACKEND) not in sys.path:
 from dotenv import load_dotenv
 
 load_dotenv(_BACKEND / '.env')
-os.environ.setdefault('HCIP_PROCESS_ROLE', 'migrate')
+os.environ['HCIP_PROCESS_ROLE'] = 'migrate'
 
 config = context.config
 if config.config_file_name is not None:

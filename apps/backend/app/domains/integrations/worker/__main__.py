@@ -23,7 +23,7 @@ logger = logging.getLogger('integrations.outbox')
 
 
 def main() -> int:
-    os.environ.setdefault('HCIP_PROCESS_ROLE', 'outbox')
+    os.environ['HCIP_PROCESS_ROLE'] = 'outbox'
 
     try:
         from dotenv import load_dotenv

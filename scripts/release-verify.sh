@@ -3,6 +3,7 @@
 #   scripts/release-verify.sh pre-deploy   # processes gone + alembic current == heads
 #   scripts/release-verify.sh post-start   # /health /ready + alembic current == heads
 #   scripts/release-verify.sh processes    # fail if old writers still running
+#   scripts/release-verify.sh db-sessions  # read-only pg_stat_activity report; fail on unknown writers
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -71,6 +72,20 @@ check_alembic_at_head() {
   ok "alembic current == heads ($current)"
 }
 
+python_bin() {
+  if [[ -x "$BACKEND/venv/bin/python" ]]; then
+    echo "$BACKEND/venv/bin/python"
+    return
+  fi
+  command -v python3 || fail "python3 not found (apps/backend/venv or PATH)"
+}
+
+check_db_sessions() {
+  local py
+  py="$(python_bin)"
+  "$py" "$ROOT/scripts/inspect_db_sessions.py" "$@"
+}
+
 check_health_ready() {
   local health_code ready_code
   health_code="$(curl -sS -o /tmp/hcip-health.json -w '%{http_code}' --max-time 5 "$HEALTH_URL" || true)"
@@ -92,12 +107,16 @@ case "$PHASE" in
     check_alembic_at_head
     check_health_ready
     ;;
+  db-sessions)
+    shift || true
+    check_db_sessions "$@"
+    ;;
   all)
-    echo "usage: $0 {pre-deploy|post-start|processes}" >&2
+    echo "usage: $0 {pre-deploy|post-start|processes|db-sessions}" >&2
     echo "Running alembic current == heads only." >&2
     check_alembic_at_head
     ;;
   *)
-    fail "unknown phase '$PHASE' (use pre-deploy | post-start | processes)"
+    fail "unknown phase '$PHASE' (use pre-deploy | post-start | processes | db-sessions)"
     ;;
 esac

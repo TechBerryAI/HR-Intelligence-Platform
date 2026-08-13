@@ -22,6 +22,7 @@ def _load_gunicorn_conf():
 def test_gunicorn_on_starting_verifies_and_sets_skip_flag(monkeypatch):
     monkeypatch.delenv("HCIP_MIGRATIONS_DONE", raising=False)
     monkeypatch.setenv("MIGRATIONS_ALREADY_APPLIED", "true")
+    monkeypatch.setenv("HCIP_PROCESS_ROLE", "migrate")
     calls = {"prepare": 0, "upgrade": 0}
 
     def fake_prepare():
@@ -52,3 +53,4 @@ def test_gunicorn_on_starting_verifies_and_sets_skip_flag(monkeypatch):
         "yes",
         "on",
     )
+    assert __import__("os").environ.get("HCIP_PROCESS_ROLE") == "web"
