@@ -31,8 +31,114 @@ class AlembicOrphanStampError(RuntimeError):
     """alembic_version points at a revision this process cannot apply."""
 
 
+class SchemaNotAtHeadError(RuntimeError):
+    """Database alembic_version is missing or not equal to this tree's head."""
+
+
+class SchemaMigrationPolicyError(RuntimeError):
+    """Production web/worker tried to migrate or started without the skip flag."""
+
+
+_PROD_MIGRATE_INSTRUCTIONS = (
+    "Production web processes must not run migrations.\n"
+    "1. cd apps/backend && HCIP_PROCESS_ROLE=migrate alembic upgrade head\n"
+    "2. alembic current   # must equal alembic heads\n"
+    "3. MIGRATIONS_ALREADY_APPLIED=true gunicorn -c gunicorn.conf.py wsgi:app"
+)
+
+
 def _is_production_like() -> bool:
     return os.getenv('FLASK_DEBUG', 'false').lower() != 'true'
+
+
+def _truthy_env(name: str) -> bool:
+    return (os.getenv(name) or '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
+def migrations_already_applied() -> bool:
+    """Operator flag (or Gunicorn inherited skip) — verify only, never upgrade."""
+    if _truthy_env('MIGRATIONS_ALREADY_APPLIED'):
+        return True
+    return os.getenv('HCIP_MIGRATIONS_DONE') == '1'
+
+
+def production_web_must_not_migrate() -> bool:
+    from app.config.env_validator import is_production_like
+
+    return is_production_like()
+
+
+def head_revision_ids() -> list[str]:
+    from alembic.script import ScriptDirectory
+
+    return list(ScriptDirectory.from_config(_config()).get_heads())
+
+
+def schema_at_head_status(current: str | None, heads: list[str]) -> str:
+    """Return the single head id, or raise if current is not exactly that head."""
+    if len(heads) != 1:
+        raise SchemaNotAtHeadError(
+            f"Expected a single Alembic head, found {heads!r}. "
+            "Resolve multiple heads before starting the application."
+        )
+    head = heads[0]
+    if not current:
+        raise SchemaNotAtHeadError(
+            f"alembic_version is empty or missing; expected head {head!r}. "
+            "Run: HCIP_PROCESS_ROLE=migrate alembic upgrade head"
+        )
+    if current != head:
+        raise SchemaNotAtHeadError(
+            f"alembic current={current!r} != head={head!r}. "
+            "Run: HCIP_PROCESS_ROLE=migrate alembic upgrade head"
+        )
+    return head
+
+
+def current_revision() -> str | None:
+    from app.database.connection.db import db_get
+
+    has_version = db_get(
+        """
+        SELECT 1 AS ok
+        FROM information_schema.tables
+        WHERE table_schema = current_schema()
+          AND table_name = 'alembic_version'
+        """,
+        (),
+    )
+    if not has_version:
+        return None
+    ver = db_get('SELECT version_num FROM alembic_version LIMIT 1', ())
+    return (ver or {}).get('version_num')
+
+
+def verify_at_head() -> str:
+    """Fail closed unless alembic_version equals this application's single head."""
+    return schema_at_head_status(current_revision(), head_revision_ids())
+
+
+def prepare_schema_for_web_process() -> str:
+    """
+    Production: require MIGRATIONS_ALREADY_APPLIED (or HCIP_MIGRATIONS_DONE) and
+    verify at head — never upgrade. Development may run upgrade_head().
+    """
+    skip = migrations_already_applied()
+    if production_web_must_not_migrate():
+        if not skip:
+            raise SchemaMigrationPolicyError(_PROD_MIGRATE_INSTRUCTIONS)
+        head = verify_at_head()
+        logger.info('[alembic] verified at head %s (web will not migrate)', head)
+        print(f'[DB] Schema verified at head {head} (migrations already applied)')
+        return head
+    if skip:
+        head = verify_at_head()
+        print(f'[DB] Schema already applied (at head {head})')
+        return head
+    upgrade_head()
+    head = verify_at_head()
+    print('[DB] Database initialized successfully')
+    return head
 
 
 def _config():

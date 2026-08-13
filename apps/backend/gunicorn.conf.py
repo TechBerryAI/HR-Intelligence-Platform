@@ -27,7 +27,7 @@ access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(m)s %(U)s %(H)s" %(s)s %(b)s "%(
 
 
 def on_starting(server):
-    """Validate config and apply migrations once in the master (avoid worker DDL races)."""
+    """Validate config and verify schema at head. Never migrate in the web master."""
     from pathlib import Path
 
     from dotenv import load_dotenv
@@ -38,10 +38,11 @@ def on_starting(server):
 
     if not EnvValidator.print_report():
         raise SystemExit(1)
-    from app.database.alembic_runner import upgrade_head
+    from app.database.alembic_runner import prepare_schema_for_web_process
 
-    upgrade_head()
+    prepare_schema_for_web_process()
     os.environ['HCIP_MIGRATIONS_DONE'] = '1'
+    os.environ.setdefault('MIGRATIONS_ALREADY_APPLIED', 'true')
 
 
 def worker_exit(server, worker):

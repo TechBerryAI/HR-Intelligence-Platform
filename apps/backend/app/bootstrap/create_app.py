@@ -148,7 +148,6 @@ def create_app() -> Flask:
 
     init_models()
 
-    from app.database.connection.db import init_db  # noqa: E402
     from app.domains.administration.api.admin import admin_bp  # noqa: E402
     from app.domains.administration.api.developer import developer_bp  # noqa: E402
     from app.domains.administration.api.head_hr import head_hr_bp  # noqa: E402
@@ -226,18 +225,19 @@ def create_app() -> Flask:
     _db_port = os.getenv('POSTGRES_PORT', os.getenv('PGPORT', '5432'))
     _db_name = os.getenv('POSTGRES_DB', os.getenv('PGDATABASE', 'postgres'))
     print(f"[DB] Target: {_db_host}:{_db_port}/{_db_name}")
-    if os.getenv('HCIP_MIGRATIONS_DONE') == '1':
-        print("[DB] Schema already applied by Gunicorn master")
-    else:
-        try:
-            init_db()
-            print("[DB] Database initialized successfully")
-        except Exception as e:
-            print(f"[DB ERROR] Failed to initialize database ({_db_host}:{_db_port}/{_db_name}): {e}")
-            import traceback
-            traceback.print_exc()
-            print("[DB ERROR] STARTUP BLOCKED — Alembic upgrade head must succeed.")
-            sys.exit(1)
+    try:
+        from app.database.alembic_runner import prepare_schema_for_web_process
+
+        prepare_schema_for_web_process()
+    except Exception as e:
+        print(f"[DB ERROR] Failed to initialize database ({_db_host}:{_db_port}/{_db_name}): {e}")
+        import traceback
+        traceback.print_exc()
+        print(
+            "[DB ERROR] STARTUP BLOCKED — production must migrate once then set "
+            "MIGRATIONS_ALREADY_APPLIED=true; development may run alembic upgrade head."
+        )
+        sys.exit(1)
 
     _bulk_url = (os.getenv('BULK_PARSER_URL') or '').strip().rstrip('/') or None
     if _bulk_url:

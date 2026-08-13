@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -11,6 +12,9 @@ ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / 'apps' / 'backend'
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
+
+os.environ.setdefault('RESUME_SKIP_LLM_WHEN_DETERMINISTIC', 'true')
+os.environ.setdefault('DOCUMENT_INTELLIGENCE_SEMANTIC_AI', 'false')
 
 from app.ai.document_intelligence.pipeline import (  # noqa: E402
     parse_jd_text_to_canonical,
@@ -23,6 +27,17 @@ from app.ai.document_intelligence.validation.engine import (  # noqa: E402
 )
 
 LAKE = ROOT / 'ai' / 'dataset' / 'lake' / 'benchmark' / 'parsing' / 'v1'
+
+
+@pytest.fixture(autouse=True)
+def _force_offline_gold(monkeypatch):
+    """Gold fixtures are deterministic; do not call Ollama during field compare."""
+    monkeypatch.setenv('RESUME_SKIP_LLM_WHEN_DETERMINISTIC', 'true')
+    monkeypatch.setenv('DOCUMENT_INTELLIGENCE_SEMANTIC_AI', 'false')
+    monkeypatch.setattr(
+        'app.ai.document_intelligence.semantic.semantic_ai_enabled',
+        lambda: False,
+    )
 
 
 def _resume_cases():

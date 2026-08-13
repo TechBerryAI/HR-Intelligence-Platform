@@ -136,7 +136,15 @@ def test_ollama_parse_persists_and_retry_uses_cache(runtime_env):
     try:
         row = db_get("SELECT id, toon FROM parsed_resumes WHERE id = ?", (parsed_id,))
         assert row and str(row["id"]) == str(parsed_id)
-        assert "Jane" in (row["toon"] or "")
+        persisted = row["toon"] or ""
+        assert "Jane" in persisted
+        assert "jane.doe@example.com" in persisted.lower() or "Jane" in persisted
+        assert "Python" in persisted
+        assert "Acme" in persisted
+
+        structured_again = parse_via_runtime(SAMPLE_RESUME, "resume")
+        assert structured_again.get("type") == "resume"
+        assert (structured_again.get("person") or {}).get("name")
 
         file_hash = compute_file_hash(payload)
         assert file_hash == raw["file_hash"]
@@ -158,3 +166,17 @@ def test_ollama_parse_persists_and_retry_uses_cache(runtime_env):
             (uploader,),
         )
         db_run("DELETE FROM raw_files WHERE uploader_id = ?", (uploader,))
+
+
+def test_application_semantic_path_hits_ollama(runtime_env):
+    """HTTP residual path must invoke the same 14b runtime contract (LLM not skipped)."""
+    from app.ai.document_intelligence.models.candidate import CandidateProfile
+    from app.ai.document_intelligence.semantic import enrich_resume_semantic
+
+    weak = CandidateProfile()
+    enriched = enrich_resume_semantic(
+        weak,
+        unresolved_text=SAMPLE_RESUME,
+        force=True,
+    )
+    assert enriched.personal.full_name or enriched.contact.email or enriched.skills

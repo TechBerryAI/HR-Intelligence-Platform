@@ -5,7 +5,10 @@ import pytest
 
 from app.database.alembic_runner import (
     AlembicOrphanStampError,
+    SchemaMigrationPolicyError,
+    SchemaNotAtHeadError,
     orphan_stamp_action,
+    schema_at_head_status,
 )
 
 
@@ -52,6 +55,79 @@ def test_debug_refuses_unknown_non_allowlisted_revision(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'true')
     with pytest.raises(AlembicOrphanStampError):
         orphan_stamp_action('20260899_future_head', KNOWN)
+
+
+def test_schema_at_head_status_ok():
+    assert schema_at_head_status('20260812_ext_outbox', ['20260812_ext_outbox']) == (
+        '20260812_ext_outbox'
+    )
+
+
+def test_schema_at_head_status_rejects_mismatch():
+    with pytest.raises(SchemaNotAtHeadError) as exc:
+        schema_at_head_status('20260810_s001', ['20260812_ext_outbox'])
+    assert '20260810_s001' in str(exc.value)
+    assert '20260812_ext_outbox' in str(exc.value)
+
+
+def test_schema_at_head_status_rejects_empty_and_multiple_heads():
+    with pytest.raises(SchemaNotAtHeadError):
+        schema_at_head_status(None, ['20260812_ext_outbox'])
+    with pytest.raises(SchemaNotAtHeadError):
+        schema_at_head_status('20260812_ext_outbox', ['a', 'b'])
+
+
+def test_production_web_requires_migrations_already_applied(monkeypatch):
+    from app.database.alembic_runner import prepare_schema_for_web_process
+
+    monkeypatch.setenv('FLASK_DEBUG', 'false')
+    monkeypatch.setenv('ALLOW_INSECURE_JWT', 'false')
+    monkeypatch.delenv('MIGRATIONS_ALREADY_APPLIED', raising=False)
+    monkeypatch.delenv('HCIP_MIGRATIONS_DONE', raising=False)
+    with pytest.raises(SchemaMigrationPolicyError) as exc:
+        prepare_schema_for_web_process()
+    assert 'MIGRATIONS_ALREADY_APPLIED' in str(exc.value)
+    assert 'alembic upgrade head' in str(exc.value)
+
+
+def test_production_web_verifies_and_does_not_upgrade(monkeypatch):
+    from app.database import alembic_runner as runner
+
+    monkeypatch.setenv('FLASK_DEBUG', 'false')
+    monkeypatch.setenv('ALLOW_INSECURE_JWT', 'false')
+    monkeypatch.setenv('MIGRATIONS_ALREADY_APPLIED', 'true')
+
+    def _fail_upgrade():
+        raise AssertionError('upgrade_head must not run in production web')
+
+    monkeypatch.setattr(runner, 'upgrade_head', _fail_upgrade)
+    monkeypatch.setattr(runner, 'verify_at_head', lambda: '20260812_ext_outbox')
+    assert runner.prepare_schema_for_web_process() == '20260812_ext_outbox'
+
+
+def test_dev_web_upgrades_when_flag_unset(monkeypatch):
+    from app.database import alembic_runner as runner
+
+    monkeypatch.setenv('FLASK_DEBUG', 'true')
+    monkeypatch.delenv('MIGRATIONS_ALREADY_APPLIED', raising=False)
+    monkeypatch.delenv('HCIP_MIGRATIONS_DONE', raising=False)
+    calls = {'upgrade': 0}
+
+    def _upgrade():
+        calls['upgrade'] += 1
+
+    monkeypatch.setattr(runner, 'upgrade_head', _upgrade)
+    monkeypatch.setattr(runner, 'verify_at_head', lambda: '20260812_ext_outbox')
+    runner.prepare_schema_for_web_process()
+    assert calls['upgrade'] == 1
+
+
+def test_hcip_migrations_done_is_alias_for_already_applied(monkeypatch):
+    from app.database.alembic_runner import migrations_already_applied
+
+    monkeypatch.delenv('MIGRATIONS_ALREADY_APPLIED', raising=False)
+    monkeypatch.setenv('HCIP_MIGRATIONS_DONE', '1')
+    assert migrations_already_applied() is True
 
 
 def test_migration_lock_key_is_stable_and_distinct_from_autosync():

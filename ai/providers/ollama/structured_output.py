@@ -12,6 +12,38 @@ _JSON_FENCE_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
+_PERSON_STRING_FIELDS = (
+    "name",
+    "email",
+    "phone",
+    "location",
+    "linkedin",
+    "github",
+    "portfolio",
+    "website",
+    "twitter",
+)
+_EXPERIENCE_STRING_FIELDS = (
+    "title",
+    "role",
+    "company",
+    "from",
+    "to",
+    "description",
+    "location",
+)
+_EDUCATION_STRING_FIELDS = (
+    "degree",
+    "institution",
+    "school",
+    "field",
+    "year",
+    "from",
+    "to",
+    "gpa",
+    "cgpa",
+)
+
 
 def build_messages(*, prompt: str, input_text: str) -> list[dict[str, str]]:
     """Build Ollama chat messages from runtime prompt and input."""
@@ -55,8 +87,67 @@ def extract_json_content(content: str) -> str:
     return stripped
 
 
+def _as_nonempty_str(value: Any) -> str:
+    if value is None or isinstance(value, bool):
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (int, float)):
+        return str(value).strip()
+    return ""
+
+
+def _location_object_to_string(value: dict[str, Any]) -> str:
+    """Flatten {city,region,country} / {raw} / remote into a location string."""
+    raw = _as_nonempty_str(
+        value.get("raw") or value.get("name") or value.get("text") or value.get("value")
+    )
+    city = _as_nonempty_str(value.get("city"))
+    region = _as_nonempty_str(value.get("region") or value.get("state"))
+    country = _as_nonempty_str(value.get("country"))
+    parts = [p for p in (city, region, country) if p]
+    if parts:
+        return ", ".join(parts)
+    if value.get("remote") is True:
+        return "Remote"
+    return raw
+
+
+def _null_to_empty_string(value: Any) -> Any:
+    """Prompt contract: unknown string fields are \"\", never JSON null."""
+    return "" if value is None else value
+
+
+def _coerce_string_field(value: Any, *, allow_location_object: bool = False) -> Any:
+    if value is None:
+        return ""
+    if allow_location_object and isinstance(value, dict):
+        return _location_object_to_string(value)
+    return value
+
+
+def _coerce_record_string_fields(
+    items: Any,
+    fields: tuple[str, ...],
+    *,
+    location_fields: frozenset[str] = frozenset(),
+) -> None:
+    if not isinstance(items, list):
+        return
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        for field in fields:
+            if field not in item:
+                continue
+            item[field] = _coerce_string_field(
+                item.get(field),
+                allow_location_object=field in location_fields,
+            )
+
+
 def _coerce_prompt_shapes(parsed: dict[str, Any]) -> dict[str, Any]:
-    """Coerce shapes the prompts already document (skill objects → name strings)."""
+    """Coerce documented LLM shapes before jsonschema (do not invent values)."""
     for key in ("skills", "mandatory_skills", "preferred_skills"):
         vals = parsed.get(key)
         if not isinstance(vals, list):
@@ -70,6 +161,29 @@ def _coerce_prompt_shapes(parsed: dict[str, Any]) -> dict[str, Any]:
             elif item is not None:
                 out.append(item if isinstance(item, str) else str(item))
         parsed[key] = out
+
+    person = parsed.get("person")
+    if isinstance(person, dict):
+        if "location" in person:
+            person["location"] = _coerce_string_field(
+                person.get("location"),
+                allow_location_object=True,
+            )
+        for field in _PERSON_STRING_FIELDS:
+            if field == "location":
+                continue
+            if field in person:
+                person[field] = _null_to_empty_string(person.get(field))
+
+    if "summary" in parsed:
+        parsed["summary"] = _null_to_empty_string(parsed.get("summary"))
+
+    _coerce_record_string_fields(
+        parsed.get("experience"),
+        _EXPERIENCE_STRING_FIELDS,
+        location_fields=frozenset({"location"}),
+    )
+    _coerce_record_string_fields(parsed.get("education"), _EDUCATION_STRING_FIELDS)
     return parsed
 
 

@@ -15,6 +15,7 @@ Root-level scripts that support local development, CI preflight, and database co
 | `db-preflight.js` | PostgreSQL connectivity diagnostics (reads `apps/backend/.env`, WSL-aware) |
 | `database/test_db_connection.py` | Python DB connection test |
 | `ensure_media_assets.py` | Ensure durable media dirs + seed hero |
+| `release-verify.sh` | Production release checks (processes / alembic head / health). No secrets. |
 | Backend module `python -m app.database.scripts.offload_blobs` | BYTEA → media + checksum verify |
 
 Full media docs: **[docs/MEDIA_AND_BACKUPS.md](../docs/MEDIA_AND_BACKUPS.md)**.
@@ -28,11 +29,15 @@ Full media docs: **[docs/MEDIA_AND_BACKUPS.md](../docs/MEDIA_AND_BACKUPS.md)**.
 
 - AI platform CLIs → `ai/runtime/cli/`, `ai/dataset/*/cli/`
 - Backend one-offs tied to Flask → prefer `apps/backend/` or document here explicitly
-- Production deployment scripts → CI workflows under `infrastructure/`
+- Production **deploy/start** scripts → wrap the commands in [docs/PRODUCTION_RELEASE.md](../docs/PRODUCTION_RELEASE.md) under your supervisor; `release-verify.sh` is the check helper only
 
 ## Quick start
 
 ```bash
+# Release verification (no secrets)
+scripts/release-verify.sh pre-deploy
+scripts/release-verify.sh post-start
+
 # Database preflight (Node)
 node scripts/db-preflight.js
 

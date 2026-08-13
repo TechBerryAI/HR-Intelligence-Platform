@@ -83,14 +83,19 @@ def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
 
     from app.core.request_context import get_timing_context, run_in_timing_context
 
-    timeout_sec = float(os.getenv('DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC', '25'))
+    timeout_sec = float(os.getenv('DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC', '90'))
     timing_ctx = get_timing_context()
 
     def _invoke() -> Optional[dict[str, Any]]:
         try:
             from app.ai.adapter.runtime_adapter import parse_via_runtime
 
-            result = parse_via_runtime(prompt, 'resume' if doc_kind == 'resume' else 'jd')
+            result = parse_via_runtime(
+                prompt,
+                'resume' if doc_kind == 'resume' else 'jd',
+                timeout_seconds=timeout_sec,
+                max_attempts=1,
+            )
             if isinstance(result, dict):
                 return result
         except Exception as exc:
@@ -141,20 +146,9 @@ def enrich_resume_semantic(
     if not unresolved_text or len(unresolved_text.strip()) < 40:
         return profile
 
-    exp_key = (
-        'experience (list of {role,company,start,end,description}), '
-        if allow_experience_fill
-        else ''
-    )
-    prompt = (
-        'Extract ONLY missing structured resume fields as JSON with keys: '
-        f'{exp_key}'
-        'education (list of {degree,institution,field,start,end}), '
-        'skills (string list), summary (string). '
-        'Do not invent email/phone/urls. Do not treat projects or assignments as jobs. '
-        f'Text:\n\n{unresolved_text[:6000]}'
-    )
-    raw = _call_section_llm(prompt, 'resume')
+    # Same resume_parser_v1 prompt + resume_milestone_v1 schema as parse_via_runtime.
+    # Do not send a competing fragment-JSON instruction.
+    raw = _call_section_llm(unresolved_text[:6000], 'resume')
     if not isinstance(raw, dict):
         return profile
 
@@ -257,13 +251,7 @@ def enrich_jd_semantic(profile, *, unresolved_text: str, force: bool = False):
     if not unresolved_text or len(unresolved_text.strip()) < 40:
         return profile
 
-    prompt = (
-        'Extract job description fields as JSON: title, company, location, '
-        'mandatory_skills, preferred_skills, responsibilities, qualifications, '
-        'min_experience_years, max_experience_years, salary_range, employment_type. '
-        f'Text:\n\n{unresolved_text[:6000]}'
-    )
-    raw = _call_section_llm(prompt, 'jd')
+    raw = _call_section_llm(unresolved_text[:6000], 'jd')
     if not isinstance(raw, dict):
         return profile
     try:

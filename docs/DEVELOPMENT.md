@@ -139,7 +139,7 @@ Optional integration vars (see `apps/backend/.env.example`):
 
 Full sequenced release (stop stale writers, migrate once, Gunicorn **with** `-c`, one scheduler, optional outbox): **[PRODUCTION_RELEASE.md](PRODUCTION_RELEASE.md)**.
 
-Gunicorn runs multiple web workers. Integration **auto-sync** is singleton work and must not start inside every worker. **Never** omit `-c gunicorn.conf.py` — without it every worker runs migrations.
+Gunicorn runs multiple web workers. Integration **auto-sync** is singleton work and must not start inside every worker. **Never** omit `-c gunicorn.conf.py`. Production web processes require `MIGRATIONS_ALREADY_APPLIED=true` and verify `alembic current == head`; they never run migrations. Without `-c` and without the flag, production startup fails closed.
 
 ```bash
 # Web API (from apps/backend)
