@@ -51,6 +51,9 @@ cp .env.example .env   # configure DATABASE_URL or POSTGRES_*
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 python wsgi.py         # or: gunicorn -c gunicorn.conf.py wsgi:app
+
+# Production: also run the integration auto-sync singleton (separate process)
+RUN_INTEGRATION_AUTO_SYNC=1 python -m app.domains.integrations.scheduler
 ```
 
 Or from repo root: `node start.js`

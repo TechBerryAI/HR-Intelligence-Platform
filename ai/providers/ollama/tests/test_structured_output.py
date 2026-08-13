@@ -14,12 +14,17 @@ from providers.ollama.structured_output import (
 
 def test_build_messages_combines_prompt_and_input() -> None:
     messages = build_messages(prompt="Parse this resume:", input_text="Jane Doe")
-    assert messages == [{"role": "user", "content": "Parse this resume:\n\nJane Doe"}]
+    assert messages == [
+        {"role": "system", "content": "Parse this resume:"},
+        {"role": "user", "content": "Jane Doe"},
+    ]
 
 
 def test_resolve_response_format_json_when_schema_present() -> None:
     assert resolve_response_format("resume_v1") == "json"
     assert resolve_response_format(None) is None
+    schema = {"type": "object", "properties": {"type": {"const": "resume"}}}
+    assert resolve_response_format("resume_v1", schema) == schema
 
 
 def test_extract_json_from_markdown_fence() -> None:

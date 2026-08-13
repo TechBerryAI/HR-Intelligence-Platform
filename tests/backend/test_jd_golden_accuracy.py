@@ -61,6 +61,39 @@ def test_experience_ignores_24x7_requires_years():
     assert extract_experience_years("Fresher – 1 year") == (0.0, 1.0)
 
 
+def test_javascript_does_not_emit_java():
+    toks = normalize_skill_tokens(
+        ["JavaScript, TypeScript, React, Node.js"],
+        from_skill_section=True,
+    )
+    assert "JavaScript" in toks
+    assert "Java" not in toks
+    from app.ai.parser.enrichment.jd_text_inference import extract_tech_keywords_from_text
+
+    assert "Java" not in extract_tech_keywords_from_text("JavaScript, TypeScript")
+
+
+def test_aws_parenthetical_keeps_parent_and_children():
+    toks = normalize_skill_tokens(
+        ["Strong knowledge of AWS (EC2, EKS, VPC, IAM)"],
+        from_skill_section=True,
+    )
+    joined = " ".join(toks).lower()
+    assert "aws" in joined or "amazon web services" in joined, toks
+    assert "ec2" in joined or "eks" in joined
+
+
+def test_aws_and_amazon_web_services_are_equivalent():
+    from app.ai.parser.engine.knowledge import skill_csv_equivalent, skill_values_equivalent
+
+    assert skill_values_equivalent("AWS", "Amazon Web Services")
+    assert skill_csv_equivalent(
+        "PostgreSQL, MongoDB, Docker, Kubernetes, AWS",
+        "PostgreSQL, MongoDB, Docker, Kubernetes, Amazon Web Services",
+    )
+    assert not skill_values_equivalent("AWS", "Azure")
+
+
 def test_normalize_skills_drops_sentences_and_qualifications():
     toks = normalize_skill_tokens(
         [

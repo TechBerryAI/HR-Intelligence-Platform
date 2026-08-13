@@ -38,7 +38,13 @@ def load_capability(capability_dir: Path) -> CapabilityPackage:
 
     metadata = _load_metadata(capability_dir / "capability.yaml")
     prompt_text = (capability_dir / "prompt.md").read_text(encoding="utf-8")
-    schema_doc = json.loads((capability_dir / "schema.json").read_text(encoding="utf-8"))
+    schema_name = (metadata.schema_ref or {}).get("file") or "schema.json"
+    schema_path = capability_dir / schema_name
+    if not schema_path.is_file():
+        raise CapabilityLoadError(
+            f"Capability '{capability_dir.name}' schema file not found: {schema_name}"
+        )
+    schema_doc = json.loads(schema_path.read_text(encoding="utf-8"))
     validation_rules = _load_yaml(capability_dir / "validation.yaml")
     runtime_config = CapabilityRuntimeConfig(**_load_yaml(capability_dir / "runtime.yaml"))
 

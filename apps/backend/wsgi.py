@@ -1,6 +1,8 @@
 """WSGI entry point for the Flask application."""
 import os
 
+os.environ.setdefault('HCIP_PROCESS_ROLE', 'web')
+
 from app.bootstrap.create_app import create_app
 
 app = create_app()

@@ -226,13 +226,18 @@ def create_app() -> Flask:
     _db_port = os.getenv('POSTGRES_PORT', os.getenv('PGPORT', '5432'))
     _db_name = os.getenv('POSTGRES_DB', os.getenv('PGDATABASE', 'postgres'))
     print(f"[DB] Target: {_db_host}:{_db_port}/{_db_name}")
-    try:
-        init_db()
-        print("[DB] Database initialized successfully")
-    except Exception as e:
-        print(f"[DB ERROR] Failed to initialize database ({_db_host}:{_db_port}/{_db_name}): {e}")
-        import traceback
-        traceback.print_exc()
+    if os.getenv('HCIP_MIGRATIONS_DONE') == '1':
+        print("[DB] Schema already applied by Gunicorn master")
+    else:
+        try:
+            init_db()
+            print("[DB] Database initialized successfully")
+        except Exception as e:
+            print(f"[DB ERROR] Failed to initialize database ({_db_host}:{_db_port}/{_db_name}): {e}")
+            import traceback
+            traceback.print_exc()
+            print("[DB ERROR] STARTUP BLOCKED — Alembic upgrade head must succeed.")
+            sys.exit(1)
 
     _bulk_url = (os.getenv('BULK_PARSER_URL') or '').strip().rstrip('/') or None
     if _bulk_url:
@@ -316,6 +321,7 @@ def create_app() -> Flask:
         return jsonify({
             'status': 'ok',
             'message': 'HR Intelligence API is running',
+            'pid': os.getpid(),
             'checks': checks,
             # Back-compat for older probes
             'bulk_parser': checks['bulk_parser'],

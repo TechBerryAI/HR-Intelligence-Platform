@@ -578,8 +578,8 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                               ? 'text-[var(--ei-text-secondary)] border-[var(--ei-border-primary)] hover:bg-white/[0.05]'
                               : 'text-slate-600 border-slate-200 dark:border-slate-600'
                           }`}
-                          title="Publish to LinkedIn"
-                          aria-label="Publish to LinkedIn"
+                          title="LinkedIn Job Posting API — provider access required"
+                          aria-label="Publish to LinkedIn (provider access required)"
                         >
                           <ProviderBrandIcon provider="linkedin" className="w-4 h-4" />
                         </button>
@@ -591,8 +591,8 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                               ? 'text-[var(--ei-text-secondary)] border-[var(--ei-border-primary)] hover:bg-white/[0.05]'
                               : 'text-slate-600 border-slate-200 dark:border-slate-600'
                           }`}
-                          title="Publish to Naukri"
-                          aria-label="Publish to Naukri"
+                          title="Naukri — provider access required"
+                          aria-label="Publish to Naukri (provider access required)"
                         >
                           <ProviderBrandIcon provider="naukri" className="w-4 h-4" />
                         </button>

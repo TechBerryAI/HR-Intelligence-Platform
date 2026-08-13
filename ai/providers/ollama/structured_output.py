@@ -22,8 +22,13 @@ def build_messages(*, prompt: str, input_text: str) -> list[dict[str, str]]:
     ]
 
 
-def resolve_response_format(schema_id: str | None) -> str | dict[str, Any] | None:
-    """Return Ollama format parameter when structured output is required."""
+def resolve_response_format(
+    schema_id: str | None,
+    schema_doc: dict[str, Any] | None = None,
+) -> str | dict[str, Any] | None:
+    """Return Ollama format: JSON Schema when available, else json mode."""
+    if isinstance(schema_doc, dict) and schema_doc:
+        return schema_doc
     if schema_id:
         return "json"
     return None
@@ -50,6 +55,24 @@ def extract_json_content(content: str) -> str:
     return stripped
 
 
+def _coerce_prompt_shapes(parsed: dict[str, Any]) -> dict[str, Any]:
+    """Coerce shapes the prompts already document (skill objects → name strings)."""
+    for key in ("skills", "mandatory_skills", "preferred_skills"):
+        vals = parsed.get(key)
+        if not isinstance(vals, list):
+            continue
+        out: list[Any] = []
+        for item in vals:
+            if isinstance(item, dict):
+                name = item.get("name") or item.get("skill") or item.get("value")
+                if name:
+                    out.append(str(name))
+            elif item is not None:
+                out.append(item if isinstance(item, str) else str(item))
+        parsed[key] = out
+    return parsed
+
+
 def normalize_content(content: str, *, schema_id: str | None) -> str:
     """Normalize provider output to runtime-expected content string."""
     if not schema_id:
@@ -59,4 +82,7 @@ def normalize_content(content: str, *, schema_id: str | None) -> str:
         parsed = json.loads(extracted)
     except json.JSONDecodeError:
         return extracted
+    if isinstance(parsed, dict):
+        parsed = _coerce_prompt_shapes(parsed)
+        return json.dumps(parsed)
     return json.dumps(parsed)

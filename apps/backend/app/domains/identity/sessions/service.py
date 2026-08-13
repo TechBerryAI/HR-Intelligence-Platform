@@ -131,6 +131,8 @@ def revoke_refresh_token(token: str) -> Dict:
 
 def deactivate_session(token: str) -> Dict:
     """Revoke a refresh token (or access token's sibling via body refresh)."""
+    if not token:
+        return {"success": False, "error": "Token is required"}
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False})
         if payload.get('type') == 'refresh':
@@ -139,9 +141,9 @@ def deactivate_session(token: str) -> Dict:
         user_id = payload.get('user_id')
         if user_id:
             return deactivate_all_user_sessions(user_id, payload.get('role') or 'HR')
+        return {"success": False, "error": "Token is missing user identity"}
     except Exception:
-        pass
-    return {"success": True}
+        return {"success": False, "error": "Invalid token"}
 
 
 def deactivate_all_user_sessions(user_id, user_type: str) -> Dict:

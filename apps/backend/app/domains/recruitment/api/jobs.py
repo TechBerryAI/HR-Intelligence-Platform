@@ -528,27 +528,31 @@ def get_candidate_resume(job_id: str, candidate_id: str):
         if not application:
             return jsonify({'error': 'Application not found'}), 404
         
-        # Get resume (prefer media via resume_raw_file_id, fallback BYTEA)
-        profile = db_get(
-            '''
-            SELECT resume, resume_raw_file_id
-            FROM candidate_profiles
-            WHERE candidate_id = ?
-            ''',
-            (candidate_id,)
-        )
-        if not profile:
-            return jsonify({'error': 'Resume not found'}), 404
-
+        # Get resume: prefer this application's match parse (apply-specific),
+        # then profile media / legacy BYTEA.
         from flask import Response
-        from app.domains.recruitment.services.parsing_storage import load_raw_file_bytes
+        from app.domains.recruitment.services.parsing_storage import (
+            load_profile_resume_bytes,
+            load_raw_file_bytes,
+        )
 
         resume_data = None
-        raw_id = profile.get('resume_raw_file_id')
-        if raw_id:
-            resume_data = load_raw_file_bytes(str(raw_id))
+        match_row = db_get(
+            '''
+            SELECT pr.raw_file_id
+            FROM matches m
+            LEFT JOIN parsed_resumes pr ON pr.id = m.parsed_resume_id
+            WHERE m.job_id = ? AND m.candidate_id = ? AND m.is_latest = ''' + TRUE_SQL + '''
+            ORDER BY m.created_at DESC
+            LIMIT 1
+            ''',
+            (job_id, candidate_id),
+        )
+        raw_from_match = (match_row or {}).get('raw_file_id')
+        if raw_from_match:
+            resume_data = load_raw_file_bytes(str(raw_from_match))
         if not resume_data:
-            resume_data = _resume_bytes(profile.get('resume'))
+            resume_data = load_profile_resume_bytes(candidate_id)
         if resume_data:
             return Response(
                 resume_data,
@@ -738,13 +742,7 @@ def create_job():
     try:
         if is_read_only(request.user):
             return jsonify({'error': 'Read-only access'}), 403
-        print("CREATE JOB ENDPOINT CALLED")
-        print(f"Request method: {request.method}")
-        print(f"Request URL: {request.url}")
-        print(f"Headers: {dict(request.headers)}")
         data = request.get_json(force=True) or {}
-        print(f"Received data: {data}")
-        print(f"User from token: {request.user}")
         title = (data.get('title') or '').strip()
         company = (data.get('company') or '').strip()
         location = (data.get('location') or '').strip()
@@ -948,44 +946,10 @@ def update_job(job_id: str):
         else:
             keywords = job.get('keywords')
 
-        # Determine if jdid needs to be regenerated
-        # Regenerate if title, experience, or salary changed
-        old_title = (job.get('title') or '').strip()
-        old_experience = (job.get('experience') or '').strip()
-        old_salary = (job.get('salary') or '').strip() or None
-        new_title = title or old_title
-        new_experience = experience or old_experience
-        new_salary = salary if salary is not None else old_salary
-        
-        should_regenerate_jdid = (
-            (title and title.strip() and title.strip().upper() != old_title.upper()) or
-            (experience and experience.strip() != old_experience) or
-            (salary is not None and salary != old_salary)
-        )
-        
-        new_jdid = job_id  # Keep same jdid by default
-        
-        if should_regenerate_jdid:
-            # Generate new jdid from title
-            new_jdid = generate_jdid_from_title(new_title)
-            print(f"Regenerating jdid: {job_id} -> {new_jdid} (title/experience/salary changed)")
-            
-            # If jdid changed, update foreign keys in other tables
-            if new_jdid != job_id:
-                # Update applications table
-                db_run('UPDATE applications SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
-                db_run('UPDATE matches SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
-                db_run('UPDATE parsed_jds SET job_id = ? WHERE job_id = ?', (new_jdid, job_id))
-                db_run(
-                    'UPDATE external_jobs SET job_id = ? WHERE job_id = ?',
-                    (new_jdid, job_id),
-                )
-
-        # Update job with new jdid if it changed
+        # jdid is the immutable primary key / foreign-key target — never regenerate on edit.
         db_run(
             '''
             UPDATE jobs SET
-              jdid = ?,
               title = COALESCE(?, title),
               location = COALESCE(?, location),
               salary = ?,
@@ -994,9 +958,9 @@ def update_job(job_id: str):
               keywords = ?
             WHERE jdid = ?
             ''',
-            (new_jdid, title, location, salary, experience, description, keywords, job_id)
+            (title, location, salary, experience, description, keywords, job_id)
         )
-        updated = db_get('SELECT * FROM jobs WHERE jdid = ?', (new_jdid,))
+        updated = db_get('SELECT * FROM jobs WHERE jdid = ?', (job_id,))
         if updated:
             emit_job_updated(updated, request.user)
         return jsonify(_serialize_job(updated))
@@ -1103,7 +1067,7 @@ def public_apply_to_job(job_id: str):
         org_id = str(job.get('organization_id') or org.get('id') or '').strip()
         if not org_id:
             return jsonify({'error': 'Job is missing organization context'}), 400
-        candidate_id = upsert_passwordless_candidate(
+        candidate_id, candidate_created = upsert_passwordless_candidate(
             full_name, email, organization_id=org_id
         )
 
@@ -1124,13 +1088,20 @@ def public_apply_to_job(job_id: str):
             resume_raw_file_id = (pr_row or {}).get('raw_file_id') or None
 
         data = {**data, 'email': email, 'fullName': full_name, 'completed': True}
-        save_candidate_profile(
-            candidate_id,
-            data,
-            None if resume_raw_file_id else resume_binary,
-            completed=True,
-            resume_raw_file_id=resume_raw_file_id,
+        # Freeze shared profile for existing candidates — email alone is not ownership proof.
+        # Apply-specific resume/ATS still bind via parsed_resume → matches.
+        existing_profile = db_get(
+            'SELECT candidate_id FROM candidate_profiles WHERE candidate_id = ?',
+            (candidate_id,),
         )
+        if candidate_created or not existing_profile:
+            save_candidate_profile(
+                candidate_id,
+                data,
+                None if resume_raw_file_id else resume_binary,
+                completed=True,
+                resume_raw_file_id=resume_raw_file_id,
+            )
 
         parsed_id = parsed_id_early
         public_uploader_id = (data.get('publicUploaderId') or data.get('public_uploader_id') or '').strip() or None
@@ -1140,8 +1111,8 @@ def public_apply_to_job(job_id: str):
                 'error': 'No parsed resume found. Please upload your resume and wait for AI parsing to finish.'
             }), 400
 
-        # If profile still lacks a raw file link, bind from parsed resume
-        if not resume_raw_file_id and parsed_resume_record.get('raw_file_id'):
+        # Only bind resume onto the shared profile when we are allowed to create it (first write).
+        if (candidate_created or not existing_profile) and not resume_raw_file_id and parsed_resume_record.get('raw_file_id'):
             save_candidate_profile(
                 candidate_id,
                 data,

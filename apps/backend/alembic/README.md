@@ -38,12 +38,7 @@ cd apps/backend
 alembic upgrade head
 ```
 
-If you see `Can't locate revision identified by '…'`, wipe/recreate the DB (preferred) or, for empty salvage only:
-
-```bash
-alembic stamp 20260810_s001
-alembic upgrade head
-```
+If you see `Can't locate revision identified by '…'`, wipe/recreate the DB (preferred). Production (`FLASK_DEBUG=false`) **never** rewrites `alembic_version` for an unknown revision. Local/debug salvage of documented pre-squash stamps may retarget to `20260810_s001` then `upgrade head`. Do not `alembic stamp head` to hide drift.
 
 **Do not** add numbered `NN_*.sql` under `app/database/migrations/` (legacy folder retired).
 

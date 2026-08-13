@@ -2,12 +2,37 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _BASELINE = '20260810_s001'
+
+# Session-level advisory lock so concurrent upgrade_head (Flask, scripts,
+# Gunicorn without -c) cannot interleave DDL. Distinct from auto-sync lock.
+MIGRATION_ADVISORY_LOCK_KEY = 872_014_002
+
+# Deleted revisions that may still appear on local DBs after the squash.
+# Production never rewrites alembic_version; debug may retarget these to baseline.
+_DELETED_PRE_SQUASH = frozenset(
+    {
+        '20260810_0014',
+        '20260811_s002',
+        '20260811_s003',
+        '20260811_s004',
+        '20260811_s005',
+    }
+)
+
+
+class AlembicOrphanStampError(RuntimeError):
+    """alembic_version points at a revision this process cannot apply."""
+
+
+def _is_production_like() -> bool:
+    return os.getenv('FLASK_DEBUG', 'false').lower() != 'true'
 
 
 def _config():
@@ -28,10 +53,33 @@ def _known_revision_ids() -> set[str]:
     return {rev.revision for rev in script.walk_revisions()}
 
 
+def orphan_stamp_action(current: str | None, known: set[str]) -> str:
+    """
+    Decide what to do with alembic_version.
+
+    Returns ``ok`` (known / empty) or ``repair`` (debug + allowlisted deleted id).
+    Raises AlembicOrphanStampError for unknown or production orphans.
+    """
+    if not current or current in known:
+        return 'ok'
+    production = _is_production_like()
+    if production or current not in _DELETED_PRE_SQUASH:
+        raise AlembicOrphanStampError(
+            f"alembic_version={current!r} is not a known revision in this "
+            f"application tree. Refusing to rewrite alembic_version. "
+            f"Wipe/recreate the database (preferred) or run the matching "
+            f"application revision. Known heads include this process's "
+            f"migration scripts only."
+        )
+    return 'repair'
+
+
 def repair_orphan_stamp() -> bool:
     """
-    If alembic_version points at a deleted revision, retarget to baseline
-    so ``upgrade head`` can continue (local/dev wipe-or-restamp path).
+    If alembic_version points at a deleted pre-squash revision, retarget to
+    baseline so ``upgrade head`` can continue (local/dev salvage only).
+
+    Production never rewrites the version table.
     Returns True if a repair was applied.
     """
     from alembic import command
@@ -55,7 +103,8 @@ def repair_orphan_stamp() -> bool:
         return False
 
     known = _known_revision_ids()
-    if current in known:
+    action = orphan_stamp_action(current, known)
+    if action != 'repair':
         return False
 
     logger.warning(

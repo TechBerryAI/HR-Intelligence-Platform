@@ -799,30 +799,62 @@ def _process_one_file_inner(
         return (filename, None, True, f"Failed: {filename} - {str(e)[:100]}", "exception")
 
 
-def _load_staged_files(job_id: str) -> list[tuple[str, Path]]:
+def _load_staged_files(job_id: str) -> list[tuple[str, Path, str | None]]:
+    """Return (filename, path, file_id) from durable DB + disk staging."""
+    from app.domains.administration.repositories.bulk_session_db import list_queued_filenames, get_file_id_by_name
+
+    names: list[str] = []
     with _local_jobs_lock:
         job = _local_jobs.get(job_id) or {}
         names = list(job.get('staged_filenames') or [])
-    out = []
+    if not names:
+        try:
+            names = list_queued_filenames(job_id)
+        except Exception:
+            names = []
+    out: list[tuple[str, Path, str | None]] = []
     for name in names:
         p = _staging_dir(job_id) / name
-        if p.is_file():
-            out.append((name, p))
+        if not p.is_file():
+            continue
+        file_id = None
+        try:
+            file_id = get_file_id_by_name(job_id, name)
+        except Exception:
+            file_id = None
+        out.append((name, p, file_id))
     return out
 
 
-def _worker(job_id: str, started_at: float, append: bool = False) -> None:
+def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str | None = None) -> None:
     """Background: process staged files in parallel, update progress, write Excel."""
     from app.domains.administration.repositories.bulk_session_db import (
+        claim_file_for_processing,
         finalize_session,
+        heartbeat_session_lease,
+        reclaim_stale_file_leases,
         update_file_status,
         update_session_progress,
     )
 
+    wid = worker_id or f'pid-{os.getpid()}-{uuid.uuid4().hex[:8]}'
+    try:
+        reclaim_stale_file_leases()
+    except Exception:
+        pass
+
     with _local_jobs_lock:
         job = _local_jobs.get(job_id)
-    if not job or job.get('status') == 'cancelled':
+    if job and job.get('status') == 'cancelled':
         return
+    # Ensure a local cache shell exists for progress UI even after worker restart.
+    if not job:
+        _ensure_job(job_id)
+        with _local_jobs_lock:
+            job = _local_jobs.get(job_id)
+            if job:
+                job['status'] = 'started'
+                job['started_at'] = started_at
 
     files_list = _load_staged_files(job_id)
     total = len(files_list)
@@ -831,17 +863,30 @@ def _worker(job_id: str, started_at: float, append: bool = False) -> None:
     failed_count = 0
     max_workers = min(BULK_PARSE_MAX_WORKERS, max(1, total))
 
+    def _run_one(item: tuple[str, Path, str | None]):
+        filename, path, file_id = item
+        if file_id:
+            if not claim_file_for_processing(str(file_id), wid):
+                return (filename, None, False, 'skipped-unclaimed', 'skipped', False)
+        return (*_process_one_file((filename, path, job_id)), True)
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_file = {
-            executor.submit(_process_one_file, (item[0], item[1], job_id)): item[0]
+            executor.submit(_run_one, item): item[0]
             for item in files_list
         }
         for future in as_completed(future_to_file):
             with _local_jobs_lock:
                 j = _local_jobs.get(job_id)
-            if not j or j.get('status') == 'cancelled':
+            if j and j.get('status') == 'cancelled':
                 break
-            filename, row, is_failed, message, code = future.result()
+            try:
+                heartbeat_session_lease(job_id, wid)
+            except Exception:
+                pass
+            filename, row, is_failed, message, code, claimed = future.result()
+            if not claimed or code == 'skipped':
+                continue
             if is_failed:
                 failed_count += 1
                 update_file_status(job_id, filename, 'Failed', error_message=message)
@@ -1010,8 +1055,11 @@ def stage_files(job_id: str, files_list: list[tuple[str, bytes]], started_by=Non
             _local_jobs[job_id]['message'] = f"Uploaded {_local_jobs[job_id]['total_files']} file(s)"
             total = _local_jobs[job_id]['total_files']
 
-    add_session_files(job_id, staged_names, file_bytes_for_db)
-    bump_session_total(job_id, total)
+    try:
+        add_session_files(job_id, staged_names, file_bytes_for_db)
+        bump_session_total(job_id, total)
+    except Exception as exc:
+        return False, {'error': f'Failed to catalog uploaded files: {exc}'}
 
     return True, {
         'job_id': job_id,
@@ -1069,14 +1117,60 @@ def extract_zip_to_job(job_id: str, zip_bytes: bytes, started_by=None) -> tuple[
 
 
 def start_staged_job(job_id: str, append: bool | None = None) -> tuple[bool, dict]:
-    """Start processing all staged files for a job."""
+    """Start processing all staged files for a job (DB-backed, multi-worker safe)."""
+    from app.domains.administration.repositories.bulk_session_db import (
+        claim_session_lease,
+        get_session_owner,
+        get_session_progress,
+        list_queued_filenames,
+        reclaim_stale_file_leases,
+    )
+
+    try:
+        reclaim_stale_file_leases()
+    except Exception:
+        pass
+
+    # Rebuild local cache from durable state when this process did not handle upload.
+    job = _ensure_job(job_id)
+    db_names = []
+    try:
+        db_names = list_queued_filenames(job_id)
+    except Exception:
+        db_names = []
+
     with _local_jobs_lock:
-        job = _local_jobs.get(job_id)
+        if not job:
+            owner = None
+            try:
+                owner = get_session_owner(job_id)
+            except Exception:
+                owner = None
+            if not owner and not db_names:
+                progress = None
+                try:
+                    progress = get_session_progress(job_id)
+                except Exception:
+                    progress = None
+                if not progress:
+                    return False, {'error': 'Job not found'}
+            job = _ensure_job(job_id, started_by=owner)
         if not job:
             return False, {'error': 'Job not found'}
-        if job.get('status') in ('started', 'completed'):
-            return False, {'error': f'Job already {job.get("status")}'}
-        total = len(job.get('staged_filenames') or [])
+        if job.get('status') == 'completed':
+            return False, {'error': 'Job already completed'}
+        # Prefer durable filename list from DB; fall back to memory / disk.
+        names = list(job.get('staged_filenames') or [])
+        if db_names:
+            names = db_names
+            job['staged_filenames'] = list(db_names)
+        if not names:
+            # Disk fallback for recovery when DB rows exist but names empty
+            staging = _staging_dir(job_id)
+            if staging.is_dir():
+                names = sorted(p.name for p in staging.iterdir() if p.is_file())
+                job['staged_filenames'] = names
+        total = len(names)
         if total == 0:
             return False, {'error': 'No files uploaded for this job'}
         if append is not None:
@@ -1093,11 +1187,24 @@ def start_staged_job(job_id: str, append: bool | None = None) -> tuple[bool, dic
         job['message'] = 'Processing...'
         job['total_files'] = total
 
-    from app.domains.administration.repositories.bulk_session_db import mark_session_running
+    worker_id = f'pid-{os.getpid()}-{uuid.uuid4().hex[:8]}'
+    claimed = claim_session_lease(job_id, worker_id, total_files=total)
+    if not claimed:
+        with _local_jobs_lock:
+            j = _local_jobs.get(job_id)
+            if j and j.get('status') == 'started':
+                j['status'] = 'pending'
+                j['message'] = 'Waiting for worker lease...'
+        return False, {
+            'error': 'Job is already being processed by another worker',
+            'status': 'started',
+        }
 
-    mark_session_running(job_id, total)
-
-    t = threading.Thread(target=_worker, args=(job_id, started_at, use_append), daemon=True)
+    t = threading.Thread(
+        target=_worker,
+        args=(job_id, started_at, use_append, worker_id),
+        daemon=True,
+    )
     t.start()
     return True, {
         'job_id': job_id,

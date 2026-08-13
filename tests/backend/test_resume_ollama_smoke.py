@@ -62,13 +62,12 @@ def require_ollama():
 
 @pytest.fixture(scope="module")
 def runtime_env(require_ollama):
-    os.environ.setdefault("AI_USE_GATEWAY", "true")
-    os.environ.setdefault(
-        "AI_RUNTIME_CONFIG",
-        str(AI_ROOT / "runtime" / "config" / "runtime.production.yaml"),
+    os.environ["AI_USE_GATEWAY"] = "true"
+    os.environ["AI_RUNTIME_CONFIG"] = str(
+        AI_ROOT / "runtime" / "config" / "runtime.production.yaml"
     )
     os.environ.setdefault("OLLAMA_HOST", "http://localhost:11434")
-    os.environ.setdefault("OLLAMA_MODEL", "qwen2.5:7b-instruct")
+    os.environ.setdefault("OLLAMA_MODEL", "qwen2.5:14b-instruct")
 
 
 def test_parse_via_runtime_returns_structured_resume(runtime_env):
@@ -94,3 +93,68 @@ def test_call_llm_gateway_path(runtime_env):
     assert toon["type"] == "resume"
     assert toon["person"]["name"]
     assert isinstance(toon["skills"], list)
+
+
+def test_ollama_parse_persists_and_retry_uses_cache(runtime_env):
+    """Real Ollama JSON → normalize → persist; second hash lookup must not duplicate."""
+    from app.ai.adapter.runtime_adapter import normalize_proposal, parse_via_runtime
+    from app.database.connection.db import db_all, db_get, db_run
+    from app.domains.recruitment.services.parsing_storage import (
+        compute_file_hash,
+        store_parsed_resume,
+        store_raw_file,
+    )
+
+    try:
+        if not db_get("SELECT 1 AS ok"):
+            pytest.skip("Postgres not reachable")
+    except Exception as exc:
+        pytest.skip(f"Postgres not reachable: {exc}")
+
+    structured = parse_via_runtime(SAMPLE_RESUME, "resume")
+    toon = normalize_proposal(structured, "resume")
+    assert toon["person"]["name"]
+
+    payload = SAMPLE_RESUME.encode("utf-8")
+    uploader = "ollama-e2e-closure"
+    raw = store_raw_file(
+        uploader,
+        "recruiter",
+        payload,
+        "jane-doe-e2e.txt",
+        "text/plain",
+        None,
+    )
+    parsed_id = store_parsed_resume(
+        raw["id"],
+        None,
+        toon,
+        SAMPLE_RESUME,
+        0.9,
+        "canonical-v6-jd-coverage+ollama-e2e",
+    )
+    try:
+        row = db_get("SELECT id, toon FROM parsed_resumes WHERE id = ?", (parsed_id,))
+        assert row and str(row["id"]) == str(parsed_id)
+        assert "Jane" in (row["toon"] or "")
+
+        file_hash = compute_file_hash(payload)
+        assert file_hash == raw["file_hash"]
+        dupes = db_all(
+            """
+            SELECT p.id FROM parsed_resumes p
+            JOIN raw_files r ON r.id = p.raw_file_id
+            WHERE r.file_hash = ? AND r.uploader_id = ?
+            """,
+            (file_hash, uploader),
+        )
+        assert len(dupes) == 1, f"retry/cache must not insert a second row: {dupes!r}"
+    finally:
+        db_run("DELETE FROM parsed_resumes WHERE id = ?", (parsed_id,))
+        db_run("DELETE FROM raw_files WHERE id = ?", (raw["id"],))
+        db_run(
+            "DELETE FROM parsed_resumes WHERE raw_file_id IN "
+            "(SELECT id FROM raw_files WHERE uploader_id = ?)",
+            (uploader,),
+        )
+        db_run("DELETE FROM raw_files WHERE uploader_id = ?", (uploader,))

@@ -93,6 +93,18 @@ def test_allows_additional_root_properties(schema: dict) -> None:
     jsonschema.Draft202012Validator(schema).validate(payload)
 
 
+def test_null_total_experience_years_allowed(schema: dict) -> None:
+    payload = {
+        "type": "resume",
+        "person": {"name": "A", "email": "a@b.com", "phone": "1"},
+        "skills": ["Python"],
+        "experience": [],
+        "education": [],
+        "total_experience_years": None,
+    }
+    jsonschema.Draft202012Validator(schema).validate(payload)
+
+
 def test_location_is_string(schema: dict) -> None:
     payload = {
         "type": "resume",

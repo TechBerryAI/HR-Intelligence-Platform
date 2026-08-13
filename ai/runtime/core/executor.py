@@ -202,7 +202,11 @@ class TaskExecutor:
 
                     timeout_seconds=timeout_seconds,
 
-                    metadata={"attempt": attempt, **kwargs.get("metadata", {})},
+                    metadata={
+                        "attempt": attempt,
+                        "json_schema": schema,
+                        **kwargs.get("metadata", {}),
+                    },
 
                 )
 

@@ -272,20 +272,34 @@ def upsert_external_job(
     request_payload: Any = None,
     response_payload: Any = None,
     mark_published: bool = False,
+    pending_operation: str | None = None,
+    next_attempt_at: Any = None,
+    clear_lease: bool | None = None,
+    due_now: bool = False,
 ) -> dict | None:
     existing = get_external_job(job_id, provider)
+    # Leaving pending (or explicit clear) drops the worker lease so reclaim is clean.
+    if clear_lease is None:
+        clear_lease = sync_status != 'pending'
+    if due_now:
+        next_attempt_at = None
     if not existing:
         db_run(
             '''
             INSERT INTO external_jobs (
                 company_key, job_id, provider, external_job_id, external_status,
                 published_at, last_sync, sync_status, error_message, retry_count,
-                request_payload, response_payload
+                request_payload, response_payload,
+                pending_operation, next_attempt_at,
+                leased_by, leased_until
             ) VALUES (
                 ?, ?, ?, ?, ?,
                 CASE WHEN ? THEN NOW() ELSE NULL END,
                 NOW(), ?, ?, ?,
-                ?::jsonb, ?::jsonb
+                ?::jsonb, ?::jsonb,
+                ?,
+                CASE WHEN ? THEN NOW() ELSE COALESCE(?, NOW()) END,
+                NULL, NULL
             )
             ''',
             (
@@ -300,11 +314,23 @@ def upsert_external_job(
                 retry_count or 0,
                 _json_dumps(request_payload),
                 _json_dumps(response_payload),
+                pending_operation if sync_status == 'pending' else None,
+                due_now or (sync_status == 'pending' and next_attempt_at is None),
+                next_attempt_at,
             ),
         )
         return get_external_job(job_id, provider)
 
     retry_v = existing.get('retry_count') or 0 if retry_count is None else retry_count
+    op_v = pending_operation
+    if sync_status == 'pending' and op_v is None:
+        op_v = existing.get('pending_operation') or 'publish'
+    if sync_status != 'pending':
+        op_v = None
+
+    force_now = bool(due_now) or (
+        sync_status == 'pending' and next_attempt_at is None and pending_operation is not None
+    )
     db_run(
         '''
         UPDATE external_jobs SET
@@ -317,7 +343,16 @@ def upsert_external_job(
             response_payload = COALESCE(?::jsonb, response_payload),
             published_at = CASE WHEN ? AND published_at IS NULL THEN NOW() ELSE published_at END,
             last_sync = NOW(),
-            updated_at = NOW()
+            updated_at = NOW(),
+            pending_operation = ?,
+            next_attempt_at = CASE
+                WHEN ? THEN NOW()
+                WHEN ?::timestamptz IS NOT NULL THEN ?::timestamptz
+                WHEN ? = 'pending' THEN COALESCE(next_attempt_at, NOW())
+                ELSE NULL
+            END,
+            leased_by = CASE WHEN ? THEN NULL ELSE leased_by END,
+            leased_until = CASE WHEN ? THEN NULL ELSE leased_until END
         WHERE job_id = ? AND provider = ?
         ''',
         (
@@ -329,11 +364,166 @@ def upsert_external_job(
             _json_dumps(request_payload),
             _json_dumps(response_payload),
             mark_published,
+            op_v,
+            force_now,
+            next_attempt_at,
+            next_attempt_at,
+            sync_status,
+            clear_lease,
+            clear_lease,
             job_id,
             provider,
         ),
     )
     return get_external_job(job_id, provider)
+
+
+DEFAULT_OUTBOX_LEASE_SECONDS = 120
+
+
+def _lease_until(lease_seconds: int):
+    from datetime import datetime, timedelta, timezone
+
+    return datetime.now(timezone.utc) + timedelta(seconds=max(30, int(lease_seconds)))
+
+
+def claim_pending_external_jobs(
+    worker_id: str,
+    *,
+    limit: int = 10,
+    lease_seconds: int = DEFAULT_OUTBOX_LEASE_SECONDS,
+    job_id: str | None = None,
+) -> list[dict]:
+    """
+    Atomically claim pending outbox rows (SKIP LOCKED).
+
+    Two workers never receive the same row. Expired leases are reclaimable.
+    """
+    from app.database.connection.db import get_conn
+    from psycopg.rows import dict_row
+
+    until = _lease_until(lease_seconds)
+    lim = max(1, min(int(limit), 200))
+    params: list = []
+    job_filter = ''
+    if job_id:
+        job_filter = 'AND job_id = %s'
+        params.append(job_id)
+    params.extend([lim, worker_id, until])
+    with get_conn() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                f'''
+                WITH cte AS (
+                    SELECT id
+                    FROM external_jobs
+                    WHERE sync_status = 'pending'
+                      AND COALESCE(next_attempt_at, TIMESTAMPTZ '-infinity') <= NOW()
+                      AND (leased_until IS NULL OR leased_until < NOW())
+                      {job_filter}
+                    ORDER BY COALESCE(next_attempt_at, created_at) ASC, id ASC
+                    FOR UPDATE SKIP LOCKED
+                    LIMIT %s
+                )
+                UPDATE external_jobs e
+                SET leased_by = %s,
+                    leased_until = %s,
+                    updated_at = NOW()
+                FROM cte
+                WHERE e.id = cte.id
+                RETURNING e.*
+                ''',
+                tuple(params),
+            )
+            rows = cur.fetchall() or []
+            return [dict(r) for r in rows]
+
+
+def release_external_job_lease(external_row_id: int) -> None:
+    db_run(
+        '''
+        UPDATE external_jobs
+        SET leased_by = NULL, leased_until = NULL, updated_at = NOW()
+        WHERE id = ?
+        ''',
+        (external_row_id,),
+    )
+
+
+def release_leases_for_worker(worker_id: str) -> int:
+    result = db_run(
+        '''
+        UPDATE external_jobs
+        SET leased_by = NULL, leased_until = NULL, updated_at = NOW()
+        WHERE leased_by = ?
+        ''',
+        (worker_id,),
+    )
+    return int((result or {}).get('changes') or 0)
+
+
+def schedule_external_job_retry(
+    company_key: str,
+    job_id: str,
+    provider: str,
+    *,
+    pending_operation: str,
+    retry_count: int,
+    error_message: str | None,
+    next_attempt_at,
+) -> None:
+    upsert_external_job(
+        company_key,
+        job_id,
+        provider,
+        sync_status='pending',
+        error_message=error_message,
+        retry_count=retry_count,
+        pending_operation=pending_operation,
+        next_attempt_at=next_attempt_at,
+        clear_lease=True,
+    )
+
+
+def recover_external_job_id_from_logs(job_id: str, provider: str) -> str | None:
+    """
+    If publish succeeded externally but the process died before persisting
+    external_job_id, recover it from sync_logs to avoid duplicate creates.
+    """
+    row = db_get(
+        '''
+        SELECT external_job_id, response_payload
+        FROM sync_logs
+        WHERE job_id = ?
+          AND provider = ?
+          AND operation IN ('publish', 'update')
+          AND status = 'success'
+          AND (
+            external_job_id IS NOT NULL
+            OR response_payload IS NOT NULL
+          )
+        ORDER BY created_at DESC
+        LIMIT 1
+        ''',
+        (job_id, provider),
+    )
+    if not row:
+        return None
+    eid = (row.get('external_job_id') or '').strip()
+    if eid:
+        return eid
+    payload = row.get('response_payload')
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except json.JSONDecodeError:
+            payload = None
+    if isinstance(payload, dict):
+        for key in ('external_job_id', 'externalJobId', 'id', 'jobId'):
+            val = payload.get(key)
+            if val:
+                return str(val)
+    return None
 
 
 def count_external_by_status(company_key: str) -> list[dict]:

@@ -12,11 +12,43 @@ max_requests = 1000
 max_requests_jitter = 50
 # Exceed AI parse default_timeout_seconds (300) so long resume/JD parses are not killed mid-request.
 timeout = int(os.getenv("GUNICORN_TIMEOUT", "320"))
+# Match request timeout so SIGTERM during a long parse is not followed by a 30s kill.
+graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", str(timeout)))
 keepalive = 5
 capture_output = True
 enable_stdio_inheritance = True
 accesslog = "-"
 errorlog = "-"
 loglevel = os.getenv("GUNICORN_LOG_LEVEL", "info")
+# Path + status only — omit query string so OAuth codes/tokens cannot appear in access logs.
+access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(m)s %(U)s %(H)s" %(s)s %(b)s "%(f)s" "%(a)s"'
 
 # .env is loaded by wsgi.py on import
+
+
+def on_starting(server):
+    """Validate config and apply migrations once in the master (avoid worker DDL races)."""
+    from pathlib import Path
+
+    from dotenv import load_dotenv
+
+    os.environ.setdefault('HCIP_PROCESS_ROLE', 'web')
+    load_dotenv(Path(__file__).resolve().parent / '.env')
+    from app.config.env_validator import EnvValidator
+
+    if not EnvValidator.print_report():
+        raise SystemExit(1)
+    from app.database.alembic_runner import upgrade_head
+
+    upgrade_head()
+    os.environ['HCIP_MIGRATIONS_DONE'] = '1'
+
+
+def worker_exit(server, worker):
+    """Release outbox leases on worker recycle / SIGTERM (do not rely on atexit alone)."""
+    try:
+        from app.domains.integrations.worker.outbox import stop_outbox_drain
+
+        stop_outbox_drain(timeout=5.0)
+    except Exception:
+        server.log.warning("worker_exit: outbox drain stop failed", exc_info=True)

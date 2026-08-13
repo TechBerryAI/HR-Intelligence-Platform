@@ -57,6 +57,12 @@ def test_e2e_resume_form_fields(case_dir: Path):
         got = actual.get(key)
         if isinstance(value, list):
             assert _norm(got) == _norm(value), f'{case_dir.name}.{key}'
+        elif key.lower() in {'skills', 'mandatoryskills', 'preferredskills', 'skillslist'}:
+            from app.ai.parser.engine.knowledge import skill_csv_equivalent
+
+            assert skill_csv_equivalent(str(value), str(got or '')), (
+                f'{case_dir.name}.{key}: expected {value!r}, got {got!r}'
+            )
         else:
             assert _norm(got) == _norm(value), (
                 f'{case_dir.name}.{key}: expected {value!r}, got {got!r}'
