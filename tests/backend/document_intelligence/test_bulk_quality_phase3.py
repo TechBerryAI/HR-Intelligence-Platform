@@ -583,6 +583,15 @@ B.Tech - Pune University
     assert cleaned.total_experience_years >= 1.5
 
 
+def test_location_parse_contract_is_city_canonical():
+    """E2E parse contract: plausible US city+state heals to the known city token."""
+    from app.ai.parser.enrichment.resume_text_inference import heal_location_candidate
+
+    assert heal_location_candidate('Austin, TX') == 'Austin'
+    assert heal_location_candidate('San Francisco, CA') == 'San Francisco'
+    assert heal_location_candidate('Seattle, WA') == 'Seattle'
+
+
 def test_p4_location_heal_phone_bleed_and_ambernath():
     from app.ai.parser.enrichment.resume_text_inference import heal_location_candidate
 
