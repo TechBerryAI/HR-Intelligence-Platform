@@ -137,7 +137,7 @@ alembic current
 alembic heads
 ```
 
-`current` must equal `heads` (today: `20260812_ext_outbox`). `scripts/release-verify.sh pre-deploy` also checks this.
+`current` must equal `heads` (today: `20260814_cid_pad3`). `scripts/release-verify.sh pre-deploy` also checks this.
 
 ### START
 

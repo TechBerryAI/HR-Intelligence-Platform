@@ -20,11 +20,13 @@ KNOWN = {
     '20260812_oauth_scrub',
     '20260812_bulk_leases',
     '20260812_ext_outbox',
+    '20260814_cid_pad3',
 }
 
 
 def test_known_revision_is_ok(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'false')
+    assert orphan_stamp_action('20260814_cid_pad3', KNOWN) == 'ok'
     assert orphan_stamp_action('20260812_ext_outbox', KNOWN) == 'ok'
     assert orphan_stamp_action('20260811_email', KNOWN) == 'ok'
     assert orphan_stamp_action(None, KNOWN) == 'ok'
@@ -58,23 +60,23 @@ def test_debug_refuses_unknown_non_allowlisted_revision(monkeypatch):
 
 
 def test_schema_at_head_status_ok():
-    assert schema_at_head_status('20260812_ext_outbox', ['20260812_ext_outbox']) == (
-        '20260812_ext_outbox'
+    assert schema_at_head_status('20260814_cid_pad3', ['20260814_cid_pad3']) == (
+        '20260814_cid_pad3'
     )
 
 
 def test_schema_at_head_status_rejects_mismatch():
     with pytest.raises(SchemaNotAtHeadError) as exc:
-        schema_at_head_status('20260810_s001', ['20260812_ext_outbox'])
+        schema_at_head_status('20260810_s001', ['20260814_cid_pad3'])
     assert '20260810_s001' in str(exc.value)
-    assert '20260812_ext_outbox' in str(exc.value)
+    assert '20260814_cid_pad3' in str(exc.value)
 
 
 def test_schema_at_head_status_rejects_empty_and_multiple_heads():
     with pytest.raises(SchemaNotAtHeadError):
-        schema_at_head_status(None, ['20260812_ext_outbox'])
+        schema_at_head_status(None, ['20260814_cid_pad3'])
     with pytest.raises(SchemaNotAtHeadError):
-        schema_at_head_status('20260812_ext_outbox', ['a', 'b'])
+        schema_at_head_status('20260814_cid_pad3', ['a', 'b'])
 
 
 def test_production_web_requires_migrations_already_applied(monkeypatch):
@@ -101,8 +103,8 @@ def test_production_web_verifies_and_does_not_upgrade(monkeypatch):
         raise AssertionError('upgrade_head must not run in production web')
 
     monkeypatch.setattr(runner, 'upgrade_head', _fail_upgrade)
-    monkeypatch.setattr(runner, 'verify_at_head', lambda: '20260812_ext_outbox')
-    assert runner.prepare_schema_for_web_process() == '20260812_ext_outbox'
+    monkeypatch.setattr(runner, 'verify_at_head', lambda: '20260814_cid_pad3')
+    assert runner.prepare_schema_for_web_process() == '20260814_cid_pad3'
 
 
 def test_dev_web_upgrades_when_flag_unset(monkeypatch):
@@ -117,7 +119,7 @@ def test_dev_web_upgrades_when_flag_unset(monkeypatch):
         calls['upgrade'] += 1
 
     monkeypatch.setattr(runner, 'upgrade_head', _upgrade)
-    monkeypatch.setattr(runner, 'verify_at_head', lambda: '20260812_ext_outbox')
+    monkeypatch.setattr(runner, 'verify_at_head', lambda: '20260814_cid_pad3')
     runner.prepare_schema_for_web_process()
     assert calls['upgrade'] == 1
 
@@ -164,8 +166,8 @@ def test_live_alembic_current_matches_head():
 
     ver = db_get('SELECT version_num FROM alembic_version LIMIT 1')
     current = (ver or {}).get('version_num')
-    assert current == '20260812_ext_outbox', (
-        f'alembic_version={current!r}; expected 20260812_ext_outbox. '
+    assert current == '20260814_cid_pad3', (
+        f'alembic_version={current!r}; expected 20260814_cid_pad3. '
         'Run: cd apps/backend && alembic upgrade head'
     )
     markers = db_get(

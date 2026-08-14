@@ -64,8 +64,8 @@ jobs:
           JWT_SECRET: "ci-test-jwt-secret-at-least-32-characters-long"
         run: |
           alembic upgrade head
-          alembic heads | grep -q 20260812_ext_outbox
-          alembic current | grep -q 20260812_ext_outbox
+          alembic heads | grep -q 20260814_cid_pad3
+          alembic current | grep -q 20260814_cid_pad3
           python - <<'PY'
           import os
           import psycopg
