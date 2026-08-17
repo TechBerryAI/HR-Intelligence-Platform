@@ -2,8 +2,9 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { apiRequest, BASE_URL } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
-import PanelShell, { usePanelBasePath } from '@/features/organization/pages/org/PanelShell.jsx'
+import PanelShell, { usePanelBasePath, usePanelReadOnly } from '@/features/organization/pages/org/PanelShell.jsx'
 import { getApplicationDisplayMatch } from '@/features/analytics/components/MatchExplanation'
+import ApplicationStatusActions from '@/features/organization/components/org/ApplicationStatusActions.jsx'
 import {
   FiArrowLeft, FiUser, FiMail, FiPhone, FiMapPin, FiBriefcase, FiBook, FiAward, FiFileText, FiArrowRight,
 } from 'react-icons/fi'
@@ -17,6 +18,7 @@ export default function HeadHrCandidateDetail() {
   const { cid } = useParams()
   const navigate = useNavigate()
   const basePath = usePanelBasePath()
+  const readOnly = usePanelReadOnly()
   const [candidate, setCandidate] = useState(null)
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(true)
@@ -142,16 +144,16 @@ export default function HeadHrCandidateDetail() {
                 const jdid = app.job_id || app.jobId
                 return (
                   <li key={app.id}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        navigate(
-                          `${basePath}/jobs/${encodeURIComponent(jdid)}/candidates/${encodeURIComponent(cid)}`,
-                        )
-                      }
-                      className="w-full text-left rounded-xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] px-4 py-3 transition-colors flex items-center justify-between gap-3"
-                    >
-                      <div className="min-w-0">
+                    <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(
+                            `${basePath}/jobs/${encodeURIComponent(jdid)}/candidates/${encodeURIComponent(cid)}`,
+                          )
+                        }
+                        className="min-w-0 flex-1 text-left hover:opacity-90 transition-opacity"
+                      >
                         <p className="text-sm font-medium text-[var(--ei-text-primary)] truncate">
                           {app.job_title || jdid || 'Job'}
                         </p>
@@ -162,9 +164,36 @@ export default function HeadHrCandidateDetail() {
                             return score != null ? ` · Score ${score}` : ''
                           })()}
                         </p>
+                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <ApplicationStatusActions
+                          jobId={jdid}
+                          candidateId={cid}
+                          application={app}
+                          readOnly={readOnly}
+                          compact
+                          onUpdated={({ shortlisted, status }) => {
+                            setApplications((prev) =>
+                              prev.map((row) =>
+                                row.id === app.id ? { ...row, shortlisted, status } : row,
+                              ),
+                            )
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate(
+                              `${basePath}/jobs/${encodeURIComponent(jdid)}/candidates/${encodeURIComponent(cid)}`,
+                            )
+                          }
+                          className="p-2 rounded-lg text-[#55B9FF] hover:bg-white/[0.06] transition-colors"
+                          aria-label="Open application"
+                        >
+                          <FiArrowRight className="w-4 h-4" />
+                        </button>
                       </div>
-                      <FiArrowRight className="w-4 h-4 shrink-0 text-[#55B9FF]" />
-                    </button>
+                    </div>
                   </li>
                 )
               })}

@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
-import PanelShell, { usePanelBasePath } from '@/features/organization/pages/org/PanelShell.jsx'
+import PanelShell, { usePanelBasePath, usePanelReadOnly } from '@/features/organization/pages/org/PanelShell.jsx'
 import JobDescriptionView from '@/shared/components/JobDescriptionView.jsx'
 import { getApplicationDisplayMatch } from '@/features/analytics/components/MatchExplanation'
+import ApplicationStatusActions from '@/features/organization/components/org/ApplicationStatusActions.jsx'
 import { FiArrowLeft, FiBriefcase, FiMapPin, FiDollarSign, FiUser, FiCalendar, FiUsers, FiClock, FiVideo } from 'react-icons/fi'
 
 const JOB_TABS = ['details', 'candidates', 'interviews']
@@ -92,6 +93,7 @@ export default function HeadHrJobDetail() {
   const { jdid } = useParams()
   const navigate = useNavigate()
   const basePath = usePanelBasePath()
+  const readOnly = usePanelReadOnly()
   const [searchParams, setSearchParams] = useSearchParams()
   const rawTab = searchParams.get('tab')
   const tab = rawTab === 'emails' ? 'interviews' : (JOB_TABS.includes(rawTab) ? rawTab : 'details')
@@ -465,7 +467,10 @@ export default function HeadHrJobDetail() {
                         <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Email</th>
                         <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Match</th>
                         <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Status</th>
-                        <th className="pb-2.5 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Applied</th>
+                        <th className="pb-2.5 pr-3 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em]">Applied</th>
+                        {!readOnly && (
+                          <th className="pb-2.5 text-[11px] font-semibold text-[var(--ei-text-muted)] uppercase tracking-[0.08em] text-right">Decision</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--ei-border-primary)]">
@@ -498,7 +503,28 @@ export default function HeadHrJobDetail() {
                             <td className="py-3 pr-3 capitalize text-[var(--ei-text-secondary)]">
                               {app.shortlisted ? 'Shortlisted' : status === 'ats_failed' ? 'ATS failed' : status}
                             </td>
-                            <td className="py-3 text-[var(--ei-text-muted)]">{formatDate(app.applied_at)}</td>
+                            <td className="py-3 pr-3 text-[var(--ei-text-muted)]">{formatDate(app.applied_at)}</td>
+                            {!readOnly && (
+                              <td
+                                className="py-3 pl-3 text-right"
+                                onClick={(e) => e.stopPropagation()}
+                                onKeyDown={(e) => e.stopPropagation()}
+                              >
+                                <ApplicationStatusActions
+                                  jobId={jdid}
+                                  candidateId={app.candidate_id}
+                                  application={app}
+                                  compact
+                                  onUpdated={({ shortlisted, status }) => {
+                                    setApplicants((prev) =>
+                                      prev.map((row) =>
+                                        row.id === app.id ? { ...row, shortlisted, status } : row,
+                                      ),
+                                    )
+                                  }}
+                                />
+                              </td>
+                            )}
                           </tr>
                         )
                       })}

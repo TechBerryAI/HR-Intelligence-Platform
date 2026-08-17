@@ -2,15 +2,17 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
-import PanelShell, { usePanelBasePath } from '@/features/organization/pages/org/PanelShell.jsx'
+import PanelShell, { usePanelBasePath, usePanelReadOnly } from '@/features/organization/pages/org/PanelShell.jsx'
 import CandidateProfilePanel from '@/features/organization/components/org/CandidateProfilePanel.jsx'
 import ApplicationMatchPanel from '@/features/organization/components/org/ApplicationMatchPanel.jsx'
+import ApplicationStatusActions from '@/features/organization/components/org/ApplicationStatusActions.jsx'
 import { FiArrowLeft } from 'react-icons/fi'
 
 export default function HeadHrJobCandidateDetail() {
   const { jdid, cid } = useParams()
   const navigate = useNavigate()
   const basePath = usePanelBasePath()
+  const readOnly = usePanelReadOnly()
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get('tab') === 'application' ? 'application' : 'profile'
 
@@ -103,16 +105,27 @@ export default function HeadHrJobCandidateDetail() {
           Back to {jobTitle}
         </button>
 
-        <header className="mb-6">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ei-text-muted)] mb-2">
-            Candidate Evaluation
-          </p>
-          <h1 className="font-display text-[28px] sm:text-[30px] font-bold text-[var(--ei-text-primary)] tracking-tight leading-tight">
-            {candidateName}
-          </h1>
-          <p className="mt-1.5 text-sm text-[var(--ei-text-secondary)]">
-            Application for {jobTitle}
-          </p>
+        <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ei-text-muted)] mb-2">
+              Candidate Evaluation
+            </p>
+            <h1 className="font-display text-[28px] sm:text-[30px] font-bold text-[var(--ei-text-primary)] tracking-tight leading-tight">
+              {candidateName}
+            </h1>
+            <p className="mt-1.5 text-sm text-[var(--ei-text-secondary)]">
+              Application for {jobTitle}
+            </p>
+          </div>
+          <ApplicationStatusActions
+            jobId={jdid}
+            candidateId={cid}
+            application={application}
+            readOnly={readOnly}
+            onUpdated={({ shortlisted, status }) => {
+              setApplication((prev) => (prev ? { ...prev, shortlisted, status } : prev))
+            }}
+          />
         </header>
 
         <div className="flex gap-6 mb-6 border-b border-[var(--ei-border-primary)]">
