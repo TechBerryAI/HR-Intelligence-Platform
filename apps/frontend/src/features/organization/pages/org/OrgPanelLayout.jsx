@@ -100,13 +100,11 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
     >
       <div className="org-sidebar-glow" aria-hidden />
 
-      <div className="relative flex items-center gap-3 px-4 pt-5 pb-4 shrink-0">
-        <BrandMark size="sm" />
+      <div className="org-sidebar-brand relative shrink-0">
+        <BrandMark size="md" />
         <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold tracking-tight text-[var(--ei-text-primary)] leading-none">
-            HR Intelligence
-          </p>
-          <p className="mt-1 text-[11px] text-[var(--ei-text-muted)] truncate">{panelTitle}</p>
+          <p className="org-sidebar-product">HR Intelligence</p>
+          <p className="org-sidebar-panel">{isCeoPanel ? 'Executive' : 'Head of HR'}</p>
         </div>
         {mobile ? (
           <button
@@ -120,23 +118,20 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
         ) : null}
       </div>
 
-      <div className="relative mx-3 mb-4 shrink-0">
-        <div className="org-sidebar-identity">
-          <div className="org-sidebar-avatar" aria-hidden>
-            {initials}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-[var(--ei-text-primary)] truncate leading-tight">{displayName}</p>
-            {displayEmail ? (
-              <p className="mt-0.5 text-[11px] text-[var(--ei-text-muted)] truncate">{displayEmail}</p>
-            ) : null}
-            {companyLabel ? (
-              <p className="mt-0.5 text-[11px] text-[var(--ei-text-secondary)] truncate" title={companyLabel}>
-                {companyLabel}
+      <div className="relative mx-3 mb-5 shrink-0">
+        <div className="org-sidebar-identity" title={displayEmail || undefined}>
+          <div className="org-sidebar-identity-main">
+            <div className="org-sidebar-avatar" aria-hidden>
+              {initials}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="org-sidebar-name">{displayName}</p>
+              <p className="org-sidebar-meta">
+                {companyLabel || displayEmail || panelTitle}
               </p>
-            ) : null}
-            <span className={`org-role-pill ${isCeoPanel ? 'org-role-pill-readonly' : ''}`}>{roleLabel}</span>
+            </div>
           </div>
+          <span className={`org-role-pill ${isCeoPanel ? 'org-role-pill-readonly' : ''}`}>{roleLabel}</span>
         </div>
       </div>
 
