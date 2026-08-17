@@ -34,4 +34,31 @@ const { updates: none } = start.ollamaHostUpdates({
 });
 assert.deepStrictEqual(none, {});
 
+const helperCpu = start.hardwareHelperEnv(
+  { HCIP_HARDWARE_PROFILE: 'cpu', OLLAMA_MODEL: '' },
+  { PATH: '/usr/bin', OLLAMA_MODEL: '  ' }
+);
+assert.strictEqual(helperCpu.HCIP_HARDWARE_PROFILE, 'cpu');
+assert.ok(!helperCpu.OLLAMA_MODEL, 'blank process OLLAMA_MODEL must not hide .env profile');
+
+const helperPin = start.hardwareHelperEnv(
+  { OLLAMA_MODEL: 'file:14b', HCIP_HARDWARE_PROFILE: 'cpu' },
+  { OLLAMA_MODEL: 'shell:7b', HCIP_HARDWARE_PROFILE: '' }
+);
+assert.strictEqual(helperPin.OLLAMA_MODEL, 'shell:7b');
+assert.strictEqual(helperPin.HCIP_HARDWARE_PROFILE, 'cpu');
+
+const helperVram = start.hardwareHelperEnv(
+  { HCIP_VRAM_MB: '8192' },
+  { PATH: '/bin' }
+);
+assert.strictEqual(helperVram.HCIP_VRAM_MB, '8192');
+
+const helperNoDump = start.hardwareHelperEnv(
+  { POSTGRES_PASSWORD: 'secret', HCIP_HARDWARE_PROFILE: 'cpu' },
+  { PATH: '/bin' }
+);
+assert.strictEqual(helperNoDump.HCIP_HARDWARE_PROFILE, 'cpu');
+assert.ok(!helperNoDump.POSTGRES_PASSWORD);
+
 console.log('test_start_ollama_env.js ok');

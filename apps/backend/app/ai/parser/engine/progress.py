@@ -24,6 +24,16 @@ def _prune_locked() -> None:
         _JOBS.pop(oldest[0], None)
 
 
+def reset_parse_jobs_for_tests() -> None:
+    with _LOCK:
+        _JOBS.clear()
+
+
+def parse_job_statuses_for_tests() -> dict[str, str]:
+    with _LOCK:
+        return {jid: str(job.get('status') or '') for jid, job in _JOBS.items()}
+
+
 def create_parse_job(doc_type: str) -> str:
     job_id = str(uuid.uuid4())
     with _LOCK:

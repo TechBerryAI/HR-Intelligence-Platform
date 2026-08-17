@@ -99,6 +99,80 @@ def redis_status() -> str:
         return 'error'
 
 
+_DELETE_IF_MATCH_LUA = """
+local raw = redis.call('GET', KEYS[1])
+if not raw then
+  return 0
+end
+if string.find(raw, ARGV[1], 1, true) then
+  redis.call('DEL', KEYS[1])
+  return 1
+end
+return 0
+"""
+
+
+def reset_memory_store_for_tests() -> None:
+    with _mem_lock:
+        _mem_kv.clear()
+        _mem_hits.clear()
+
+
+def set_json_nx(key: str, value: dict, ttl_seconds: int) -> bool:
+    """Atomic set-if-not-exists. Returns True if this caller created the key."""
+    payload = json.dumps(value)
+    ttl = int(ttl_seconds) if ttl_seconds else 0
+    client = _get_redis()
+    if client is not None:
+        try:
+            kwargs: dict[str, Any] = {'nx': True}
+            if ttl > 0:
+                kwargs['ex'] = ttl
+            return bool(client.set(key, payload, **kwargs))
+        except Exception as exc:
+            logger.warning('[shared_store] set_json_nx Redis error: %s', exc)
+            if _production_like():
+                raise
+            return False
+    expires_at = (time.time() + ttl) if ttl > 0 else None
+    now = time.time()
+    with _mem_lock:
+        entry = _mem_kv.get(key)
+        if entry:
+            _value, exp = entry
+            if exp is None or now <= exp:
+                return False
+            _mem_kv.pop(key, None)
+        _mem_kv[key] = (value, expires_at)
+        return True
+
+
+def delete_json_if_match(key: str, field: str, expected: str) -> bool:
+    """Delete key only when stored JSON ``field`` still equals ``expected``."""
+    client = _get_redis()
+    if client is not None:
+        try:
+            # Token is a uuid; Lua GET+compare+DEL is atomic vs expired-lease reclaim.
+            deleted = client.eval(_DELETE_IF_MATCH_LUA, 1, key, str(expected))
+            return int(deleted) == 1
+        except Exception as exc:
+            logger.warning('[shared_store] delete_json_if_match Redis error: %s', exc)
+            return False
+    now = time.time()
+    with _mem_lock:
+        entry = _mem_kv.get(key)
+        if not entry:
+            return False
+        value, expires_at = entry
+        if expires_at is not None and now > expires_at:
+            _mem_kv.pop(key, None)
+            return False
+        if not isinstance(value, dict) or str(value.get(field)) != str(expected):
+            return False
+        _mem_kv.pop(key, None)
+        return True
+
+
 def set_json(key: str, value: dict, ttl_seconds: int | None = None) -> None:
     client = _get_redis()
     payload = json.dumps(value)

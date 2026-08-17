@@ -21,7 +21,6 @@ from app.ai.document_intelligence.response import (
 )
 from app.ai.parser.engine import get_parse_job, run_jd_parse_pipeline, run_resume_parse_pipeline
 from app.ai.parser.engine.confidence import calculate_confidence
-from app.ai.parser.engine.progress import create_parse_job
 from app.ai.toon.runtime import toon_loads_flex
 from app.core import shared_store
 from app.domains.identity.authorization.rbac import STAFF_ROLES, get_role, get_user_id
@@ -311,7 +310,6 @@ def parse_resume_public_stream():
     file_data = file.read()
     filename = secure_filename(file.filename)
     public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
-    parse_job_id = create_parse_job('resume')
 
     def generate():
         import json
@@ -339,7 +337,6 @@ def parse_resume_public_stream():
                     uploader_role='public',
                     candidate_id=None,
                     enrichment_context=None,
-                    parse_job_id=parse_job_id,
                     on_stage=on_stage,
                 )
             return run_resume_parse_pipeline(
@@ -349,7 +346,6 @@ def parse_resume_public_stream():
                 uploader_role='public',
                 candidate_id=None,
                 enrichment_context=None,
-                parse_job_id=parse_job_id,
                 on_stage=on_stage,
             )
 
@@ -376,7 +372,6 @@ def parse_resume_public_stream():
         headers={
             'Cache-Control': 'no-cache',
             'X-Accel-Buffering': 'no',
-            'X-Parse-Job-Id': parse_job_id,
         },
     )
 
@@ -413,7 +408,6 @@ def parse_jd_stream():
         return jsonify({'status': 'error', 'error': 'User ID not found'}), 401
 
     job_id = request.form.get('job_id')
-    parse_job_id = create_parse_job('job_description')
 
     def generate():
         import json
@@ -438,7 +432,6 @@ def parse_jd_stream():
                     uploader_id=uploader_id,
                     uploader_role=uploader_role,
                     job_id=job_id,
-                    parse_job_id=parse_job_id,
                     on_stage=on_stage,
                 )
             return run_jd_parse_pipeline(
@@ -447,7 +440,6 @@ def parse_jd_stream():
                 uploader_id=uploader_id,
                 uploader_role=uploader_role,
                 job_id=job_id,
-                parse_job_id=parse_job_id,
                 on_stage=on_stage,
             )
 
@@ -474,7 +466,6 @@ def parse_jd_stream():
         headers={
             'Cache-Control': 'no-cache',
             'X-Accel-Buffering': 'no',
-            'X-Parse-Job-Id': parse_job_id,
         },
     )
 

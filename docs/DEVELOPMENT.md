@@ -136,9 +136,17 @@ Precedence (identical in `start.js`, `hardware.py`, and runtime YAML):
 5. **GPU present but VRAM unknown** (NVIDIA device node / WSL `/dev/dxg` / `lspci` NVIDIA|AMD) → `unknown` (7B, concurrency 1). This is **not** treated as a weak CPU.
 6. **Conservative fallback** — `cpu` / `qwen2.5:3b-instruct`
 
-`start.js` does **not** write `OLLAMA_MODEL` into `.env` when it is unset. AMD, Apple, and Intel GPUs are not VRAM-measured; set `HCIP_HARDWARE_PROFILE` (and optionally `HCIP_VRAM_MB`).
+`start.js` does **not** write `OLLAMA_MODEL` into `.env` when it is unset. The Ollama pull helper forwards only `OLLAMA_MODEL`, `HCIP_HARDWARE_PROFILE`, and `HCIP_VRAM_MB` from `apps/backend/.env` when those keys are unset in the process environment (process env still wins). AMD, Apple, and Intel GPUs are not VRAM-measured; set `HCIP_HARDWARE_PROFILE` (and optionally `HCIP_VRAM_MB`).
 
-Public resume stream fallback joins an in-process parse of the same file bytes. Gunicorn multi-worker: join is per process only.
+Public resume stream fallback joins an in-process parse of the same file bytes. When Redis is up (`REDIS_URL` pings), a SET NX lease coordinates that hash across Gunicorn workers. Without Redis, join is per process only — duplicate work is possible with `GUNICORN_WORKERS>1`.
+
+AI performance harness (this machine only; do not treat numbers as SLAs):
+
+```bash
+PYTHONPATH=apps/backend python3 ai/eval/run_ai_performance_benchmark.py --limit 2
+HCIP_HARDWARE_PROFILE=gpu_mid PYTHONPATH=apps/backend python3 ai/eval/run_ai_performance_benchmark.py --limit 2
+HCIP_HARDWARE_PROFILE=cpu PYTHONPATH=apps/backend python3 ai/eval/run_ai_performance_benchmark.py --limit 2
+```
 
 Optional integration vars (see `apps/backend/.env.example`):
 
@@ -148,7 +156,7 @@ Optional integration vars (see `apps/backend/.env.example`):
 - `INTEGRATION_WORKER_MAX_WORKERS` — default `4`
 - `INTEGRATION_AUTO_SYNC_INTERVAL_SECONDS` — default `900` (min 60)
 - `RUN_INTEGRATION_AUTO_SYNC` — set `1` only in the dedicated scheduler process (not in Gunicorn web workers)
-- `REDIS_URL` — set when `GUNICORN_WORKERS>1` **and** you use Google Calendar OAuth or need a **global** public resume-parse rate limit. JWT/OTP/outbox do not need Redis. If unset, OAuth `state` and parse rate limits are per-worker memory.
+- `REDIS_URL` — set when `GUNICORN_WORKERS>1` **and** you use Google Calendar OAuth, need a **global** public resume-parse rate limit, or want cross-worker parse-job join. JWT/OTP/outbox do not need Redis. If unset, OAuth `state`, parse rate limits, and parse join are per-worker memory. Redis is not required for single-worker parse.
 
 ### Production processes (Gunicorn + scheduler)
 

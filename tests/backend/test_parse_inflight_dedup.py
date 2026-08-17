@@ -11,14 +11,21 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.ai.parser.engine.parse_inflight import inflight_key, reset_parse_inflight_for_tests, run_or_join
+from app.ai.parser.engine.progress import (
+    get_parse_job,
+    parse_job_statuses_for_tests,
+    reset_parse_jobs_for_tests,
+)
 
 
 def setup_function():
     reset_parse_inflight_for_tests()
+    reset_parse_jobs_for_tests()
 
 
 def teardown_function():
     reset_parse_inflight_for_tests()
+    reset_parse_jobs_for_tests()
 
 
 def test_overlapping_same_key_runs_once():
@@ -96,11 +103,20 @@ def test_failure_allows_retry():
     assert n['c'] == 2
 
 
+def _assert_no_running_jobs():
+    statuses = parse_job_statuses_for_tests()
+    assert 'running' not in statuses.values(), statuses
+    for jid, status in statuses.items():
+        job = get_parse_job(jid)
+        assert job is not None
+        assert job['status'] in ('completed', 'failed')
+
+
 def test_pipeline_public_join(monkeypatch):
     from app.ai.document_intelligence import pipeline as pip
-    from app.ai.parser.engine.parse_inflight import reset_parse_inflight_for_tests
 
     reset_parse_inflight_for_tests()
+    reset_parse_jobs_for_tests()
     calls = {'n': 0}
 
     def fake_resume(**kwargs):
@@ -122,7 +138,7 @@ def test_pipeline_public_join(monkeypatch):
             uploader_id=uploader,
             uploader_role='public',
         )
-        out.append((body.get('status'), status, calls['n']))
+        out.append((body, status))
 
     t1 = threading.Thread(target=go, args=('PUB1',))
     t2 = threading.Thread(target=go, args=('PUB2',))
@@ -131,5 +147,89 @@ def test_pipeline_public_join(monkeypatch):
     t1.join(timeout=5)
     t2.join(timeout=5)
     assert calls['n'] == 1
-    assert all(status == 200 for _st, status, _n in out)
+    assert all(status == 200 for _body, status in out)
+    job_ids = {body.get('parse_job_id') for body, _status in out}
+    assert len(job_ids) == 1
+    _assert_no_running_jobs()
     reset_parse_inflight_for_tests()
+    reset_parse_jobs_for_tests()
+
+
+def test_pipeline_join_failure_terminals(monkeypatch):
+    from app.ai.document_intelligence import pipeline as pip
+
+    def fake_resume(**kwargs):
+        time.sleep(0.05)
+        return {'status': 'error', 'error': 'parse boom'}, 500
+
+    monkeypatch.setattr(pip, '_run_resume', lambda *a, **k: fake_resume())
+    monkeypatch.setattr(pip, 'apply_hardware_env', lambda: None)
+
+    payload = b'%PDF-fail-same'
+    out = []
+
+    def go():
+        out.append(
+            pip.run_document_intelligence(
+                'resume',
+                payload,
+                'cv.pdf',
+                uploader_id='PUBX',
+                uploader_role='public',
+            )
+        )
+
+    t1 = threading.Thread(target=go)
+    t2 = threading.Thread(target=go)
+    t1.start()
+    t2.start()
+    t1.join(timeout=5)
+    t2.join(timeout=5)
+    assert all(status == 500 for _body, status in out)
+    _assert_no_running_jobs()
+    for body, _status in out:
+        job = get_parse_job(body['parse_job_id'])
+        assert job['status'] == 'failed'
+
+
+def test_pipeline_exception_terminals(monkeypatch):
+    from app.ai.document_intelligence import pipeline as pip
+
+    def fake_resume(**kwargs):
+        raise RuntimeError('explode')
+
+    monkeypatch.setattr(pip, '_run_resume', lambda *a, **k: fake_resume())
+    monkeypatch.setattr(pip, 'apply_hardware_env', lambda: None)
+    body, status = pip.run_document_intelligence(
+        'resume',
+        b'%PDF-x',
+        'cv.pdf',
+        uploader_id='PUB1',
+        uploader_role='public',
+    )
+    assert status == 500
+    job = get_parse_job(body['parse_job_id'])
+    assert job['status'] == 'failed'
+    _assert_no_running_jobs()
+
+
+def test_distinct_hashes_two_executions(monkeypatch):
+    from app.ai.document_intelligence import pipeline as pip
+
+    calls = {'n': 0}
+
+    def fake_resume(**kwargs):
+        calls['n'] += 1
+        return {'status': 'ok'}, 200
+
+    monkeypatch.setattr(pip, '_run_resume', lambda *a, **k: fake_resume())
+    monkeypatch.setattr(pip, 'apply_hardware_env', lambda: None)
+    pip.run_document_intelligence(
+        'resume', b'aaa', 'a.pdf', uploader_id='PUB1', uploader_role='public'
+    )
+    pip.run_document_intelligence(
+        'resume', b'bbb', 'b.pdf', uploader_id='PUB2', uploader_role='public'
+    )
+    assert calls['n'] == 2
+    _assert_no_running_jobs()
+    assert len(parse_job_statuses_for_tests()) == 2

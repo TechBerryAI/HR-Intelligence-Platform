@@ -178,6 +178,32 @@ function ollamaHostUpdates(envMap = {}, defaultHost = DEFAULT_OLLAMA_HOST) {
   return { host, updates };
 }
 
+/** Keys that must match between start.js Ollama pull and Flask hardware selection. */
+const MODEL_SELECTION_KEYS = ['OLLAMA_MODEL', 'HCIP_HARDWARE_PROFILE', 'HCIP_VRAM_MB'];
+
+/**
+ * Child env for `python -m app.ai.parser.engine.hardware`.
+ * Process env wins; .env fills only unset/blank model-selection keys.
+ * Never copies unrelated .env secrets.
+ */
+function hardwareHelperEnv(envMap = {}, processEnv = process.env) {
+  const env = { ...processEnv };
+  for (const key of MODEL_SELECTION_KEYS) {
+    const fromProcess = String((processEnv && processEnv[key]) || '').trim();
+    if (fromProcess) {
+      env[key] = fromProcess;
+      continue;
+    }
+    const fromFile = String((envMap && envMap[key]) || '').trim();
+    if (fromFile) {
+      env[key] = fromFile;
+    } else {
+      delete env[key];
+    }
+  }
+  return env;
+}
+
 function setupEnv() {
   logStep(2, 7, 'Checking apps/backend/.env');
   if (!fs.existsSync(BACKEND_ENV)) {
@@ -415,11 +441,8 @@ function resolveAdaptiveOllamaModel(envMap = {}) {
     return { model: pinned, source: 'operator' };
   }
   try {
-    const env = { ...process.env, PYTHONPATH: BACKEND_DIR };
-    // Blank process env must not look like a pin to the Python helper.
-    if (!(env.OLLAMA_MODEL || '').trim()) {
-      delete env.OLLAMA_MODEL;
-    }
+    const env = hardwareHelperEnv(envMap, process.env);
+    env.PYTHONPATH = BACKEND_DIR;
     const result = spawnSync(
       VENV_PYTHON,
       ['-m', 'app.ai.parser.engine.hardware'],
@@ -722,6 +745,8 @@ module.exports = {
   explicitOllamaModel,
   ollamaModelIsExplicit,
   ollamaHostUpdates,
+  hardwareHelperEnv,
+  MODEL_SELECTION_KEYS,
   resolveAdaptiveOllamaModel,
   log,
   logStep,

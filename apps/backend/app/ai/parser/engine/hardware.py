@@ -310,6 +310,16 @@ def reset_hardware_env_for_tests() -> None:
 
 def main() -> None:
     """Print the adaptive (or operator-pinned) model hint. Used by start.js pull."""
+    skip = (os.getenv('HCIP_SKIP_DOTENV') or '').strip().lower() in ('1', 'true', 'yes')
+    if not skip:
+        try:
+            from dotenv import load_dotenv
+
+            env_path = Path(__file__).resolve().parents[4] / '.env'
+            load_dotenv(env_path, override=False)
+        except Exception:
+            pass
+    detect_hardware_profile.cache_clear()
     print(detect_hardware_profile().preferred_model_hint)
 
 

@@ -302,10 +302,15 @@ def run_document_intelligence(
     """
     apply_hardware_env()
     kind = 'resume' if doc_type == 'resume' else 'job_description'
-    if parse_job_id is None:
-        parse_job_id = create_parse_job(kind)
+    preexisting_job_id = parse_job_id
 
     def _execute() -> tuple[dict[str, Any], int]:
+        # Create the progress job only for the in-flight owner. Joiners reuse
+        # this function's return value (same parse_job_id); they must not
+        # leave a phantom `running` row.
+        owned_parse_job_id = (
+            preexisting_job_id if preexisting_job_id is not None else create_parse_job(kind)
+        )
         try:
             if kind == 'resume':
                 body, status = _run_resume(
@@ -314,7 +319,7 @@ def run_document_intelligence(
                     uploader_id=uploader_id,
                     uploader_role=uploader_role,
                     candidate_id=candidate_id,
-                    parse_job_id=parse_job_id,
+                    parse_job_id=owned_parse_job_id,
                     on_stage=on_stage,
                     use_content_hash_cache=use_content_hash_cache,
                 )
@@ -325,20 +330,20 @@ def run_document_intelligence(
                     uploader_id=uploader_id,
                     uploader_role=uploader_role,
                     job_id=job_id,
-                    parse_job_id=parse_job_id,
+                    parse_job_id=owned_parse_job_id,
                     on_stage=on_stage,
                     use_content_hash_cache=use_content_hash_cache,
                 )
             if status == 200:
-                complete_parse_job(parse_job_id, body)
+                complete_parse_job(owned_parse_job_id, body)
             else:
-                complete_parse_job(parse_job_id, None, error=body.get('error'))
+                complete_parse_job(owned_parse_job_id, None, error=body.get('error'))
             body = dict(body)
-            body['parse_job_id'] = parse_job_id
+            body['parse_job_id'] = owned_parse_job_id
             return body, status
         except Exception as exc:
-            complete_parse_job(parse_job_id, None, error=str(exc))
-            return {'status': 'error', 'error': str(exc), 'parse_job_id': parse_job_id}, 500
+            complete_parse_job(owned_parse_job_id, None, error=str(exc))
+            return {'status': 'error', 'error': str(exc), 'parse_job_id': owned_parse_job_id}, 500
 
     # Public stream → sync fallback re-uploads the same bytes with a new uploader id.
     # Join in-process so the second request waits instead of starting another LLM parse.
@@ -576,6 +581,7 @@ def _cache_hit_response(
         'model_version': cached['model_version'],
         'partial': 'text-fallback' in str(cached.get('model_version') or ''),
         'parse_job_id': parse_job_id,
+        'cache_status': 'cache-hit',
         'raw_text': cached.get('raw_text') or '',
         'raw_text_chars': len(cached.get('raw_text') or ''),
         'raw_text_sha256': hashlib.sha256(

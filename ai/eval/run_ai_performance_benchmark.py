@@ -84,7 +84,18 @@ def main() -> int:
     parser.add_argument('--with-llm', action='store_true', help='Allow residual Ollama (live)')
     parser.add_argument('--limit', type=int, default=12, help='Max gold/fixture cases')
     parser.add_argument('--json', action='store_true', help='Print JSONL only')
+    parser.add_argument(
+        '--with-file-cache',
+        action='store_true',
+        help='File-upload DB cache is not used by this text-gold harness',
+    )
     args = parser.parse_args()
+    if args.with_file_cache:
+        print(
+            'Note: this harness uses parse_resume_text_to_canonical (no DB). '
+            'Persistent content-hash cache is the file-upload path only. '
+            'Text gold has no cache-hit; a second pass is runtime-reuse.'
+        )
 
     if args.with_llm:
         os.environ['DOCUMENT_INTELLIGENCE_SEMANTIC_AI'] = 'true'
@@ -176,8 +187,8 @@ def main() -> int:
         if args.json:
             print(json.dumps(row))
 
-    # Second pass on first case: runtime should already be warm (not a content-hash cache).
-    if cases and args.with_llm:
+    # Second pass: runtime-reuse (warm process), not a content-hash cache-hit.
+    if cases:
         case_id, text, expected = cases[0]
         t0 = time.perf_counter()
         parse_resume_text_to_canonical(text, max_workers=2)
@@ -185,12 +196,12 @@ def main() -> int:
         rows.append({
             'hardware_profile': hw.name,
             'model': model,
-            'case_id': f'{case_id}:warm-runtime',
+            'case_id': f'{case_id}:runtime-reuse',
             'deterministic_ms': None,
             'semantic_ms': None,
             'total_ms': round(warm_ms, 2),
             'cache_status': 'runtime-reuse',
-            'ollama_invoked': True,
+            'ollama_invoked': bool(args.with_llm),
             'success': True,
             'correctness': None,
             'misses': [],
@@ -204,7 +215,9 @@ def main() -> int:
         print(json.dumps(rows, indent=2))
         print(
             'Note: numbers are for THIS machine only. Do not treat them as universal SLAs. '
-            'max_tokens remains 8192 unless output_chars approaches the cap on --with-llm runs.'
+            'max_tokens remains 8192 unless output_chars approaches the cap on --with-llm runs. '
+            'cache_status=runtime-reuse is process warmup, not get_cached_parsing_result. '
+            'Force a profile with HCIP_HARDWARE_PROFILE=gpu_mid or HCIP_HARDWARE_PROFILE=cpu.'
         )
     return 0 if all(r.get('success') for r in rows) else 1
 
