@@ -4,13 +4,15 @@ import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
 import { useApp } from '@/core/context/AppContext.jsx'
 import { apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
-import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiBarChart2, FiPieChart, FiArrowRight, FiEdit2, FiX } from 'react-icons/fi'
+import { FiUsers, FiUser, FiBriefcase, FiFileText, FiCheckCircle, FiTrendingUp, FiArrowRight, FiEdit2, FiX, FiSlash } from 'react-icons/fi'
 import { LayoutDashboard, Home, RefreshCw } from 'lucide-react'
 import RecruiterJobDashboard from '@/features/dashboard/components/recruiter/RecruiterJobDashboard.jsx'
 import ExternalPublishingSection from '@/features/dashboard/components/ExternalPublishingSection.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import ThemeToggle from '@/shared/components/ThemeToggle.jsx'
+import CeoAnalyticsSection from '@/features/organization/components/org/CeoAnalyticsSection.jsx'
+import { computeExecutiveAnalytics } from '@/features/organization/utils/executiveAnalytics.js'
 
 const ACCENT_ICON = {
   purple: 'bg-[rgba(121,87,255,0.15)] text-[#A78BFA]',
@@ -30,7 +32,7 @@ function parseExperienceRange(experience) {
   return { from: single ? single[1] : '', to: '' }
 }
 
-function StatCard({ icon: Icon, label, value, accent, onClick, disabled, compact = false }) {
+function StatCard({ icon: Icon, label, value, hint, accent, onClick, disabled, compact = false }) {
   const className = `org-glass-card group text-left w-full ${
     compact ? 'p-3.5' : 'p-5'
   } ${disabled ? 'cursor-default hover:transform-none' : 'cursor-pointer'}`
@@ -51,6 +53,7 @@ function StatCard({ icon: Icon, label, value, accent, onClick, disabled, compact
       <div className="min-w-0 flex-1">
         <p className="text-xl font-bold text-[var(--ei-text-primary)] tabular-nums leading-tight">{value ?? '—'}</p>
         <p className="text-xs text-[var(--ei-text-secondary)] truncate">{label}</p>
+        {hint ? <p className="text-[11px] text-[var(--ei-text-muted)] truncate mt-0.5">{hint}</p> : null}
       </div>
       {!disabled && onClick && (
         <FiTrendingUp className="w-3.5 h-3.5 text-[var(--ei-text-muted)] group-hover:text-[#00A6FF] transition-colors flex-shrink-0" />
@@ -64,6 +67,7 @@ function StatCard({ icon: Icon, label, value, accent, onClick, disabled, compact
       </div>
       <p className="mt-4 text-3xl font-bold text-[var(--ei-text-primary)] tabular-nums">{value ?? '—'}</p>
       <p className="mt-1 text-sm text-[var(--ei-text-secondary)]">{label}</p>
+      {hint ? <p className="mt-0.5 text-xs text-[var(--ei-text-muted)]">{hint}</p> : null}
     </>
   )
   if (disabled || !onClick) {
@@ -73,19 +77,6 @@ function StatCard({ icon: Icon, label, value, accent, onClick, disabled, compact
     <button type="button" onClick={onClick} className={className}>
       {inner}
     </button>
-  )
-}
-
-function BarRow({ label, count, total, colorClass }) {
-  const pct = total > 0 ? Math.round((count / total) * 100) : 0
-  return (
-    <div className="flex items-center gap-3 py-1.5">
-      <span className="text-sm text-[var(--ei-text-secondary)] w-24 flex-shrink-0 capitalize">{label}</span>
-      <div className="flex-1 h-6 rounded-md bg-white/[0.06] overflow-hidden">
-        <div className={`h-full rounded-md transition-all duration-500 ${colorClass}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-sm text-[var(--ei-text-secondary)] tabular-nums w-10 text-right">{count}</span>
-    </div>
   )
 }
 
@@ -152,72 +143,10 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
     return () => document.removeEventListener('visibilitychange', onVisibilityChange)
   }, [load])
 
-  const analytics = useMemo(() => {
-    const apps = applications
-    const total = apps.length
-    const byStatus = { applied: 0, shortlisted: 0, rejected: 0, reviewed: 0 }
-    let scoreSum = 0
-    let scoreCount = 0
-    const scoreBuckets = { high: 0, medium: 0, low: 0 }
-    const byJob = {}
-
-    const normalizeStatus = (a) => {
-      if (a.shortlisted === true || a.shortlisted === 1) return 'shortlisted'
-      const raw = String(a.status ?? a.Status ?? 'applied').toLowerCase().trim()
-      if (raw === 'profile_viewed') return 'reviewed'
-      if (raw === 'rejected' || raw === 'not_shortlisted') return 'rejected'
-      if (raw === 'shortlisted') return 'shortlisted'
-      if (raw === 'reviewed') return 'reviewed'
-      return 'applied'
-    }
-
-    apps.forEach((a) => {
-      const status = normalizeStatus(a)
-      byStatus[status] = (byStatus[status] || 0) + 1
-      const jobId = a.job_id || a.jobId
-      if (jobId) {
-        if (!byJob[jobId]) byJob[jobId] = { count: 0, shortlisted: 0, reviewed: 0, rejected: 0, scoreSum: 0, scoreN: 0 }
-        byJob[jobId].count += 1
-        if (a.shortlisted) byJob[jobId].shortlisted += 1
-        if (status === 'reviewed') byJob[jobId].reviewed += 1
-        if (status === 'rejected') byJob[jobId].rejected += 1
-        const score = a.match_score != null ? Number(a.match_score) : null
-        if (score != null && !Number.isNaN(score)) {
-          byJob[jobId].scoreSum += score
-          byJob[jobId].scoreN += 1
-        }
-      }
-      const score = a.match_score != null ? Number(a.match_score) : null
-      if (score != null && !Number.isNaN(score)) {
-        scoreSum += score
-        scoreCount += 1
-        if (score >= 60) scoreBuckets.high += 1
-        else if (score >= 30) scoreBuckets.medium += 1
-        else scoreBuckets.low += 1
-      }
-    })
-
-    const jobTitleById = {}
-    jobs.forEach((j) => { jobTitleById[j.jdid] = j.title || j.jdid })
-    const topJobs = Object.entries(byJob)
-      .map(([id, data]) => ({
-        id,
-        title: jobTitleById[id] || id,
-        count: data.count,
-        shortlisted: data.shortlisted,
-        reviewed: data.reviewed || 0,
-        rejected: data.rejected || 0,
-        avgScore: data.scoreN > 0 ? Math.round((data.scoreSum / data.scoreN) * 10) / 10 : null,
-      }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 6)
-
-    const avgScore = scoreCount > 0 ? Math.round((scoreSum / scoreCount) * 10) / 10 : null
-    const shortlistedCount = byStatus.shortlisted || 0
-    const shortlistRate = total > 0 ? Math.round((shortlistedCount / total) * 100) : 0
-
-    return { byStatus, total, avgScore, scoreBuckets, scoreCount, topJobs, shortlistRate }
-  }, [applications, jobs])
+  const analytics = useMemo(
+    () => computeExecutiveAnalytics(applications, jobs),
+    [applications, jobs],
+  )
 
   const go = (segment) => {
     if (segment) navigate(`${basePath}/${segment}`)
@@ -416,6 +345,12 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
     { label: 'Shortlisted', value: stats?.shortlistedApplications },
   ]
 
+  const totalApps = analytics.total || stats?.totalApplications || 0
+  const shortlistedValue = analytics.total > 0 ? analytics.shortlistedCount : (stats?.shortlistedApplications ?? 0)
+  const notShortlistedValue = analytics.total > 0
+    ? analytics.notShortlistedCount
+    : Math.max(0, (stats?.totalApplications ?? 0) - (stats?.shortlistedApplications ?? 0))
+
   const statItems = [
     {
       icon: FiUsers,
@@ -429,16 +364,38 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
     { icon: FiBriefcase, label: 'Total Jobs', value: stats?.totalJobs, accent: 'purple', onClick: () => go('jobs') },
     { icon: FiBriefcase, label: 'Active Jobs', value: stats?.activeJobs, accent: 'green', onClick: () => go('jobs') },
     { icon: FiFileText, label: 'Total Applications', value: stats?.totalApplications, accent: 'rose', onClick: () => go('jobs') },
-    { icon: FiCheckCircle, label: 'Shortlisted', value: stats?.shortlistedApplications, accent: 'teal', onClick: () => go('jobs') },
+    {
+      icon: FiCheckCircle,
+      label: 'Shortlisted',
+      value: shortlistedValue,
+      hint: isCeo && totalApps > 0 ? `${shortlistedValue} of ${totalApps} applications` : undefined,
+      accent: 'teal',
+      onClick: () => go('jobs'),
+    },
+    ...(isCeo
+      ? [{
+          icon: FiSlash,
+          label: 'Not shortlisted',
+          value: notShortlistedValue,
+          hint: 'Still in talent pool',
+          accent: 'rose',
+          onClick: () => go('jobs'),
+        }]
+      : []),
   ]
 
+  const kpiGridClass = isCeo
+    ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4'
+    : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4'
+
   const renderStatCards = (compact = false) =>
-    statItems.map(({ icon, label, value, accent, disabled, onClick }) => (
+    statItems.map(({ icon, label, value, hint, accent, disabled, onClick }) => (
       <StatCard
         key={label}
         icon={icon}
         label={label}
         value={value}
+        hint={hint}
         accent={accent}
         disabled={disabled}
         onClick={onClick}
@@ -525,8 +482,8 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
       )}
 
       {!showJobPosting && loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className={kpiGridClass}>
+          {Array.from({ length: isCeo ? 7 : 6 }).map((_, i) => (
             <div key={i} className="org-glass-card p-5 animate-pulse hover:transform-none">
               <div className="w-10 h-10 rounded-xl bg-white/[0.06]" />
               <div className="mt-4 h-8 w-16 rounded bg-white/[0.06]" />
@@ -537,7 +494,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
       )}
 
       {!showJobPosting && !loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className={kpiGridClass}>
           {renderStatCards(false)}
         </div>
       )}
@@ -838,86 +795,10 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
       )}
 
       {!loading && showAnalytics && (
-        <div className="mt-10 space-y-6">
-          <h2 className="text-lg font-semibold text-[var(--ei-text-primary)] flex items-center gap-2">
-            <FiBarChart2 className="w-5 h-5 text-[#00A6FF]" /> Analytics
-          </h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="org-card p-5">
-              <h3 className="text-sm font-semibold text-[var(--ei-text-label)] flex items-center gap-2 mb-4">
-                <FiPieChart className="w-4 h-4" /> Applications by status
-              </h3>
-              <div className="space-y-1">
-                {[
-                  { key: 'shortlisted', label: 'Shortlisted', color: 'bg-emerald-500' },
-                  { key: 'applied', label: 'Applied', color: 'bg-sky-500' },
-                  { key: 'reviewed', label: 'Reviewed', color: 'bg-violet-500' },
-                  { key: 'rejected', label: 'Rejected', color: 'bg-rose-500' },
-                ].map(({ key, label, color }) => (
-                  <BarRow key={key} label={label} count={analytics.byStatus[key] || 0} total={analytics.total} colorClass={color} />
-                ))}
-              </div>
-              {analytics.total === 0 && <p className="text-sm text-[var(--ei-text-muted)] py-4">No applications yet</p>}
-            </div>
-            <div className="org-card p-5">
-              <h3 className="text-sm font-semibold text-[var(--ei-text-label)] mb-4">Match score & shortlist rate</h3>
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div className="rounded-xl bg-white/[0.035] p-4 border border-[var(--ei-border-primary)]">
-                  <p className="text-xs text-[#83909C] uppercase tracking-wider">Avg. match score</p>
-                  <p className="text-2xl font-bold text-[var(--ei-text-primary)] mt-1 tabular-nums">{analytics.avgScore != null ? `${analytics.avgScore}%` : '—'}</p>
-                  <p className="text-xs text-[var(--ei-text-muted)] mt-0.5">{analytics.scoreCount} with score</p>
-                </div>
-                <div className="rounded-xl bg-white/[0.035] p-4 border border-[var(--ei-border-primary)]">
-                  <p className="text-xs text-[#83909C] uppercase tracking-wider">Shortlist rate</p>
-                  <p className="text-2xl font-bold text-[#36D6A0] mt-1 tabular-nums">{analytics.shortlistRate}%</p>
-                  <p className="text-xs text-[var(--ei-text-muted)] mt-0.5">of applications</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-[#83909C] uppercase tracking-wider mb-2">Score distribution</p>
-                <div className="flex gap-2">
-                  <div className="flex-1 rounded-lg overflow-hidden bg-white/[0.06] h-8 flex">
-                    <div className="bg-red-500/80 transition-all duration-500" style={{ width: `${analytics.scoreCount ? (analytics.scoreBuckets.low / analytics.scoreCount) * 100 : 0}%` }} />
-                    <div className="bg-amber-500/80 transition-all duration-500" style={{ width: `${analytics.scoreCount ? (analytics.scoreBuckets.medium / analytics.scoreCount) * 100 : 0}%` }} />
-                    <div className="bg-green-500/80 transition-all duration-500" style={{ width: `${analytics.scoreCount ? (analytics.scoreBuckets.high / analytics.scoreCount) * 100 : 0}%` }} />
-                  </div>
-                </div>
-                <div className="flex gap-4 mt-2 text-xs text-[var(--ei-text-muted)]">
-                  <span><span className="inline-block w-2 h-2 rounded bg-red-500/80 mr-1" /> Low (&lt;30%)</span>
-                  <span><span className="inline-block w-2 h-2 rounded bg-amber-500/80 mr-1" /> Medium (30–60%)</span>
-                  <span><span className="inline-block w-2 h-2 rounded bg-green-500/80 mr-1" /> High (60%+)</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="org-card p-5">
-            <h3 className="text-sm font-semibold text-[var(--ei-text-label)] mb-1">Job-level insight</h3>
-            <p className="text-xs text-[var(--ei-text-muted)] mb-4">Applications, shortlisted count, and average match score per job.</p>
-            {analytics.topJobs.length > 0 ? (
-              <div className="space-y-2">
-                {analytics.topJobs.map(({ id, title, count, shortlisted, reviewed, rejected, avgScore }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => navigate(`${basePath}/jobs/${encodeURIComponent(id)}?tab=candidates`)}
-                    className="w-full flex flex-wrap items-center gap-x-4 gap-y-1 py-3 px-3 rounded-xl bg-white/[0.035] border border-[var(--ei-border-primary)] hover:border-[rgba(0,166,255,0.3)] hover:bg-white/[0.05] transition-all duration-[180ms] text-left"
-                  >
-                    <span className="text-sm font-medium text-[var(--ei-text-primary)] truncate flex-1 min-w-0">{title || id}</span>
-                    <span className="text-xs text-[var(--ei-text-secondary)] tabular-nums">
-                      <span className="text-[var(--ei-text-label)]">{count}</span> applied
-                      {(reviewed || 0) > 0 && <span className="text-amber-400 ml-2">{reviewed} reviewed</span>}
-                      {shortlisted > 0 && <span className="text-[#36D6A0] ml-2">{shortlisted} shortlisted</span>}
-                      {(rejected || 0) > 0 && <span className="text-[#FF6685] ml-2">{rejected} rejected</span>}
-                      {avgScore != null && <span className="text-[#A78BFA] ml-2">avg {avgScore}% match</span>}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--ei-text-muted)] py-4">No applications yet</p>
-            )}
-          </div>
-        </div>
+        <CeoAnalyticsSection
+          analytics={analytics}
+          onOpenJob={(id) => navigate(`${basePath}/jobs/${encodeURIComponent(id)}?tab=candidates`)}
+        />
       )}
     </>
   )

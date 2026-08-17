@@ -3,26 +3,42 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useApp } from '@/core/context/AppContext.jsx'
 import { useOrgPanel } from '@/core/context/OrgPanelContext.jsx'
 import ThemeToggle from '@/shared/components/ThemeToggle.jsx'
-import {
-  FiGrid, FiUsers, FiUser, FiBriefcase, FiLogOut, FiMenu, FiX, FiShield, FiSettings, FiBarChart2, FiLayers, FiActivity,
-} from 'react-icons/fi'
+import BrandMark from '@/shared/components/BrandMark.jsx'
 import { useDeveloperMode } from '@/features/admin/hooks/useDeveloperMode.js'
+import {
+  LayoutDashboard,
+  Users,
+  User,
+  Briefcase,
+  Layers,
+  Puzzle,
+  Settings,
+  Activity,
+  LogOut,
+  Menu,
+  X,
+} from 'lucide-react'
 
 const headHrNavBase = [
-  { label: 'Overview', path: '/head-hr', icon: FiGrid, end: true },
-  { label: 'Admins', path: '/head-hr/admins', icon: FiUsers },
-  { label: 'Candidates', path: '/head-hr/candidates', icon: FiUser },
-  { label: 'Jobs', path: '/head-hr/jobs', icon: FiBriefcase },
-  { label: 'Bulk Parsing', path: '/head-hr/bulk-parsing', icon: FiLayers },
-  { label: 'Integrations', path: '/head-hr/integrations', icon: FiBarChart2 },
-  { label: 'Settings', path: '/head-hr/settings', icon: FiSettings },
+  { label: 'Overview', path: '/head-hr', icon: LayoutDashboard, end: true, group: 'workspace' },
+  { label: 'Admins', path: '/head-hr/admins', icon: Users, group: 'workspace' },
+  { label: 'Candidates', path: '/head-hr/candidates', icon: User, group: 'workspace' },
+  { label: 'Jobs', path: '/head-hr/jobs', icon: Briefcase, group: 'workspace' },
+  { label: 'Bulk Parsing', path: '/head-hr/bulk-parsing', icon: Layers, group: 'tools' },
+  { label: 'Integrations', path: '/head-hr/integrations', icon: Puzzle, group: 'tools' },
+  { label: 'Settings', path: '/head-hr/settings', icon: Settings, group: 'tools' },
 ]
 
 const ceoNav = [
-  { label: 'Overview', path: '/ceo', icon: FiGrid, end: true },
-  { label: 'Candidates', path: '/ceo/candidates', icon: FiUser },
-  { label: 'Jobs', path: '/ceo/jobs', icon: FiBriefcase },
+  { label: 'Overview', path: '/ceo', icon: LayoutDashboard, end: true, group: 'workspace' },
+  { label: 'Candidates', path: '/ceo/candidates', icon: User, group: 'workspace' },
+  { label: 'Jobs', path: '/ceo/jobs', icon: Briefcase, group: 'workspace' },
 ]
+
+const GROUP_LABELS = {
+  workspace: 'Workspace',
+  tools: 'Tools',
+}
 
 function initialsFromName(name) {
   if (!name || typeof name !== 'string') return 'HR'
@@ -30,6 +46,20 @@ function initialsFromName(name) {
   if (parts.length === 0) return 'HR'
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+}
+
+function groupNavItems(items) {
+  const groups = []
+  items.forEach((item) => {
+    const key = item.group || 'workspace'
+    const last = groups[groups.length - 1]
+    if (!last || last.key !== key) {
+      groups.push({ key, label: GROUP_LABELS[key] || key, items: [item] })
+    } else {
+      last.items.push(item)
+    }
+  })
+  return groups
 }
 
 export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
@@ -42,17 +72,17 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
   const headHrNav = developerModeEnabled
     ? [
         ...headHrNavBase.slice(0, 6),
-        { label: 'Developer Mode', path: '/head-hr/developer', icon: FiActivity },
+        { label: 'Developer Mode', path: '/head-hr/developer', icon: Activity, group: 'tools' },
         headHrNavBase[6],
       ]
     : headHrNavBase
   const navItems = isCeoPanel ? ceoNav : headHrNav
+  const navGroups = groupNavItems(navItems)
   const displayEmail = auth?.email
   const displayName = auth?.fullName || (isCeoPanel ? 'CEO' : 'Head of HR')
   const companyLabel = auth?.company || ''
   const panelTitle = isCeoPanel ? 'Executive Panel' : 'Head of HR Panel'
-  const roleLabel = isCeoPanel ? 'Executive' : 'Administrator'
-  const PanelIcon = isCeoPanel ? FiBarChart2 : FiShield
+  const roleLabel = isCeoPanel ? 'Read-only' : 'Administrator'
   const initials = initialsFromName(displayName)
 
   const handleLogout = () => {
@@ -64,52 +94,81 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
     <aside
       className={
         mobile
-          ? 'flex flex-col h-full min-h-0'
-          : 'org-sidebar hidden lg:flex flex-col w-60 shrink-0 h-screen sticky top-0 self-start'
+          ? 'org-sidebar relative flex flex-col h-full min-h-0'
+          : 'org-sidebar hidden lg:flex flex-col w-[17.5rem] shrink-0 h-screen sticky top-0 self-start'
       }
     >
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-[var(--ei-border-primary)] shrink-0">
-        <div className="w-10 h-10 rounded-full bg-[var(--ei-btn-primary-from)] text-[var(--ei-btn-primary-text)] grid place-items-center flex-shrink-0 text-xs font-bold shadow-[0_8px_20px_var(--ei-btn-primary-shadow)]">
-          {initials}
-        </div>
+      <div className="org-sidebar-glow" aria-hidden />
+
+      <div className="relative flex items-center gap-3 px-4 pt-5 pb-4 shrink-0">
+        <BrandMark size="sm" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-[var(--ei-text-primary)] truncate">{displayName}</p>
-          <p className="text-xs text-[var(--ei-text-muted)] truncate">{displayEmail || ''}</p>
-          {companyLabel ? (
-            <p className="text-xs text-[var(--ei-text-secondary)] truncate mt-0.5" title={companyLabel}>
-              {companyLabel}
-            </p>
-          ) : null}
-          <p className="text-[10px] uppercase tracking-[0.08em] text-[#00A6FF]/80 mt-1">
-            {isCeoPanel ? 'Read-only access' : roleLabel}
+          <p className="text-[13px] font-semibold tracking-tight text-[var(--ei-text-primary)] leading-none">
+            HR Intelligence
           </p>
+          <p className="mt-1 text-[11px] text-[var(--ei-text-muted)] truncate">{panelTitle}</p>
+        </div>
+        {mobile ? (
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="p-2 rounded-xl text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] hover:bg-[var(--ei-surface-hover)] transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="w-4 h-4" strokeWidth={2} />
+          </button>
+        ) : null}
+      </div>
+
+      <div className="relative mx-3 mb-4 shrink-0">
+        <div className="org-sidebar-identity">
+          <div className="org-sidebar-avatar" aria-hidden>
+            {initials}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-[var(--ei-text-primary)] truncate leading-tight">{displayName}</p>
+            {displayEmail ? (
+              <p className="mt-0.5 text-[11px] text-[var(--ei-text-muted)] truncate">{displayEmail}</p>
+            ) : null}
+            {companyLabel ? (
+              <p className="mt-0.5 text-[11px] text-[var(--ei-text-secondary)] truncate" title={companyLabel}>
+                {companyLabel}
+              </p>
+            ) : null}
+            <span className={`org-role-pill ${isCeoPanel ? 'org-role-pill-readonly' : ''}`}>{roleLabel}</span>
+          </div>
         </div>
       </div>
 
-      <nav className="px-3 py-4 space-y-1 flex-1 overflow-y-auto min-h-0">
-        {navItems.map(({ label, path, icon: Icon, end }) => (
-          <NavLink
-            key={path}
-            to={path}
-            end={end}
-            onClick={() => setSidebarOpen(false)}
-            className={({ isActive }) =>
-              `org-nav-item ${isActive ? 'org-nav-item-active' : ''}`
-            }
-          >
-            <Icon className="w-4 h-4 flex-shrink-0" />
-            {label}
-          </NavLink>
+      <nav className="relative px-3 pb-4 space-y-4 flex-1 overflow-y-auto min-h-0">
+        {navGroups.map((group) => (
+          <div key={group.key}>
+            <p className="org-nav-section">{group.label}</p>
+            <div className="space-y-1">
+              {group.items.map(({ label, path, icon: Icon, end }) => (
+                <NavLink
+                  key={path}
+                  to={path}
+                  end={end}
+                  onClick={() => setSidebarOpen(false)}
+                  className={({ isActive }) => `org-nav-item ${isActive ? 'org-nav-item-active' : ''}`}
+                >
+                  <span className="org-nav-icon">
+                    <Icon className="w-4 h-4" strokeWidth={1.85} />
+                  </span>
+                  <span className="min-w-0 truncate">{label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
-      <div className="px-3 pt-1 pb-5 shrink-0 border-t border-[var(--ei-border-primary)]">
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="org-nav-item w-full mt-2 text-[#FF8FA3] hover:text-[#FFB0BC] hover:bg-[rgba(255,102,133,0.08)]"
-        >
-          <FiLogOut className="w-4 h-4" />
+      <div className="relative px-3 pt-3 pb-5 shrink-0 org-sidebar-footer">
+        <button type="button" onClick={handleLogout} className="org-sidebar-logout">
+          <span className="org-nav-icon">
+            <LogOut className="w-4 h-4" strokeWidth={1.85} />
+          </span>
           Logout
         </button>
       </div>
@@ -123,19 +182,7 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
       {sidebarOpen && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-black/55 backdrop-blur-sm" onClick={() => setSidebarOpen(false)} />
-          <div className="org-sidebar relative z-50 flex flex-col w-64 h-full border-r border-white/[0.08]">
-            <div className="flex items-center justify-between px-4 py-4 border-b border-white/[0.08]">
-              <span className="text-sm font-semibold text-[var(--ei-text-primary)] flex items-center gap-2">
-                <PanelIcon className="w-4 h-4 text-[#00A6FF]" /> {panelTitle}
-              </span>
-              <button
-                type="button"
-                onClick={() => setSidebarOpen(false)}
-                className="text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] p-2 rounded-xl hover:bg-white/[0.05] transition-all duration-[180ms]"
-              >
-                <FiX className="w-5 h-5" />
-              </button>
-            </div>
+          <div className="relative z-50 h-full w-[17.5rem] max-w-[85vw] shadow-[8px_0_40px_rgba(0,0,0,0.35)]">
             <Sidebar mobile />
           </div>
         </div>
@@ -147,11 +194,13 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
             type="button"
             onClick={() => setSidebarOpen(true)}
             className="text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] p-2 rounded-xl hover:bg-[var(--ei-surface-hover)] transition-all duration-[180ms]"
+            aria-label="Open menu"
           >
-            <FiMenu className="w-5 h-5" />
+            <Menu className="w-5 h-5" strokeWidth={2} />
           </button>
-          <span className="text-sm font-semibold text-[var(--ei-text-primary)] flex items-center gap-2 flex-1">
-            <PanelIcon className="w-4 h-4 text-[#00A6FF]" /> {panelTitle}
+          <span className="flex items-center gap-2.5 flex-1 min-w-0">
+            <BrandMark size="sm" />
+            <span className="text-sm font-semibold text-[var(--ei-text-primary)] truncate">{panelTitle}</span>
           </span>
           <ThemeToggle variant="org" compact />
         </div>
