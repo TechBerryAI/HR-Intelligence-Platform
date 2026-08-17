@@ -88,11 +88,12 @@ def test_schema_registry_missing() -> None:
         registry.get("missing_schema")
 
 
-def test_model_registry_resolve_alias() -> None:
+def test_model_registry_resolve_alias(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
     models_path = Path(__file__).resolve().parents[1] / "config" / "models.default.yaml"
     registry = ModelRegistry(models_path)
     model = registry.resolve("resume-parser", provider_id="ollama")
-    assert model == "qwen2.5:14b-instruct"
+    assert model == "qwen2.5:7b-instruct"
 
 
 def test_model_registry_missing_alias() -> None:

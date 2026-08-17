@@ -44,7 +44,7 @@ Recommended (not a startup hard-fail): `FRONTEND_URL` / `FRONTEND_URLS` for CORS
 
 When `GUNICORN_WORKERS>1` **and** Google Calendar OAuth is configured, `REDIS_URL` is required and must ping. If `REDIS_URL` is set in production, ping must succeed (no silent in-memory fallback).
 
-AI parse: `OLLAMA_MODEL=qwen2.5:14b-instruct`, `AI_RUNTIME_CONFIG=ai/runtime/config/runtime.production.yaml`, Ollama reachable at `OLLAMA_HOST`. Residual fill timeout: `DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC` (default 90).
+AI parse: leave `OLLAMA_MODEL` unset for hardware-adaptive selection, or pin it explicitly. Runtime YAML: `AI_RUNTIME_CONFIG=ai/runtime/config/runtime.production.yaml`. Ollama reachable at `OLLAMA_HOST`. Residual fill timeout: `DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC` (default 90).
 
 Optional labels for `pg_stat_activity`:
 

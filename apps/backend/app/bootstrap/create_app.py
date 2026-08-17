@@ -63,6 +63,13 @@ def create_app() -> Flask:
     elif warnings:
         EnvValidator.print_report()
 
+    try:
+        from app.ai.parser.engine.hardware import apply_hardware_env
+
+        apply_hardware_env()
+    except Exception as exc:
+        print(f"[AI] hardware profile apply skipped: {exc}")
+
     from app.domains.identity.models import init_models  # noqa: E402
 
     app = Flask(__name__)

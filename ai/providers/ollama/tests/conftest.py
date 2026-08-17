@@ -5,12 +5,20 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import os
+
 import httpx
 import pytest
 
 from providers.ollama.client import OllamaClient
 from providers.ollama.config import OllamaProviderConfig
 from providers.ollama.provider import OllamaProvider
+
+
+@pytest.fixture(autouse=True)
+def _ensure_ollama_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    if not (os.getenv("OLLAMA_MODEL") or "").strip():
+        monkeypatch.setenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
 
 
 RESUME_RESPONSE = {

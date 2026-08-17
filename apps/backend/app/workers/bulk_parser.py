@@ -53,14 +53,11 @@ BULK_MIN_TEXT_CHARS = 30
 # OCR/extract can run in parallel; LLM calls are gated by OLLAMA_MAX_CONCURRENT.
 # Higher default now that most clean resumes skip Ollama via deterministic path.
 BULK_PARSE_MAX_WORKERS = max(1, min(24, int(os.getenv('BULK_PARSE_MAX_WORKERS', '6'))))
-# Serialize local 14B inference so large batches queue instead of timing out.
-OLLAMA_MAX_CONCURRENT = max(1, min(8, int(os.getenv('OLLAMA_MAX_CONCURRENT', '1'))))
 BULK_LLM_ATTEMPTS = max(2, min(8, int(os.getenv('BULK_LLM_ATTEMPTS', '4'))))
 BULK_EXCEL_CHECKPOINT_EVERY = max(5, int(os.getenv('BULK_EXCEL_CHECKPOINT_EVERY', '25')))
 BULK_SKIP_LLM_WHEN_DETERMINISTIC = os.getenv(
     'BULK_SKIP_LLM_WHEN_DETERMINISTIC', 'true'
 ).lower() in ('1', 'true', 'yes')
-_llm_semaphore = threading.Semaphore(OLLAMA_MAX_CONCURRENT)
 
 
 def _is_retryable_llm_error(err: str) -> bool:
@@ -142,9 +139,10 @@ def _ocr_experience_slice_mushy(raw_text: str) -> bool:
 
 def _call_llm_throttled(raw_text: str, doc_type: str = 'resume'):
     """Queue LLM calls so Ollama is not overwhelmed on large batches."""
+    from app.ai.parser.engine.ollama_limit import ollama_slot
     from app.integrations.openai.llm_service import call_llm
 
-    with _llm_semaphore:
+    with ollama_slot():
         return call_llm(raw_text, doc_type)
 
 
@@ -828,7 +826,9 @@ def _process_one_file_inner(
                 from app.ai.parser.engine import parse_resume_text_via_engine
 
                 # Gate concurrent Ollama calls (OLLAMA_MAX_CONCURRENT)
-                with _llm_semaphore:
+                from app.ai.parser.engine.ollama_limit import ollama_slot
+
+                with ollama_slot():
                     toon, source, eng_notes, form_dto = parse_resume_text_via_engine(
                         raw_text,
                         allow_llm=True,

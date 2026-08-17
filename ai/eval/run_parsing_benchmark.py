@@ -11,6 +11,8 @@ IMPORTANT (accuracy honesty):
 Usage (from repo root, with backend on PYTHONPATH):
   PYTHONPATH=apps/backend python ai/eval/run_parsing_benchmark.py
   PYTHONPATH=apps/backend python ai/eval/run_parsing_benchmark.py --threshold 0.85
+  PYTHONPATH=apps/backend python ai/eval/run_ai_performance_benchmark.py
+  PYTHONPATH=apps/backend python ai/eval/run_ai_performance_benchmark.py --with-llm
 """
 from __future__ import annotations
 

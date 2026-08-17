@@ -24,7 +24,8 @@ const BACKEND_PORT = 3000;
 const FRONTEND_PORT = 5173;
 const BROWSER_URL = `http://localhost:${FRONTEND_PORT}`;
 const DEFAULT_OLLAMA_HOST = 'http://127.0.0.1:11434';
-const DEFAULT_OLLAMA_MODEL = 'qwen2.5:14b-instruct';
+/** Pull-only fallback when hardware detection is unavailable. Never written to .env. */
+const SAFE_PULL_OLLAMA_MODEL = 'qwen2.5:7b-instruct';
 
 let backendProcess = null;
 let frontendProcess = null;
@@ -154,6 +155,29 @@ function upsertEnvKeys(filePath, updates) {
   fs.writeFileSync(filePath, content, 'utf8');
 }
 
+/** Non-empty OLLAMA_MODEL in .env or process env is an operator pin. */
+function explicitOllamaModel(envMap = {}, processEnv = process.env) {
+  const fromProcess = String((processEnv && processEnv.OLLAMA_MODEL) || '').trim();
+  if (fromProcess) return fromProcess;
+  return String((envMap && envMap.OLLAMA_MODEL) || '').trim();
+}
+
+function ollamaModelIsExplicit(envMap = {}, processEnv = process.env) {
+  return Boolean(explicitOllamaModel(envMap, processEnv));
+}
+
+/** Host/base-url normalization only — never persist OLLAMA_MODEL. */
+function ollamaHostUpdates(envMap = {}, defaultHost = DEFAULT_OLLAMA_HOST) {
+  const host =
+    (envMap.OLLAMA_HOST || '').trim() ||
+    (envMap.OLLAMA_BASE_URL || '').trim() ||
+    defaultHost;
+  const updates = {};
+  if ((envMap.OLLAMA_HOST || '').trim() !== host) updates.OLLAMA_HOST = host;
+  if (!(envMap.OLLAMA_BASE_URL || '').trim()) updates.OLLAMA_BASE_URL = host;
+  return { host, updates };
+}
+
 function setupEnv() {
   logStep(2, 7, 'Checking apps/backend/.env');
   if (!fs.existsSync(BACKEND_ENV)) {
@@ -168,21 +192,23 @@ function setupEnv() {
   }
 
   // Runtime YAML reads OLLAMA_HOST; accept legacy OLLAMA_BASE_URL and normalize.
+  // Do NOT persist OLLAMA_MODEL — unset means hardware-adaptive selection in Python.
   const envMap = readEnvFile(BACKEND_ENV);
-  const host =
-    (envMap.OLLAMA_HOST || '').trim() ||
-    (envMap.OLLAMA_BASE_URL || '').trim() ||
-    DEFAULT_OLLAMA_HOST;
-  const model = (envMap.OLLAMA_MODEL || '').trim() || DEFAULT_OLLAMA_MODEL;
-  const updates = {};
-  if ((envMap.OLLAMA_HOST || '').trim() !== host) updates.OLLAMA_HOST = host;
-  if (!(envMap.OLLAMA_MODEL || '').trim()) updates.OLLAMA_MODEL = model;
-  if (!(envMap.OLLAMA_BASE_URL || '').trim()) updates.OLLAMA_BASE_URL = host;
+  const { host, updates } = ollamaHostUpdates(envMap);
+  const pinned = explicitOllamaModel(envMap);
   if (Object.keys(updates).length) {
     upsertEnvKeys(BACKEND_ENV, updates);
-    log(`Normalized Ollama env: host=${host}, model=${model}`);
+    log(
+      pinned
+        ? `Normalized Ollama env: host=${host}, model=${pinned} (operator pin)`
+        : `Normalized Ollama env: host=${host}, model=unset (hardware-adaptive)`
+    );
   } else {
-    log(`Ollama config: host=${host}, model=${model}`);
+    log(
+      pinned
+        ? `Ollama config: host=${host}, model=${pinned} (operator pin)`
+        : `Ollama config: host=${host}, model=unset (hardware-adaptive)`
+    );
   }
 
   setupFrontendEnv(envMap);
@@ -383,12 +409,50 @@ function modelIsPresent(tags, modelName) {
   });
 }
 
+function resolveAdaptiveOllamaModel(envMap = {}) {
+  const pinned = explicitOllamaModel(envMap);
+  if (pinned) {
+    return { model: pinned, source: 'operator' };
+  }
+  try {
+    const env = { ...process.env, PYTHONPATH: BACKEND_DIR };
+    // Blank process env must not look like a pin to the Python helper.
+    if (!(env.OLLAMA_MODEL || '').trim()) {
+      delete env.OLLAMA_MODEL;
+    }
+    const result = spawnSync(
+      VENV_PYTHON,
+      ['-m', 'app.ai.parser.engine.hardware'],
+      { cwd: BACKEND_DIR, encoding: 'utf8', env }
+    );
+    const lines = String(result.stdout || '')
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean);
+    const model = lines.length ? lines[lines.length - 1].trim() : '';
+    if (result.status === 0 && model) {
+      return { model, source: 'hardware' };
+    }
+    if (result.stderr) {
+      log(`Hardware model helper: ${String(result.stderr).trim()}`, 'warn');
+    }
+  } catch (err) {
+    log(`Hardware model helper failed: ${err.message || err}`, 'warn');
+  }
+  log(
+    `Hardware detection unavailable — pulling ${SAFE_PULL_OLLAMA_MODEL} (not written to .env)`,
+    'warn'
+  );
+  return { model: SAFE_PULL_OLLAMA_MODEL, source: 'pull-fallback' };
+}
+
 async function setupOllama() {
   logStep(4, 7, 'Setting up Ollama (serve + model pull)');
   const envMap = readEnvFile(BACKEND_ENV);
   const host = (envMap.OLLAMA_HOST || envMap.OLLAMA_BASE_URL || DEFAULT_OLLAMA_HOST).replace(/\/$/, '');
-  const model = envMap.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL;
-  log(`Using Ollama model: ${model}`);
+  const resolved = resolveAdaptiveOllamaModel(envMap);
+  const model = resolved.model;
+  log(`Using Ollama model: ${model} (${resolved.source})`);
   log(`Using Ollama host: ${host}`);
 
     if (!commandExists('ollama')) {
@@ -497,7 +561,6 @@ function startBackend() {
   freePort(BACKEND_PORT);
   const envMap = readEnvFile(BACKEND_ENV);
   const ollamaHost = (envMap.OLLAMA_HOST || envMap.OLLAMA_BASE_URL || DEFAULT_OLLAMA_HOST).trim();
-  const ollamaModel = (envMap.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL).trim();
   const env = {
     ...process.env,
     PYTHONIOENCODING: 'utf-8',
@@ -505,9 +568,14 @@ function startBackend() {
     AI_RUNTIME_CONFIG: path.join(ROOT, 'ai', 'runtime', 'config', 'runtime.production.yaml'),
     OLLAMA_HOST: ollamaHost,
     OLLAMA_BASE_URL: ollamaHost,
-    OLLAMA_MODEL: ollamaModel,
     FLASK_USE_RELOADER: 'false',
   };
+  const pinned = explicitOllamaModel(envMap);
+  if (pinned) {
+    env.OLLAMA_MODEL = pinned;
+  } else {
+    delete env.OLLAMA_MODEL;
+  }
   backendProcess = spawn(VENV_PYTHON, ['wsgi.py'], {
     cwd: BACKEND_DIR,
     stdio: 'inherit',
@@ -651,6 +719,10 @@ module.exports = {
   BACKEND_ENV,
   readEnvFile,
   upsertEnvKeys,
+  explicitOllamaModel,
+  ollamaModelIsExplicit,
+  ollamaHostUpdates,
+  resolveAdaptiveOllamaModel,
   log,
   logStep,
   checkEnv,

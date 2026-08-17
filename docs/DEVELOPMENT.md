@@ -125,6 +125,21 @@ Fresh local DB: create an empty Postgres database, then `alembic upgrade head`. 
 
 Copy from the matching `.env.example`, then fill secrets. Never commit `.env` files.
 
+### Ollama model selection
+
+Precedence (identical in `start.js`, `hardware.py`, and runtime YAML):
+
+1. **Explicit `OLLAMA_MODEL`** — operator pin; never overridden
+2. **`HCIP_HARDWARE_PROFILE`** — `gpu_high` | `gpu_mid` | `unknown` | `cpu`
+3. **`HCIP_VRAM_MB`** — integer megabytes (0 is valid and means CPU)
+4. **NVIDIA `nvidia-smi`** — automatic VRAM → high (≥20GB) / mid (≥6GB)
+5. **GPU present but VRAM unknown** (NVIDIA device node / WSL `/dev/dxg` / `lspci` NVIDIA|AMD) → `unknown` (7B, concurrency 1). This is **not** treated as a weak CPU.
+6. **Conservative fallback** — `cpu` / `qwen2.5:3b-instruct`
+
+`start.js` does **not** write `OLLAMA_MODEL` into `.env` when it is unset. AMD, Apple, and Intel GPUs are not VRAM-measured; set `HCIP_HARDWARE_PROFILE` (and optionally `HCIP_VRAM_MB`).
+
+Public resume stream fallback joins an in-process parse of the same file bytes. Gunicorn multi-worker: join is per process only.
+
 Optional integration vars (see `apps/backend/.env.example`):
 
 - `INTEGRATION_SECRETS_KEY` — Fernet key (or any secret string) for encrypting job-board / OAuth credentials (required in production; do not rely on plaintext fallback)

@@ -50,7 +50,7 @@ python ../../scripts/database/test_db_connection.py
 
 ## Resume parsing smoke test (Ollama)
 
-Primary model: **`qwen2.5:14b-instruct`** (`OLLAMA_MODEL`).
+Primary model: **hardware-adaptive** when `OLLAMA_MODEL` is unset (`gpu_high`→14b, `gpu_mid`/`unknown`→7b, `cpu`→3b). Pin `OLLAMA_MODEL` to override.
 
 `node start.js` now:
 1. Installs backend deps from `requirements.txt` (includes **RapidOCR** via `rapidocr-onnxruntime`, pymupdf, Pillow)
@@ -63,8 +63,8 @@ Primary model: **`qwen2.5:14b-instruct`** (`OLLAMA_MODEL`).
 # Then from repo root:
 node start.js
 
-# Or manual:
-ollama pull qwen2.5:14b-instruct
+# Or manual (example pin; omit to let the backend choose):
+ollama pull qwen2.5:7b-instruct
 ollama serve
 
 cd apps/backend && source venv/bin/activate

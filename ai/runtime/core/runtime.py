@@ -6,7 +6,11 @@ from __future__ import annotations
 
 
 
+from collections import OrderedDict
+
 from pathlib import Path
+
+from threading import RLock
 
 from typing import Any
 
@@ -248,7 +252,63 @@ class AIRuntime:
 
 
 
+_RUNTIME_LOCK = RLock()
+
+_RUNTIMES: OrderedDict[str, AIRuntime] = OrderedDict()
+
+_MAX_RUNTIMES = 4
+
 _default_runtime: AIRuntime | None = None
+
+
+
+
+
+def _resolved_config_key(config_path: Path | None = None) -> str:
+
+    from runtime.config.loader import _resolve_config_path
+
+    return str(_resolve_config_path(config_path))
+
+
+
+
+
+def _close_runtime(runtime: AIRuntime) -> None:
+
+    try:
+
+        for provider in runtime.providers.providers.values():
+
+            closer = getattr(provider, "close", None)
+
+            if closer is not None:
+
+                closer()
+
+    except Exception:
+
+        pass
+
+
+
+
+
+def reset_runtime() -> None:
+
+    """Drop cached runtimes (tests / explicit reload)."""
+
+    global _default_runtime
+
+    with _RUNTIME_LOCK:
+
+        for runtime in _RUNTIMES.values():
+
+            _close_runtime(runtime)
+
+        _RUNTIMES.clear()
+
+        _default_runtime = None
 
 
 
@@ -256,15 +316,39 @@ _default_runtime: AIRuntime | None = None
 
 def get_runtime(config_path: Path | None = None) -> AIRuntime:
 
-    """Return process-wide runtime singleton."""
+    """Return a runtime for the resolved configuration; reuse when the key matches."""
 
     global _default_runtime
 
-    if _default_runtime is None or config_path is not None:
+    key = _resolved_config_key(config_path)
 
-        _default_runtime = AIRuntime.from_config_path(config_path)
+    with _RUNTIME_LOCK:
 
-    return _default_runtime
+        existing = _RUNTIMES.get(key)
+
+        if existing is not None:
+
+            _RUNTIMES.move_to_end(key)
+
+            _default_runtime = existing
+
+            return existing
+
+        runtime = AIRuntime.from_config_path(config_path)
+
+        while len(_RUNTIMES) >= _MAX_RUNTIMES:
+
+            _old_key, old_runtime = _RUNTIMES.popitem(last=False)
+
+            if old_runtime is not runtime:
+
+                _close_runtime(old_runtime)
+
+        _RUNTIMES[key] = runtime
+
+        _default_runtime = runtime
+
+        return runtime
 
 
 

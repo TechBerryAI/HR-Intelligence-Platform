@@ -111,5 +111,5 @@ def test_prefer_deterministic_jd():
 
 def test_hardware_profile_detects():
     profile = detect_hardware_profile()
-    assert profile.name in ('gpu_high', 'gpu_mid', 'cpu')
+    assert profile.name in ('gpu_high', 'gpu_mid', 'unknown', 'cpu')
     assert profile.ollama_max_concurrent >= 1

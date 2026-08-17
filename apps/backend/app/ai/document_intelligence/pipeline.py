@@ -26,6 +26,7 @@ from app.ai.document_intelligence.trace import trace_stage
 from app.ai.document_intelligence.validation.engine import sanitize_candidate_profile
 from app.ai.parser.engine.confidence import calculate_confidence
 from app.ai.parser.engine.hardware import apply_hardware_env, detect_hardware_profile
+from app.ai.parser.engine.parse_inflight import inflight_key, run_or_join
 from app.ai.parser.engine.progress import complete_parse_job, create_parse_job, emit_stage
 from app.ai.parser.engine.sections import unresolved_semantic_text
 from app.ai.parser.engine.types import StageCallback, StageEvent
@@ -304,39 +305,49 @@ def run_document_intelligence(
     if parse_job_id is None:
         parse_job_id = create_parse_job(kind)
 
-    try:
-        if kind == 'resume':
-            body, status = _run_resume(
-                file_data,
-                filename,
-                uploader_id=uploader_id,
-                uploader_role=uploader_role,
-                candidate_id=candidate_id,
-                parse_job_id=parse_job_id,
-                on_stage=on_stage,
-                use_content_hash_cache=use_content_hash_cache,
-            )
-        else:
-            body, status = _run_jd(
-                file_data,
-                filename,
-                uploader_id=uploader_id,
-                uploader_role=uploader_role,
-                job_id=job_id,
-                parse_job_id=parse_job_id,
-                on_stage=on_stage,
-                use_content_hash_cache=use_content_hash_cache,
-            )
-        if status == 200:
-            complete_parse_job(parse_job_id, body)
-        else:
-            complete_parse_job(parse_job_id, None, error=body.get('error'))
-        body = dict(body)
-        body['parse_job_id'] = parse_job_id
-        return body, status
-    except Exception as exc:
-        complete_parse_job(parse_job_id, None, error=str(exc))
-        return {'status': 'error', 'error': str(exc), 'parse_job_id': parse_job_id}, 500
+    def _execute() -> tuple[dict[str, Any], int]:
+        try:
+            if kind == 'resume':
+                body, status = _run_resume(
+                    file_data,
+                    filename,
+                    uploader_id=uploader_id,
+                    uploader_role=uploader_role,
+                    candidate_id=candidate_id,
+                    parse_job_id=parse_job_id,
+                    on_stage=on_stage,
+                    use_content_hash_cache=use_content_hash_cache,
+                )
+            else:
+                body, status = _run_jd(
+                    file_data,
+                    filename,
+                    uploader_id=uploader_id,
+                    uploader_role=uploader_role,
+                    job_id=job_id,
+                    parse_job_id=parse_job_id,
+                    on_stage=on_stage,
+                    use_content_hash_cache=use_content_hash_cache,
+                )
+            if status == 200:
+                complete_parse_job(parse_job_id, body)
+            else:
+                complete_parse_job(parse_job_id, None, error=body.get('error'))
+            body = dict(body)
+            body['parse_job_id'] = parse_job_id
+            return body, status
+        except Exception as exc:
+            complete_parse_job(parse_job_id, None, error=str(exc))
+            return {'status': 'error', 'error': str(exc), 'parse_job_id': parse_job_id}, 500
+
+    # Public stream → sync fallback re-uploads the same bytes with a new uploader id.
+    # Join in-process so the second request waits instead of starting another LLM parse.
+    # Persistent public hash cache stays disabled (cross-visitor stale TOON).
+    if uploader_role == 'public' and file_data:
+        cache_tag = os.getenv('DOCUMENT_INTELLIGENCE_CACHE_TAG', '')
+        key = inflight_key(compute_file_hash(file_data), kind, cache_tag)
+        return run_or_join(key, _execute)
+    return _execute()
 
 
 def run_intelligence_pipeline(*args, **kwargs):

@@ -8,18 +8,18 @@ from pathlib import Path
 import pytest
 import yaml
 
-import runtime.core.runtime as runtime_module
-
 TEST_RUNTIME_CONFIG = Path(__file__).resolve().parent / "runtime.test.yaml"
 
 
 @pytest.fixture(autouse=True)
 def mock_runtime_config(monkeypatch: pytest.MonkeyPatch) -> None:
     """Use mock provider for all proposal generator tests."""
-    runtime_module._default_runtime = None
+    from runtime.core.runtime import reset_runtime
+
+    reset_runtime()
     monkeypatch.setenv("AI_RUNTIME_CONFIG", str(TEST_RUNTIME_CONFIG))
     yield
-    runtime_module._default_runtime = None
+    reset_runtime()
     monkeypatch.delenv("AI_RUNTIME_CONFIG", raising=False)
 
 

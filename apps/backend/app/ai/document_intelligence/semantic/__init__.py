@@ -97,13 +97,15 @@ def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
     def _invoke() -> Optional[dict[str, Any]]:
         try:
             from app.ai.adapter.runtime_adapter import parse_via_runtime
+            from app.ai.parser.engine.ollama_limit import ollama_slot
 
-            result = parse_via_runtime(
-                prompt,
-                'resume' if doc_kind == 'resume' else 'jd',
-                timeout_seconds=timeout_sec,
-                max_attempts=1,
-            )
+            with ollama_slot():
+                result = parse_via_runtime(
+                    prompt,
+                    'resume' if doc_kind == 'resume' else 'jd',
+                    timeout_seconds=timeout_sec,
+                    max_attempts=1,
+                )
             if isinstance(result, dict):
                 return result
         except Exception as exc:
