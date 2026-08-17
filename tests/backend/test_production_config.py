@@ -124,12 +124,43 @@ def test_multi_worker_oauth_requires_redis(monkeypatch):
     ok, errors, _ = EnvValidator.validate()
     assert not ok
     assert any('REDIS_URL' in e for e in errors)
+    assert any('GUNICORN_WORKERS=1' in e for e in errors)
 
 
-def test_multi_worker_without_oauth_does_not_require_redis(monkeypatch):
+def test_production_multi_worker_requires_redis(monkeypatch):
     _prod_base(monkeypatch)
     monkeypatch.setenv('GUNICORN_WORKERS', '4')
     monkeypatch.delenv('GOOGLE_OAUTH_CLIENT_ID', raising=False)
+    monkeypatch.delenv('REDIS_URL', raising=False)
+    ok, errors, _ = EnvValidator.validate()
+    assert not ok
+    assert any('REDIS_URL' in e for e in errors)
+
+
+def test_production_gunicorn_default_workers_requires_redis(monkeypatch):
+    _prod_base(monkeypatch)
+    monkeypatch.delenv('GUNICORN_WORKERS', raising=False)
+    monkeypatch.setenv('SERVER_SOFTWARE', 'gunicorn/21.2.0')
+    ok, errors, _ = EnvValidator.validate()
+    assert not ok
+    assert any('REDIS_URL' in e for e in errors)
+
+
+def test_production_multi_worker_ok_when_redis_pings(monkeypatch):
+    _prod_base(monkeypatch)
+    monkeypatch.setenv('GUNICORN_WORKERS', '4')
+    monkeypatch.setenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
+    monkeypatch.setattr(EnvValidator, '_ping_redis', classmethod(lambda cls, url: None))
+    ok, errors, _ = EnvValidator.validate()
+    assert ok, errors
+
+
+def test_dev_multi_worker_does_not_require_redis(monkeypatch):
+    _prod_base(monkeypatch)
+    monkeypatch.setenv('FLASK_DEBUG', 'true')
+    monkeypatch.setenv('ALLOW_INSECURE_JWT', 'true')
+    monkeypatch.setenv('GUNICORN_WORKERS', '4')
+    monkeypatch.delenv('REDIS_URL', raising=False)
     ok, errors, _ = EnvValidator.validate()
     assert ok, errors
 

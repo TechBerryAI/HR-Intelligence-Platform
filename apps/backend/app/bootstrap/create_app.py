@@ -336,22 +336,33 @@ def create_app() -> Flask:
 
     @app.route('/ready', methods=['GET'])
     def ready():
-        """Readiness: Postgres must be reachable before serving traffic."""
+        """Readiness: Postgres (and Redis when REDIS_URL is set) must be reachable."""
         postgres = _check_postgres()
+        redis_url = (os.getenv('REDIS_URL') or '').strip()
+        redis = None
+        ready_ok = postgres == 'ok'
+        if redis_url:
+            from app.core.shared_store import redis_status
+
+            redis = redis_status()
+            ready_ok = ready_ok and redis == 'ok'
         body = {
-            'status': 'ready' if postgres == 'ok' else 'not_ready',
+            'status': 'ready' if ready_ok else 'not_ready',
             'postgres': postgres,
         }
-        return jsonify(body), (200 if postgres == 'ok' else 503)
+        if redis is not None:
+            body['redis'] = redis
+        return jsonify(body), (200 if ready_ok else 503)
 
-    @app.route('/api/test-cors', methods=['GET', 'OPTIONS'])
-    def test_cors():
-        return jsonify({
-            "status": "ok",
-            "message": "CORS test successful",
-            "origin": request.headers.get('Origin'),
-            "allowed_origins": cors_origins,
-        })
+    if os.getenv('FLASK_DEBUG', 'false').lower() == 'true':
+        @app.route('/api/test-cors', methods=['GET', 'OPTIONS'])
+        def test_cors():
+            return jsonify({
+                "status": "ok",
+                "message": "CORS test successful",
+                "origin": request.headers.get('Origin'),
+                "allowed_origins": cors_origins,
+            })
 
     app.register_blueprint(auth_bp, url_prefix='/api')
     app.register_blueprint(companies_bp, url_prefix='/api/companies')

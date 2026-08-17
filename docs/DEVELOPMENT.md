@@ -138,7 +138,13 @@ Precedence (identical in `start.js`, `hardware.py`, and runtime YAML):
 
 `start.js` does **not** write `OLLAMA_MODEL` into `.env` when it is unset. The Ollama pull helper forwards only `OLLAMA_MODEL`, `HCIP_HARDWARE_PROFILE`, and `HCIP_VRAM_MB` from `apps/backend/.env` when those keys are unset in the process environment (process env still wins). AMD, Apple, and Intel GPUs are not VRAM-measured; set `HCIP_HARDWARE_PROFILE` (and optionally `HCIP_VRAM_MB`).
 
-Public resume stream fallback joins an in-process parse of the same file bytes. When Redis is up (`REDIS_URL` pings), a SET NX lease coordinates that hash across Gunicorn workers. Without Redis, join is per process only — duplicate work is possible with `GUNICORN_WORKERS>1`.
+Public resume stream fallback joins an in-process parse of the same file bytes. Production with `GUNICORN_WORKERS>1` requires `REDIS_URL` (startup fails if missing or unreachable). The owner renews a SET NX lease until the parse finishes so a 180s TTL cannot expire under a healthy ~320s Gunicorn request. `GUNICORN_WORKERS=1` does not require Redis.
+
+Live Redis lease test (disposable instance, not production Redis):
+
+```bash
+TEST_REDIS_URL=redis://127.0.0.1:6379/15 python3 -m pytest tests/backend/test_parse_redis_lease.py -k live -q
+```
 
 AI performance harness (this machine only; do not treat numbers as SLAs):
 
@@ -156,7 +162,8 @@ Optional integration vars (see `apps/backend/.env.example`):
 - `INTEGRATION_WORKER_MAX_WORKERS` — default `4`
 - `INTEGRATION_AUTO_SYNC_INTERVAL_SECONDS` — default `900` (min 60)
 - `RUN_INTEGRATION_AUTO_SYNC` — set `1` only in the dedicated scheduler process (not in Gunicorn web workers)
-- `REDIS_URL` — set when `GUNICORN_WORKERS>1` **and** you use Google Calendar OAuth, need a **global** public resume-parse rate limit, or want cross-worker parse-job join. JWT/OTP/outbox do not need Redis. If unset, OAuth `state`, parse rate limits, and parse join are per-worker memory. Redis is not required for single-worker parse.
+- `REDIS_URL` — **required in production when `GUNICORN_WORKERS>1`** (cross-worker parse join; Gunicorn default is 4). Set `GUNICORN_WORKERS=1` for single-process production without Redis. JWT/OTP/outbox do not need Redis. Dev (`FLASK_DEBUG=true`) does not require Redis.
+- `TRUST_PROXY_HEADERS` — set `true` behind nginx/Caddy so public parse rate limits use `X-Forwarded-For`. Unset (default) uses `request.remote_addr` only.
 
 ### Production processes (Gunicorn + scheduler)
 

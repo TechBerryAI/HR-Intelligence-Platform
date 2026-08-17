@@ -42,7 +42,7 @@ Required:
 
 Recommended (not a startup hard-fail): `FRONTEND_URL` / `FRONTEND_URLS` for CORS and booking links.
 
-When `GUNICORN_WORKERS>1` **and** Google Calendar OAuth is configured, `REDIS_URL` is required and must ping. If `REDIS_URL` is set in production, ping must succeed (no silent in-memory fallback). Cross-worker public parse join uses Redis SET NX when Redis is up; it is not a mandatory dependency for parse (without Redis, join is per worker).
+When `GUNICORN_WORKERS>1` in production, `REDIS_URL` is required and must ping (cross-worker parse join; Gunicorn default is 4). Set `GUNICORN_WORKERS=1` if you are not running Redis. If `REDIS_URL` is set, ping must succeed (no silent in-memory fallback). The parse owner renews its SET NX lease until completion so a healthy request is not stolen at 180s. Behind nginx/Caddy set `TRUST_PROXY_HEADERS=true`. `GET /ready` includes Redis when `REDIS_URL` is set.
 
 AI parse: leave `OLLAMA_MODEL` unset for hardware-adaptive selection, or pin it explicitly. Runtime YAML: `AI_RUNTIME_CONFIG=ai/runtime/config/runtime.production.yaml`. Ollama reachable at `OLLAMA_HOST`. Residual fill timeout: `DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC` (default 90).
 
@@ -182,7 +182,7 @@ curl -sS http://127.0.0.1:3000/health
 curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/ready
 ```
 
-`/ready` must be 200 only when Postgres answers `SELECT 1`. `/health` reports postgres/redis/ollama checks and worker `pid`.
+`/ready` must be 200 when Postgres answers `SELECT 1`, and Redis is `ok` when `REDIS_URL` is set. `/health` is liveness (always 200 plus checks).
 
 ### POST-DEPLOY
 

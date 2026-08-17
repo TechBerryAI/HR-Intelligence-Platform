@@ -7,6 +7,7 @@ Frontend clients receive Form DTOs only — never raw TOON/AI output.
 from __future__ import annotations
 
 import hmac
+import logging
 import os
 import time
 import uuid
@@ -24,6 +25,8 @@ from app.ai.parser.engine.confidence import calculate_confidence
 from app.ai.toon.runtime import toon_loads_flex
 from app.core import shared_store
 from app.domains.identity.authorization.rbac import STAFF_ROLES, get_role, get_user_id
+
+logger = logging.getLogger(__name__)
 
 
 def _resume_client(body: dict, status: int):
@@ -72,11 +75,31 @@ def get_mime_type(filename):
     return MIME_TYPE_MAP.get(ext, 'application/octet-stream')
 
 
+def _trust_proxy_headers() -> bool:
+    return os.getenv('TRUST_PROXY_HEADERS', '').strip().lower() in ('1', 'true', 'yes', 'on')
+
+
 def _client_ip() -> str:
-    forwarded = request.headers.get('X-Forwarded-For', '')
-    if forwarded:
-        return forwarded.split(',')[0].strip()
+    if _trust_proxy_headers():
+        forwarded = request.headers.get('X-Forwarded-For', '')
+        if forwarded:
+            return forwarded.split(',')[0].strip() or (request.remote_addr or 'unknown')
     return request.remote_addr or 'unknown'
+
+
+def _reject_public_oversize():
+    cl = request.content_length
+    if cl is not None and cl > MAX_FILE_SIZE:
+        return jsonify({
+            'status': 'error',
+            'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
+        }), 413
+    return None
+
+
+def _generic_parse_error(exc: Exception, where: str):
+    logger.exception('%s', where)
+    return jsonify({'status': 'error', 'error': 'Internal server error'}), 500
 
 
 def _public_parse_rate_limited(ip: str) -> bool:
@@ -120,6 +143,10 @@ def parse_resume_public():
                 'pid': os.getpid(),
             }), 429
 
+        oversize = _reject_public_oversize()
+        if oversize:
+            return oversize
+
         if 'file' not in request.files:
             return jsonify({'status': 'error', 'error': 'No file provided', 'pid': os.getpid()}), 400
 
@@ -138,6 +165,11 @@ def parse_resume_public():
             }), 400
 
         file_data = file.read()
+        if len(file_data) > MAX_FILE_SIZE:
+            return jsonify({
+                'status': 'error',
+                'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
+            }), 413
         filename = secure_filename(file.filename)
         public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
 
@@ -151,8 +183,7 @@ def parse_resume_public():
         )
         return _resume_client(body, status)
     except Exception as e:
-        print(f"Public resume parsing error: {str(e)}")
-        return jsonify({'status': 'error', 'error': str(e)}), 500
+        return _generic_parse_error(e, 'Public resume parsing error')
 
 
 @parsing_bp.route('/parse/resume', methods=['POST'])
@@ -203,8 +234,7 @@ def parse_resume_upload():
         )
         return _resume_client(body, status)
     except Exception as e:
-        print(f"Resume parsing error: {str(e)}")
-        return jsonify({'status': 'error', 'error': str(e)}), 500
+        return _generic_parse_error(e, 'Resume parsing error')
 
 
 @parsing_bp.route('/parse/jd', methods=['POST'])
@@ -261,8 +291,7 @@ def parse_jd_upload():
         )
         return _jd_client(body, status)
     except Exception as e:
-        print(f"JD parsing error: {str(e)}")
-        return jsonify({'status': 'error', 'error': str(e)}), 500
+        return _generic_parse_error(e, 'JD parsing error')
 
 
 @parsing_bp.route('/parse/jobs/<job_id>/progress', methods=['GET'])
@@ -274,7 +303,14 @@ def parse_job_progress(job_id):
     job = get_parse_job(job_id)
     if not job:
         return jsonify({'status': 'error', 'error': 'Parse job not found'}), 404
-    return jsonify({'status': 'ok', **job}), 200
+    return jsonify({
+        'status': 'ok',
+        'id': job['id'],
+        'doc_type': job.get('doc_type'),
+        'job_status': job.get('status'),
+        'events': job.get('events') or [],
+        'error': job.get('error'),
+    }), 200
 
 
 @parsing_bp.route('/parse/resume/public/stream', methods=['POST'])
@@ -289,6 +325,10 @@ def parse_resume_public_stream():
             'status': 'error',
             'error': 'Too many resume parse requests. Please try again later.',
         }), 429
+
+    oversize = _reject_public_oversize()
+    if oversize:
+        return oversize
 
     if 'file' not in request.files:
         return jsonify({'status': 'error', 'error': 'No file provided'}), 400
@@ -308,6 +348,11 @@ def parse_resume_public_stream():
         }), 400
 
     file_data = file.read()
+    if len(file_data) > MAX_FILE_SIZE:
+        return jsonify({
+            'status': 'error',
+            'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
+        }), 413
     filename = secure_filename(file.filename)
     public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
 
@@ -517,7 +562,7 @@ def get_parsed_resume(parsed_id):
         )
         return jsonify(payload), 200
     except Exception as e:
-        return jsonify({'status': 'error', 'error': str(e)}), 500
+        return _generic_parse_error(e, 'get_parsed_resume')
 
 
 @parsing_bp.route('/parsed/jd/<parsed_id>', methods=['GET'])
@@ -566,4 +611,4 @@ def get_parsed_jd(parsed_id):
         )
         return jsonify(payload), 200
     except Exception as e:
-        return jsonify({'status': 'error', 'error': str(e)}), 500
+        return _generic_parse_error(e, 'get_parsed_jd')

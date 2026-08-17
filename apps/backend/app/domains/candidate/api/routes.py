@@ -1,10 +1,13 @@
 """Candidate profile routes for HR staff (no candidate self-service accounts)."""
+import logging
+
 from flask import Blueprint, jsonify, request
 
 from app.api.middleware.auth import authenticate_token
 from app.database.connection.db import db_all, db_get, BACKEND
 from app.domains.identity.authorization.rbac import get_role, get_user_id, has_permission, ROLE_RECRUITER
 
+logger = logging.getLogger(__name__)
 candidate_bp = Blueprint('candidate', __name__)
 CGPA_COL = '"cgpa/percentage"' if BACKEND == "postgresql" else "[cgpa/percentage]"
 
@@ -134,5 +137,6 @@ def get_profile_admin(candidate_id: str):
             return jsonify({'error': 'Profile not found'}), 404
 
         return jsonify(parse_profile(profile))
-    except Exception as e:
-        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
+    except Exception:
+        logger.exception('candidate details failed')
+        return jsonify({'error': 'Internal server error'}), 500

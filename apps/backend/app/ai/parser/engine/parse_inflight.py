@@ -5,11 +5,13 @@ Does not share persistent DB TOON across public uploaders.
 
 Same-process callers join a Future. When Redis is up (``redis_status()=='ok'``),
 an additional SET NX lease coordinates the same key across Gunicorn workers.
-Without Redis, join is per process only — a documented multi-worker limitation.
+The owner renews the lease on a heartbeat until success/failure/exception.
+Without Redis, join is per process only.
 """
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 import uuid
@@ -28,8 +30,13 @@ _TTL_SEC = 90.0
 
 LEASE_TTL_SEC = 180
 RESULT_TTL_SEC = 90
-JOIN_TIMEOUT_SEC = 180
 JOIN_POLL_SEC = 0.1
+_HEARTBEAT_JOIN_SEC = 2.0
+_RENEW_RETRIES = 3
+_RENEW_RETRY_WAIT_SEC = 0.2
+
+_HEARTBEAT_LOCK = threading.Lock()
+_HEARTBEATS: set[threading.Thread] = set()
 
 
 class SharedKV(Protocol):
@@ -38,6 +45,7 @@ class SharedKV(Protocol):
     def get_json(self, key: str) -> dict | None: ...
     def pop_json(self, key: str) -> dict | None: ...
     def delete_json_if_match(self, key: str, field: str, expected: str) -> bool: ...
+    def renew_json_if_match(self, key: str, field: str, expected: str, ttl_seconds: int) -> bool: ...
 
 
 def inflight_key(file_hash: str, kind: str, cache_tag: str) -> str:
@@ -52,10 +60,33 @@ def result_key(key: str) -> str:
     return f'parse:result:{key}'
 
 
+def join_timeout_sec() -> float:
+    raw = (os.getenv('GUNICORN_TIMEOUT') or '').strip()
+    try:
+        if raw:
+            return max(1.0, float(raw))
+    except ValueError:
+        pass
+    return 320.0
+
+
+def renew_interval_sec(lease_ttl: int) -> float:
+    """Leave margin before expiry; tests pass a shorter interval explicitly."""
+    ttl = max(1, int(lease_ttl))
+    return max(15.0, ttl / 3.0)
+
+
+def lease_heartbeat_threads_for_tests() -> list[threading.Thread]:
+    with _HEARTBEAT_LOCK:
+        return [t for t in _HEARTBEATS if t.is_alive()]
+
+
 def reset_parse_inflight_for_tests() -> None:
     with _LOCK:
         _INFLIGHT.clear()
         _RECENT.clear()
+    with _HEARTBEAT_LOCK:
+        _HEARTBEATS.clear()
 
 
 def _prune_locked(now: float) -> None:
@@ -89,6 +120,74 @@ def _unpack_result(data: dict[str, Any]) -> Any:
     return data.get('body')
 
 
+class LeaseHeartbeat:
+    """One daemon thread: renew lease while this token still owns it."""
+
+    def __init__(
+        self,
+        store: SharedKV,
+        key: str,
+        token: str,
+        ttl: int,
+        interval: float,
+        *,
+        renew_retries: int = _RENEW_RETRIES,
+    ) -> None:
+        self.store = store
+        self.key = key
+        self.token = token
+        self.ttl = ttl
+        self.interval = max(0.05, float(interval))
+        self.renew_retries = max(1, int(renew_retries))
+        self._stop = threading.Event()
+        self.ownership_lost = threading.Event()
+        self.renew_count = 0
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        thread = threading.Thread(target=self._loop, name='parse-lease-hb', daemon=True)
+        self._thread = thread
+        with _HEARTBEAT_LOCK:
+            _HEARTBEATS.add(thread)
+        thread.start()
+
+    def stop(self, join_timeout: float = _HEARTBEAT_JOIN_SEC) -> None:
+        self._stop.set()
+        thread = self._thread
+        if thread is not None:
+            thread.join(timeout=join_timeout)
+            with _HEARTBEAT_LOCK:
+                _HEARTBEATS.discard(thread)
+
+    def _loop(self) -> None:
+        while not self._stop.wait(self.interval):
+            if not self._renew_with_retries():
+                self.ownership_lost.set()
+                logger.warning('parse lease: ownership lost or renew failed key=%s', self.key)
+                return
+
+    def _renew_with_retries(self) -> bool:
+        for attempt in range(self.renew_retries):
+            try:
+                ok = self.store.renew_json_if_match(self.key, 'owner', self.token, self.ttl)
+                if ok:
+                    self.renew_count += 1
+                    return True
+                return False
+            except Exception as exc:
+                logger.warning(
+                    'parse lease renew error key=%s attempt=%s: %s',
+                    self.key,
+                    attempt + 1,
+                    exc,
+                )
+                if attempt + 1 >= self.renew_retries:
+                    return False
+                if self._stop.wait(_RENEW_RETRY_WAIT_SEC):
+                    return True
+        return False
+
+
 def run_or_join_shared(
     store: SharedKV,
     key: str,
@@ -96,30 +195,42 @@ def run_or_join_shared(
     *,
     lease_ttl: int = LEASE_TTL_SEC,
     result_ttl: int = RESULT_TTL_SEC,
-    timeout: float = JOIN_TIMEOUT_SEC,
+    timeout: float | None = None,
     poll: float = JOIN_POLL_SEC,
     owner_token: str | None = None,
+    renew_interval: float | None = None,
 ) -> T:
     """Cross-worker join via SET NX lease. Independent of in-process Futures."""
     token = owner_token or uuid.uuid4().hex
     lkey = lease_key(key)
     rkey = result_key(key)
+    wait = timeout if timeout is not None else join_timeout_sec()
+    interval = renew_interval if renew_interval is not None else renew_interval_sec(lease_ttl)
     if store.set_json_nx(lkey, {'owner': token}, lease_ttl):
+        heartbeat = LeaseHeartbeat(store, lkey, token, lease_ttl, interval)
+        lost = False
         try:
+            heartbeat.start()
             store.pop_json(rkey)
             result = fn()
-            store.set_json(rkey, _pack_result(result), result_ttl)
+            lost = heartbeat.ownership_lost.is_set()
+            if not lost:
+                store.set_json(rkey, _pack_result(result), result_ttl)
             return result
         except Exception as exc:
-            try:
-                store.set_json(rkey, {'ok': False, 'error': str(exc)}, result_ttl)
-            except Exception:
-                logger.warning('parse lease: failed to store error for key=%s', key)
+            lost = heartbeat.ownership_lost.is_set()
+            if not lost:
+                try:
+                    store.set_json(rkey, {'ok': False, 'error': str(exc)}, result_ttl)
+                except Exception:
+                    logger.warning('parse lease: failed to store error for key=%s', key)
             raise
         finally:
-            store.delete_json_if_match(lkey, 'owner', token)
+            heartbeat.stop()
+            if not heartbeat.ownership_lost.is_set():
+                store.delete_json_if_match(lkey, 'owner', token)
 
-    deadline = time.time() + timeout
+    deadline = time.time() + wait
     while time.time() < deadline:
         data = store.get_json(rkey)
         if data:
@@ -152,7 +263,7 @@ def run_or_join(key: str, fn: Callable[[], T], *, ttl_sec: float = _TTL_SEC) -> 
 
     if not created:
         logger.debug('parse inflight join key=%s', key)
-        return fut.result()
+        return fut.result(timeout=join_timeout_sec())
 
     try:
         if _cross_worker_enabled():

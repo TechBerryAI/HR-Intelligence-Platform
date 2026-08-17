@@ -176,11 +176,11 @@ class EnvValidator:
                 )
 
             redis_url = (os.getenv('REDIS_URL') or '').strip()
-            oauth_configured = bool((os.getenv('GOOGLE_OAUTH_CLIENT_ID') or '').strip())
-            redis_required = bool(workers and workers > 1 and oauth_configured)
-            if redis_required and not redis_url:
+            if workers and workers > 1 and not redis_url:
                 errors.append(
-                    "  ❌ REDIS_URL: required when GUNICORN_WORKERS>1 and Google Calendar OAuth is configured"
+                    "  ❌ REDIS_URL: required when GUNICORN_WORKERS>1 "
+                    "(cross-worker parse join; Gunicorn default is 4). "
+                    "Set REDIS_URL or GUNICORN_WORKERS=1."
                 )
             elif redis_url:
                 ping_err = cls._ping_redis(redis_url)

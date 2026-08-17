@@ -87,6 +87,7 @@ def test_parse_progress_endpoint_shape():
     assert res.status_code == 404
     body = res.get_json()
     assert body.get('status') == 'error'
+    assert 'result' not in (body or {})
 
 
 def test_public_resume_parse_rejects_empty_file():

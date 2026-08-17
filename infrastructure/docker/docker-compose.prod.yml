@@ -32,7 +32,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redisdata_prod:/data
     healthcheck:
@@ -40,6 +40,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    # Host gunicorn is the documented model; bind loopback so Redis is not on all interfaces.
+    # Remote Redis: add --requirepass and REDIS_URL=redis://:PASSWORD@host:6379/0
     command: ["redis-server", "--appendonly", "yes"]
 
   # Optional: uncomment and provide a Dockerfile / image for the API.

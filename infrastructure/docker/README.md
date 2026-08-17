@@ -35,10 +35,13 @@ Point the API at the stack:
 |----------|---------|
 | `POSTGRES_HOST` | `localhost` (host) or `postgres` (from another compose service) |
 | `POSTGRES_PASSWORD` | same as compose |
-| `REDIS_URL` | `redis://localhost:6379/0` |
+| `REDIS_URL` | `redis://127.0.0.1:6379/0` |
+
+Redis is published on **loopback only** (`127.0.0.1:6379`) so host Gunicorn can reach it without exposing Redis on all interfaces. For a remote Redis, set `--requirepass` and `REDIS_URL=redis://:PASSWORD@host:6379/0`.
 
 ### API / frontend notes
 
-- **API:** run gunicorn from `apps/backend` (or uncomment the optional `api` service in `docker-compose.prod.yml` once you have an image). Probe `GET /health` (liveness) and `GET /ready` (Postgres readiness).
+- **API:** run gunicorn from `apps/backend` (or uncomment the optional `api` service in `docker-compose.prod.yml` once you have an image). Probe `GET /health` (liveness) and `GET /ready` (Postgres, and Redis when `REDIS_URL` is set).
+- Behind a reverse proxy, set `TRUST_PROXY_HEADERS=true` so public parse rate limits use `X-Forwarded-For`.
 - **Frontend:** build with `npm run build` in `apps/frontend`, then serve `dist/` behind a reverse proxy that forwards `/api`, `/health`, and `/ready` to the API.
 - Do not bake JWT secrets, mail passwords, or OAuth client secrets into images; inject them at runtime.

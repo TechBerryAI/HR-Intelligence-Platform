@@ -900,7 +900,7 @@ def create_job():
         print("=" * 50)
         if 'FOREIGN KEY' in error_msg.upper():
             return jsonify({'error': 'Invalid HR user. Please log in again.'}), 400
-        return jsonify({'error': f'Internal server error: {error_msg}'}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 
 @jobs_bp.put('/<string:job_id>')

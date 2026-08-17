@@ -99,13 +99,34 @@ def redis_status() -> str:
         return 'error'
 
 
-_DELETE_IF_MATCH_LUA = """
+# Compact and spaced JSON both appear depending on dumps separators.
+_OWNER_NEEDLE_LUA = """
+local function owner_match(raw, token)
+  local a = '"owner":"' .. token .. '"'
+  local b = '"owner": "' .. token .. '"'
+  return string.find(raw, a, 1, true) or string.find(raw, b, 1, true)
+end
+"""
+
+_DELETE_IF_MATCH_LUA = _OWNER_NEEDLE_LUA + """
 local raw = redis.call('GET', KEYS[1])
 if not raw then
   return 0
 end
-if string.find(raw, ARGV[1], 1, true) then
+if owner_match(raw, ARGV[1]) then
   redis.call('DEL', KEYS[1])
+  return 1
+end
+return 0
+"""
+
+_RENEW_IF_MATCH_LUA = _OWNER_NEEDLE_LUA + """
+local raw = redis.call('GET', KEYS[1])
+if not raw then
+  return 0
+end
+if owner_match(raw, ARGV[1]) then
+  redis.call('EXPIRE', KEYS[1], tonumber(ARGV[2]))
   return 1
 end
 return 0
@@ -147,12 +168,39 @@ def set_json_nx(key: str, value: dict, ttl_seconds: int) -> bool:
         return True
 
 
+def renew_json_if_match(key: str, field: str, expected: str, ttl_seconds: int) -> bool:
+    """Extend TTL only when stored JSON ``field`` still equals ``expected``. Never recreates the key."""
+    ttl = int(ttl_seconds) if ttl_seconds else 0
+    if ttl <= 0:
+        return False
+    client = _get_redis()
+    if client is not None:
+        try:
+            renewed = client.eval(_RENEW_IF_MATCH_LUA, 1, key, str(expected), ttl)
+            return int(renewed) == 1
+        except Exception as exc:
+            logger.warning('[shared_store] renew_json_if_match Redis error: %s', exc)
+            raise
+    now = time.time()
+    with _mem_lock:
+        entry = _mem_kv.get(key)
+        if not entry:
+            return False
+        value, expires_at = entry
+        if expires_at is not None and now > expires_at:
+            _mem_kv.pop(key, None)
+            return False
+        if not isinstance(value, dict) or str(value.get(field)) != str(expected):
+            return False
+        _mem_kv[key] = (value, now + ttl)
+        return True
+
+
 def delete_json_if_match(key: str, field: str, expected: str) -> bool:
     """Delete key only when stored JSON ``field`` still equals ``expected``."""
     client = _get_redis()
     if client is not None:
         try:
-            # Token is a uuid; Lua GET+compare+DEL is atomic vs expired-lease reclaim.
             deleted = client.eval(_DELETE_IF_MATCH_LUA, 1, key, str(expected))
             return int(deleted) == 1
         except Exception as exc:

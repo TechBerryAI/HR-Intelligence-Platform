@@ -34,10 +34,23 @@ from app.domains.identity.sessions.service import (
     deactivate_session,
 )
 from app.core.auth import build_jwt_payload, JWT_SECRET, validate_password_strength
+from app.core import shared_store
 from app.api.middleware.auth import authenticate_token
 from app.domains.identity.authorization.rbac import build_hr_identity, ROLE_RECRUITER, get_user_id
 
 auth_bp = Blueprint('auth', __name__)
+
+_OTP_RATE_LIMIT = int(os.getenv('OTP_RATE_LIMIT', '8'))
+_OTP_RATE_WINDOW_SEC = int(os.getenv('OTP_RATE_WINDOW_SEC', '900'))
+
+
+def _otp_rate_limited(email: str) -> bool:
+    ip = request.remote_addr or 'unknown'
+    return shared_store.rate_limit_hit(
+        f'otp:{ip}:{email}',
+        _OTP_RATE_LIMIT,
+        _OTP_RATE_WINDOW_SEC,
+    )
 
 ALLOWED_PASSWORD_RESET_DOMAIN = (
     os.getenv('ALLOWED_PASSWORD_RESET_DOMAIN') or 'techberryinfotech.com'
@@ -128,7 +141,7 @@ def hr_signup():
         print(f"Error in hr_signup: {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @auth_bp.post('/verify-otp')
@@ -139,6 +152,8 @@ def verify_hr_otp():
         otp = (data.get('otp') or '').strip()
         if not email or not otp:
             return jsonify({'error': 'Email and OTP are required.'}), 400
+        if _otp_rate_limited(email):
+            return jsonify({'error': 'Too many OTP attempts. Please try again later.'}), 429
 
         row = db_get(
             """
@@ -213,6 +228,8 @@ def resend_hr_otp():
             return jsonify({'error': 'Email is required.'}), 400
         if not is_valid_email(email):
             return jsonify({"error": "Please provide a valid email address"}), 400
+        if _otp_rate_limited(email):
+            return jsonify({'error': 'Too many OTP requests. Please try again later.'}), 429
 
         row = db_get(
             'SELECT hrid, account_status FROM hr_signup WHERE LOWER(TRIM(email)) = ?',
@@ -248,6 +265,8 @@ def hr_forgot_password():
             return jsonify({'error': 'Email is required.'}), 400
         if not is_valid_email(email) or not _is_allowed_password_reset_email(email):
             return jsonify({'error': 'Invalid email'}), 400
+        if _otp_rate_limited(email):
+            return jsonify({'error': 'Too many OTP requests. Please try again later.'}), 429
 
         hr_row = db_get(
             """
@@ -290,6 +309,8 @@ def hr_verify_reset_otp():
             return jsonify({'error': 'Email and OTP are required.'}), 400
         if not is_valid_email(email) or not _is_allowed_password_reset_email(email):
             return jsonify({'error': 'Invalid email'}), 400
+        if _otp_rate_limited(email):
+            return jsonify({'error': 'Too many OTP attempts. Please try again later.'}), 429
 
         row = db_get(
             'SELECT otp, otp_expiry FROM hr_signup WHERE LOWER(TRIM(email)) = ?',
