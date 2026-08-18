@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core import media_storage
+from app.core.errors import log_unexpected
 
 # In-memory job store: job_id -> job dict
 _local_jobs: dict[str, dict[str, Any]] = {}
@@ -192,7 +193,7 @@ def _persist_excel(job_id: str, rows: list[dict], append: bool = False) -> None:
         else:
             path.write_bytes(_build_excel_bytes(rows))
     except Exception as e:
-        print(f"[local_bulk_parser] persist excel failed: {e}")
+        log_unexpected('local_bulk_parser.persist_excel', e)
 
 
 def _read_excel_rows(path: Path) -> list[dict]:
@@ -609,7 +610,7 @@ def _maybe_enhance_layout(raw_text: str) -> tuple[str, str]:
             return structured, 'completed'
         return raw_text, 'completed'
     except Exception as e:
-        print(f"[local_bulk_parser] layout enhance failed: {e}")
+        log_unexpected('local_bulk_parser.layout_enhance', e)
         return raw_text, 'failed'
 
 

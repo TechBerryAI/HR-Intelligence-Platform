@@ -1,7 +1,7 @@
 import os
 import re
 import hmac
-import traceback
+import logging
 import requests
 from flask import Blueprint, request, jsonify
 from app.database.connection.db import db_get, db_run, db_all, BACKEND, TRUE_SQL, get_conn, _pg_query
@@ -20,23 +20,18 @@ from app.ai.parser.enrichment.jd_text_inference import (
 from app.core.timing import timing
 
 applications_bp = Blueprint('applications', __name__)
+logger = logging.getLogger(__name__)
 
 
 def _apply_debug(stage: str, **fields):
     """Structured debug logging for POST /api/applications only."""
-    parts = [f"[APPLY][{stage}]"]
-    for key, value in fields.items():
-        parts.append(f"{key}={value}")
-    print(" ".join(parts))
+    logger.debug('apply stage=%s fields=%s', stage, fields)
 
 
 def _apply_log_exception(exc: Exception):
-    tb = traceback.extract_tb(exc.__traceback__)
-    location = f"{tb[-1].filename}:{tb[-1].lineno}" if tb else "unknown"
-    print(
-        f"[APPLY][EXCEPTION] type={type(exc).__name__} message={exc} file={location}"
-    )
-    traceback.print_exc()
+    from app.core.errors import log_unexpected
+
+    log_unexpected('apply', exc)
 
 
 def _shortlisted_from_decision(decision: str) -> bool:
@@ -180,64 +175,60 @@ def _jd_toon_from_job_row(job):
     }
 
 # ============================================================================
-# N8N ATS WORKFLOW INTEGRATION - START
+# N8N ATS WORKFLOW INTEGRATION
 # ============================================================================
 
-# Environment variables for n8n workflow integration
 N8N_WEBHOOK_URL = os.getenv('N8N_WEBHOOK_URL', '')
 N8N_CALLBACK_SECRET = os.getenv('N8N_CALLBACK_SECRET', '')
 
+
 def trigger_n8n(candidate_id, job_id, parsed_resume, parsed_jd):
+    """POST candidate/job TOON to the optional n8n ATS webhook.
+
+    Never returns or logs the webhook URL (it may contain a secret path token).
     """
-    Helper function to trigger n8n ATS workflow
-    
-    Sends a POST request to n8n webhook with:
-    - candidate_id
-    - job_id
-    - parsed_resume (TOON format JSON)
-    - parsed_jd (TOON format JSON)
-    
-    Returns:
-        dict: Response from n8n or error details
-    """
+    from app.core.errors import log_unexpected
+
     if not N8N_WEBHOOK_URL:
-        print("[N8N] WARNING: N8N_WEBHOOK_URL not configured, skipping n8n trigger")
-        return {'error': 'N8N_WEBHOOK_URL not configured', 'skipped': True}
-    
+        logger.info('operation=trigger_workflow provider=n8n skipped=not_configured')
+        return {'error': 'External workflow is not configured', 'skipped': True, 'success': False}
+
     payload = {
         'candidate_id': candidate_id,
         'job_id': job_id,
         'parsed_resume': parsed_resume,
-        'parsed_jd': parsed_jd
+        'parsed_jd': parsed_jd,
     }
-    
     try:
-        print(f"[N8N] Triggering n8n workflow for candidate {candidate_id} applying to job {job_id}")
+        logger.info(
+            'operation=trigger_workflow provider=n8n candidate_id=%s job_id=%s',
+            candidate_id,
+            job_id,
+        )
         response = requests.post(
             N8N_WEBHOOK_URL,
             json=payload,
             headers={'Content-Type': 'application/json'},
-            timeout=10  # 10 second timeout for webhook
+            timeout=10,
         )
-        
         response.raise_for_status()
-        
-        print(f"[N8N] Successfully triggered n8n workflow. Status: {response.status_code}")
-        return {
-            'success': True,
-            'status_code': response.status_code,
-            'response': response.text
-        }
-        
+        return {'success': True, 'status_code': response.status_code}
     except requests.exceptions.Timeout:
-        error_msg = "n8n webhook request timed out"
-        print(f"[N8N] ERROR: {error_msg}")
-        return {'error': error_msg, 'success': False}
-        
-    except requests.exceptions.RequestException as e:
-        error_msg = f"n8n webhook request failed: {str(e)}"
-        print(f"[N8N] ERROR: {error_msg}")
-        return {'error': error_msg, 'success': False}
+        logger.warning(
+            'operation=trigger_workflow provider=n8n exception_type=Timeout candidate_id=%s job_id=%s',
+            candidate_id,
+            job_id,
+        )
+        return {'error': 'External workflow request failed', 'success': False}
+    except requests.exceptions.RequestException as exc:
+        log_unexpected(
+            'trigger_workflow',
+            exc,
+            provider='n8n',
+            candidate_id=candidate_id,
+            job_id=job_id,
+        )
+        return {'error': 'External workflow request failed', 'success': False}
 
 # ============================================================================
 # N8N ATS WORKFLOW INTEGRATION - END
@@ -312,12 +303,12 @@ def receive_ats_result():
         flask_debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
         if not N8N_CALLBACK_SECRET:
             if not (allow_insecure and flask_debug):
-                print("[ATS_RESULT] SECURITY: N8N_CALLBACK_SECRET is not configured")
+                logger.warning('ATS callback not configured')
                 return jsonify({'error': 'ATS callback not configured'}), 503
         else:
             provided_secret = request.headers.get('X-N8N-Callback-Secret', '')
             if not hmac.compare_digest(provided_secret, N8N_CALLBACK_SECRET):
-                print("[ATS_RESULT] SECURITY: Invalid or missing callback secret")
+                logger.warning('ATS callback unauthorized')
                 return jsonify({'error': 'Unauthorized - invalid callback secret'}), 401
         
         data = request.get_json(force=True)
@@ -431,7 +422,7 @@ def receive_ats_result():
             (match_score, match_score, reasoning, analysis_toon, candidate_id, job_id),
         )
         
-        print(f"[ATS_RESULT] Successfully updated application with detailed analysis. New status: {new_status}")
+        logger.info('ATS result stored application_id=%s status=%s', application['id'], new_status)
 
         if new_status == STATUS_SHORTLISTED:
             from datetime import datetime
@@ -451,7 +442,9 @@ def receive_ats_result():
                     timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
                 )
             except Exception as notify_err:
-                print(f"[ATS_RESULT] shortlist+booking notify failed: {notify_err}")
+                from app.core.errors import log_unexpected
+
+                log_unexpected('ats_result_notify', notify_err, application_id=application['id'])
        
         return jsonify({
             'status': 'ok',
@@ -462,10 +455,10 @@ def receive_ats_result():
         }), 200
         
     except Exception as e:
-        print(f"[ATS_RESULT] ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
+        from app.core.errors import client_internal_error, log_unexpected
+
+        log_unexpected('ats_result', e)
+        return client_internal_error()
 
 # ============================================================================
 # N8N ATS CALLBACK ENDPOINT - END

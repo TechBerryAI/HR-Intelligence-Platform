@@ -72,14 +72,21 @@ def test_parse_progress_omits_result():
     reset_parse_jobs_for_tests()
 
 
-def test_public_parse_generic_500(monkeypatch):
+def test_public_parse_generic_500(monkeypatch, caplog):
     from app.domains.recruitment.api import parsing as parsing_mod
 
+    secret_exc = (
+        'postgresql://user:DB_PASSWORD_SECRET@host/db '
+        'Bearer TOP_SECRET_TOKEN_ABC '
+        'https://service.example/webhook/WEBHOOK_SECRET_123'
+    )
+
     def boom(*_a, **_k):
-        raise RuntimeError('database password=super-secret')
+        raise RuntimeError(secret_exc)
 
     monkeypatch.setattr(parsing_mod, 'run_resume_parse_pipeline', boom)
     monkeypatch.setattr(parsing_mod, '_public_parse_rate_limited', lambda *_a, **_k: False)
+    caplog.set_level(__import__('logging').ERROR)
     app = Flask(__name__)
     app.register_blueprint(parsing_mod.parsing_bp, url_prefix='/api')
     data = {'file': (BytesIO(b'%PDF-fake'), 'cv.pdf')}
@@ -88,7 +95,35 @@ def test_public_parse_generic_500(monkeypatch):
     body = res.get_json()
     err = str(body.get('error') or '')
     assert err == 'Internal server error'
-    assert 'super-secret' not in res.get_data(as_text=True)
+    blob = res.get_data(as_text=True) + caplog.text
+    assert 'super-secret' not in blob
+    assert 'DB_PASSWORD_SECRET' not in blob
+    assert 'TOP_SECRET_TOKEN_ABC' not in blob
+    assert 'WEBHOOK_SECRET_123' not in blob
+
+
+def test_pipeline_error_body_not_forwarded(monkeypatch):
+    from app.domains.recruitment.api import parsing as parsing_mod
+
+    monkeypatch.setattr(
+        parsing_mod,
+        'run_resume_parse_pipeline',
+        lambda *_a, **_k: (
+            {'status': 'error', 'error': 'postgresql://user:DB_PASSWORD_SECRET@host/db'},
+            500,
+        ),
+    )
+    monkeypatch.setattr(parsing_mod, '_public_parse_rate_limited', lambda *_a, **_k: False)
+    app = Flask(__name__)
+    app.register_blueprint(parsing_mod.parsing_bp, url_prefix='/api')
+    res = app.test_client().post(
+        '/api/parse/resume/public',
+        data={'file': (BytesIO(b'%PDF-fake'), 'cv.pdf')},
+    )
+    assert res.status_code == 500
+    text = res.get_data(as_text=True)
+    assert 'Internal server error' in text
+    assert 'DB_PASSWORD_SECRET' not in text
 
 
 def test_reject_public_oversize_content_length():

@@ -8,6 +8,7 @@ from typing import Dict, Any, Optional, Tuple
 
 from app.ai.toon.runtime import toon_dumps, toon_loads_flex
 from app.core import media_storage
+from app.core.errors import log_unexpected
 from app.core.timing import timing
 from datetime import datetime
 
@@ -73,9 +74,9 @@ def load_raw_file_bytes(raw_file_id: str) -> bytes | None:
                 return media_storage.read_verified(storage_url, expected)
             return media_storage.read_bytes(storage_url)
         except media_storage.MediaIntegrityError as exc:
-            print(f'[media] checksum mismatch raw_files.id={raw_file_id}: {exc}')
+            log_unexpected('raw_file_checksum', exc, raw_file_id=raw_file_id)
         except (FileNotFoundError, ValueError, OSError) as exc:
-            print(f'[media] miss raw_files.id={raw_file_id} key={storage_url!r}: {exc}')
+            log_unexpected('raw_file_read', exc, raw_file_id=raw_file_id)
 
     blob = _as_bytes(row.get('file_data'))
     if blob is None:

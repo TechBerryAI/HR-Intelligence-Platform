@@ -6,7 +6,13 @@ import logging
 from flask import Blueprint, jsonify, request
 
 from app.api.middleware.auth import authenticate_token, require_head_hr, require_recruiter
-from app.domains.identity.authorization.rbac import get_role, has_permission, is_read_only
+from app.domains.identity.authorization.rbac import (
+    get_role,
+    has_permission,
+    is_read_only,
+    same_organization,
+    _resolve_job_organization_id,
+)
 from app.domains.integrations.company_context import resolve_company_for_user
 from app.domains.integrations.config import is_builtin, is_valid_provider_slug, slugify_provider
 from app.domains.integrations import repository as repo
@@ -40,24 +46,22 @@ def _can_publish(user) -> bool:
 
 
 def _job_belongs_to_company(job_id: str, company_key: str, user) -> bool:
+    """Authorize job access by organization_id first. Company name is legacy-only."""
     job = db_get('SELECT * FROM jobs WHERE jdid = ?', (job_id,))
     if not job:
         return False
-    try:
-        from app.domains.identity.services.organizations import get_organization_id_for_user
-        from app.domains.identity.authorization.rbac import same_organization
-
-        org_id = job.get('organization_id')
-        if org_id and same_organization(user, org_id):
-            return True
-        # Fallback for legacy rows without organization_id
-        user_org = get_organization_id_for_user(user)
-        if user_org and org_id and str(user_org) == str(org_id):
-            return True
-    except Exception:
-        pass
+    org_id = job.get('organization_id')
+    if org_id:
+        return same_organization(user, org_id)
+    # Legacy unscoped row: owner's org if known, else company-name fallback.
+    owner_org = _resolve_job_organization_id(
+        organization_id=None,
+        posted_by=job.get('posted_by'),
+    )
+    if owner_org:
+        return same_organization(user, owner_org)
     job_key = normalize_company(job.get('company') or '')
-    if job_key and job_key == company_key:
+    if job_key and company_key and job_key == company_key:
         return True
     _, display = resolve_company_for_user(user)
     return companies_related(display, job.get('company'))

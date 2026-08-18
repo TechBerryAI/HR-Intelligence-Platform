@@ -7,6 +7,7 @@ import re
 import uuid
 from flask import Blueprint, request, jsonify, current_app
 from app.api.middleware.auth import require_head_hr
+from app.core.errors import log_unexpected
 from app.database.connection.db import db_run, db_get, db_all, BACKEND, NOW_SQL
 from app.integrations.email.utils import send_notification_email
 from app.integrations.email.templates import hrms_feedback_html
@@ -179,7 +180,7 @@ def submit_feedback():
 
     except Exception as e:
         current_app.logger.exception(e) if current_app else None
-        print(f"[FEEDBACK ERROR] {e}")
+        log_unexpected('feedback', e)
         return jsonify({"error": "Failed to submit feedback"}), 500
 
 
@@ -238,7 +239,7 @@ def list_feedback():
         return jsonify({"success": True, "feedback": rows}), 200
 
     except Exception as e:
-        print(f"[FEEDBACK ERROR] {e}")
+        log_unexpected('feedback', e)
         return jsonify({"error": "Failed to list feedback"}), 500
 
 
@@ -260,5 +261,5 @@ def update_feedback_status(feedback_id):
         )
         return jsonify({"success": True, "message": "Status updated"}), 200
     except Exception as e:
-        print(f"[FEEDBACK ERROR] {e}")
+        log_unexpected('feedback', e)
         return jsonify({"error": "Failed to update status"}), 500

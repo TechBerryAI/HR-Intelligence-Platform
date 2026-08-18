@@ -35,6 +35,7 @@ from app.domains.identity.sessions.service import (
 )
 from app.core.auth import build_jwt_payload, JWT_SECRET, validate_password_strength
 from app.core import shared_store
+from app.core.errors import client_internal_error, log_unexpected
 from app.api.middleware.auth import authenticate_token
 from app.domains.identity.authorization.rbac import build_hr_identity, ROLE_RECRUITER, get_user_id
 
@@ -138,10 +139,8 @@ def hr_signup():
             ),
         }), 400
     except Exception as e:
-        print(f"Error in hr_signup: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": "Internal server error"}), 500
+        log_unexpected('hr_signup', e)
+        return client_internal_error()
 
 
 @auth_bp.post('/verify-otp')
@@ -213,10 +212,8 @@ def verify_hr_otp():
             }
         }), 200
     except Exception as e:
-        print(f"Error in verify_hr_otp: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": "Internal server error"}), 500
+        log_unexpected('verify_hr_otp', e)
+        return client_internal_error()
 
 
 @auth_bp.post('/resend-otp')
@@ -250,10 +247,8 @@ def resend_hr_otp():
             return jsonify({'error': 'Unable to send OTP. Please try again later.'}), 500
         return jsonify({'message': 'OTP resent successfully. Please check your email.'}), 200
     except Exception as e:
-        print(f"Error in resend_hr_otp: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
+        log_unexpected('resend_hr_otp', e)
+        return client_internal_error()
 
 
 @auth_bp.post('/forgot-password')
@@ -288,10 +283,8 @@ def hr_forgot_password():
             return jsonify({'error': 'Failed to send OTP email. Please try again later.'}), 500
         return jsonify({'message': 'OTP sent successfully. Please check your email.'}), 200
     except Exception as e:
-        print(f"Error in hr_forgot_password: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
+        log_unexpected('hr_forgot_password', e)
+        return client_internal_error()
 
 
 @auth_bp.post('/forgot-password/resend-otp')
@@ -323,10 +316,8 @@ def hr_verify_reset_otp():
             return jsonify({'error': err}), 400
         return jsonify({'message': 'OTP verified. You may set a new password.'}), 200
     except Exception as e:
-        print(f"Error in hr_verify_reset_otp: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
+        log_unexpected('hr_verify_reset_otp', e)
+        return client_internal_error()
 
 
 @auth_bp.post('/reset-password')
@@ -382,10 +373,8 @@ def hr_reset_password():
         )
         return jsonify({'message': 'Password updated successfully. You can now login.'}), 200
     except Exception as e:
-        print(f"Error in hr_reset_password: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
+        log_unexpected('hr_reset_password', e)
+        return client_internal_error()
 
 
 @auth_bp.post('/login')
@@ -527,10 +516,8 @@ def hr_change_password():
             pass
         return jsonify({'message': 'Password updated successfully'}), 200
     except Exception as e:
-        print(f"Error in hr_change_password: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
+        log_unexpected('hr_change_password', e)
+        return client_internal_error()
 
 
 @auth_bp.post('/refresh')
@@ -568,7 +555,7 @@ def refresh_tokens():
     except jwt.InvalidTokenError:
         return jsonify({"error": "Invalid refresh token"}), 403
     except Exception as e:
-        print(f"[REFRESH] Error: {e}")
+        log_unexpected('hr_refresh_token', e)
         return jsonify({"error": "Invalid refresh token"}), 403
 
 

@@ -107,6 +107,26 @@ def _cross_worker_enabled() -> bool:
         return False
 
 
+def _worker_count() -> int:
+    raw = (os.getenv('GUNICORN_WORKERS') or '').strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    software = (os.getenv('SERVER_SOFTWARE') or '').lower()
+    if software.startswith('gunicorn'):
+        return 4
+    return 1
+
+
+def _redis_coordination_required() -> bool:
+    """REDIS_URL plus multiple workers means in-process join is not a safe fallback."""
+    if not (os.getenv('REDIS_URL') or '').strip():
+        return False
+    return _worker_count() > 1
+
+
 def _pack_result(result: Any) -> dict[str, Any]:
     if isinstance(result, tuple) and len(result) == 2:
         body, status = result
@@ -221,7 +241,7 @@ def run_or_join_shared(
             lost = heartbeat.ownership_lost.is_set()
             if not lost:
                 try:
-                    store.set_json(rkey, {'ok': False, 'error': str(exc)}, result_ttl)
+                    store.set_json(rkey, {'ok': False, 'error': type(exc).__name__}, result_ttl)
                 except Exception:
                     logger.warning('parse lease: failed to store error for key=%s', key)
             raise
@@ -270,6 +290,8 @@ def run_or_join(key: str, fn: Callable[[], T], *, ttl_sec: float = _TTL_SEC) -> 
             from app.core import shared_store as store
 
             result = run_or_join_shared(store, key, fn)
+        elif _redis_coordination_required():
+            raise RuntimeError('Redis parse coordination unavailable')
         else:
             result = fn()
         fut.set_result(result)

@@ -9,6 +9,7 @@ import time
 import uuid
 from typing import Any
 
+from app.core.errors import log_unexpected
 from app.database.connection.db import db_all, db_get, db_run
 
 
@@ -32,7 +33,7 @@ def create_empty_session(created_by: str) -> str | None:
         )
         return session_id
     except Exception as e:
-        print(f"[bulk_session_db] create_empty_session failed: {e}")
+        log_unexpected('bulk_session_db.create_empty_session', e)
         return None
 
 
@@ -63,7 +64,7 @@ def bump_session_total(session_id: str, total_files: int) -> None:
             (total_files, session_id),
         )
     except Exception as e:
-        print(f"[bulk_session_db] bump_session_total failed: {e}")
+        log_unexpected('bulk_session_db.bump_session_total', e)
 
 
 def mark_session_running(session_id: str, total_files: int) -> None:
@@ -78,7 +79,7 @@ def mark_session_running(session_id: str, total_files: int) -> None:
             (total_files, session_id),
         )
     except Exception as e:
-        print(f"[bulk_session_db] mark_session_running failed: {e}")
+        log_unexpected('bulk_session_db.mark_session_running', e)
 
 
 def create_session(created_by: str, filenames: list[str], file_data: list[bytes]) -> str | None:
@@ -108,7 +109,7 @@ def create_session(created_by: str, filenames: list[str], file_data: list[bytes]
             )
         return session_id
     except Exception as e:
-        print(f"[bulk_session_db] create_session failed: {e}")
+        log_unexpected('bulk_session_db.create_session', e)
         return None
 
 
@@ -173,7 +174,7 @@ def update_file_status(
                 ),
             )
     except Exception as e:
-        print(f"[bulk_session_db] update_file_status failed: {e}")
+        log_unexpected('bulk_session_db.update_file_status', e)
 
 
 def link_session_file(
@@ -200,7 +201,7 @@ def link_session_file(
             (raw_file_id, parsed_resume_id, session_id, filename),
         )
     except Exception as e:
-        print(f"[bulk_session_db] link_session_file failed: {e}")
+        log_unexpected('bulk_session_db.link_session_file', e)
 
 
 def update_session_progress(
@@ -249,7 +250,7 @@ def update_session_progress(
                 (progress, successful, failed, session_id),
             )
     except Exception as e:
-        print(f"[bulk_session_db] update_session_progress failed: {e}")
+        log_unexpected('bulk_session_db.update_session_progress', e)
 
 
 def finalize_session(session_id: str, started_at: float, successful: int, failed: int) -> None:
@@ -266,7 +267,7 @@ def finalize_session(session_id: str, started_at: float, successful: int, failed
         )
         update_session_progress(session_id, successful + failed, successful, failed, status="Completed")
     except Exception as e:
-        print(f"[bulk_session_db] finalize_session failed: {e}")
+        log_unexpected('bulk_session_db.finalize_session', e)
 
 
 DEFAULT_FILE_LEASE_SECONDS = 900

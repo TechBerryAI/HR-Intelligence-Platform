@@ -8,6 +8,7 @@ import bcrypt
 from flask import Blueprint, jsonify, request
 
 from app.database.connection.db import db_get, db_run
+from app.core.errors import log_unexpected
 from app.domains.identity.services.organizations import (
     ensure_organization,
     force_organization_id,
@@ -152,5 +153,5 @@ def provision_company():
     except ValueError as ve:
         return jsonify({'error': str(ve)}), 400
     except Exception as e:
-        print(f'[PLATFORM] provision error: {e}')
+        log_unexpected('platform_provision', e)
         return jsonify({'error': 'Failed to provision company'}), 500

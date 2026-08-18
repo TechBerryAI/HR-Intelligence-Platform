@@ -233,3 +233,17 @@ def test_distinct_hashes_two_executions(monkeypatch):
     assert calls['n'] == 2
     _assert_no_running_jobs()
     assert len(parse_job_statuses_for_tests()) == 2
+
+
+def test_multi_worker_fails_closed_when_redis_down(monkeypatch):
+    import pytest
+    from app.ai.parser.engine.parse_inflight import run_or_join
+
+    monkeypatch.setenv('REDIS_URL', 'redis://127.0.0.1:1/0')
+    monkeypatch.setenv('GUNICORN_WORKERS', '2')
+    monkeypatch.setattr(
+        'app.ai.parser.engine.parse_inflight._cross_worker_enabled',
+        lambda: False,
+    )
+    with pytest.raises(RuntimeError, match='coordination unavailable'):
+        run_or_join('need-redis', lambda: 'nope')

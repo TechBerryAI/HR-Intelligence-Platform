@@ -162,7 +162,7 @@ Optional integration vars (see `apps/backend/.env.example`):
 - `INTEGRATION_WORKER_MAX_WORKERS` — default `4`
 - `INTEGRATION_AUTO_SYNC_INTERVAL_SECONDS` — default `900` (min 60)
 - `RUN_INTEGRATION_AUTO_SYNC` — set `1` only in the dedicated scheduler process (not in Gunicorn web workers)
-- `REDIS_URL` — **required in production when `GUNICORN_WORKERS>1`** (cross-worker parse join; Gunicorn default is 4). Set `GUNICORN_WORKERS=1` for single-process production without Redis. JWT/OTP/outbox do not need Redis. Dev (`FLASK_DEBUG=true`) does not require Redis.
+- `REDIS_URL` — **required in production when `GUNICORN_WORKERS>1`** (cross-worker parse join; Gunicorn default is 4). Set `GUNICORN_WORKERS=1` for single-process production without Redis. JWT/OTP/outbox do not need Redis. Dev (`FLASK_DEBUG=true`) does not require Redis. If `REDIS_URL` is set and workers>1 but Redis becomes unreachable at runtime, parse requests fail closed (`Redis parse coordination unavailable`) instead of silently duplicating work per worker.
 - `TRUST_PROXY_HEADERS` — set `true` behind nginx/Caddy so public parse rate limits use `X-Forwarded-For`. Unset (default) uses `request.remote_addr` only.
 
 ### Production processes (Gunicorn + scheduler)

@@ -34,7 +34,10 @@ def on_starting(server):
 
     os.environ['HCIP_PROCESS_ROLE'] = 'web'
     load_dotenv(Path(__file__).resolve().parent / '.env')
+    from app.core.log_redaction import install_log_redaction
     from app.config.env_validator import EnvValidator
+
+    install_log_redaction()
 
     if not EnvValidator.print_report():
         raise SystemExit(1)

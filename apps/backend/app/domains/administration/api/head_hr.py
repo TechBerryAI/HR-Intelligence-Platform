@@ -4,9 +4,11 @@ Scoped to the caller's organization (company tenant).
 """
 import bcrypt
 from functools import wraps
+import logging
 from flask import Blueprint, jsonify, request
 
 from app.database.connection.db import db_all, db_get, db_run
+from app.core.errors import log_unexpected
 from app.ai.toon.runtime import toon_loads_flex
 from app.api.middleware.auth import authenticate_token, require_head_hr
 from app.domains.identity.authorization.rbac import is_head_hr, require_analytics_read, is_read_only
@@ -19,6 +21,7 @@ from app.domains.recruitment.services.job_delete import cascade_delete_job
 from app.domains.recruitment.services.ats_service import sync_application_match_score
 
 head_hr_bp = Blueprint('head_hr', __name__)
+logger = logging.getLogger(__name__)
 
 
 def allow_options_no_auth(f):
@@ -181,7 +184,7 @@ def create_admin():
             },
         }), 201
     except Exception as e:
-        print(f'[HEAD HR] Error creating admin: {e}')
+        log_unexpected('head_hr_create_admin', e)
         return jsonify({'error': 'Failed to create admin'}), 500
 
 
@@ -212,7 +215,7 @@ def update_or_delete_admin(hrid):
             db_run('DELETE FROM hr_signup WHERE hrid = ? AND organization_id = ?', (hrid, org_id))
             return jsonify({'message': f'Admin {hrid} deleted successfully'})
         except Exception as e:
-            print(f'[HEAD HR] Error deleting admin {hrid}: {e}')
+            log_unexpected('head_hr_delete_admin', e, hrid=hrid)
             return jsonify({'error': 'Failed to delete admin'}), 500
 
     # PUT — update (company locked to caller's org)
@@ -256,7 +259,7 @@ def update_or_delete_admin(hrid):
             },
         })
     except Exception as e:
-        print(f'[HEAD HR] Error updating admin {hrid}: {e}')
+        log_unexpected('head_hr_update_admin', e, hrid=hrid)
         return jsonify({'error': 'Failed to update admin'}), 500
 
 
@@ -493,7 +496,7 @@ def delete_candidate(cid):
             db_run('DELETE FROM candidates WHERE cid = ?', (cid,))
         return jsonify({'message': f'Candidate {cid} removed from organization successfully'})
     except Exception as e:
-        print(f'[HEAD HR] Error deleting candidate {cid}: {e}')
+        log_unexpected('head_hr_delete_candidate', e, candidate_id=cid)
         return jsonify({'error': 'Failed to delete candidate'}), 500
 
 
@@ -544,7 +547,7 @@ def job_detail_or_delete(jdid):
             cascade_delete_job(jdid)
             return jsonify({'message': f'Job {jdid} deleted successfully'})
         except Exception as e:
-            print(f'[HEAD HR] Error deleting job {jdid}: {e}')
+            log_unexpected('head_hr_delete_job', e, job_id=jdid)
             return jsonify({'error': 'Failed to delete job'}), 500
     from app.domains.identity.authorization.rbac import has_permission
     if not has_permission(getattr(request, 'user', None), 'analytics:read'):

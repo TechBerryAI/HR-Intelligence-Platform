@@ -3,13 +3,16 @@ Send email with timeout and retries. Flask-Mail has no built-in timeout;
 blocking send can hang the request. This module runs mail.send() in a
 thread with a configurable timeout and retries on failure.
 """
+import logging
 import time
-import traceback
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 from flask import current_app
 
 from app.bootstrap.extensions import mail
+from app.core.errors import log_unexpected
+
+logger = logging.getLogger(__name__)
 
 
 def send_with_timeout_and_retries(msg) -> bool:
@@ -34,29 +37,14 @@ def send_with_timeout_and_retries(msg) -> bool:
             return True
         except FuturesTimeoutError as e:
             last_exc = e
-            if current_app:
-                current_app.logger.warning(
-                    "Mail send timeout (attempt %s/%s, timeout=%ss)",
-                    attempt + 1, retries, timeout,
-                )
-            else:
-                print(f"[MAIL] Timeout (attempt {attempt + 1}/{retries})")
+            logger.warning(
+                "Mail send timeout (attempt %s/%s, timeout=%ss)",
+                attempt + 1, retries, timeout,
+            )
         except Exception as e:
             last_exc = e
-            if current_app:
-                current_app.logger.warning(
-                    "Mail send failed: %s\n%s",
-                    e, traceback.format_exc(),
-                )
-            else:
-                print(f"[MAIL] Send failed: {e}\n{traceback.format_exc()}")
+            log_unexpected('mail_send', e, attempt=attempt + 1, retries=retries)
         if attempt < retries - 1:
             time.sleep(1 + attempt)
-    err_msg = f"Mail send failed after {retries} attempts: {last_exc}"
-    if current_app:
-        current_app.logger.error(err_msg)
-    print(f"[MAIL] {err_msg}")
-    if last_exc and hasattr(last_exc, "__traceback__") and last_exc.__traceback__:
-        import traceback
-        traceback.print_exception(type(last_exc), last_exc, last_exc.__traceback__)
+    log_unexpected('mail_send_exhausted', last_exc or RuntimeError('mail send failed'), retries=retries)
     return False

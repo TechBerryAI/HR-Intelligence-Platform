@@ -29,13 +29,26 @@ from app.domains.identity.authorization.rbac import STAFF_ROLES, get_role, get_u
 logger = logging.getLogger(__name__)
 
 
+def _safe_error_body(body: dict, status: int) -> dict:
+    if status < 500:
+        return body
+    out = {'status': 'error', 'error': 'Internal server error'}
+    if body.get('parse_job_id'):
+        out['parse_job_id'] = body['parse_job_id']
+    return out
+
+
 def _resume_client(body: dict, status: int):
+    if status >= 500:
+        return jsonify(_safe_error_body(body, status)), status
     if status != 200 or body.get('status') != 'ok':
         return jsonify(body), status
     return jsonify(build_resume_client_payload(body)), status
 
 
 def _jd_client(body: dict, status: int):
+    if status >= 500:
+        return jsonify(_safe_error_body(body, status)), status
     if status != 200 or body.get('status') != 'ok':
         return jsonify(body), status
     return jsonify(build_jd_client_payload(body)), status

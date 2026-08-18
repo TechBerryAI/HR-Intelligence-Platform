@@ -7,6 +7,7 @@ Frontend receives Form DTOs only. TOON is persistence/ATS serialization.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 from typing import Any, Optional
@@ -41,6 +42,8 @@ from app.domains.recruitment.services.parsing_storage import (
     store_raw_file,
     validate_toon_format,
 )
+
+logger = logging.getLogger(__name__)
 
 MAX_FILE_SIZE = 10 * 1024 * 1024
 
@@ -342,8 +345,15 @@ def run_document_intelligence(
             body['parse_job_id'] = owned_parse_job_id
             return body, status
         except Exception as exc:
-            complete_parse_job(owned_parse_job_id, None, error=str(exc))
-            return {'status': 'error', 'error': str(exc), 'parse_job_id': owned_parse_job_id}, 500
+            from app.core.errors import log_unexpected
+
+            log_unexpected('document_intelligence', exc, parse_job_id=owned_parse_job_id)
+            complete_parse_job(owned_parse_job_id, None, error=type(exc).__name__)
+            return {
+                'status': 'error',
+                'error': 'Internal server error',
+                'parse_job_id': owned_parse_job_id,
+            }, 500
 
     # Public stream → sync fallback re-uploads the same bytes with a new uploader id.
     # Join in-process so the second request waits instead of starting another LLM parse.

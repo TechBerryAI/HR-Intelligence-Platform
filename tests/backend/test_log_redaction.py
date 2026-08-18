@@ -6,8 +6,10 @@ from contextlib import redirect_stdout
 
 from app.core.log_redaction import (
     REDACTED,
+    install_log_redaction,
     redact_headers,
     redact_mapping,
+    redact_text,
     safe_header_repr,
 )
 
@@ -88,3 +90,40 @@ def test_print_of_raw_headers_would_be_caught_by_redaction():
     assert 'leak-me-now' not in out
     assert 'leak-cookie' not in out
     assert REDACTED in out
+
+
+def test_redact_text_sentinels():
+    blob = (
+        'Bearer TOP_SECRET_TOKEN_ABC '
+        'Cookie: session=ULTRA_SECRET_COOKIE '
+        'Authorization: Basic SECRET_VALUE '
+        'postgresql://user:DB_PASSWORD_SECRET@host/db '
+        'https://service.example/webhook/WEBHOOK_SECRET_123'
+    )
+    safe = redact_text(blob)
+    assert 'TOP_SECRET_TOKEN_ABC' not in safe
+    assert 'ULTRA_SECRET_COOKIE' not in safe
+    assert 'SECRET_VALUE' not in safe
+    assert 'DB_PASSWORD_SECRET' not in safe
+    assert 'WEBHOOK_SECRET_123' not in safe
+    assert REDACTED in safe
+
+
+def test_logger_exception_redacts_sentinels(caplog):
+    """Actual logging path (not sanitizer-only): logger.exception goes through redaction."""
+    import logging
+
+    install_log_redaction()
+    log = logging.getLogger('hcip.errors.test')
+    caplog.set_level(logging.ERROR)
+    try:
+        raise RuntimeError(
+            'Bearer TOP_SECRET_TOKEN_ABC '
+            'postgresql://user:DB_PASSWORD_SECRET@host/db '
+            'https://service.example/webhook/WEBHOOK_SECRET_123'
+        )
+    except RuntimeError:
+        log.exception('operation=test_redact')
+    assert 'TOP_SECRET_TOKEN_ABC' not in caplog.text
+    assert 'DB_PASSWORD_SECRET' not in caplog.text
+    assert 'WEBHOOK_SECRET_123' not in caplog.text

@@ -4,6 +4,7 @@ from __future__ import annotations
 from flask import Blueprint, abort, send_file
 
 from app.core import media_storage, site_assets
+from app.core.errors import log_unexpected
 
 media_bp = Blueprint('media', __name__)
 
@@ -19,7 +20,7 @@ def hero_video():
     try:
         packed = site_assets.hero_video_path()
     except Exception as e:
-        print(f'[MEDIA] hero resolve failed, trying disk: {e}')
+        log_unexpected('hero_video_resolve', e)
 
     if packed:
         path, content_type, filename, meta = packed
@@ -56,7 +57,7 @@ def media_health():
         media_storage.ensure_hero_video()
         site_assets.ensure_hero_video_in_db()
     except Exception as e:
-        print(f'[MEDIA] health ensure warning: {e}')
+        log_unexpected('hero_video_health_ensure', e)
 
     disk_hero = root / media_storage.HERO_VIDEO_REL
     disk_ok = disk_hero.is_file() and disk_hero.stat().st_size > 0

@@ -6,10 +6,15 @@ Supports create-job → chunked/ZIP upload → start for large batches.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 
 import requests
+
+from app.core.errors import log_unexpected
+
+logger = logging.getLogger(__name__)
 
 BULK_PARSER_URL = (os.getenv('BULK_PARSER_URL') or 'http://localhost:8001').rstrip('/') or None
 
@@ -24,7 +29,7 @@ def _load_external_owners() -> dict:
         if _EXTERNAL_OWNERS_FILE.is_file():
             return json.loads(_EXTERNAL_OWNERS_FILE.read_text(encoding='utf-8'))
     except Exception as e:
-        print(f"[bulk_parsing_service] load owners failed: {e}")
+        log_unexpected('bulk_parsing_load_owners', e)
     return {}
 
 
@@ -38,7 +43,7 @@ def _save_external_owner(job_id: str, started_by: str) -> None:
             _EXTERNAL_OWNERS_FILE.parent.mkdir(parents=True, exist_ok=True)
             _EXTERNAL_OWNERS_FILE.write_text(json.dumps(owners), encoding='utf-8')
         except Exception as e:
-            print(f"[bulk_parsing_service] save owner failed: {e}")
+            log_unexpected('bulk_parsing_save_owner', e)
 
 
 def _get_external_owner(job_id: str) -> str | None:
@@ -109,13 +114,8 @@ def upload_files(files_list, output_filename=None, append=False, started_by=None
             return True, payload
         except requests.exceptions.RequestException as e:
             if not _is_connection_error(e):
-                err = str(e)
-                if getattr(e, 'response', None) is not None:
-                    try:
-                        err = e.response.json().get('detail', err)
-                    except Exception:
-                        pass
-                return False, {'error': err}
+                log_unexpected('bulk_parser_request', e)
+                return False, {'error': 'Bulk parser request failed'}
             # Fall through to local fallback
     # Local bulk parsing (external unreachable or BULK_PARSER_URL not set)
     from app.workers.bulk_parser import start_local_job
@@ -150,10 +150,10 @@ def get_progress(job_id, user=None):
     except requests.exceptions.RequestException as e:
         if _is_connection_error(e):
             return False, {'error': 'Bulk parsing service unavailable.', 'code': ERROR_CODE_UNREACHABLE}
-        err = str(e)
         if getattr(e, 'response', None) is not None and e.response.status_code == 404:
             return False, {'error': 'Job not found'}
-        return False, {'error': err}
+        log_unexpected('bulk_parser_progress', e, job_id=job_id)
+        return False, {'error': 'Bulk parser request failed'}
 
 
 def get_download_url(job_id):
@@ -212,4 +212,5 @@ def stream_download(job_id, user=None):
     except requests.exceptions.RequestException as e:
         if _is_connection_error(e):
             return False, {'error': 'Bulk parsing service unavailable.', 'code': ERROR_CODE_UNREACHABLE}
-        return False, {'error': str(e)}
+        log_unexpected('bulk_parser_download', e, job_id=job_id)
+        return False, {'error': 'Bulk parser request failed'}

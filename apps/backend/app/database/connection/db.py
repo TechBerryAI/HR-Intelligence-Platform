@@ -89,7 +89,9 @@ class ConnectionPool:
                             conn = self._create_connection()
                             self.pool.put(conn)
                         except Exception as e:
-                            print(f"[DB WARNING] Could not pre-populate connection to {DB_TARGET}: {e}")
+                            from app.core.errors import log_unexpected
+
+                            log_unexpected('db_pool_prepopulate', e, target=DB_TARGET)
                 self._initialized = True
         try:
             conn = self.pool.get(timeout=timeout)

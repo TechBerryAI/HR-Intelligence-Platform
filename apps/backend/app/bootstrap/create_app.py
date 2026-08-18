@@ -138,8 +138,10 @@ def create_app() -> Flask:
             % (app.config['MAIL_SERVER'], app.config['MAIL_USERNAME'])
         )
 
+    from app.core.log_redaction import install_log_redaction  # noqa: E402
     from app.core.structured_logging import configure_structured_logging  # noqa: E402
 
+    install_log_redaction()
     configure_structured_logging(app)
 
     @app.after_request
@@ -237,9 +239,15 @@ def create_app() -> Flask:
 
         prepare_schema_for_web_process()
     except Exception as e:
-        print(f"[DB ERROR] Failed to initialize database ({_db_host}:{_db_port}/{_db_name}): {e}")
-        import traceback
-        traceback.print_exc()
+        from app.core.errors import log_unexpected
+
+        log_unexpected(
+            'prepare_schema_for_web_process',
+            e,
+            host=_db_host,
+            port=_db_port,
+            db=_db_name,
+        )
         print(
             "[DB ERROR] STARTUP BLOCKED — production must migrate once then set "
             "MIGRATIONS_ALREADY_APPLIED=true; development may run alembic upgrade head."
@@ -395,14 +403,18 @@ def create_app() -> Flask:
             f"MEDIA_ROOT={root} hero_db_bytes={size}"
         )
     except Exception as e:
-        print(f"[MEDIA] Init warning: {e}")
+        from app.core.errors import log_unexpected
+
+        log_unexpected('media_init', e)
 
     try:
         from app.domains.integrations.bootstrap import init_integrations
         init_integrations()
         print("[INTEGRATIONS] Framework initialized")
     except Exception as e:
-        print(f"[INTEGRATIONS] Init warning: {e}")
+        from app.core.errors import log_unexpected
+
+        log_unexpected('integrations_init', e)
 
     if app.config.get('DEVELOPER_MODE'):
         print("[DEVELOPER MODE] Enabled — Admin performance collector active")

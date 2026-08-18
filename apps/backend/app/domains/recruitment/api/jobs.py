@@ -1,10 +1,12 @@
 import json
+import logging
 import re
 from datetime import datetime
 from typing import Optional
 from flask import Blueprint, request, jsonify
 from app.database.connection.db import db_all, db_get, db_run, BACKEND, TRUE_SQL, FALSE_SQL
 from app.api.middleware.auth import authenticate_token, require_recruiter, optional_authenticate_token
+from app.core.errors import client_internal_error, log_unexpected
 from app.domains.identity.authorization.rbac import (
     can_access_job,
     can_modify_job,
@@ -36,6 +38,7 @@ from app.domains.integrations.events import emit_job_closed, emit_job_created, e
 from app.core.timing import timing
 
 jobs_bp = Blueprint('jobs', __name__)
+logger = logging.getLogger(__name__)
 
 
 def _jobs_for_organization(org_id: str) -> list:
@@ -506,10 +509,8 @@ def get_job_applications(job_id: str):
         
         return jsonify({'applications': formatted_apps})
     except Exception as e:
-        print(f"Error in get_job_applications: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
+        log_unexpected('get_job_applications', e)
+        return client_internal_error()
 
 
 @jobs_bp.get('/<string:job_id>/applications/<string:candidate_id>/resume')
@@ -568,10 +569,8 @@ def get_candidate_resume(job_id: str, candidate_id: str):
             )
         return jsonify({'error': 'Resume not found'}), 404
     except Exception as e:
-        print(f"Error in get_candidate_resume: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
+        log_unexpected('get_candidate_resume', e)
+        return client_internal_error()
 
 
 @jobs_bp.post('/<string:job_id>/applications/<string:candidate_id>/viewed')
@@ -637,10 +636,8 @@ def record_profile_viewed(job_id: str, candidate_id: str):
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
-        print(f"Error in record_profile_viewed: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
+        log_unexpected('record_profile_viewed', e)
+        return client_internal_error()
 
 
 @jobs_bp.patch('/<string:job_id>/applications/<string:candidate_id>/status')
@@ -733,10 +730,8 @@ def update_application_status(job_id: str, candidate_id: str):
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
-        print(f"Error in update_application_status: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
+        log_unexpected('update_application_status', e)
+        return client_internal_error()
 
 
 @jobs_bp.post('/')
@@ -827,11 +822,7 @@ def create_job():
         
         # Generate jdid from job title
         jdid = generate_jdid_from_title(title)
-        print(f"Generated jdid: {jdid} from title: {title}")
-        
-        print(f"Prepared job data: jdid={jdid}, title={title}, company={company}, location={location}, hr_id={hr_id}")
-        print("Executing INSERT query...")
-        
+        logger.info('creating job jdid=%s', jdid) 
         _enabled_val = True if BACKEND == 'postgresql' else 1
         # status='Published' keeps jobs_status_enabled_sync from forcing enabled=false
         # (INSERT with Draft default would set enabled := (status = 'Published') → false).
@@ -842,14 +833,11 @@ def create_job():
             ''',
             (jdid, title, company, location, salary, experience, description, keywords, hr_id, _enabled_val, 'Published', parsed_jd_id, org_id)
         )
-        print(f"INSERT result: {result}")
-        
-        print("Fetching created job...")
+        logger.debug('job insert result=%s jdid=%s', result, jdid)
+
         job = db_get('SELECT * FROM jobs WHERE jdid = ?', (jdid,))
-        print(f"Retrieved job: {job}")
-        
         if not job:
-            print("ERROR: Job created but could not be retrieved")
+            logger.error('job created but could not be retrieved jdid=%s', jdid)
             return jsonify({'error': 'Job created but could not be retrieved'}), 500
 
         if not job.get('organization_id'):
@@ -882,25 +870,18 @@ def create_job():
                                 (toon_dumps(toon), parsed_jd_id),
                             )
             except Exception as link_err:
-                print(f"[jobs] parsed_jd link warning: {link_err}")
-        
-        print("Job created successfully!")
-        print("=" * 50)
+                log_unexpected('create_job_parsed_jd_link', link_err, job_id=jdid)
+
+        logger.info('job created jdid=%s', jdid)
 
         emit_job_created(job, request.user)
 
         return jsonify(_serialize_job(job)), 201
     except Exception as e:
-        import traceback
-        error_msg = str(e)
-        print("=" * 50)
-        print("ERROR IN CREATE JOB:")
-        print(f"Error message: {error_msg}")
-        traceback.print_exc()  # Print full traceback for debugging
-        print("=" * 50)
-        if 'FOREIGN KEY' in error_msg.upper():
+        log_unexpected('create_job', e)
+        if 'FOREIGN KEY' in str(e).upper():
             return jsonify({'error': 'Invalid HR user. Please log in again.'}), 400
-        return jsonify({'error': 'Internal server error'}), 500
+        return client_internal_error()
 
 
 @jobs_bp.put('/<string:job_id>')
@@ -1004,8 +985,8 @@ def delete_job(job_id: str):
         cascade_delete_job(job_id)
         return jsonify({'message': 'Job deleted successfully'})
     except Exception as e:
-        print(f'[JOBS] Error deleting job {job_id}: {e}')
-        return jsonify({'error': 'Internal server error'}), 500
+        log_unexpected('delete_job', e, job_id=job_id)
+        return client_internal_error()
 
 
 def _parse_json_field(raw, default=None):
@@ -1218,7 +1199,7 @@ def public_apply_to_job(job_id: str):
                             timestamp=datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
                         )
                     except Exception as side_err:
-                        print(f"[PUBLIC_APPLY] shortlist side effects failed: {side_err}")
+                        log_unexpected('public_apply_shortlist_side_effects', side_err)
 
             threading.Thread(
                 target=_shortlist_side_effects,
@@ -1237,7 +1218,5 @@ def public_apply_to_job(job_id: str):
             'matchId': match_id,
         }), 200
     except Exception as e:
-        print(f"[PUBLIC_APPLY] ERROR: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error'}), 500
+        log_unexpected('public_apply', e, job_id=job_id)
+        return client_internal_error()

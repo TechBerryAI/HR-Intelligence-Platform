@@ -25,6 +25,8 @@ class JsonLogFormatter(logging.Formatter):
                 payload[key] = getattr(record, key)
         if record.exc_info:
             payload['exc_info'] = self.formatException(record.exc_info)
+        elif record.exc_text:
+            payload['exc_info'] = record.exc_text
         return json.dumps(payload, default=str)
 
 

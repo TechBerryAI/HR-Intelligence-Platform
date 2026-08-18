@@ -13,3 +13,7 @@ os.environ.setdefault('JWT_SECRET', 'ci-test-jwt-secret-at-least-32-characters-l
 BACKEND_ROOT = Path(__file__).resolve().parents[2] / 'apps' / 'backend'
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.core.log_redaction import install_log_redaction  # noqa: E402
+
+install_log_redaction()

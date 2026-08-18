@@ -106,10 +106,9 @@ def send_email_otp(
             print(f"[SEND_EMAIL_OTP] Email sent successfully to {recipient}")
         return ok
     except Exception as exc:
-        if current_app:
-            current_app.logger.error("Failed to send email OTP: %s", exc, exc_info=True)
-        else:
-            print(f"[SEND_EMAIL_OTP] Failed to send email OTP: {exc}")
+        from app.core.errors import log_unexpected
+
+        log_unexpected('send_email_otp', exc)
         return False
 
 
@@ -123,10 +122,9 @@ def send_sms_otp(phone: str, otp: str) -> bool:
             print(f"Simulating Fast2SMS OTP send to {phone}")
         return True
     except Exception as exc:
-        if current_app:
-            current_app.logger.error("Failed to send SMS OTP: %s", exc)
-        else:
-            print(f"Failed to send SMS OTP: {exc}")
+        from app.core.errors import log_unexpected
+
+        log_unexpected('send_sms_otp', exc)
         return False
 
 

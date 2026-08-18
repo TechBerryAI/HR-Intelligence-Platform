@@ -4,6 +4,7 @@ Support Routes - Handle help and support requests
 import os
 from flask import Blueprint, request, jsonify
 from app.api.middleware.auth import authenticate_token, require_head_hr
+from app.core.errors import log_unexpected
 from app.database.connection.db import db_run, db_get, db_all, BACKEND, NOW_SQL
 from app.integrations.email.utils import send_notification_email
 from app.integrations.email.templates import support_request_html
@@ -99,9 +100,9 @@ def submit_support_request():
                 SUPPORT_NOTIFICATION_EMAIL, email_subject, email_body, html=html
             )
             if not ok:
-                print(f"[SUPPORT] Notification email to {SUPPORT_NOTIFICATION_EMAIL} may have failed (check mail config)")
+                log_unexpected('support_notify_email', Exception('notification send returned false'))
         except Exception as mail_err:
-            print(f"[SUPPORT] Could not send notification email: {mail_err}")
+            log_unexpected('support_notify_email', mail_err)
 
         return jsonify({
             "success": True,
@@ -110,7 +111,7 @@ def submit_support_request():
         }), 201
         
     except Exception as e:
-        print(f"[SUPPORT ERROR] {str(e)}")
+        log_unexpected('support_request', e)
         return jsonify({"error": "Failed to submit support request"}), 500
 
 
@@ -153,7 +154,7 @@ def get_my_requests():
         }), 200
         
     except Exception as e:
-        print(f"[SUPPORT ERROR] {str(e)}")
+        log_unexpected('support_request', e)
         return jsonify({"error": "Failed to fetch support requests"}), 500
 
 
@@ -191,7 +192,7 @@ def get_all_requests():
         }), 200
         
     except Exception as e:
-        print(f"[SUPPORT ERROR] {str(e)}")
+        log_unexpected('support_request', e)
         return jsonify({"error": "Failed to fetch support requests"}), 500
 
 
@@ -219,7 +220,7 @@ def get_request_by_id(request_id):
         }), 200
         
     except Exception as e:
-        print(f"[SUPPORT ERROR] {str(e)}")
+        log_unexpected('support_request', e)
         return jsonify({"error": "Failed to fetch support request"}), 500
 
 
@@ -270,6 +271,6 @@ def update_request_status(request_id):
         }), 200
         
     except Exception as e:
-        print(f"[SUPPORT ERROR] {str(e)}")
+        log_unexpected('support_request', e)
         return jsonify({"error": "Failed to update support request"}), 500
 
