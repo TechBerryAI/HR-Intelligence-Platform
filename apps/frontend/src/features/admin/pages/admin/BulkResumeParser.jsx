@@ -358,20 +358,24 @@ export default function BulkResumeParser({ embedded = false }) {
       ? failedDetails.map((d) => d.filename || d.name).filter(Boolean)
       : progress?.failed_filenames ?? progress?.failedFilenames ?? []
   const successFilenames = progress?.success_filenames ?? progress?.successFilenames ?? []
+  const queuedFilenames = progress?.queued_filenames ?? progress?.queuedFilenames ?? []
   const hasDetailedLists = successFilenames.length > 0 || failedFilenames.length > 0 || failedDetails.length > 0
   const failedCount = failedDetails.length || failedFilenames.length || failed
-  const processingCount = jobId ? Math.max(0, total - processed) : 0
+  const processingCount = jobId ? Math.max(0, queuedFilenames.length || total - processed) : 0
   const progressPct = total ? Math.round((processed / total) * 100) : 0
   const currentFile =
     progress?.message?.replace(/^Processing:\s*/i, '').trim() ||
+    queuedFilenames[0] ||
     (jobId ? resumeFiles[processed]?.name ?? '' : '')
   const inProgressFilenames = !jobId
     ? []
     : progress?.status === 'completed' || progress?.status === 'failed'
       ? []
-      : hasDetailedLists
-        ? resumeFiles.map((f) => f.name).filter((name) => !successFilenames.includes(name) && !failedFilenames.includes(name))
-        : resumeFiles.slice(processed).map((f) => f.name)
+      : queuedFilenames.length
+        ? queuedFilenames
+        : hasDetailedLists && resumeFiles.length
+          ? resumeFiles.map((f) => f.name).filter((name) => !successFilenames.includes(name) && !failedFilenames.includes(name))
+          : resumeFiles.slice(processed).map((f) => f.name)
   const processedDisplayNames = hasDetailedLists
     ? successFilenames
     : jobId

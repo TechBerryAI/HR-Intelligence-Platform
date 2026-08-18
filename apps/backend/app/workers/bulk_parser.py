@@ -53,7 +53,7 @@ BULK_MIN_TEXT_CHARS = 30
 # OCR/extract can run in parallel; LLM calls are gated by OLLAMA_MAX_CONCURRENT.
 # Higher default now that most clean resumes skip Ollama via deterministic path.
 BULK_PARSE_MAX_WORKERS = max(1, min(24, int(os.getenv('BULK_PARSE_MAX_WORKERS', '6'))))
-BULK_LLM_ATTEMPTS = max(2, min(8, int(os.getenv('BULK_LLM_ATTEMPTS', '4'))))
+BULK_LLM_ATTEMPTS = max(1, min(4, int(os.getenv('BULK_LLM_ATTEMPTS', '2'))))
 BULK_EXCEL_CHECKPOINT_EVERY = max(5, int(os.getenv('BULK_EXCEL_CHECKPOINT_EVERY', '25')))
 BULK_SKIP_LLM_WHEN_DETERMINISTIC = os.getenv(
     'BULK_SKIP_LLM_WHEN_DETERMINISTIC', 'true'
@@ -767,8 +767,9 @@ def _process_one_file_inner(
                         "completed" if accept else "failed",
                         (time.perf_counter() - t_val) * 1000.0,
                     )
-                    # Bulk-validate "partial" alone must not skip LLM when experience is weak
-                    if accept and parse_status == "ok":
+                    # Fast path: keep Ollama for true gaps (no experience / mushy OCR),
+                    # not for ordinary "partial" validation notes.
+                    if accept and parse_status in ("ok", "partial"):
                         t_persist = time.perf_counter()
                         row = _flatten_toon(det_toon, filename, form=form_dto)
                         note_bits = [f"source=engine:{source}", f"conf={conf:.2f}"]
@@ -1392,6 +1393,13 @@ def get_local_progress(job_id: str, check_only: bool = False) -> tuple[bool, dic
             'message': job.get('message', ''),
             'failed_filenames': job.get('failed_filenames', []),
             'success_filenames': job.get('success_filenames', []),
+            'queued_filenames': [
+                name
+                for name in (job.get('staged_filenames') or [])
+                if name
+                and name not in (job.get('success_filenames') or [])
+                and name not in (job.get('failed_filenames') or [])
+            ],
             'failed_details': job.get('failed_details', []),
         }
 

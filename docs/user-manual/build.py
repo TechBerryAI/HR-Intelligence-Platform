@@ -18,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 SHOTS = ROOT / "screenshots"
 MANIFEST_PATH = SHOTS / "manifest.json"
-VERSION = "1.0"
+VERSION = "1.1"
 TODAY = date.today().isoformat()
 COMPANY = "Techberry Infotech Pvt. Ltd."
 DOC_NAME = "HR_Intelligence_Platform_User_Manual"
@@ -30,8 +30,11 @@ MODULE_META = OrderedDict(
             "01-home",
             {
                 "title": "Home",
-                "purpose": "Public landing experience that introduces the product and routes users to Jobs.",
-                "nav": "/",
+                "purpose": (
+                    "Public landing experience: cinematic hero, Watch Demo, Features / Solutions / Pricing / Contact, "
+                    "and Get Started to the jobs board."
+                ),
+                "nav": "/  ·  Get Started → /jobs  ·  Watch Demo  ·  #features · #solutions · #pricing · #contact",
                 "roles": "Public",
             },
         ),
@@ -70,7 +73,7 @@ MODULE_META = OrderedDict(
             "05-head-hr-overview",
             {
                 "title": "Head HR Overview Dashboard",
-                "purpose": "Organization overview and Head HR panel entry point.",
+                "purpose": "Organization overview, job posting, and Head HR panel entry (Workspace / Tools sidebar).",
                 "nav": "/head-hr",
                 "roles": "HEAD_HR",
             },
@@ -205,7 +208,7 @@ MODULE_META = OrderedDict(
             "20-ceo-overview",
             {
                 "title": "CEO / Executive Dashboard",
-                "purpose": "Read-only executive views of overview, jobs, candidates, and evaluation.",
+                "purpose": "Read-only executive views of overview analytics, jobs, candidates, and evaluation.",
                 "nav": "/ceo · /ceo/jobs · /ceo/candidates",
                 "roles": "CEO",
             },
@@ -456,6 +459,10 @@ def build_docx(manifest: list[dict]) -> Path:
             hs.paragraph_format.space_before = Pt(space_before)
             hs.paragraph_format.space_after = Pt(space_after)
             hs.paragraph_format.line_spacing = 1.15
+            # Heading 1 keep-with-next + a trailing page break leaves blank pages
+            # when the previous chapter already filled the last page.
+            hs.paragraph_format.keep_with_next = False
+            hs.paragraph_format.page_break_before = False
         except KeyError:
             pass
 
@@ -481,7 +488,7 @@ def build_docx(manifest: list[dict]) -> Path:
             section.header.paragraphs[0].text = ""
             section.footer.paragraphs[0].text = ""
 
-    def h(text, level=1, bookmark=None):
+    def h(text, level=1, bookmark=None, *, page_break_before=False):
         para = doc.add_heading(text, level=level)
         # Enforce size + gap even if Word theme overrides the style
         sizes = {1: 24, 2: 16, 3: 13}
@@ -489,6 +496,8 @@ def build_docx(manifest: list[dict]) -> Path:
         gaps_before = {1: 0, 2: 16, 3: 12}
         para.paragraph_format.space_before = Pt(gaps_before.get(level, 0))
         para.paragraph_format.space_after = Pt(gaps_after.get(level, 8))
+        para.paragraph_format.keep_with_next = False
+        para.paragraph_format.page_break_before = bool(page_break_before)
         for run in para.runs:
             run.bold = True
             run.font.name = "Calibri"
@@ -533,7 +542,7 @@ def build_docx(manifest: list[dict]) -> Path:
 
         # Usable page body ≈ 6.5\" wide × ~8.5\" tall; leave room for caption + labels.
         max_w_in = 6.2
-        max_h_in = 7.0
+        max_h_in = 6.4
         width_in = max_w_in
         try:
             from PIL import Image
@@ -616,7 +625,7 @@ def build_docx(manifest: list[dict]) -> Path:
     _set_cell_text(table.rows[1].cells[2], TODAY, size=10)
     _set_cell_text(
         table.rows[1].cells[3],
-        "Complete enterprise manual rebuilt from live routes and screenshots",
+        "Screenshots and copy refreshed to match the current UI (landing, login, org sidebar, CEO analytics)",
         size=10,
     )
     doc.add_page_break()
@@ -674,7 +683,6 @@ def build_docx(manifest: list[dict]) -> Path:
     bullet("Each chapter lists Purpose, Navigation Path, Accessible Roles, then step-by-step actions with screenshots.")
     bullet("Supported staff roles: RECRUITER, HEAD_HR, and CEO (read-only). Admin Login authenticates these roles.")
     bullet("Recommended browsers: Chrome, Edge, Firefox, or Safari (latest). Desktop resolution 1280×720 or higher.")
-    doc.add_page_break()
 
     modules = by_module(manifest)
     chapter = 2
@@ -682,7 +690,7 @@ def build_docx(manifest: list[dict]) -> Path:
         items = modules.get(mod_key) or []
         if not items:
             continue
-        h(f"{chapter}. {meta['title']}", 1, bookmark=f"sec_{chapter}")
+        h(f"{chapter}. {meta['title']}", 1, bookmark=f"sec_{chapter}", page_break_before=True)
         p("Purpose", bold=True)
         p(meta["purpose"])
         p("Navigation Path", bold=True)
@@ -710,12 +718,11 @@ def build_docx(manifest: list[dict]) -> Path:
         p("Notes", bold=True)
         bullet("If a control is disabled, complete required fields first.")
         bullet("Match scores depend on parsed JD and resume content.")
-        doc.add_page_break()
         chapter += 1
 
     # Reference chapters — continue from next chapter number
     # (placeholder removed; existing block below still uses chapter variable)
-    h(f"{chapter}. Forms, Fields, and Buttons Reference", 1, bookmark=f"sec_{chapter}")
+    h(f"{chapter}. Forms, Fields, and Buttons Reference", 1, bookmark=f"sec_{chapter}", page_break_before=True)
     p("The following reference covers controls present in the shipped UI.")
     p("Job create / edit (Recruiter dashboard & Head HR overview posting)", bold=True)
     fields = [
@@ -740,7 +747,9 @@ def build_docx(manifest: list[dict]) -> Path:
     p("Primary buttons", bold=True)
     actions = [
         ("Sign in", "Authenticate staff at /login/admin"),
-        ("Get Started", "Navigate from landing to /jobs"),
+        ("Get Started", "From landing, open the public jobs board (/jobs)"),
+        ("Watch Demo", "Open the Platform Demo video modal on the landing page"),
+        ("Contact Us", "From landing #contact, open /support/contact"),
         ("Apply", "Open apply modal on public jobs board"),
         ("Preview Post / Post Job", "Preview and publish a job (Recruiter / Head HR)"),
         ("Shortlist / Reject", "Application status actions (Recruiter Applied Candidates)"),
@@ -755,10 +764,9 @@ def build_docx(manifest: list[dict]) -> Path:
     for i, (a, b) in enumerate(actions, start=1):
         at.rows[i].cells[0].text = a
         at.rows[i].cells[1].text = b
-    doc.add_page_break()
     chapter += 1
 
-    h(f"{chapter}. Troubleshooting", 1, bookmark=f"sec_{chapter}")
+    h(f"{chapter}. Troubleshooting", 1, bookmark=f"sec_{chapter}", page_break_before=True)
     rows = [
         ("Cannot sign in", "Confirm email/password; use Forgot Password; verify role in hr_signup"),
         ("Redirected away from a page", "Role guards send users to their home panel (/dashboard, /head-hr, /ceo)"),
@@ -774,10 +782,9 @@ def build_docx(manifest: list[dict]) -> Path:
     for i, (a, b) in enumerate(rows, start=1):
         tt.rows[i].cells[0].text = a
         tt.rows[i].cells[1].text = b
-    doc.add_page_break()
     chapter += 1
 
-    h(f"{chapter}. FAQs", 1, bookmark=f"sec_{chapter}")
+    h(f"{chapter}. FAQs", 1, bookmark=f"sec_{chapter}", page_break_before=True)
     faqs = [
         ("Is there a Super Admin role?", "No separate SUPER_ADMIN enum. Admin Login authenticates RECRUITER, HEAD_HR, or CEO."),
         ("Do candidates create accounts?", "Public apply is passwordless via /jobs. Candidate JWT sessions are cleared."),
@@ -788,10 +795,9 @@ def build_docx(manifest: list[dict]) -> Path:
     for q, a in faqs:
         p(f"Q: {q}", bold=True)
         p(f"A: {a}")
-    doc.add_page_break()
     chapter += 1
 
-    h(f"{chapter}. Appendix", 1, bookmark=f"sec_{chapter}")
+    h(f"{chapter}. Appendix", 1, bookmark=f"sec_{chapter}", page_break_before=True)
     p("From repository root with the app running, regenerate this manual with:")
     bullet("python docs/user-manual/capture.py")
     bullet("python docs/user-manual/build.py")

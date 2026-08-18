@@ -11,6 +11,7 @@ import json
 import os
 import re
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -47,11 +48,31 @@ def api_login(email: str, password: str) -> dict:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=30) as res:
-        data = json.loads(res.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=30) as res:
+            data = json.loads(res.read().decode())
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")[:300]
+        raise SystemExit(f"Login failed for {email}: HTTP {exc.code} {body}") from exc
     if not data.get("token"):
         raise SystemExit(f"Login failed for {email}: {data}")
     return data
+
+
+def api_login_optional(email: str, password: str) -> dict | None:
+    payload = json.dumps({"email": email, "password": password}).encode()
+    req = urllib.request.Request(
+        f"{API}/api/login",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as res:
+            data = json.loads(res.read().decode())
+    except urllib.error.HTTPError:
+        return None
+    return data if data.get("token") else None
 
 
 def api_get(token: str, path: str):
@@ -191,18 +212,56 @@ def capture_public(page) -> None:
     print("== Public ==")
     clear_auth(page)
 
-    page.goto(f"{BASE}/", wait_until="networkidle")
+    page.goto(f"{BASE}/", wait_until="domcontentloaded")
+    page.wait_for_selector("text=The Future of", timeout=20000)
+    page.wait_for_timeout(1800)
     shot(
         page,
         "01-home",
         "01_landing",
         title="Home / Landing page",
         action="Open the application URL",
-        expected="Landing page loads with product branding and Get Started CTA",
+        expected=(
+            "Dark cinematic landing with HR Intelligence nav (Features, Solutions, Pricing, Contact), "
+            "hero copy, Get Started and Watch Demo"
+        ),
         nav_path="/",
         roles=["Public"],
-        purpose="Introduce the platform and route visitors to the jobs board",
-        boxes=boxes(box_for(page, "text=Get Started"), box_for(page, "a:has-text('Jobs')")),
+        purpose="Introduce the platform and route visitors to the jobs board via Get Started",
+        boxes=boxes(box_for(page, "text=Get Started"), box_for(page, "text=Watch Demo")),
+    )
+
+    watch = page.get_by_role("button", name=re.compile(r"Watch Demo", re.I)).first
+    if watch.count() and watch.is_visible():
+        watch.click()
+        page.wait_for_timeout(900)
+        shot(
+            page,
+            "01-home",
+            "02_watch_demo",
+            title="Watch Demo modal",
+            action="Click Watch Demo on the landing hero",
+            expected="Platform Demo modal opens with the product walkthrough video",
+            nav_path="/ → Watch Demo",
+            roles=["Public"],
+            purpose="Preview the product without leaving the landing page",
+        )
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(400)
+
+    page.locator("#features").first.scroll_into_view_if_needed()
+    page.wait_for_timeout(700)
+    shot(
+        page,
+        "01-home",
+        "03_landing_sections",
+        title="Landing — Features, Solutions, Pricing, Contact",
+        action="Scroll the landing page (or use Features / Solutions / Pricing / Contact in the nav)",
+        expected="Intelligent Features, Solutions, Pricing tiers, and Contact Us CTA",
+        nav_path="/#features",
+        roles=["Public"],
+        purpose="Describe product capabilities and how visitors can get in touch",
+        full_page=True,
     )
 
     page.goto(f"{BASE}/jobs", wait_until="networkidle")
@@ -292,7 +351,7 @@ def capture_auth(page) -> None:
         "01_login_chooser",
         title="Login chooser",
         action="Open /login",
-        expected="Login landing with Admin Login entry point",
+        expected="Split-screen login: product story on the left, HR / Admin Access card with Admin Login",
         nav_path="/login",
         roles=["Public"],
         purpose="Route staff users to admin authentication",
@@ -429,7 +488,7 @@ def capture_head_hr(page, token: str, user: dict, jdid: str, cid: str) -> None:
         "01_dashboard",
         title="Head HR Overview Dashboard",
         action="Sign in as Head HR (or open /head-hr)",
-        expected="Organization overview with sidebar navigation and posting tools",
+        expected="Head of HR sidebar (Workspace / Tools), org snapshot, and job posting tools",
         nav_path="/head-hr",
         roles=["HEAD_HR"],
         purpose="Org-wide recruitment overview and job posting for Head of HR",
@@ -582,6 +641,7 @@ def capture_head_hr(page, token: str, user: dict, jdid: str, cid: str) -> None:
         boxes=boxes(box_for(page, "button:has-text('Upload') || button:has-text('Parse') || button:has-text('Browse')")),
         full_page=True,
     )
+    _append_preserved_bulk_shots()
 
     page.goto(f"{BASE}/head-hr/integrations", wait_until="networkidle")
     shot(
@@ -722,7 +782,7 @@ def capture_ceo(page, token: str, user: dict, jdid: str, cid: str) -> None:
         "01_dashboard",
         title="CEO / Executive Overview",
         action="Sign in as CEO (lands on /ceo)",
-        expected="Read-only executive overview (no Admins / Bulk / Settings in sidebar)",
+        expected="Read-only Executive sidebar plus analytics (applications by status, match scores)",
         nav_path="/ceo",
         roles=["CEO"],
         purpose="Executive read-only view of organization recruitment health",
@@ -819,17 +879,152 @@ def capture_logout(page, token: str, user: dict) -> None:
         print("  ! Logout control not found — skipped")
 
 
+# Manual extras not recaptured by Playwright (OS file dialog / live parse progress)
+PRESERVE_SHOTS = (
+    "11-bulk-parsing/02_browse_file_dialog.png",
+    "11-bulk-parsing/03_bulk_parsing_progress.png",
+)
+RECRUITER_PRESERVE_SHOTS = (
+    "14-recruiter-dashboard/01_dashboard.png",
+    "15-recruiter-candidates/01_applied_candidates.png",
+    "16-recruiter-bulk/01_bulk_parser.png",
+    "17-feedback-admin/01_feedback_admin.png",
+    "18-recruiter-integrations/01_integrations.png",
+    "19-recruiter-settings/01_settings.png",
+)
+PRESERVE_META = {
+    "11-bulk-parsing/02_browse_file_dialog.png": {
+        "title": "Browse and select ZIP or resume files",
+        "action": "Click Browse or Upload ZIP and choose files in the system file dialog",
+        "expected": "Windows Open dialog appears so you can select a ZIP or resume files from your computer",
+        "nav_path": "/head-hr/bulk-parsing → Browse / Upload ZIP",
+        "purpose": "Select the resume ZIP or files to parse",
+    },
+    "11-bulk-parsing/03_bulk_parsing_progress.png": {
+        "title": "Bulk parsing in progress",
+        "action": "After selecting input and output, start Parse and watch progress",
+        "expected": "Processing status, progress bar, processed/failed/queued counts, and file activity lists update live",
+        "nav_path": "/head-hr/bulk-parsing → Parse",
+        "purpose": "Monitor batch resume parsing until completion",
+    },
+}
+
+
+def _append_preserved_recruiter_shots() -> None:
+    meta_by_file = {
+        "14-recruiter-dashboard/01_dashboard.png": (
+            "14-recruiter-dashboard",
+            "Recruiter Dashboard",
+            "Sign in as Recruiter (lands on /dashboard)",
+            "Recruiter stats, publishing section, and job create/list workspace",
+            "/dashboard",
+            "Create, edit, publish, and manage the recruiter’s own jobs",
+        ),
+        "15-recruiter-candidates/01_applied_candidates.png": (
+            "15-recruiter-candidates",
+            "Applied Candidates (Recruiter)",
+            "Navbar avatar menu → Candidates",
+            "Applicants for recruiter jobs with shortlist/reject and match reason",
+            "/candidates",
+            "Review and act on applications to the recruiter’s jobs",
+        ),
+        "16-recruiter-bulk/01_bulk_parser.png": (
+            "16-recruiter-bulk",
+            "Bulk Resume Parser (Recruiter)",
+            "Navbar avatar menu → Bulk Resume Parser",
+            "Same bulk parsing workspace under /admin/bulk-resume-parser",
+            "/admin/bulk-resume-parser",
+            "Batch-parse resumes for the recruiter workflow",
+        ),
+        "17-feedback-admin/01_feedback_admin.png": (
+            "17-feedback-admin",
+            "Feedback Admin",
+            "Navbar avatar menu → Feedback (Admin)",
+            "Feedback inbox with filters and refresh",
+            "/admin/feedback",
+            "Review submitted HRMS testing feedback",
+        ),
+        "18-recruiter-integrations/01_integrations.png": (
+            "18-recruiter-integrations",
+            "Integrations (Recruiter)",
+            "Navbar avatar menu → Integrations",
+            "Integrations dashboard for the recruiter session",
+            "/integrations",
+            "View integration health and open settings",
+        ),
+        "19-recruiter-settings/01_settings.png": (
+            "19-recruiter-settings",
+            "Settings (Recruiter)",
+            "Navbar avatar menu → Settings",
+            "Security password change and integrations settings tabs",
+            "/settings",
+            "Manage account security settings",
+        ),
+    }
+    for rel, (module, title, action, expected, nav_path, purpose) in meta_by_file.items():
+        if not (SHOTS / rel).is_file():
+            continue
+        MANIFEST.append(
+            {
+                "file": rel,
+                "module": module,
+                "name": Path(rel).stem,
+                "title": title,
+                "action": action,
+                "expected": expected,
+                "nav_path": nav_path,
+                "roles": ["RECRUITER"],
+                "purpose": purpose,
+            }
+        )
+        print(f"  + {rel} (preserved)")
+
+
+def _append_preserved_bulk_shots() -> None:
+    for rel, meta in PRESERVE_META.items():
+        path = SHOTS / rel
+        if not path.is_file():
+            continue
+        MANIFEST.append(
+            {
+                "file": rel,
+                "module": "11-bulk-parsing",
+                "name": Path(rel).stem,
+                "title": meta["title"],
+                "action": meta["action"],
+                "expected": meta["expected"],
+                "nav_path": meta["nav_path"],
+                "roles": ["HEAD_HR"],
+                "purpose": meta["purpose"],
+            }
+        )
+        print(f"  + {rel} (preserved)")
+
+
 def main() -> None:
+    head = api_login(*HEAD_HR)
+    ceo = api_login(*CEO)
+    recruiter = api_login_optional(*RECRUITER)
+    if recruiter is None:
+        print("! Recruiter login failed — keeping previous recruiter screenshots")
+
+    preserved: dict[str, bytes] = {}
+    keep = list(PRESERVE_SHOTS)
+    if recruiter is None:
+        keep.extend(RECRUITER_PRESERVE_SHOTS)
     if SHOTS.exists():
-        # keep folder, wipe previous shots
+        for rel in dict.fromkeys(keep):
+            p = SHOTS / rel
+            if p.is_file():
+                preserved[rel] = p.read_bytes()
         for p in SHOTS.rglob("*"):
             if p.is_file():
                 p.unlink()
     SHOTS.mkdir(parents=True, exist_ok=True)
-
-    head = api_login(*HEAD_HR)
-    ceo = api_login(*CEO)
-    recruiter = api_login(*RECRUITER)
+    for rel, data in preserved.items():
+        dest = SHOTS / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
 
     apps = api_get(head["token"], "/api/head-hr/applications").get("applications") or []
     jdid = "PDA001"
@@ -852,7 +1047,10 @@ def main() -> None:
         capture_public(page)
         capture_auth(page)
         capture_head_hr(page, head["token"], head.get("user") or head, jdid, cid)
-        capture_recruiter(page, recruiter["token"], recruiter.get("user") or recruiter)
+        if recruiter:
+            capture_recruiter(page, recruiter["token"], recruiter.get("user") or recruiter)
+        else:
+            _append_preserved_recruiter_shots()
         capture_ceo(page, ceo["token"], ceo.get("user") or ceo, jdid, cid)
         capture_logout(
             page,
