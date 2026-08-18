@@ -467,6 +467,14 @@ def get_session_progress(session_id: str) -> dict[str, Any] | None:
         """,
         (session_id,),
     )
+    pending_rows = db_all(
+        """
+        SELECT original_filename, status FROM bulk_parse_files
+        WHERE session_id = ? AND status IN ('Queued', 'Running')
+        ORDER BY created_at ASC
+        """,
+        (session_id,),
+    ) or []
     status_map = {
         "Queued": "pending",
         "Running": "started",
@@ -496,8 +504,15 @@ def get_session_progress(session_id: str) -> dict[str, Any] | None:
                 "code": code,
             }
         )
+    mapped_status = status_map.get(row.get("status"), row.get("status", "").lower())
+    queued_filenames = [
+        r.get("original_filename") for r in pending_rows if r.get("original_filename")
+    ]
+    # Worker died after the last file: session can stay Running with an empty queue.
+    if mapped_status in ("started", "pending") and not queued_filenames:
+        mapped_status = "completed"
     return {
-        "status": status_map.get(row.get("status"), row.get("status", "").lower()),
+        "status": mapped_status,
         "started_by": row.get("created_by"),
         "total_files": row.get("total_files", 0),
         "processed_files": (row.get("successful_files") or 0) + (row.get("failed_files") or 0),
@@ -505,6 +520,7 @@ def get_session_progress(session_id: str) -> dict[str, Any] | None:
         "message": row.get("error_summary") or "",
         "failed_filenames": [r.get("original_filename") for r in failed_rows],
         "success_filenames": [r.get("original_filename") for r in success_rows],
+        "queued_filenames": queued_filenames,
         "failed_details": failed_details,
         "from_db": True,
     }

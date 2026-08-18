@@ -50,7 +50,17 @@ def parse_resume_text_via_engine(
         # Keep engine.parsers façade reachable for audit/integration tests.
         from app.ai.parser.engine.parsers import parse_resume_from_text  # noqa: F401
 
-        profile, form, toon = parse_resume_text_to_canonical(text)
+        if not allow_llm:
+            allow_semantic = False
+        elif not skip:
+            allow_semantic = True
+        else:
+            allow_semantic = None
+
+        profile, form, toon = parse_resume_text_to_canonical(
+            text,
+            allow_semantic=allow_semantic,
+        )
         has_id = bool(profile.personal.full_name and profile.contact.email)
         has_body = bool(profile.skills and (profile.experience or profile.education))
         tag = 'deterministic' if (has_id and has_body) else 'llm'

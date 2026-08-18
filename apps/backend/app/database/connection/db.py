@@ -36,7 +36,7 @@ DB_TARGET = (
     f"{os.getenv('POSTGRES_DB', os.getenv('PGDATABASE', 'postgres'))}"
 )
 
-POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '5'))
+POOL_SIZE = int(os.getenv('DB_POOL_SIZE', '16'))
 CONNECTION_TIMEOUT = int(os.getenv('DB_CONNECTION_TIMEOUT', '10'))
 
 try:

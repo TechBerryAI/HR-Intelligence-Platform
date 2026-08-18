@@ -415,8 +415,16 @@ def run_jd_parse_pipeline(
     )
 
 
-def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None):
-    """In-memory resume parse for tests / gold / bulk (no DB)."""
+def parse_resume_text_to_canonical(
+    text: str,
+    *,
+    max_workers: int | None = None,
+    allow_semantic: bool | None = None,
+):
+    """In-memory resume parse for tests / gold / bulk (no DB).
+
+    allow_semantic=False skips Ollama even when coverage looks weak (bulk fast path).
+    """
     import time as _time
 
     from app.core.timing_collector import record_pipeline_stage
@@ -463,7 +471,11 @@ def parse_resume_text_to_canonical(text: str, *, max_workers: int | None = None)
     profile = apply_knowledge_to_candidate(profile)
     knowledge_ms = (_time.perf_counter() - t0) * 1000.0
 
-    run_semantic = (not _SKIP_LLM) or (not _resume_deterministic_is_strong(profile, coverage))
+    skip_semantic = allow_semantic is False
+    force_semantic = allow_semantic is True
+    run_semantic = (not skip_semantic) and (
+        force_semantic or (not _SKIP_LLM) or (not _resume_deterministic_is_strong(profile, coverage))
+    )
     if run_semantic:
         t0 = _time.perf_counter()
         unresolved = unresolved_semantic_text(sections, 'resume') or text

@@ -5,12 +5,38 @@
     "name": "01_landing",
     "title": "Home / Landing page",
     "action": "Open the application URL",
-    "expected": "Landing page loads with product branding and Get Started CTA",
+    "expected": "Dark cinematic landing with HR Intelligence nav (Features, Solutions, Pricing, Contact), hero copy, Get Started and Watch Demo",
     "nav_path": "/",
     "roles": [
       "Public"
     ],
-    "purpose": "Introduce the platform and route visitors to the jobs board"
+    "purpose": "Introduce the platform and route visitors to the jobs board via Get Started"
+  },
+  {
+    "file": "01-home/02_watch_demo.png",
+    "module": "01-home",
+    "name": "02_watch_demo",
+    "title": "Watch Demo modal",
+    "action": "Click Watch Demo on the landing hero",
+    "expected": "Platform Demo modal opens with the product walkthrough video",
+    "nav_path": "/ \u2192 Watch Demo",
+    "roles": [
+      "Public"
+    ],
+    "purpose": "Preview the product without leaving the landing page"
+  },
+  {
+    "file": "01-home/03_landing_sections.png",
+    "module": "01-home",
+    "name": "03_landing_sections",
+    "title": "Landing \u2014 Features, Solutions, Pricing, Contact",
+    "action": "Scroll the landing page (or use Features / Solutions / Pricing / Contact in the nav)",
+    "expected": "Intelligent Features, Solutions, Pricing tiers, and Contact Us CTA",
+    "nav_path": "/#features",
+    "roles": [
+      "Public"
+    ],
+    "purpose": "Describe product capabilities and how visitors can get in touch"
   },
   {
     "file": "03-public-jobs/01_jobs_board.png",
@@ -81,12 +107,116 @@
     "purpose": "Collect product testing feedback from users"
   },
   {
+    "file": "02-authentication/01_login_chooser.png",
+    "module": "02-authentication",
+    "name": "01_login_chooser",
+    "title": "Login chooser",
+    "action": "Open /login",
+    "expected": "Split-screen login: product story on the left, HR / Admin Access card with Admin Login",
+    "nav_path": "/login",
+    "roles": [
+      "Public"
+    ],
+    "purpose": "Route staff users to admin authentication"
+  },
+  {
+    "file": "02-authentication/02_login_admin_empty.png",
+    "module": "02-authentication",
+    "name": "02_login_admin_empty",
+    "title": "Admin login form (empty)",
+    "action": "Open Admin Login",
+    "expected": "Email and password fields with Sign in button",
+    "nav_path": "/login/admin",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Authenticate Recruiter, Head HR, or CEO accounts"
+  },
+  {
+    "file": "02-authentication/03_login_email_filled.png",
+    "module": "02-authentication",
+    "name": "03_login_email_filled",
+    "title": "Email entered",
+    "action": "Enter staff email address",
+    "expected": "Email field shows the entered address; password still empty",
+    "nav_path": "/login/admin",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Identify the staff account"
+  },
+  {
+    "file": "02-authentication/04_login_password_filled.png",
+    "module": "02-authentication",
+    "name": "04_login_password_filled",
+    "title": "Password entered",
+    "action": "Enter password",
+    "expected": "Password field is filled (masked)",
+    "nav_path": "/login/admin",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Prove account ownership"
+  },
+  {
+    "file": "02-authentication/05_forgot_password.png",
+    "module": "02-authentication",
+    "name": "05_forgot_password",
+    "title": "Forgot password \u2014 request OTP",
+    "action": "From Admin Login, open Forgot password and enter work email",
+    "expected": "Reset with OTP form: work email field, Send OTP, Back to login",
+    "nav_path": "/forgot-password/admin",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Start staff password reset by emailing a 6-digit OTP (valid 10 minutes)"
+  },
+  {
+    "file": "02-authentication/05b_forgot_password_email.png",
+    "module": "02-authentication",
+    "name": "05b_forgot_password_email",
+    "title": "Forgot password \u2014 email entered",
+    "action": "Enter the staff work email, then click Send OTP",
+    "expected": "Work email filled; Send OTP ready; note that OTP is valid for 10 minutes",
+    "nav_path": "/forgot-password/admin",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Identify the account that will receive the password-reset OTP"
+  },
+  {
+    "file": "02-authentication/05c_forgot_password_verify.png",
+    "module": "02-authentication",
+    "name": "05c_forgot_password_verify",
+    "title": "Forgot password \u2014 verify OTP",
+    "action": "Open the email, copy the 6-digit OTP, enter it, optionally Resend OTP",
+    "expected": "Verify OTP form with email (read-only), 6-digit OTP field, Verify OTP and Resend OTP",
+    "nav_path": "/forgot-password/admin/verify",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Confirm ownership of the email before allowing a password change"
+  },
+  {
+    "file": "02-authentication/05d_forgot_password_reset.png",
+    "module": "02-authentication",
+    "name": "05d_forgot_password_reset",
+    "title": "Forgot password \u2014 set new password",
+    "action": "After OTP verification, choose a strong new password and confirm it",
+    "expected": "Create new password form with strength rules, Reset password button",
+    "nav_path": "/forgot-password/admin/reset",
+    "roles": [
+      "Public \u2192 staff"
+    ],
+    "purpose": "Complete password recovery and return to Admin Login"
+  },
+  {
     "file": "05-head-hr-overview/01_dashboard.png",
     "module": "05-head-hr-overview",
     "name": "01_dashboard",
     "title": "Head HR Overview Dashboard",
     "action": "Sign in as Head HR (or open /head-hr)",
-    "expected": "Organization overview with sidebar navigation and posting tools",
+    "expected": "Head of HR sidebar (Workspace / Tools), org snapshot, and job posting tools",
     "nav_path": "/head-hr",
     "roles": [
       "HEAD_HR"
@@ -124,9 +254,9 @@
     "module": "07-head-hr-candidates",
     "name": "02_candidate_detail",
     "title": "Candidate detail",
-    "action": "Open candidate CID007 from the candidates list",
+    "action": "Open candidate CID012 from the candidates list",
     "expected": "Candidate profile detail for the selected CID",
-    "nav_path": "/head-hr/candidates/CID007",
+    "nav_path": "/head-hr/candidates/CID012",
     "roles": [
       "HEAD_HR"
     ],
@@ -176,9 +306,9 @@
     "module": "10-candidate-evaluation",
     "name": "01_profile_tab",
     "title": "Candidate Evaluation \u2014 Profile & Resume",
-    "action": "Open applicant CID007 for job PDA001",
+    "action": "Open applicant CID012 for job PDA001",
     "expected": "Profile & Resume tab with candidate identity and resume actions",
-    "nav_path": "/head-hr/jobs/PDA001/candidates/CID007",
+    "nav_path": "/head-hr/jobs/PDA001/candidates/CID012",
     "roles": [
       "HEAD_HR",
       "CEO (read-only)"
@@ -192,7 +322,7 @@
     "title": "Candidate Evaluation \u2014 Application & Match",
     "action": "Open Application & Match tab",
     "expected": "ATS score, verdict, and match breakdown",
-    "nav_path": "/head-hr/jobs/PDA001/candidates/CID007?tab=application",
+    "nav_path": "/head-hr/jobs/PDA001/candidates/CID012?tab=application",
     "roles": [
       "HEAD_HR",
       "CEO (read-only)"
@@ -325,9 +455,7 @@
     "expected": "Integrations dashboard for the recruiter session",
     "nav_path": "/integrations",
     "roles": [
-      "RECRUITER",
-      "HEAD_HR",
-      "CEO"
+      "RECRUITER"
     ],
     "purpose": "View integration health and open settings"
   },
@@ -340,9 +468,7 @@
     "expected": "Security password change and integrations settings tabs",
     "nav_path": "/settings",
     "roles": [
-      "RECRUITER",
-      "HEAD_HR",
-      "CEO"
+      "RECRUITER"
     ],
     "purpose": "Manage account security settings"
   },
@@ -352,7 +478,7 @@
     "name": "01_dashboard",
     "title": "CEO / Executive Overview",
     "action": "Sign in as CEO (lands on /ceo)",
-    "expected": "Read-only executive overview (no Admins / Bulk / Settings in sidebar)",
+    "expected": "Read-only Executive sidebar plus analytics (applications by status, match scores)",
     "nav_path": "/ceo",
     "roles": [
       "CEO"
@@ -390,9 +516,9 @@
     "module": "20-ceo-overview",
     "name": "04_eval_readonly",
     "title": "CEO candidate evaluation (read-only)",
-    "action": "Open /ceo/jobs/PDA001/candidates/CID007",
+    "action": "Open /ceo/jobs/PDA001/candidates/CID012",
     "expected": "Same evaluation UI as Head HR, without write actions",
-    "nav_path": "/ceo/jobs/PDA001/candidates/CID007",
+    "nav_path": "/ceo/jobs/PDA001/candidates/CID012",
     "roles": [
       "CEO"
     ],
@@ -427,109 +553,5 @@
       "RECRUITER"
     ],
     "purpose": "Prevent unauthorized access after the user finishes work"
-  },
-  {
-    "file": "02-authentication/01_login_chooser.png",
-    "module": "02-authentication",
-    "name": "01_login_chooser",
-    "title": "Login chooser",
-    "action": "Open /login",
-    "expected": "Login landing with Admin Login entry point",
-    "nav_path": "/login",
-    "roles": [
-      "Public"
-    ],
-    "purpose": "Route staff users to admin authentication"
-  },
-  {
-    "file": "02-authentication/02_login_admin_empty.png",
-    "module": "02-authentication",
-    "name": "02_login_admin_empty",
-    "title": "Admin login form (empty)",
-    "action": "Open Admin Login",
-    "expected": "Email and password fields with Sign in button",
-    "nav_path": "/login/admin",
-    "roles": [
-      "Public \u2192 staff"
-    ],
-    "purpose": "Authenticate Recruiter, Head HR, or CEO accounts"
-  },
-  {
-    "file": "02-authentication/03_login_email_filled.png",
-    "module": "02-authentication",
-    "name": "03_login_email_filled",
-    "title": "Email entered",
-    "action": "Enter staff email address",
-    "expected": "Email field shows the entered address; password still empty",
-    "nav_path": "/login/admin",
-    "roles": [
-      "Public \u2192 staff"
-    ],
-    "purpose": "Identify the staff account"
-  },
-  {
-    "file": "02-authentication/04_login_password_filled.png",
-    "module": "02-authentication",
-    "name": "04_login_password_filled",
-    "title": "Password entered",
-    "action": "Enter password",
-    "expected": "Password field is filled (masked)",
-    "nav_path": "/login/admin",
-    "roles": [
-      "Public \u2192 staff"
-    ],
-    "purpose": "Prove account ownership"
-  },
-  {
-    "file": "02-authentication/05_forgot_password.png",
-    "module": "02-authentication",
-    "name": "05_forgot_password",
-    "title": "Forgot password \u2014 request OTP",
-    "action": "From Admin Login, open Forgot password and enter work email",
-    "expected": "Reset with OTP form: work email field, Send OTP, Back to login",
-    "nav_path": "/forgot-password/admin",
-    "roles": [
-      "Public \u2192 staff"
-    ],
-    "purpose": "Start staff password reset by emailing a 6-digit OTP (valid 10 minutes)"
-  },
-  {
-    "file": "02-authentication/05b_forgot_password_email.png",
-    "module": "02-authentication",
-    "name": "05b_forgot_password_email",
-    "title": "Forgot password \u2014 email entered",
-    "action": "Enter the staff work email, then click Send OTP",
-    "expected": "Work email filled; Send OTP ready; note that OTP is valid for 10 minutes",
-    "nav_path": "/forgot-password/admin",
-    "roles": [
-      "Public \u2192 staff"
-    ],
-    "purpose": "Identify the account that will receive the password-reset OTP"
-  },
-  {
-    "file": "02-authentication/05c_forgot_password_verify.png",
-    "module": "02-authentication",
-    "name": "05c_forgot_password_verify",
-    "title": "Forgot password \u2014 verify OTP",
-    "action": "Open the email, copy the 6-digit OTP, enter it, optionally Resend OTP",
-    "expected": "Verify OTP form with email (read-only), 6-digit OTP field, Verify OTP and Resend OTP",
-    "nav_path": "/forgot-password/admin/verify",
-    "roles": [
-      "Public \u2192 staff"
-    ],
-    "purpose": "Confirm ownership of the email before allowing a password change"
-  },
-  {
-    "file": "02-authentication/05d_forgot_password_reset.png",
-    "module": "02-authentication",
-    "name": "05d_forgot_password_reset",
-    "title": "Forgot password \u2014 set new password",
-    "action": "After OTP verification, choose a strong new password and confirm it",
-    "expected": "Create new password form with strength rules, Reset password button",
-    "nav_path": "/forgot-password/admin/reset",
-    "roles": [
-      "Public \u2192 staff"
-    ],
-    "purpose": "Complete password recovery and return to Admin Login"
   }
 ]
