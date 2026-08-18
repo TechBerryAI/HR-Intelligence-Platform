@@ -25,7 +25,7 @@ HR Job Portal
 | Tool | Version | Check |
 |------|---------|--------|
 | Node.js | 16+ | `node --version` |
-| Python | 3.8+ (backend), 3.11+ (ai) | `python --version` |
+| Python | 3.10+ required (backend); 3.11 recommended (matches CI); 3.11+ (ai) | `python --version` |
 | PostgreSQL | 12+ | Local or cloud |
 
 ## Quick start (HRMS)
@@ -80,6 +80,8 @@ cd apps/frontend && npm install && npm run dev
 ```bash
 cd apps/backend && source venv/bin/activate && python wsgi.py
 ```
+
+Production Python installs should use the tested pin set: `pip install -r requirements.lock.txt` (Python 3.10+ required, 3.11 recommended).
 
 ### Run Electron (bulk parser)
 
@@ -162,7 +164,7 @@ Optional integration vars (see `apps/backend/.env.example`):
 - `INTEGRATION_WORKER_MAX_WORKERS` — default `4`
 - `INTEGRATION_AUTO_SYNC_INTERVAL_SECONDS` — default `900` (min 60)
 - `RUN_INTEGRATION_AUTO_SYNC` — set `1` only in the dedicated scheduler process (not in Gunicorn web workers)
-- `REDIS_URL` — **required in production when `GUNICORN_WORKERS>1`** (cross-worker parse join; Gunicorn default is 4). Set `GUNICORN_WORKERS=1` for single-process production without Redis. JWT/OTP/outbox do not need Redis. Dev (`FLASK_DEBUG=true`) does not require Redis. If `REDIS_URL` is set and workers>1 but Redis becomes unreachable at runtime, parse requests fail closed (`Redis parse coordination unavailable`) instead of silently duplicating work per worker.
+- `REDIS_URL` — **required in production when `GUNICORN_WORKERS>1`** (cross-worker parse join; Gunicorn default is 4). Set `GUNICORN_WORKERS=1` for single-process production without Redis. JWT/OTP/outbox do not need Redis. Dev (`FLASK_DEBUG=true`) does not require Redis. If `REDIS_URL` is set and workers>1 but Redis becomes unreachable at runtime, parse requests fail closed (`Redis parse coordination unavailable`) instead of silently duplicating work per worker. Use `redis://:URL_ENCODED_PASSWORD@host:6379/0` when Redis has a password (`/` in the password must be `%2F`).
 - `TRUST_PROXY_HEADERS` — set `true` behind nginx/Caddy so public parse rate limits use `X-Forwarded-For`. Unset (default) uses `request.remote_addr` only.
 
 ### Production processes (Gunicorn + scheduler)

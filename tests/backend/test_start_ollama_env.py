@@ -81,9 +81,11 @@ def _assert_spawn_matches(env_map: dict, monkeypatch: pytest.MonkeyPatch, expect
 
 def test_start_js_does_not_persist_implicit_ollama_model():
     script = ROOT / 'tests' / 'start' / 'test_start_ollama_env.js'
+    env = {k: v for k, v in os.environ.items() if k not in MODEL_KEYS}
     result = subprocess.run(
         ['node', str(script)],
         cwd=str(ROOT),
+        env=env,
         capture_output=True,
         text=True,
         timeout=30,

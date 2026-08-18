@@ -111,7 +111,7 @@ function checkEnv() {
         }
       }
     } catch (e2) {
-      log('Python 3.8+ required for backend.', 'err');
+      log('Python 3.10+ required for backend.', 'err');
       process.exit(1);
     }
   }

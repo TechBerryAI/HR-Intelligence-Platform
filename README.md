@@ -24,7 +24,7 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
 | Layer | Technologies |
 |-------|---------------|
 | **Frontend** | React 18, Vite 5, React Router 6, Tailwind CSS, Radix UI, Framer Motion |
-| **Backend** | Python 3.8+, Flask, PostgreSQL (psycopg3), JWT, bcrypt, Flask-Mail |
+| **Backend** | Python 3.10+ (3.11 recommended), Flask, PostgreSQL (psycopg3), JWT, bcrypt, Flask-Mail |
 | **Optional** | Electron (desktop bulk parser), n8n (ATS workflow), external Bulk-Resume-Parser API |
 
 ---
@@ -94,6 +94,7 @@ Canonical app locations (no root-level duplicates):
 cd apps/backend
 python -m venv venv
 # Windows: .\venv\Scripts\Activate  |  macOS/Linux: source venv/bin/activate
+# Production: pip install -r requirements.lock.txt
 pip install -r requirements.txt
 python wsgi.py
 ```

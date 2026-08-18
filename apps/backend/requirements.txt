@@ -1,7 +1,7 @@
-# Backend requires Python 3.10–3.12 recommended (3.9 works if modules use
-# `from __future__ import annotations` — required for `str | None` type hints).
+# Backend requires Python 3.10+ (3.11 recommended; CI uses 3.11).
 # Python 3.13+ can run the API; RapidOCR is skipped (no wheels yet) — scanned-image OCR
 # then needs system Tesseract, or use Python 3.12 for pip RapidOCR.
+# Production installs: pip install -r requirements.lock.txt
 Flask==3.0.3
 Flask-Cors==4.0.0
 Flask-Mail==0.9.1

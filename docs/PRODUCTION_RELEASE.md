@@ -42,7 +42,7 @@ Required:
 
 Recommended (not a startup hard-fail): `FRONTEND_URL` / `FRONTEND_URLS` for CORS and booking links.
 
-When `GUNICORN_WORKERS>1` in production, `REDIS_URL` is required and must ping (cross-worker parse join; Gunicorn default is 4). Set `GUNICORN_WORKERS=1` if you are not running Redis. If `REDIS_URL` is set, ping must succeed (no silent in-memory fallback). The parse owner renews its SET NX lease until completion so a healthy request is not stolen at 180s. Behind nginx/Caddy set `TRUST_PROXY_HEADERS=true`. `GET /ready` includes Redis when `REDIS_URL` is set.
+When `GUNICORN_WORKERS>1` in production, `REDIS_URL` is required and must ping (cross-worker parse join; Gunicorn default is 4). Set `GUNICORN_WORKERS=1` if you are not running Redis. If `REDIS_URL` is set, ping must succeed (no silent in-memory fallback). Use `redis://:URL_ENCODED_PASSWORD@host:6379/0` — percent-encode special characters in the password (`/` → `%2F`). The application also canonicalizes unencoded passwords; do not log the URL. The parse owner renews its SET NX lease until completion so a healthy request is not stolen at 180s. Behind nginx/Caddy set `TRUST_PROXY_HEADERS=true`. `GET /ready` includes Redis when `REDIS_URL` is set.
 
 AI parse: leave `OLLAMA_MODEL` unset for hardware-adaptive selection, or pin it explicitly. Runtime YAML: `AI_RUNTIME_CONFIG=ai/runtime/config/runtime.production.yaml`. Ollama reachable at `OLLAMA_HOST`. Residual fill timeout: `DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC` (default 90).
 
@@ -52,6 +52,15 @@ Optional labels for `pg_stat_activity`:
 - `HCIP_RELEASE_ID` — short release id (appears in `application_name`)
 
 Copy knobs from `apps/backend/.env.example`. Never commit `.env`.
+
+Python **3.10+** is required; **3.11** is recommended (CI). Production installs should use the tested pin set:
+
+```bash
+cd apps/backend
+pip install -r requirements.lock.txt
+```
+
+Do not `pip install -r requirements.txt` on a production host if the lockfile is present — open `>=` constraints can resolve newer packages than those tested.
 
 ---
 

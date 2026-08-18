@@ -98,11 +98,13 @@ class EnvValidator:
 
     @classmethod
     def _ping_redis(cls, url: str) -> str | None:
+        from app.core.redis_url import canonicalize_redis_url, safe_redis_error
+
         try:
             import redis
 
             client = redis.Redis.from_url(
-                url,
+                canonicalize_redis_url(url),
                 decode_responses=True,
                 socket_connect_timeout=2,
                 socket_timeout=2,
@@ -110,7 +112,7 @@ class EnvValidator:
             client.ping()
             return None
         except Exception as exc:
-            return f"  ❌ REDIS_URL: Redis is not reachable ({exc})"
+            return f"  ❌ REDIS_URL: Redis is not reachable ({safe_redis_error(exc)})"
 
     @classmethod
     def validate(cls, strict: bool = False) -> Tuple[bool, List[str], List[str]]:

@@ -49,7 +49,8 @@ _TEXT_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         re.compile(r'(?i)(postgres(?:ql)?(?:\+\w+)?://[^:\s/]+:)[^@\s]+(@)'),
         rf'\1{REDACTED}\2',
     ),
-    (re.compile(r'(?i)(redis://:)[^@\s]+(@)'), rf'\1{REDACTED}\2'),
+    (re.compile(r'(?i)((?:redis|rediss)://[^@\s/]*:)[^@\s]+(@)'), rf'\1{REDACTED}\2'),
+    (re.compile(r'(?i)((?:redis|rediss)://)[^:@\s/]+(@)'), rf'\1{REDACTED}\2'),
     (re.compile(r'(?i)(https?://[^\s\"\']*?/webhook/)[^\s\"\'/?#]+'), rf'\1{REDACTED}'),
 )
 

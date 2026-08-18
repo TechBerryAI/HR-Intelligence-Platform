@@ -98,6 +98,9 @@ def test_redact_text_sentinels():
         'Cookie: session=ULTRA_SECRET_COOKIE '
         'Authorization: Basic SECRET_VALUE '
         'postgresql://user:DB_PASSWORD_SECRET@host/db '
+        'redis://:REDIS_PASSWORD_SECRET@redis-host:6379/0 '
+        'rediss://user:REDIS_USER_SECRET@secure-host:6380/0 '
+        'redis://REDIS_BARE_SECRET@redis-host:6379/0 '
         'https://service.example/webhook/WEBHOOK_SECRET_123'
     )
     safe = redact_text(blob)
@@ -105,6 +108,9 @@ def test_redact_text_sentinels():
     assert 'ULTRA_SECRET_COOKIE' not in safe
     assert 'SECRET_VALUE' not in safe
     assert 'DB_PASSWORD_SECRET' not in safe
+    assert 'REDIS_PASSWORD_SECRET' not in safe
+    assert 'REDIS_USER_SECRET' not in safe
+    assert 'REDIS_BARE_SECRET' not in safe
     assert 'WEBHOOK_SECRET_123' not in safe
     assert REDACTED in safe
 
