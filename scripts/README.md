@@ -55,15 +55,16 @@ Primary model: **hardware-adaptive** when `OLLAMA_MODEL` is unset (`gpu_high`→
 `node start.js` now:
 1. Installs backend deps from `requirements.txt` (includes **RapidOCR** via `rapidocr-onnxruntime`, pymupdf, Pillow)
 2. Verifies OCR Python imports
-3. Ensures Ollama is reachable (`ollama serve` if needed) and pulls `OLLAMA_MODEL`
-4. Normalizes `OLLAMA_HOST` (also accepts legacy `OLLAMA_BASE_URL`)
+3. Health-checks `OLLAMA_HOST` (default `http://192.168.1.200:11434`). Local `ollama serve` / pull only when the host is loopback
+4. Normalizes `OLLAMA_HOST` (also accepts legacy `OLLAMA_BASE_URL`) — does not rewrite keys already present in `.env`
 
 ```bash
-# Prerequisites: install Ollama once from https://ollama.com/download
+# Prerequisites: central Ollama at OLLAMA_HOST (default http://192.168.1.200:11434),
+# or a local daemon if you set OLLAMA_HOST=http://127.0.0.1:11434
 # Then from repo root:
 node start.js
 
-# Or manual (example pin; omit to let the backend choose):
+# Optional local daemon (only if OLLAMA_HOST is loopback):
 ollama pull qwen2.5:7b-instruct
 ollama serve
 

@@ -14,7 +14,7 @@ runtime:
     ollama:
       type: ollama
       enabled: true
-      base_url: ${OLLAMA_HOST:http://localhost:11434}
+      base_url: ${OLLAMA_HOST:http://192.168.1.200:11434}
       # Long timeout for 14B on large resumes / queued bulk jobs
       default_timeout_seconds: 300
     grok:

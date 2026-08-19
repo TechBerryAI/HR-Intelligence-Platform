@@ -36,8 +36,11 @@ Point the API at the stack:
 | `POSTGRES_HOST` | `localhost` (host) or `postgres` (from another compose service) |
 | `POSTGRES_PASSWORD` | same as compose |
 | `REDIS_URL` | `redis://127.0.0.1:6379/0` |
+| `OLLAMA_HOST` | `http://192.168.1.200:11434` (Ollama is external; not in this compose file) |
 
 Redis is published on **loopback only** (`127.0.0.1:6379`) so host Gunicorn can reach it without exposing Redis on all interfaces. For a remote Redis, set `--requirepass` and `REDIS_URL=redis://:PASSWORD@host:6379/0`.
+
+Ollama is not part of this compose stack. Point the API at the central server with `OLLAMA_HOST` (default `http://192.168.1.200:11434`).
 
 ### API / frontend notes
 

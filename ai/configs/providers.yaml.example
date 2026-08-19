@@ -18,7 +18,7 @@ providers:
   definitions:
     ollama:
       type: ollama
-      host: ${OLLAMA_HOST:http://localhost:11434}
+      host: ${OLLAMA_HOST:http://192.168.1.200:11434}
       model: ${OLLAMA_MODEL:hrms-resume-jd-parser}
       timeout_seconds: ${OLLAMA_TIMEOUT_SECONDS:120}
 

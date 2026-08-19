@@ -23,7 +23,7 @@ const VENV_PYTHON = path.join(
 const BACKEND_PORT = 3000;
 const FRONTEND_PORT = 5173;
 const BROWSER_URL = `http://localhost:${FRONTEND_PORT}`;
-const DEFAULT_OLLAMA_HOST = 'http://127.0.0.1:11434';
+const DEFAULT_OLLAMA_HOST = 'http://192.168.1.200:11434';
 /** Pull-only fallback when hardware detection is unavailable. Never written to .env. */
 const SAFE_PULL_OLLAMA_MODEL = 'qwen2.5:7b-instruct';
 
@@ -164,6 +164,20 @@ function explicitOllamaModel(envMap = {}, processEnv = process.env) {
 
 function ollamaModelIsExplicit(envMap = {}, processEnv = process.env) {
   return Boolean(explicitOllamaModel(envMap, processEnv));
+}
+
+/** True only for 127.0.0.1 / localhost (optional scheme and port). */
+function isOllamaLoopbackHost(host) {
+  const raw = String(host || '').trim().toLowerCase().replace(/\/$/, '');
+  if (!raw) return false;
+  let hostname = raw;
+  try {
+    const url = new URL(raw.includes('://') ? raw : `http://${raw}`);
+    hostname = url.hostname;
+  } catch {
+    hostname = raw.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+  }
+  return hostname === '127.0.0.1' || hostname === 'localhost';
 }
 
 /** Host/base-url normalization only — never persist OLLAMA_MODEL. */
@@ -470,7 +484,7 @@ function resolveAdaptiveOllamaModel(envMap = {}) {
 }
 
 async function setupOllama() {
-  logStep(4, 7, 'Setting up Ollama (serve + model pull)');
+  logStep(4, 7, 'Checking Ollama');
   const envMap = readEnvFile(BACKEND_ENV);
   const host = (envMap.OLLAMA_HOST || envMap.OLLAMA_BASE_URL || DEFAULT_OLLAMA_HOST).replace(/\/$/, '');
   const resolved = resolveAdaptiveOllamaModel(envMap);
@@ -478,7 +492,30 @@ async function setupOllama() {
   log(`Using Ollama model: ${model} (${resolved.source})`);
   log(`Using Ollama host: ${host}`);
 
-    if (!commandExists('ollama')) {
+  if (!isOllamaLoopbackHost(host)) {
+    log('Remote Ollama host — health-check only (no local serve or model pull)');
+    const tags = await httpGetJson(`${host}/api/tags`);
+    if (!tags) {
+      log(
+        `Ollama did not become ready at ${host}. Parsing may fail until the central server is reachable.`,
+        'warn'
+      );
+      return { host, model, ready: false };
+    }
+    log('Ollama API is reachable');
+    const ready = modelIsPresent(tags, model);
+    if (ready) {
+      log(`Ollama setup complete (model ${model} listed)`);
+    } else {
+      log(
+        `Ollama is reachable but model ${model} is not listed. Pull it on the central server.`,
+        'warn'
+      );
+    }
+    return { host, model, ready };
+  }
+
+  if (!commandExists('ollama')) {
     log(
       'Ollama CLI not found. Install from https://ollama.com/download then re-run start.js. ' +
         'Parsing requires Ollama (Grok cloud fallback is disabled).',
@@ -523,7 +560,6 @@ async function setupOllama() {
     log(`Model already available: ${model}`);
   }
 
-  // Re-check after pull
   tags = await httpGetJson(`${host}/api/tags`);
   const ready = modelIsPresent(tags, model);
   if (ready) log('Ollama setup complete');
@@ -730,7 +766,7 @@ async function main() {
   console.log('\n--- Ready ---');
   console.log('Backend:  http://localhost:' + BACKEND_PORT);
   console.log('Frontend: ' + BROWSER_URL);
-  console.log('Ollama:   ' + ollama.host + '  model=' + ollama.model + (ollama.ready ? ' (ready)' : ' (not ready — check install/pull)'));
+  console.log('Ollama:   ' + ollama.host + '  model=' + ollama.model + (ollama.ready ? ' (ready)' : ' (not ready — check host/model)'));
   console.log('Press Ctrl+C to stop.\n');
 }
 
@@ -742,8 +778,10 @@ module.exports = {
   BACKEND_ENV,
   readEnvFile,
   upsertEnvKeys,
+  DEFAULT_OLLAMA_HOST,
   explicitOllamaModel,
   ollamaModelIsExplicit,
+  isOllamaLoopbackHost,
   ollamaHostUpdates,
   hardwareHelperEnv,
   MODEL_SELECTION_KEYS,

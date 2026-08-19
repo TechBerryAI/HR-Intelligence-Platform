@@ -2,7 +2,7 @@
 # Copy to ollama.yaml. Used for Modelfile generation and local serve.
 
 ollama:
-  host: ${OLLAMA_HOST:http://localhost:11434}
+  host: ${OLLAMA_HOST:http://192.168.1.200:11434}
   model_name: ${OLLAMA_MODEL:hrms-resume-jd-parser}
   tag: latest
 

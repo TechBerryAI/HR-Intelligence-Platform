@@ -27,12 +27,18 @@ assert.strictEqual(start.ollamaModelIsExplicit({ OLLAMA_MODEL: 'x' }), true);
 const { updates } = start.ollamaHostUpdates({});
 assert.ok(!Object.prototype.hasOwnProperty.call(updates, 'OLLAMA_MODEL'));
 assert.ok(updates.OLLAMA_HOST || updates.OLLAMA_BASE_URL);
+assert.strictEqual(updates.OLLAMA_HOST, start.DEFAULT_OLLAMA_HOST);
+assert.strictEqual(start.DEFAULT_OLLAMA_HOST, 'http://192.168.1.200:11434');
 
 const { updates: none } = start.ollamaHostUpdates({
   OLLAMA_HOST: 'http://127.0.0.1:11434',
   OLLAMA_BASE_URL: 'http://127.0.0.1:11434',
 });
 assert.deepStrictEqual(none, {});
+
+assert.strictEqual(start.isOllamaLoopbackHost('http://127.0.0.1:11434'), true);
+assert.strictEqual(start.isOllamaLoopbackHost('http://localhost:11434'), true);
+assert.strictEqual(start.isOllamaLoopbackHost('http://192.168.1.200:11434'), false);
 
 const helperCpu = start.hardwareHelperEnv(
   { HCIP_HARDWARE_PROFILE: 'cpu', OLLAMA_MODEL: '' },

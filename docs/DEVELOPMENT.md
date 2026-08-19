@@ -53,7 +53,7 @@ Optional `start-vm.js` knobs (env or `apps/backend/.env`):
 | `HCIP_VM_NAME` | Hyper-V VM name to `Start-VM` when DB is down |
 | `HCIP_VM_PROVIDER` | `auto` (default), `hyperv`, or `docker` |
 | `HCIP_START_DOCKER_DB` | Force `docker compose` Postgres |
-| `HCIP_SKIP_OLLAMA` | Skip Ollama serve/pull |
+| `HCIP_SKIP_OLLAMA` | Skip Ollama health-check (and local serve/pull when host is loopback) |
 | `HCIP_OPEN_BROWSER` | Set `false` to skip opening the browser |
 
 ## Quick start (AI platform)
@@ -126,6 +126,10 @@ Fresh local DB: create an empty Postgres database, then `alembic upgrade head`. 
 | `ai/.env` | AI workspace overrides (optional) |
 
 Copy from the matching `.env.example`, then fill secrets. Never commit `.env` files.
+
+### Ollama host
+
+Default endpoint is the central LAN server `http://192.168.1.200:11434`. Set `OLLAMA_HOST` (legacy alias `OLLAMA_BASE_URL`) in `apps/backend/.env` to override. `start.js` health-checks that URL; it starts a local `ollama serve` / pull only when the host is loopback (`127.0.0.1` or `localhost`). Existing `.env` files are not rewritten if those keys are already set — update them yourself when moving off a local daemon.
 
 ### Ollama model selection
 

@@ -125,7 +125,7 @@ artifacts:
   gguf: models/gguf/hrparser-v1-llama32-3b-q4_k_m.gguf
   modelfile: exports/modelfiles/hrms-parsing-v1.Modelfile
 ollama:
-  host: http://localhost:11434
+  host: ${OLLAMA_HOST:http://192.168.1.200:11434}
   model_name: hrms-parsing-v1
   tag: "v1.0.0"           # immutable tag — not `latest`
 prompts:

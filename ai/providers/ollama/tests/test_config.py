@@ -8,7 +8,7 @@ from providers.ollama.config import OllamaProviderConfig
 def test_from_dict_defaults() -> None:
     config = OllamaProviderConfig.from_dict({"type": "ollama"})
     assert config.enabled is True
-    assert config.base_url == "http://localhost:11434"
+    assert config.base_url == "http://192.168.1.200:11434"
     assert config.default_timeout_seconds == 120.0
     assert config.stream is False
 
