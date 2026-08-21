@@ -48,7 +48,7 @@ function inviteEmailBadge(payload) {
   const sent = !!payload?.sent || String(payload?.status || '').toLowerCase() === 'sent'
   const label = failed ? 'Failed' : sent ? 'Sent' : 'Pending'
   const cls = failed
-    ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+    ? 'bg-[var(--ei-tone-danger-bg)] text-[var(--ei-tone-danger)] border border-[var(--ei-tone-danger-border)]'
     : sent
       ? 'bg-[var(--ei-tone-success-bg)] text-[var(--ei-tone-success)] border border-[var(--ei-tone-success-border)]'
       : 'bg-[var(--ei-tone-warning-bg,rgba(245,158,11,0.12))] text-[var(--ei-tone-warning)] border border-[var(--ei-tone-warning-border,rgba(245,158,11,0.25))]'
@@ -267,7 +267,7 @@ export default function HeadHrJobDetail() {
   if (error || !job) {
     return (
       <PanelShell>
-        <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
+        <div className="rounded-lg bg-[var(--ei-tone-danger-bg)] border border-[var(--ei-tone-danger-border)] px-4 py-3 text-sm text-[var(--ei-tone-danger)]">
           {error || 'Job not found'}
         </div>
         <button
@@ -553,7 +553,7 @@ export default function HeadHrJobDetail() {
                 ))}
               </div>
             ) : scheduleError ? (
-              <p className="text-sm text-red-400 py-4">{scheduleError}</p>
+              <p className="text-sm text-[var(--ei-tone-danger)] py-4">{scheduleError}</p>
             ) : scheduleRows.length === 0 ? (
               <p className="text-sm text-[var(--ei-text-muted)] py-4">
                 No shortlisted candidates yet. When someone is shortlisted, their combined shortlist + booking invite appears here, along with any booked interview slot.

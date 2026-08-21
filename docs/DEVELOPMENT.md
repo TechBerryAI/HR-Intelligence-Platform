@@ -97,6 +97,18 @@ cd ai && source .venv/bin/activate
 python -m runtime.cli.main --help
 ```
 
+### Clear local caches
+
+Removes Python `__pycache__` / `.pyc`, `.pytest_cache`, and Vite `node_modules/.vite` (never touches `venv/`, full `node_modules/`, `.git/`, media, or `.env`).
+
+```bash
+npm run clear-cache
+# Preview: npm run clear-cache:dry
+# Also remove apps/frontend/dist: node scripts/clear-cache.js --dist
+```
+
+After clearing, restart the stack (`node start.js`) so Flask and Vite rebuild fresh.
+
 ### Database diagnostics
 
 ```bash

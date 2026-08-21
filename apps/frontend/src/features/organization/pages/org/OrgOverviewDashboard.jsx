@@ -619,6 +619,21 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                     })}
                   </tbody>
                 </table>
+                <div className="mt-4 pt-4 border-t border-[var(--ei-border-primary)] flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => go('jobs')}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)] px-4 py-2.5 text-sm font-medium text-[#0284c7] hover:text-[#0369a1] hover:bg-[var(--ei-border-primary)] dark:text-[#55B9FF] dark:hover:text-white transition-colors"
+                  >
+                    View more
+                    <FiArrowRight className="w-4 h-4" />
+                    {jobs.length > recentJobs.length ? (
+                      <span className="text-[var(--ei-text-muted)] font-normal">
+                        ({jobs.length - recentJobs.length} more)
+                      </span>
+                    ) : null}
+                  </button>
+                </div>
               </div>
             )}
           </section>

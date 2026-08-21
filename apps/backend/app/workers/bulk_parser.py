@@ -55,7 +55,7 @@ BULK_MIN_TEXT_CHARS = 30
 # Higher default now that most clean resumes skip Ollama via deterministic path.
 BULK_PARSE_MAX_WORKERS = max(1, min(24, int(os.getenv('BULK_PARSE_MAX_WORKERS', '6'))))
 BULK_LLM_ATTEMPTS = max(1, min(4, int(os.getenv('BULK_LLM_ATTEMPTS', '2'))))
-BULK_EXCEL_CHECKPOINT_EVERY = max(5, int(os.getenv('BULK_EXCEL_CHECKPOINT_EVERY', '25')))
+BULK_EXCEL_CHECKPOINT_EVERY = max(1, int(os.getenv('BULK_EXCEL_CHECKPOINT_EVERY', '5')))
 BULK_SKIP_LLM_WHEN_DETERMINISTIC = os.getenv(
     'BULK_SKIP_LLM_WHEN_DETERMINISTIC', 'true'
 ).lower() in ('1', 'true', 'yes')
@@ -827,15 +827,15 @@ def _process_one_file_inner(
             try:
                 from app.ai.parser.engine import parse_resume_text_via_engine
 
-                # Gate concurrent Ollama calls (OLLAMA_MAX_CONCURRENT)
-                from app.ai.parser.engine.ollama_limit import ollama_slot
-
-                with ollama_slot():
-                    toon, source, eng_notes, form_dto = parse_resume_text_via_engine(
-                        raw_text,
-                        allow_llm=True,
-                        skip_llm_when_deterministic=False,
-                    )
+                # Do not hold ollama_slot here. Semantic AI acquires it on a
+                # timeout worker thread; wrapping both sides deadlocks when
+                # OLLAMA_MAX_CONCURRENT is 1 (bulk waits, timeout thread waits,
+                # executor shutdown waits forever). Slot lives in _call_section_llm.
+                toon, source, eng_notes, form_dto = parse_resume_text_via_engine(
+                    raw_text,
+                    allow_llm=True,
+                    skip_llm_when_deterministic=False,
+                )
                 if not isinstance(toon, dict):
                     last_err = "Engine returned non-object"
                     toon = None

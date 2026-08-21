@@ -12,6 +12,7 @@ Root-level scripts that support local development, CI preflight, and database co
 |--------|---------|
 | `../start.js` | Local stack: env, venv, npm, backend + frontend + Ollama |
 | `../start-vm.js` | Full VM stack: DB (Hyper-V / Docker) + backend + frontend + Ollama |
+| `clear-cache.js` | Wipe local bytecode / pytest / Vite caches (`npm run clear-cache`) |
 | `db-preflight.js` | PostgreSQL connectivity diagnostics (reads `apps/backend/.env`, WSL-aware) |
 | `database/test_db_connection.py` | Python DB connection test |
 | `ensure_media_assets.py` | Ensure durable media dirs + seed hero |
@@ -35,6 +36,11 @@ Full media docs: **[docs/MEDIA_AND_BACKUPS.md](../docs/MEDIA_AND_BACKUPS.md)**.
 ## Quick start
 
 ```bash
+# Clear local caches (__pycache__, .pytest_cache, Vite .vite, etc.)
+npm run clear-cache
+# Preview only: npm run clear-cache:dry
+# Also drop frontend dist/: node scripts/clear-cache.js --dist
+
 # Release verification (no secrets)
 scripts/release-verify.sh pre-deploy
 scripts/release-verify.sh db-sessions

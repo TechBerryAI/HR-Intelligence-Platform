@@ -117,16 +117,20 @@ def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
             return run_in_timing_context(timing_ctx, _invoke)
         return _invoke()
 
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            fut = pool.submit(_invoke_timed)
-            return fut.result(timeout=timeout_sec)
+        fut = pool.submit(_invoke_timed)
+        return fut.result(timeout=timeout_sec)
     except concurrent.futures.TimeoutError:
         logger.warning('semantic AI timed out after %ss for %s', timeout_sec, doc_kind)
         return None
     except Exception as exc:
         logger.debug('semantic AI failed: %s', exc)
         return None
+    finally:
+        # wait=False: if the worker is blocked on ollama_slot (nested acquire),
+        # shutdown(wait=True) would hang forever and freeze bulk parse.
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 @timing
