@@ -16,3 +16,4 @@
 - Frontend: `apps/frontend/`
 - **UI theme (centralized):** `apps/frontend/src/core/theme/themeConfig.js` + `ThemeProvider` — do not add parallel theme state; landing dark-only is configured there
 - Setup: `docs/DEVELOPMENT.md`
+- **Clear caches:** when the user asks to clear cache, run `npm run clear-cache` (logic in `scripts/clear-cache.js`). Do not hand-delete `__pycache__` trees ad hoc.

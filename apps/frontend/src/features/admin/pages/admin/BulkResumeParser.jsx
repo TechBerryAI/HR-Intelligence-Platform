@@ -364,8 +364,8 @@ export default function BulkResumeParser({ embedded = false }) {
   const processingCount = jobId ? Math.max(0, queuedFilenames.length || total - processed) : 0
   const progressPct = total ? Math.round((processed / total) * 100) : 0
   const currentFile =
-    progress?.message?.replace(/^Processing:\s*/i, '').trim() ||
     queuedFilenames[0] ||
+    progress?.message?.replace(/^Processing:\s*/i, '').trim() ||
     (jobId ? resumeFiles[processed]?.name ?? '' : '')
   const inProgressFilenames = !jobId
     ? []

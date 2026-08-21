@@ -8,7 +8,9 @@
     "electron": "electron .",
     "electron:dev": "electron .",
     "start": "node start.js",
-    "start:vm": "node start-vm.js"
+    "start:vm": "node start-vm.js",
+    "clear-cache": "node scripts/clear-cache.js",
+    "clear-cache:dry": "node scripts/clear-cache.js --dry-run"
   },
   "devDependencies": {
     "electron": "^28.0.0"
