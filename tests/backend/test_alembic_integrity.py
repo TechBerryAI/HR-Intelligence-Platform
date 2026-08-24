@@ -53,6 +53,17 @@ def test_debug_repairs_allowlisted_deleted_revision(monkeypatch):
     assert orphan_stamp_action('20260811_s005', KNOWN) == 'repair'
 
 
+def test_debug_repairs_phantom_unmerged_stamp(monkeypatch):
+    monkeypatch.setenv('FLASK_DEBUG', 'true')
+    assert orphan_stamp_action('20260824_bulk_pause', KNOWN) == 'repair'
+
+
+def test_production_refuses_phantom_unmerged_stamp(monkeypatch):
+    monkeypatch.setenv('FLASK_DEBUG', 'false')
+    with pytest.raises(AlembicOrphanStampError):
+        orphan_stamp_action('20260824_bulk_pause', KNOWN)
+
+
 def test_debug_refuses_unknown_non_allowlisted_revision(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'true')
     with pytest.raises(AlembicOrphanStampError):

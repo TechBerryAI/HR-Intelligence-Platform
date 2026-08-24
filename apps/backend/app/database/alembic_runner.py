@@ -26,6 +26,13 @@ _DELETED_PRE_SQUASH = frozenset(
     }
 )
 
+# Stamps from unmerged local work (never committed migration scripts).
+# Dev/debug may retarget to the canonical revision when schema already matches.
+# Production never rewrites alembic_version for these.
+_PHANTOM_STAMP_REPAIRS: dict[str, str] = {
+    '20260824_bulk_pause': '20260814_cid_pad3',
+}
+
 
 class AlembicOrphanStampError(RuntimeError):
     """alembic_version points at a revision this process cannot apply."""
@@ -169,6 +176,8 @@ def orphan_stamp_action(current: str | None, known: set[str]) -> str:
     if not current or current in known:
         return 'ok'
     production = _is_production_like()
+    if not production and current in _PHANTOM_STAMP_REPAIRS:
+        return 'repair'
     if production or current not in _DELETED_PRE_SQUASH:
         raise AlembicOrphanStampError(
             f"alembic_version={current!r} is not a known revision in this "
@@ -213,20 +222,21 @@ def repair_orphan_stamp() -> bool:
     if action != 'repair':
         return False
 
+    target = _PHANTOM_STAMP_REPAIRS.get(current, _BASELINE)
     logger.warning(
         '[alembic] orphan stamp %s not in scripts; retargeting to %s '
         '(wipe/recreate DB if schema is incomplete)',
         current,
-        _BASELINE,
+        target,
     )
-    print(f'[DB] Alembic orphan stamp {current} → {_BASELINE} (prefer wipe+upgrade for local DBs)')
+    print(f'[DB] Alembic orphan stamp {current} → {target} (prefer wipe+upgrade for local DBs)')
     db_run(
         'UPDATE alembic_version SET version_num = %s WHERE version_num = %s',
-        (_BASELINE, current),
+        (target, current),
     )
     still = db_get('SELECT version_num FROM alembic_version LIMIT 1', ())
-    if (still or {}).get('version_num') != _BASELINE:
-        command.stamp(_config(), _BASELINE)
+    if (still or {}).get('version_num') != target:
+        command.stamp(_config(), target)
     return True
 
 
