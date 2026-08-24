@@ -48,6 +48,7 @@ CERT_SECTION_PATTERN = re.compile(
 
 SECTION_HEADERS = frozenset({
     'summary', 'objective', 'profile', 'experience', 'work experience',
+    'workexperience', 'professionalexperience',
     'professional experience', 'employment', 'education', 'skills', 'technical skills',
     'technical skill', 'core skills', 'core skill', 'key skills', 'key skill',
     'skill set', 'skills set', 'skills and abilities', 'abilities',
@@ -56,7 +57,7 @@ SECTION_HEADERS = frozenset({
     'certifications', 'certificates', 'certifications and licenses', 'licenses',
     'languages', 'awards', 'interests',
     'references', 'contact', 'resume', 'curriculum vitae', 'cv', 'about me',
-    'work history', 'qualifications', 'achievements',
+    'work history', 'qualification', 'qualifications', 'achievements',
     'internship', 'internships', 'internship experience', 'industrial training',
     'summer internship', 'trainings', 'training', 'apprenticeship',
     'internship / training',
@@ -454,6 +455,7 @@ def name_from_resume_filename(filename: str | None) -> str:
 DATE_RANGE_PATTERN = re.compile(
     r'(?i)('
     r'(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{4}'
+    r'|\d{1,2}[/\-]\d{1,2}[/\-]\d{4}'
     r'|\d{1,2}[/\-]\d{4}'
     r'|\d{4}[/\-]\d{1,2}'
     r'|\d{4}-\d{2}'
@@ -462,6 +464,7 @@ DATE_RANGE_PATTERN = re.compile(
     r'\s*(?:[-–—to]+|\s+to\s+)\s*'
     r'('
     r'(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{4}'
+    r'|\d{1,2}[/\-]\d{1,2}[/\-]\d{4}'
     r'|\d{1,2}[/\-]\d{4}'
     r'|\d{4}[/\-]\d{1,2}'
     r'|\d{4}-\d{2}'
@@ -550,6 +553,14 @@ def normalize_date_token(token: str) -> str:
         return s
     if re.match(r'^\d{4}$', s):
         return s
+    m = re.match(r'^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})$', s)
+    if m:
+        day, month, year = int(m.group(1)), int(m.group(2)), m.group(3)
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            return f'{year}-{month:02d}'
+        if 1 <= day <= 12 and 1 <= month <= 31:
+            # Ambiguous; prefer month-first when first token is 1-12
+            return f'{year}-{day:02d}'
     m = re.match(r'(?i)^(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(\d{4})$', s)
     if m:
         key = m.group(1).lower()
@@ -605,17 +616,29 @@ def compute_total_experience_years(experience: list[dict[str, Any]]) -> float | 
             continue
         start_tok = str(exp.get('from') or exp.get('start') or '').strip()
         end_tok = str(exp.get('to') or exp.get('end') or '').strip()
+        blob = ' '.join(
+            str(exp.get(k) or '')
+            for k in ('description', 'title', 'role', 'company')
+        )
         # Peel dates from description when structured dates missing (Excel safety net)
-        if not start_tok:
-            blob = ' '.join(
-                str(exp.get(k) or '')
-                for k in ('description', 'title', 'role', 'company')
-            )
+        if not start_tok or not end_tok:
             fr, to = extract_date_range_from_line(blob)
-            if fr:
+            if fr and not start_tok:
                 start_tok = fr
-                if to and not end_tok:
-                    end_tok = to
+            if to and not end_tok:
+                end_tok = to
+        if not start_tok:
+            dm = re.search(
+                r'(?i)\b(\d{1,2})\s*[-–—]?\s*(?:months?)\s*(?:tenure)?\b',
+                blob,
+            )
+            if dm:
+                total_months += int(dm.group(1))
+                continue
+        if not end_tok and (
+            exp.get('is_current') or exp.get('isCurrent')
+        ):
+            end_tok = 'Present'
         start = _parse_year_month(start_tok) if start_tok else None
         if re.match(r'(?i)^(present|current|now)$', end_tok):
             end = _parse_year_month('Present')
@@ -897,11 +920,13 @@ _LOCATION_TECH_NOISE = re.compile(
     r'(?i)\b(?:html|css|javascript|typescript|python|java|react|node\.?js|sql|aws|'
     r'docker|kubernetes|devops|ci/?cd|nlp|ml|ai|excel|bootstrap|bitbucket|postman|'
     r'jupyter|mongodb|postgresql|mysql|linux|git|github|vscode|vs\s*code|'
-    r'technical\s+support|incident\s+management|cloud\s+devops|net\s+development)\b'
+    r'ansible|patching|technical\s+support|incident\s+management|cloud\s+devops|'
+    r'net\s+development)\b'
 )
 _LOCATION_PROSE_NOISE = re.compile(
     r'(?i)\b(?:analyzed|building|practice|automation|dashboards?|binaries|'
-    r'process|workflow|objective|summary|experience\s+in|hands[- ]on)\b'
+    r'process|workflow|objective|summary|experience\s+in|hands[- ]on|'
+    r'communication|financial|curriculum|vitae|marketing|accounting)\b'
 )
 _KNOWN_LOCATION_CITIES = (
     'Mumbai', 'Delhi', 'New Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
@@ -911,7 +936,7 @@ _KNOWN_LOCATION_CITIES = (
     'Kochi', 'Chandigarh', 'Mysore', 'Mysuru', 'Visakhapatnam', 'Mehdipatnam',
     'Kalwa', 'Nashik', 'Nasik', 'Ambernath', 'Dombivli', 'Dombivili', 'Sindhudurg',
     'Sewree', 'Solapur', 'Kalyan', 'Vasai', 'Virar', 'Panvel', 'Aurangabad', 'Kolhapur',
-    'Bhubaneswar', 'Vellore', 'Berhampur', 'Kanpur', 'Mangalore',
+    'Bhubaneswar', 'Vellore', 'Berhampur', 'Kanpur', 'Mangalore', 'Shevgaon',
     'Austin', 'Seattle', 'San Francisco', 'New York', 'London',
     'Toronto', 'Singapore', 'Dubai',
 )
@@ -937,7 +962,7 @@ _INSTITUTE_CITY_PEEL = (
     (re.compile(r'(?i)\bnitk?\s+surathkal\b'), 'Mangalore'),
 )
 _KNOWN_REGIONS = frozenset({
-    'maharashtra', 'karnataka', 'tamil nadu', 'telangana', 'andhra pradesh',
+    'maharashtra', 'maharastra', 'karnataka', 'tamil nadu', 'telangana', 'andhra pradesh',
     'gujarat', 'rajasthan', 'uttar pradesh', 'west bengal', 'kerala', 'punjab',
     'haryana', 'odisha', 'india', 'usa', 'uk', 'uae', 'tx', 'ca', 'wa', 'ny',
 })
@@ -946,6 +971,25 @@ _KNOWN_REGIONS = frozenset({
 def known_location_cities() -> tuple[str, ...]:
     """Shared city allowlist for location heal / evidence / extract."""
     return _KNOWN_LOCATION_CITIES
+
+
+def location_tokens_in_source(value: str) -> list[str]:
+    """Canonical city plus spelling aliases so Nashik matches Nasik in source text."""
+    s = (value or '').strip()
+    if not s:
+        return []
+    out = [s]
+    low = s.lower()
+    canon = _LOCATION_ALIASES.get(low, s)
+    if canon not in out:
+        out.append(canon)
+    for alias, target in _LOCATION_ALIASES.items():
+        if target.lower() == low or target.lower() == canon.lower() or alias == low:
+            if alias not in {x.lower() for x in out}:
+                out.append(alias)
+            if target not in out:
+                out.append(target)
+    return out
 
 
 def canonicalize_location_city(value: str) -> str:
@@ -1031,8 +1075,13 @@ def is_plausible_location_value(value: str) -> bool:
         return False
     if low in (
         'education', 'experience', 'skills', 'summary', 'objective', 'projects',
-        'certifications', 'internship', 'profile',
+        'certifications', 'internship', 'profile', 'curriculum vitae', 'cv',
+        'resume',
     ):
+        return False
+    if low in _JOB_TITLE_NAME_BLOCKLIST:
+        return False
+    if _JOB_TITLE_CUE.search(s) and not any(c.lower() in low for c in _KNOWN_LOCATION_CITIES):
         return False
     # Reject person-name lines mistaken for location (header bleed)
     if (
@@ -1065,13 +1114,13 @@ def is_plausible_location_value(value: str) -> bool:
         a, b = m.group(1).strip().lower(), m.group(2).strip().lower()
         if _LOCATION_TECH_NOISE.search(a) or _LOCATION_TECH_NOISE.search(b):
             return False
+        if _LOCATION_PROSE_NOISE.search(a) or _LOCATION_PROSE_NOISE.search(b):
+            return False
         if a in _KNOWN_REGIONS or b in _KNOWN_REGIONS:
             return True
         if any(c.lower() == a or c.lower() == b for c in _KNOWN_LOCATION_CITIES):
             return True
-        # Short Title Case place names without tech tokens
-        if len(a.split()) <= 3 and len(b.split()) <= 3 and not re.search(r'\d', s):
-            return a[0].isalpha() and b[0].isalpha() and len(a) >= 3 and len(b) >= 2
+        # Unknown Title-Case pairs (skill/soft-skill) are not cities
         return False
     # Single short place token
     if re.match(r'^[A-Z][a-zA-Z .]{1,40}$', s) and len(s.split()) <= 4:

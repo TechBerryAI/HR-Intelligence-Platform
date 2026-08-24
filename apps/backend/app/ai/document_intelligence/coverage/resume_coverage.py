@@ -20,7 +20,7 @@ from app.ai.document_intelligence.validation.engine import validate_phone
 
 # VALIDATION_FIX_experience_section_evidence
 _EXP_SECTION_RE = re.compile(
-    r'(?im)^(?:\*\*)?(?:work\s+experience|professional\s+experience|experience|'
+    r'(?im)^(?:\*\*)?(?:work\s*experience|professional\s*experience|experience|'
     r'employment|work\s+history|internships?|internship\s+experience|'
     r'industrial\s+trainings?|summer\s+internship|internship\s*/\s*training|'
     r'trainings?|apprenticeships?)\b'
@@ -76,7 +76,7 @@ def _has_education_evidence(text: str) -> bool:
 def _experience_section_text(text: str) -> str:
     """Slice Experience/Internship body from raw text for grounded re-parse."""
     m = re.search(
-        r'(?ims)(?:^|\n)\s*(?:\*\*)?(?:work\s+experience|professional\s+experience|'
+        r'(?ims)(?:^|\n)\s*(?:\*\*)?(?:work\s*experience|professional\s*experience|'
         r'experience|employment|work\s+history|internships?|internship\s+experience|'
         r'industrial\s+trainings?|summer\s+internship|internship\s*/\s*training[^\n]*|'
         r'trainings?|apprenticeships?)\b[^\n]*\n'
