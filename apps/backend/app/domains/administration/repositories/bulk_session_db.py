@@ -322,6 +322,40 @@ def reclaim_stale_file_leases(stale_seconds: int = DEFAULT_FILE_LEASE_SECONDS) -
     return int((result or {}).get('changes') or 0)
 
 
+def reclaim_session_running_files(session_id: str) -> int:
+    """Return all Running files for a session to Queued (used on pause)."""
+    result = db_run(
+        """
+        UPDATE bulk_parse_files
+        SET status = 'Queued',
+            leased_by = NULL,
+            leased_until = NULL,
+            updated_at = NOW()
+        WHERE session_id = ? AND status = 'Running'
+        """,
+        (session_id,),
+    )
+    return int((result or {}).get('changes') or 0)
+
+
+def mark_session_paused(session_id: str, *, message: str | None = None) -> bool:
+    """Mark session Paused and clear the worker lease."""
+    result = db_run(
+        """
+        UPDATE bulk_parse_sessions
+        SET status = 'Paused',
+            leased_by = NULL,
+            leased_until = NULL,
+            updated_at = NOW(),
+            error_summary = COALESCE(?, error_summary)
+        WHERE id = ?
+          AND status IN ('Running', 'Paused', 'Queued')
+        """,
+        (message, session_id),
+    )
+    return bool(result and (result.get('changes') or 0) > 0)
+
+
 def claim_session_lease(
     session_id: str,
     worker_id: str,
@@ -332,7 +366,7 @@ def claim_session_lease(
     """
     Atomically claim a session for processing.
 
-    Wins when status is Queued, or Running with an expired/missing lease (crash recovery).
+    Wins when status is Queued or Paused, or Running with an expired/missing lease.
     """
     until = _lease_until(lease_seconds)
     if total_files is not None:
@@ -347,7 +381,7 @@ def claim_session_lease(
                 total_files = COALESCE(?, total_files)
             WHERE id = ?
               AND (
-                status = 'Queued'
+                status IN ('Queued', 'Paused')
                 OR (
                   status = 'Running'
                   AND (leased_until IS NULL OR leased_until < NOW())
@@ -367,7 +401,7 @@ def claim_session_lease(
                 updated_at = NOW()
             WHERE id = ?
               AND (
-                status = 'Queued'
+                status IN ('Queued', 'Paused')
                 OR (
                   status = 'Running'
                   AND (leased_until IS NULL OR leased_until < NOW())
@@ -481,6 +515,7 @@ def get_session_progress(session_id: str) -> dict[str, Any] | None:
         "Completed": "completed",
         "Failed": "failed",
         "Cancelled": "cancelled",
+        "Paused": "paused",
     }
     failed_details = []
     for r in failed_rows:
@@ -509,6 +544,7 @@ def get_session_progress(session_id: str) -> dict[str, Any] | None:
         r.get("original_filename") for r in pending_rows if r.get("original_filename")
     ]
     # Worker died after the last file: session can stay Running with an empty queue.
+    # Do not auto-complete paused sessions that still have work left.
     if mapped_status in ("started", "pending") and not queued_filenames:
         mapped_status = "completed"
     return {

@@ -28,7 +28,10 @@ export default function DetailedAnalysisPanel({
   const panelBg = enterprise
     ? 'border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]'
     : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40'
-  const tableHead = enterprise ? 'text-[var(--ei-text-muted)]' : 'text-slate-500 dark:text-slate-400'
+  const tableHead = enterprise ? 'text-[var(--ei-text-label)]' : 'text-slate-500 dark:text-slate-400'
+  const ruleCardClass = enterprise
+    ? 'border-[var(--ei-border-primary)] bg-[rgba(255,255,255,0.06)]'
+    : 'border-slate-100 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60'
   const rowBorder = enterprise ? 'border-[var(--ei-border-primary)]' : 'border-slate-100 dark:border-slate-800'
 
   const outcomeTone =
@@ -325,16 +328,16 @@ export default function DetailedAnalysisPanel({
       {rulesApplied.length > 0 && (
         <section className={`rounded-[14px] border p-4 ${panelBg}`}>
           <p className={labelClass}>How we decide</p>
-          <ul className={`mt-3 grid gap-2 sm:grid-cols-2 text-xs ${mutedClass}`}>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2 text-xs">
             {rulesApplied.map((rule, i) => (
               <li
                 key={i}
-                className={`flex gap-2 rounded-[10px] border px-3 py-2.5 leading-relaxed ${enterprise ? 'border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)]' : 'border-slate-100 bg-slate-50'}`}
+                className={`flex gap-2 rounded-[10px] border px-3 py-2.5 leading-relaxed ${ruleCardClass}`}
               >
-                <span className={`shrink-0 font-semibold tabular-nums ${enterprise ? 'text-[var(--ei-tone-info)]' : 'text-sky-600'}`}>
+                <span className={`shrink-0 font-semibold tabular-nums ${enterprise ? 'text-[var(--ei-tone-info)]' : 'text-sky-600 dark:text-sky-400'}`}>
                   {String(i + 1).padStart(2, '0')}
                 </span>
-                <span>{rule}</span>
+                <span className={bodyClass}>{rule}</span>
               </li>
             ))}
           </ul>
