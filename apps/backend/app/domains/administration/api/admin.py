@@ -11,6 +11,8 @@ from app.domains.administration.services.bulk_parsing import (
     create_job as bulk_create_job,
     upload_chunk as bulk_upload_chunk,
     start_job as bulk_start_job,
+    pause_job as bulk_pause_job,
+    resume_job as bulk_resume_job,
     upload_files as bulk_upload,
     get_progress as bulk_progress,
     stream_download as bulk_stream_download,
@@ -163,6 +165,46 @@ def bulk_parse_start(job_id):
         if append_form is not None:
             append = append_form.lower() == 'true'
     success, result = bulk_start_job(job_id, append=append)
+    if not success:
+        return jsonify(result), 400
+    return jsonify(result), 200
+
+
+@admin_bp.route('/bulk-parse/pause/<job_id>', methods=['POST'])
+@authenticate_token
+@require_recruiter
+def bulk_parse_pause(job_id):
+    """Pause a running bulk parse job (finishes in-flight files, then stops)."""
+    if is_read_only(request.user):
+        return jsonify({'error': 'Read-only access'}), 403
+    from app.workers.bulk_parser import get_local_progress
+
+    ok_local, local_job = get_local_progress(job_id, check_only=True)
+    if ok_local:
+        started_by = local_job.get('started_by')
+        if started_by and not can_access_bulk_session(request.user, started_by):
+            return jsonify({'error': 'Access denied'}), 403
+    success, result = bulk_pause_job(job_id)
+    if not success:
+        return jsonify(result), 400
+    return jsonify(result), 200
+
+
+@admin_bp.route('/bulk-parse/resume/<job_id>', methods=['POST'])
+@authenticate_token
+@require_recruiter
+def bulk_parse_resume(job_id):
+    """Resume a paused bulk parse job."""
+    if is_read_only(request.user):
+        return jsonify({'error': 'Read-only access'}), 403
+    from app.workers.bulk_parser import get_local_progress
+
+    ok_local, local_job = get_local_progress(job_id, check_only=True)
+    if ok_local:
+        started_by = local_job.get('started_by')
+        if started_by and not can_access_bulk_session(request.user, started_by):
+            return jsonify({'error': 'Access denied'}), 403
+    success, result = bulk_resume_job(job_id)
     if not success:
         return jsonify(result), 400
     return jsonify(result), 200

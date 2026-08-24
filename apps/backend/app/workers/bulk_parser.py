@@ -13,7 +13,7 @@ import threading
 import time
 import uuid
 import zipfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from pathlib import Path
 from typing import Any
 
@@ -1454,18 +1454,25 @@ def _process_one_file_inner(
 
 
 def _load_staged_files(job_id: str) -> list[tuple[str, Path, str | None]]:
-    """Return (filename, path, file_id) from durable DB + disk staging."""
-    from app.domains.administration.repositories.bulk_session_db import list_queued_filenames, get_file_id_by_name
+    """Return (filename, path, file_id) for Queued work only (DB-first)."""
+    from app.domains.administration.repositories.bulk_session_db import (
+        get_file_id_by_name,
+        list_queued_filenames,
+    )
 
     names: list[str] = []
-    with _local_jobs_lock:
-        job = _local_jobs.get(job_id) or {}
-        names = list(job.get('staged_filenames') or [])
+    try:
+        names = list_queued_filenames(job_id)
+    except Exception:
+        names = []
     if not names:
-        try:
-            names = list_queued_filenames(job_id)
-        except Exception:
-            names = []
+        with _local_jobs_lock:
+            job = _local_jobs.get(job_id) or {}
+            done = set(job.get('success_filenames') or []) | set(job.get('failed_filenames') or [])
+            names = [
+                n for n in (job.get('staged_filenames') or [])
+                if n and n not in done
+            ]
     out: list[tuple[str, Path, str | None]] = []
     for name in names:
         p = _staging_dir(job_id) / name
@@ -1480,12 +1487,27 @@ def _load_staged_files(job_id: str) -> list[tuple[str, Path, str | None]]:
     return out
 
 
+def _job_stop_reason(job_id: str) -> str | None:
+    """Return 'paused' / 'cancelled' when the worker should stop claiming new files."""
+    with _local_jobs_lock:
+        j = _local_jobs.get(job_id) or {}
+        status = j.get('status')
+    if status == 'paused':
+        return 'paused'
+    if status == 'cancelled':
+        return 'cancelled'
+    return None
+
+
 def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str | None = None) -> None:
     """Background: process staged files in parallel, update progress, write Excel."""
     from app.domains.administration.repositories.bulk_session_db import (
         claim_file_for_processing,
         finalize_session,
+        get_session_progress,
         heartbeat_session_lease,
+        mark_session_paused,
+        reclaim_session_running_files,
         reclaim_stale_file_leases,
         update_file_status,
         update_session_progress,
@@ -1499,7 +1521,7 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
 
     with _local_jobs_lock:
         job = _local_jobs.get(job_id)
-    if job and job.get('status') == 'cancelled':
+    if job and job.get('status') in ('cancelled', 'paused'):
         return
     # Ensure a local cache shell exists for progress UI even after worker restart.
     if not job:
@@ -1510,6 +1532,31 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
                 job['status'] = 'started'
                 job['started_at'] = started_at
 
+    # Seed counters from durable progress so resume does not wipe earlier totals.
+    success_count = 0
+    failed_count = 0
+    try:
+        db_prog = get_session_progress(job_id) or {}
+        success_count = len(db_prog.get('success_filenames') or [])
+        failed_count = int(db_prog.get('failed_files') or 0)
+        with _local_jobs_lock:
+            if job_id in _local_jobs:
+                _local_jobs[job_id]['success_filenames'] = list(
+                    db_prog.get('success_filenames') or []
+                )
+                _local_jobs[job_id]['failed_filenames'] = list(
+                    db_prog.get('failed_filenames') or []
+                )
+                _local_jobs[job_id]['failed_details'] = list(
+                    db_prog.get('failed_details') or []
+                )
+                _local_jobs[job_id]['processed_files'] = success_count + failed_count
+                _local_jobs[job_id]['failed_files'] = failed_count
+                if db_prog.get('total_files'):
+                    _local_jobs[job_id]['total_files'] = db_prog['total_files']
+    except Exception:
+        pass
+
     files_list = _load_staged_files(job_id)
     expected_filenames: list[str] = [item[0] for item in files_list]
     with _local_jobs_lock:
@@ -1517,11 +1564,9 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
         for name in list(job_now.get('staged_filenames') or []):
             if name and name not in expected_filenames:
                 expected_filenames.append(name)
-    total = len(files_list)
     results: list[dict] = []
-    success_count = 0
-    failed_count = 0
-    max_workers = min(BULK_PARSE_MAX_WORKERS, max(1, total))
+    max_workers = min(BULK_PARSE_MAX_WORKERS, max(1, len(files_list) or 1))
+    stop_reason: str | None = None
 
     def _run_one(item: tuple[str, Path, str | None]):
         filename, path, file_id = item
@@ -1530,56 +1575,111 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
                 return (filename, None, False, 'skipped-unclaimed', 'skipped', False)
         return (*_process_one_file((filename, path, job_id)), True)
 
+    pending = list(files_list)
+    inflight: dict = {}
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_file = {
-            executor.submit(_run_one, item): item[0]
-            for item in files_list
-        }
-        for future in as_completed(future_to_file):
-            with _local_jobs_lock:
-                j = _local_jobs.get(job_id)
-            if j and j.get('status') == 'cancelled':
+        while pending or inflight:
+            stop_reason = _job_stop_reason(job_id)
+            while (
+                pending
+                and len(inflight) < max_workers
+                and stop_reason is None
+            ):
+                item = pending.pop(0)
+                fut = executor.submit(_run_one, item)
+                inflight[fut] = item[0]
+                stop_reason = _job_stop_reason(job_id)
+
+            if not inflight:
                 break
-            try:
-                heartbeat_session_lease(job_id, wid)
-            except Exception:
-                pass
-            filename, row, is_failed, message, code, claimed = future.result()
-            if not claimed or code == 'skipped':
+
+            done_set, _ = wait(
+                list(inflight.keys()),
+                timeout=0.5,
+                return_when=FIRST_COMPLETED,
+            )
+            if not done_set:
+                try:
+                    heartbeat_session_lease(job_id, wid)
+                except Exception:
+                    pass
                 continue
-            if is_failed:
-                failed_count += 1
-                results.append(
-                    row
-                    if row
-                    else _failed_excel_row(filename, code=code, message=message)
+
+            for future in done_set:
+                inflight.pop(future, None)
+                try:
+                    heartbeat_session_lease(job_id, wid)
+                except Exception:
+                    pass
+                filename, row, is_failed, message, code, claimed = future.result()
+                if not claimed or code == 'skipped':
+                    continue
+                if is_failed:
+                    failed_count += 1
+                    results.append(
+                        row
+                        if row
+                        else _failed_excel_row(filename, code=code, message=message)
+                    )
+                    update_file_status(job_id, filename, 'Failed', error_message=message)
+                    with _local_jobs_lock:
+                        if job_id in _local_jobs:
+                            _local_jobs[job_id].setdefault('failed_filenames', []).append(filename)
+                            _local_jobs[job_id].setdefault('failed_details', []).append(
+                                {'filename': filename, 'error': message, 'code': code}
+                            )
+                else:
+                    if row:
+                        results.append(row)
+                    success_count += 1
+                    notes = (row or {}).get('ParseNotes') or None
+                    update_file_status(job_id, filename, 'Completed', error_message=notes)
+                    with _local_jobs_lock:
+                        if job_id in _local_jobs:
+                            _local_jobs[job_id].setdefault('success_filenames', []).append(filename)
+                done = success_count + failed_count
+                update_session_progress(job_id, done, success_count, failed_count)
+                with _local_jobs_lock:
+                    if job_id in _local_jobs:
+                        _local_jobs[job_id]['processed_files'] = done
+                        _local_jobs[job_id]['failed_files'] = failed_count
+                        _local_jobs[job_id]['message'] = message
+                if results and done > 0 and done % BULK_EXCEL_CHECKPOINT_EVERY == 0:
+                    _persist_excel(job_id, list(results), append=append)
+
+            if stop_reason and not inflight:
+                break
+
+    if results:
+        _persist_excel(job_id, results, append=append)
+
+    if stop_reason == 'paused':
+        try:
+            reclaim_session_running_files(job_id)
+        except Exception:
+            pass
+        msg = f'Paused: {success_count} successful, {failed_count} failed'
+        try:
+            mark_session_paused(job_id, message=msg)
+        except Exception:
+            pass
+        with _local_jobs_lock:
+            if job_id in _local_jobs:
+                _local_jobs[job_id]['status'] = 'paused'
+                _local_jobs[job_id]['processed_files'] = success_count + failed_count
+                _local_jobs[job_id]['failed_files'] = failed_count
+                _local_jobs[job_id]['message'] = msg
+        return
+
+    if stop_reason == 'cancelled':
+        with _local_jobs_lock:
+            if job_id in _local_jobs:
+                _local_jobs[job_id]['status'] = 'cancelled'
+                _local_jobs[job_id]['message'] = (
+                    f'Cancelled: {success_count} successful, {failed_count} failed'
                 )
-                update_file_status(job_id, filename, 'Failed', error_message=message)
-                with _local_jobs_lock:
-                    if job_id in _local_jobs:
-                        _local_jobs[job_id].setdefault('failed_filenames', []).append(filename)
-                        _local_jobs[job_id].setdefault('failed_details', []).append(
-                            {'filename': filename, 'error': message, 'code': code}
-                        )
-            else:
-                if row:
-                    results.append(row)
-                success_count += 1
-                notes = (row or {}).get('ParseNotes') or None
-                update_file_status(job_id, filename, 'Completed', error_message=notes)
-                with _local_jobs_lock:
-                    if job_id in _local_jobs:
-                        _local_jobs[job_id].setdefault('success_filenames', []).append(filename)
-            done = success_count + failed_count
-            update_session_progress(job_id, done, success_count, failed_count)
-            with _local_jobs_lock:
-                if job_id in _local_jobs:
-                    _local_jobs[job_id]['processed_files'] = done
-                    _local_jobs[job_id]['failed_files'] = failed_count
-                    _local_jobs[job_id]['message'] = message
-            # Checkpoint Excel during long runs so progress survives restarts
-            if results and done > 0 and done % BULK_EXCEL_CHECKPOINT_EVERY == 0:
-                _persist_excel(job_id, list(results), append=append)
+        return
 
     _reconcile_missing_excel_rows(results, expected_filenames)
     extra_failed = sum(
@@ -1597,14 +1697,14 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
             _local_jobs[job_id]['processed_files'] = success_count + failed_count
             _local_jobs[job_id]['failed_files'] = failed_count
             _local_jobs[job_id]['results'] = results
-            _local_jobs[job_id]['message'] = f'Completed: {success_count} successful, {failed_count} failed'
+            _local_jobs[job_id]['message'] = (
+                f'Completed: {success_count} successful, {failed_count} failed'
+            )
 
-    if results:
-        _persist_excel(job_id, results, append=append)
-    elif append and _export_path(job_id).is_file():
-        pass  # keep existing workbook
-    else:
+    if not results and not (append and _export_path(job_id).is_file()):
         _persist_excel(job_id, [], append=False)
+    elif results:
+        _persist_excel(job_id, results, append=append)
 
     finalize_session(job_id, started_at, success_count, failed_count)
 
@@ -1814,52 +1914,80 @@ def start_staged_job(job_id: str, append: bool | None = None) -> tuple[bool, dic
     except Exception:
         db_names = []
 
-    with _local_jobs_lock:
-        if not job:
+    db_prog = None
+    try:
+        db_prog = get_session_progress(job_id)
+    except Exception:
+        db_prog = None
+
+    if not job:
+        owner = None
+        try:
+            owner = get_session_owner(job_id)
+        except Exception:
             owner = None
-            try:
-                owner = get_session_owner(job_id)
-            except Exception:
-                owner = None
-            if not owner and not db_names:
-                progress = None
-                try:
-                    progress = get_session_progress(job_id)
-                except Exception:
-                    progress = None
-                if not progress:
-                    return False, {'error': 'Job not found'}
-            job = _ensure_job(job_id, started_by=owner)
+        if not owner and not db_names and not db_prog:
+            return False, {'error': 'Job not found'}
+        job = _ensure_job(job_id, started_by=owner or (db_prog or {}).get('started_by'))
+    if not job:
+        return False, {'error': 'Job not found'}
+
+    use_append = False
+    started_at = time.time()
+    total = 0
+    was_resume = False
+
+    with _local_jobs_lock:
+        job = _local_jobs.get(job_id)
         if not job:
             return False, {'error': 'Job not found'}
         if job.get('status') == 'completed':
             return False, {'error': 'Job already completed'}
-        # Prefer durable filename list from DB; fall back to memory / disk.
-        names = list(job.get('staged_filenames') or [])
-        if db_names:
-            names = db_names
-            job['staged_filenames'] = list(db_names)
+        if job.get('status') == 'started':
+            return False, {
+                'error': 'Job is already being processed',
+                'status': 'started',
+            }
+        # Prefer durable Queued filename list from DB for remaining work.
+        names = list(db_names) if db_names else []
         if not names:
-            # Disk fallback for recovery when DB rows exist but names empty
+            names = list(job.get('staged_filenames') or [])
+        if not names:
             staging = _staging_dir(job_id)
             if staging.is_dir():
                 names = sorted(p.name for p in staging.iterdir() if p.is_file())
                 job['staged_filenames'] = names
-        total = len(names)
-        if total == 0:
+        if not names and not (db_prog and (db_prog.get('processed_files') or 0) > 0):
             return False, {'error': 'No files uploaded for this job'}
+        if not names:
+            return False, {'error': 'No remaining files to process'}
         if append is not None:
             job['append'] = bool(append)
-        use_append = bool(job.get('append'))
+        use_append = bool(job.get('append')) or bool(db_prog and (db_prog.get('processed_files') or 0) > 0)
         started_at = time.time()
+        was_resume = job.get('status') == 'paused' or (
+            bool(db_prog) and db_prog.get('status') == 'paused'
+        )
         job['status'] = 'started'
         job['started_at'] = started_at
-        job['processed_files'] = 0
-        job['failed_files'] = 0
-        job['failed_filenames'] = []
-        job['success_filenames'] = []
-        job['results'] = []
-        job['message'] = 'Processing...'
+        if not was_resume:
+            job['processed_files'] = 0
+            job['failed_files'] = 0
+            job['failed_filenames'] = []
+            job['success_filenames'] = []
+            job['failed_details'] = []
+            job['results'] = []
+        else:
+            job['processed_files'] = int(db_prog.get('processed_files') or 0) if db_prog else job.get('processed_files', 0)
+            job['failed_files'] = int(db_prog.get('failed_files') or 0) if db_prog else job.get('failed_files', 0)
+            if db_prog:
+                job['success_filenames'] = list(db_prog.get('success_filenames') or [])
+                job['failed_filenames'] = list(db_prog.get('failed_filenames') or [])
+                job['failed_details'] = list(db_prog.get('failed_details') or [])
+        job['message'] = 'Resuming...' if was_resume else 'Processing...'
+        total = int((db_prog or {}).get('total_files') or 0) or len(
+            job.get('staged_filenames') or names
+        )
         job['total_files'] = total
 
     worker_id = f'pid-{os.getpid()}-{uuid.uuid4().hex[:8]}'
@@ -1868,7 +1996,7 @@ def start_staged_job(job_id: str, append: bool | None = None) -> tuple[bool, dic
         with _local_jobs_lock:
             j = _local_jobs.get(job_id)
             if j and j.get('status') == 'started':
-                j['status'] = 'pending'
+                j['status'] = 'paused' if was_resume else 'pending'
                 j['message'] = 'Waiting for worker lease...'
         return False, {
             'error': 'Job is already being processed by another worker',
@@ -1885,8 +2013,88 @@ def start_staged_job(job_id: str, append: bool | None = None) -> tuple[bool, dic
         'job_id': job_id,
         'total_files': total,
         'status': 'started',
-        'message': 'Local bulk parsing started.',
+        'message': 'Local bulk parsing resumed.' if was_resume else 'Local bulk parsing started.',
     }
+
+
+def pause_local_job(job_id: str) -> tuple[bool, dict]:
+    """Ask the running worker to pause after in-flight files finish."""
+    from app.domains.administration.repositories.bulk_session_db import (
+        get_session_progress,
+        mark_session_paused,
+        reclaim_session_running_files,
+    )
+
+    with _local_jobs_lock:
+        job = _local_jobs.get(job_id)
+        if job:
+            status = job.get('status')
+            if status == 'paused':
+                return True, {
+                    'job_id': job_id,
+                    'status': 'paused',
+                    'message': job.get('message') or 'Already paused',
+                }
+            if status in ('completed', 'failed', 'cancelled'):
+                return False, {'error': f'Cannot pause a {status} job'}
+            if status == 'started':
+                job['status'] = 'paused'
+                job['message'] = 'Pausing after current file(s)…'
+                return True, {
+                    'job_id': job_id,
+                    'status': 'paused',
+                    'message': 'Pause requested — finishing in-flight file(s), then stopping.',
+                }
+            if status not in ('pending',):
+                return False, {'error': f'Cannot pause job in status {status}'}
+
+    db_prog = get_session_progress(job_id)
+    if not db_prog and not job:
+        return False, {'error': 'Job not found'}
+    mapped = (db_prog or {}).get('status')
+    if mapped == 'paused':
+        return True, {'job_id': job_id, 'status': 'paused', 'message': 'Already paused'}
+    if mapped in ('completed', 'failed', 'cancelled'):
+        return False, {'error': f'Cannot pause a {mapped} job'}
+
+    try:
+        reclaim_session_running_files(job_id)
+        mark_session_paused(job_id, message='Paused')
+    except Exception as exc:
+        return False, {'error': f'Failed to pause session: {exc}'}
+
+    with _local_jobs_lock:
+        j = _local_jobs.get(job_id)
+        if j:
+            j['status'] = 'paused'
+            j['message'] = 'Paused'
+
+    return True, {
+        'job_id': job_id,
+        'status': 'paused',
+        'message': 'Parsing paused.',
+    }
+
+
+def resume_local_job(job_id: str, append: bool | None = None) -> tuple[bool, dict]:
+    """Resume a paused job (process remaining Queued files)."""
+    with _local_jobs_lock:
+        job = _local_jobs.get(job_id)
+        if job and job.get('status') == 'started':
+            return False, {'error': 'Job is already running', 'status': 'started'}
+        if job and job.get('status') == 'completed':
+            return False, {'error': 'Job already completed'}
+    try:
+        from app.domains.administration.repositories.bulk_session_db import (
+            reclaim_session_running_files,
+            reclaim_stale_file_leases,
+        )
+
+        reclaim_stale_file_leases()
+        reclaim_session_running_files(job_id)
+    except Exception:
+        pass
+    return start_staged_job(job_id, append=True if append is None else append)
 
 
 def start_local_job(files_list: list[tuple[str, bytes]], started_by=None, append: bool = False) -> tuple[str, dict]:

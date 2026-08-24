@@ -86,6 +86,20 @@ def start_job(job_id: str, append: bool | None = None):
     return start_staged_job(job_id, append=append)
 
 
+def pause_job(job_id: str):
+    """Pause a running local bulk job after in-flight files finish."""
+    from app.workers.bulk_parser import pause_local_job
+
+    return pause_local_job(job_id)
+
+
+def resume_job(job_id: str, append: bool | None = None):
+    """Resume a paused local bulk job."""
+    from app.workers.bulk_parser import resume_local_job
+
+    return resume_local_job(job_id, append=append)
+
+
 def upload_files(files_list, output_filename=None, append=False, started_by=None):
     """
     Try external Bulk-Resume-Parser first; on connection failure use local bulk parsing.

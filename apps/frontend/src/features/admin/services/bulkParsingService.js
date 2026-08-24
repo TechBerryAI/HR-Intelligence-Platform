@@ -173,6 +173,20 @@ export async function getBulkProgress(jobId) {
   })
 }
 
+/** Pause a running bulk job (finishes in-flight files, then stops). */
+export async function pauseBulkJob(jobId) {
+  return apiRequest(`/api/admin/bulk-parse/pause/${jobId}`, {
+    method: 'POST',
+  })
+}
+
+/** Resume a paused bulk job. */
+export async function resumeBulkJob(jobId) {
+  return apiRequest(`/api/admin/bulk-parse/resume/${jobId}`, {
+    method: 'POST',
+  })
+}
+
 /** Attempt one coordinated refresh after an auth-looking progress failure. */
 export async function refreshForBulkPoll() {
   return tryRefresh()
