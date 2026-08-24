@@ -47,6 +47,44 @@ EXCEL_HEADERS = [
     'ParseStatus',
     'ParseNotes',
 ]
+FIELD_TRACE_HEADERS = [
+    'Filename',
+    'Field',
+    'ExcelValue',
+    'InResume',
+    'Coverage',
+    'Verdict',
+    'Note',
+]
+_TRACE_CORE_FIELDS = (
+    'name',
+    'email',
+    'phone',
+    'location',
+    'skills',
+    'education',
+    'experience',
+    'years',
+)
+_TRACE_EXCEL_COL = {
+    'name': 'Name',
+    'email': 'Email',
+    'phone': 'Phone',
+    'location': 'Current Location',
+    'skills': 'Skills',
+    'education': 'Education',
+    'experience': 'Experience',
+    'years': 'Total Experience Years',
+    'preferred_location': 'Preferred Location',
+}
+_TRACE_COVERAGE_FIELD = {
+    'name': 'fullName',
+    'email': 'email',
+    'phone': 'phone',
+    'location': 'location',
+    'education': 'education',
+    'experience': 'experience',
+}
 
 BULK_OCR_RETRY_DPI = 300
 BULK_MIN_TEXT_CHARS = 30
@@ -184,7 +222,7 @@ def _persist_excel(job_id: str, rows: list[dict], append: bool = False) -> None:
         path = _export_path(job_id)
         if append and path.is_file():
             existing = _read_excel_rows(path)
-            # Prefer newer rows for same Filename
+            # Prefer newer rows for same Filename (includes _field_trace)
             by_name = {r.get('Filename'): r for r in existing if r.get('Filename')}
             for r in rows:
                 by_name[r.get('Filename')] = r
@@ -196,16 +234,11 @@ def _persist_excel(job_id: str, rows: list[dict], append: bool = False) -> None:
         log_unexpected('local_bulk_parser.persist_excel', e)
 
 
-def _read_excel_rows(path: Path) -> list[dict]:
-    from openpyxl import load_workbook
-
-    wb = load_workbook(path, read_only=True, data_only=True)
-    ws = wb.active
+def _sheet_to_dicts(ws) -> list[dict]:
     rows_iter = ws.iter_rows(values_only=True)
     try:
         headers = [str(h) if h is not None else '' for h in next(rows_iter)]
     except StopIteration:
-        wb.close()
         return []
     out = []
     for vals in rows_iter:
@@ -216,8 +249,30 @@ def _read_excel_rows(path: Path) -> list[dict]:
             row[h] = vals[i] if i < len(vals) and vals[i] is not None else ''
         if any(str(v).strip() for v in row.values()):
             out.append(row)
-    wb.close()
     return out
+
+
+def _read_excel_rows(path: Path) -> list[dict]:
+    from openpyxl import load_workbook
+
+    wb = load_workbook(path, read_only=True, data_only=True)
+    try:
+        resumes_ws = wb['Resumes'] if 'Resumes' in wb.sheetnames else wb.active
+        out = _sheet_to_dicts(resumes_ws)
+        traces_by_file: dict[str, list[dict]] = {}
+        if 'Field Trace' in wb.sheetnames:
+            for t in _sheet_to_dicts(wb['Field Trace']):
+                fn = str(t.get('Filename') or '')
+                if not fn:
+                    continue
+                traces_by_file.setdefault(fn, []).append(t)
+        for row in out:
+            fn = str(row.get('Filename') or '')
+            if fn and fn in traces_by_file:
+                row['_field_trace'] = traces_by_file[fn]
+        return out
+    finally:
+        wb.close()
 
 
 def _as_text(value: Any) -> str:
@@ -283,8 +338,367 @@ def _skill_to_str(s: Any) -> str:
     return _as_text(s)
 
 
-def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
-    """Flatten one TOON resume to a row dict for Excel; prefer Form DTO for location/education."""
+def _form_get(form: Any, *names: str, default: Any = None) -> Any:
+    if form is None:
+        return default
+    for name in names:
+        if isinstance(form, dict):
+            if name in form and form[name] not in (None,):
+                return form[name]
+        else:
+            if hasattr(form, name):
+                return getattr(form, name)
+    return default
+
+
+def _form_trace_reason(form: Any, form_field: str) -> str:
+    traces = _form_get(form, 'trace', default=None)
+    if not traces:
+        return ''
+    for t in traces:
+        if isinstance(t, dict):
+            if str(t.get('form_field') or '') == form_field:
+                return str(t.get('reason') or '')
+        else:
+            if getattr(t, 'form_field', '') == form_field:
+                return str(getattr(t, 'reason', '') or '')
+    return ''
+
+
+def _coverage_map(form: Any) -> dict[str, dict]:
+    rows = _form_get(form, 'coverage', default=None)
+    if not isinstance(rows, list):
+        return {}
+    out: dict[str, dict] = {}
+    for c in rows:
+        if not isinstance(c, dict):
+            continue
+        field = str(c.get('field') or '')
+        if field:
+            out[field] = c
+    return out
+
+
+def _coverage_report_from_form(form: Any):
+    from app.ai.document_intelligence.coverage.jd_coverage import CoverageReport, FieldCoverage
+
+    fields = []
+    for c in _coverage_map(form).values():
+        fields.append(
+            FieldCoverage(
+                field=str(c.get('field') or ''),
+                status=c.get('status') or 'missing_no_evidence',
+                evidence=bool(c.get('evidence')),
+                detail=str(c.get('detail') or ''),
+            )
+        )
+    return CoverageReport(fields=fields)
+
+
+def _location_value_ok(value: str) -> bool:
+    try:
+        from app.ai.parser.enrichment.resume_text_inference import is_plausible_location_value
+
+        return is_plausible_location_value(value)
+    except Exception:
+        return bool((value or '').strip())
+
+
+def _excel_value_in_resume(value: str, raw_text: str, field: str) -> bool:
+    v = (value or '').strip()
+    src = raw_text or ''
+    if not v or not src:
+        return False
+    if field == 'phone':
+        digits = re.sub(r'\D', '', v)
+        src_digits = re.sub(r'\D', '', src)
+        return len(digits) >= 8 and digits[-10:] in src_digits
+    if field == 'email':
+        return v.lower() in src.lower()
+    if field == 'years':
+        return bool(
+            re.search(
+                r'(?i)\b(?:19|20)\d{2}\b|\b\d{1,2}(?:\.\d)?\+?\s*(?:years?|yrs?)\b',
+                src,
+            )
+        )
+    from app.ai.document_intelligence.experience_quality import _value_in_source
+
+    if field in ('location', 'preferred_location'):
+        from app.ai.parser.enrichment.resume_text_inference import location_tokens_in_source
+
+        return any(_value_in_source(tok, src) for tok in location_tokens_in_source(v))
+    if field == 'skills':
+        toks = [t.strip() for t in re.split(r'[,;/|]', v) if t.strip()]
+        if not toks:
+            return False
+        hits = sum(1 for t in toks if _value_in_source(t, src))
+        return hits >= max(1, (len(toks) + 1) // 2)
+    return _value_in_source(v, src)
+
+
+def _source_has_field_evidence(field: str, raw_text: str, coverage: dict) -> bool:
+    cov_key = _TRACE_COVERAGE_FIELD.get(field)
+    if cov_key and cov_key in coverage:
+        c = coverage[cov_key]
+        if c.get('evidence') or c.get('status') in (
+            'filled',
+            'recovered',
+            'missing_with_evidence',
+        ):
+            return bool(c.get('evidence')) or c.get('status') != 'missing_no_evidence'
+        if c.get('status') == 'missing_no_evidence':
+            return False
+    src = raw_text or ''
+    if field == 'skills':
+        return bool(re.search(r'(?im)^(?:\*\*)?(?:skills?|technical\s+skills?|core\s+skills?)\b', src))
+    if field == 'years':
+        return _source_has_years_evidence(src)
+    if field == 'name':
+        return bool(src.strip())
+    return bool(cov_key and coverage.get(cov_key, {}).get('evidence'))
+
+
+def _source_has_years_evidence(raw_text: str) -> bool:
+    """True when the resume has job-tenure evidence, not merely graduation years."""
+    src = raw_text or ''
+    if not src:
+        return False
+    from app.ai.parser.enrichment.resume_text_inference import (
+        extract_total_experience_years_from_text,
+    )
+
+    if extract_total_experience_years_from_text(src) is not None:
+        return True
+    from app.ai.document_intelligence.experience_quality import experience_date_signal_count
+    from app.ai.document_intelligence.coverage.resume_coverage import _experience_section_text
+
+    body = _experience_section_text(src) or ''
+    if experience_date_signal_count(body) >= 1:
+        return True
+    head = '\n'.join(src.splitlines()[:20])
+    # Two-column sidebar: month-named or MM/YYYY ranges, not bare YYYY-YYYY (education)
+    if re.search(
+        r'(?i)(?:'
+        r'(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+        r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+        r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+        r')\s*[-–—]\s*(?:'
+        r'(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+        r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+        r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+        r'|(?:19|20)\d{2}|present|current'
+        r')',
+        head,
+    ):
+        return True
+    if re.search(r'(?i)\b\d{1,2}\s*[-–—]?\s*months?\s+tenure\b', head):
+        return True
+    return False
+
+
+def _years_from_form_or_toon(
+    form: Any,
+    toon: dict,
+    exp_dicts: list[dict],
+    raw_text: str = '',
+) -> Any:
+    from app.ai.parser.enrichment.resume_text_inference import (
+        compute_total_experience_years,
+        extract_total_experience_years_from_text,
+        merge_experience_years,
+    )
+
+    dated: list[dict] = []
+    for e in exp_dicts:
+        if not isinstance(e, dict):
+            continue
+        row = dict(e)
+        if (row.get('is_current') or row.get('isCurrent')) and not (
+            row.get('to') or row.get('end')
+        ):
+            row['to'] = 'Present'
+        dated.append(row)
+    date_years = None
+    try:
+        date_years = compute_total_experience_years(dated)
+    except Exception:
+        date_years = None
+    prose_years = None
+    if raw_text:
+        try:
+            prose_years = extract_total_experience_years_from_text(raw_text)
+        except Exception:
+            prose_years = None
+    years = merge_experience_years(date_years, prose_years)
+    if years not in (None, ''):
+        return years
+    toon_years = toon.get('total_experience_years') if isinstance(toon, dict) else None
+    if toon_years not in (None, ''):
+        return toon_years
+    return ''
+
+
+def _exp_dicts_from_form(form: Any) -> list[dict]:
+    rows = _form_get(form, 'experiences', default=None)
+    if not rows:
+        return []
+    out = []
+    for e in list(rows)[:25]:
+        if hasattr(e, 'role'):
+            out.append(
+                {
+                    'title': getattr(e, 'role', '') or '',
+                    'role': getattr(e, 'role', '') or '',
+                    'company': getattr(e, 'company', '') or '',
+                    'from': getattr(e, 'startMonth', '') or '',
+                    'to': getattr(e, 'endMonth', '') or '',
+                    'description': getattr(e, 'description', '') or '',
+                    'is_current': bool(getattr(e, 'isCurrent', False)),
+                }
+            )
+        elif isinstance(e, dict):
+            out.append(
+                {
+                    'title': e.get('role') or e.get('title') or '',
+                    'role': e.get('role') or e.get('title') or '',
+                    'company': e.get('company') or '',
+                    'from': e.get('startMonth') or e.get('from') or e.get('start') or '',
+                    'to': e.get('endMonth') or e.get('to') or e.get('end') or '',
+                    'description': e.get('description') or '',
+                    'is_current': bool(e.get('isCurrent') or e.get('is_current')),
+                }
+            )
+    return out
+
+
+def _format_experience_chunks(exp_dicts: list[dict]) -> list[str]:
+    exp_parts = []
+    for e in exp_dicts:
+        title = _as_text(e.get('title') or e.get('role'))
+        company = _as_text(e.get('company'))
+        fr = _as_text(e.get('from') or e.get('start'))
+        to = _as_text(e.get('to') or e.get('end'))
+        if (e.get('is_current') or str(to).lower() in ('present', 'current', 'now')) and not to:
+            to = 'Present'
+        desc = _as_text(e.get('description'))
+        if not title and not company:
+            if (fr or to) and desc:
+                loc = _as_text(e.get('location'))
+                chunk = f'({fr}-{to})'.strip()
+                if loc:
+                    chunk = f'{chunk} {loc}'
+                exp_parts.append(f'{chunk}: {desc[:400]}')
+            continue
+        if re.match(r'(?i)^(india|pune|mumbai|remote)$', title) and re.match(
+            r'(?i)^(india|pune|mumbai|remote)$', company or 'x'
+        ):
+            continue
+        if title and company:
+            chunk = f'{title} at {company}'
+        elif title:
+            chunk = title
+        else:
+            chunk = company
+        if fr or to:
+            chunk = f'{chunk} ({fr}-{to})'.strip()
+        if desc:
+            chunk = f'{chunk}: {desc[:400]}'
+        if chunk and chunk not in ('at ()', '()'):
+            exp_parts.append(chunk)
+    return exp_parts
+
+
+def _format_education_chunks_from_form(form: Any) -> list[str]:
+    form_edu = _form_get(form, 'education', default=None)
+    if not form_edu:
+        return []
+    edu_parts = []
+    for e in list(form_edu)[:15]:
+        if hasattr(e, 'degree'):
+            degree = _as_text(getattr(e, 'degree', ''))
+            inst = _as_text(getattr(e, 'institution', ''))
+            year = _as_text(getattr(e, 'endMonth', '') or getattr(e, 'startMonth', ''))
+        elif isinstance(e, dict):
+            degree = _as_text(e.get('degree'))
+            inst = _as_text(e.get('institution'))
+            year = _as_text(e.get('endMonth') or e.get('startMonth') or e.get('to'))
+        else:
+            continue
+        chunk = degree
+        if inst:
+            chunk = f'{chunk} - {inst}' if chunk else inst
+        if year:
+            chunk = f'{chunk} [{year}]' if chunk else year
+        if chunk:
+            edu_parts.append(chunk)
+    return edu_parts
+
+
+def _build_field_trace(
+    row: dict,
+    *,
+    filename: str,
+    form: Any,
+    raw_text: str,
+    pref_fallback: bool,
+) -> list[dict]:
+    coverage = _coverage_map(form)
+    traces: list[dict] = []
+    fields = list(_TRACE_CORE_FIELDS)
+    if pref_fallback or _as_text(row.get('Preferred Location')):
+        fields.append('preferred_location')
+    for field in fields:
+        col = _TRACE_EXCEL_COL[field]
+        excel_val = _as_text(row.get(col))
+        cov_key = _TRACE_COVERAGE_FIELD.get(field)
+        cov = coverage.get(cov_key or '', {}) if cov_key else {}
+        cov_status = str(cov.get('status') or '')
+        in_resume = _excel_value_in_resume(excel_val, raw_text, field)
+        has_evidence = _source_has_field_evidence(field, raw_text, coverage)
+        note = ''
+        if field == 'preferred_location' and pref_fallback:
+            verdict = 'fallback'
+            note = 'fallback_current'
+            cov_status = cov_status or 'fallback_current'
+        elif not excel_val:
+            if cov_status == 'missing_with_evidence' or (has_evidence and cov_status != 'missing_no_evidence'):
+                verdict = 'weak_missing'
+                note = cov_status or 'evidence_in_resume'
+            else:
+                verdict = 'absent'
+                note = cov_status or 'missing_no_evidence'
+        elif field == 'location' and excel_val and not _location_value_ok(excel_val):
+            verdict = 'weak_ungrounded'
+            note = 'implausible_location'
+        elif excel_val and not in_resume:
+            verdict = 'weak_ungrounded'
+            note = 'value_not_in_resume'
+        else:
+            verdict = 'ok'
+            note = cov_status or 'grounded'
+        traces.append(
+            {
+                'Filename': filename,
+                'Field': field,
+                'ExcelValue': excel_val[:200],
+                'InResume': 'yes' if in_resume else 'no',
+                'Coverage': cov_status or ('fallback_current' if verdict == 'fallback' else ''),
+                'Verdict': verdict,
+                'Note': note,
+            }
+        )
+    return traces
+
+
+def _flatten_toon(
+    toon: dict,
+    filename: str,
+    form: Any = None,
+    *,
+    raw_text: str = '',
+) -> dict:
+    """Flatten one resume to an Excel row. Form DTO is source of truth when present."""
     if not isinstance(toon, dict):
         toon = {}
     person = toon.get('person') or {}
@@ -304,64 +718,87 @@ def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
     if not isinstance(certs, list):
         certs = [certs] if certs else []
 
-    exp_parts = []
-    for e in exp[:25]:
-        if not isinstance(e, dict):
-            continue
-        title = _as_text(e.get('title') or e.get('role'))
-        company = _as_text(e.get('company'))
-        fr = _as_text(e.get('from') or e.get('start'))
-        to = _as_text(e.get('to') or e.get('end'))
-        if (e.get('is_current') or str(to).lower() in ('present', 'current', 'now')) and not to:
-            to = 'Present'
-        desc = _as_text(e.get('description'))
-        # Skip geo-only / empty noise rows
-        if not title and not company:
-            continue
-        if re.match(r'(?i)^(india|pune|mumbai|remote)$', title) and re.match(
-            r'(?i)^(india|pune|mumbai|remote)$', company or 'x'
-        ):
-            continue
-        if title and company:
-            chunk = f'{title} at {company}'
-        elif title:
-            chunk = title
-        else:
-            chunk = company
-        if fr or to:
-            chunk = f'{chunk} ({fr}-{to})'.strip()
-        if desc:
-            chunk = f'{chunk}: {desc[:400]}'
-        if chunk and chunk not in ('at ()', '()'):
-            exp_parts.append(chunk)
+    use_form = form is not None
+    pref_fallback = False
 
-    edu_parts = []
-    # Prefer Form DTO education (includes mapper heals / grounding filters)
-    form_edu = None
-    if form is not None:
-        form_edu = getattr(form, 'education', None)
-        if form_edu is None and isinstance(form, dict):
-            form_edu = form.get('education')
-    if form_edu:
-        for e in list(form_edu)[:15]:
-            if hasattr(e, 'degree'):
-                degree = _as_text(getattr(e, 'degree', ''))
-                inst = _as_text(getattr(e, 'institution', ''))
-                year = _as_text(getattr(e, 'endMonth', '') or getattr(e, 'startMonth', ''))
-            elif isinstance(e, dict):
-                degree = _as_text(e.get('degree'))
-                inst = _as_text(e.get('institution'))
-                year = _as_text(e.get('endMonth') or e.get('startMonth') or e.get('to'))
-            else:
-                continue
-            chunk = degree
-            if inst:
-                chunk = f'{chunk} - {inst}' if chunk else inst
-            if year:
-                chunk = f'{chunk} [{year}]' if chunk else year
-            if chunk:
-                edu_parts.append(chunk)
-    if not edu_parts:
+    if use_form:
+        name = _as_text(_form_get(form, 'fullName', default='')) or _as_text(person.get('name'))
+        email = _normalize_email(
+            _form_get(form, 'email', default='') or person.get('email')
+        )
+        phone = _normalize_phone(
+            _form_get(form, 'phone', default='') or person.get('phone')
+        )
+        linkedin = _as_text(
+            _form_get(form, 'linkedinUrl', default='') or person.get('linkedin')
+        )
+        github = _as_text(
+            _form_get(form, 'githubUrl', default='') or person.get('github')
+        )
+        current_location = _as_text(_form_get(form, 'currentLocation', default=''))
+        preferred_location = _as_text(_form_get(form, 'preferredLocation', default=''))
+        if (
+            preferred_location
+            and current_location
+            and preferred_location == current_location
+            and _form_trace_reason(form, 'preferredLocation') == 'fallback_current_location'
+        ):
+            pref_fallback = True
+        elif not preferred_location and current_location:
+            preferred_location = current_location
+            pref_fallback = True
+        summary = _as_text(
+            _form_get(form, 'summary', 'summaryText', default='') or toon.get('summary')
+        )[:2000]
+        form_skills = _form_get(form, 'skillsList', default=None)
+        if not form_skills:
+            form_skills = _form_get(form, 'skills', default='')
+        if isinstance(form_skills, list):
+            skill_strs = [_skill_to_str(s) for s in form_skills[:50] if s]
+        elif isinstance(form_skills, str) and form_skills.strip():
+            skill_strs = [s.strip() for s in form_skills.split(',') if s.strip()][:50]
+        else:
+            skill_strs = [_skill_to_str(s) for s in skills[:50] if s]
+        skill_strs = [s for s in skill_strs if s]
+        exp_dicts = _exp_dicts_from_form(form)
+        exp_parts = _format_experience_chunks(exp_dicts)
+        edu_parts = _format_education_chunks_from_form(form)
+        form_certs = _form_get(form, 'certifications', default=None)
+        if form_certs:
+            cert_strs = []
+            for c in list(form_certs)[:30]:
+                if hasattr(c, 'name'):
+                    cert_strs.append(
+                        _cert_to_str({'name': getattr(c, 'name', ''), 'issuer': getattr(c, 'issuer', '')})
+                    )
+                elif isinstance(c, dict):
+                    cert_strs.append(_cert_to_str(c))
+            cert_strs = [c for c in cert_strs if c]
+        else:
+            cert_strs = [_cert_to_str(c) for c in certs[:30]]
+            cert_strs = [c for c in cert_strs if c]
+        years_out = _years_from_form_or_toon(form, toon, exp_dicts, raw_text=raw_text)
+    else:
+        name = _as_text(person.get('name'))
+        email = _normalize_email(person.get('email'))
+        phone = _normalize_phone(person.get('phone'))
+        linkedin = _as_text(person.get('linkedin'))
+        github = _as_text(person.get('github'))
+        current_location = _as_text(
+            person.get('location') or person.get('current_location')
+        )
+        preferred_location = _as_text(person.get('preferred_location')) or current_location
+        if preferred_location and current_location and preferred_location == current_location:
+            pref_fallback = True
+        summary = _as_text(toon.get('summary'))[:2000]
+        skill_strs = [_skill_to_str(s) for s in skills[:50]]
+        skill_strs = [s for s in skill_strs if s]
+        exp_dicts = []
+        for e in exp[:25]:
+            if isinstance(e, dict):
+                exp_dicts.append(e)
+        exp_parts = _format_experience_chunks(exp_dicts)
+        edu_parts = []
         for e in edu[:15]:
             if not isinstance(e, dict):
                 continue
@@ -378,66 +815,20 @@ def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
                 chunk = f'{chunk} [{year}]' if chunk else year
             if chunk:
                 edu_parts.append(chunk)
+        cert_strs = [_cert_to_str(c) for c in certs[:30]]
+        cert_strs = [c for c in cert_strs if c]
+        years_out = _years_from_form_or_toon(None, toon, exp_dicts, raw_text=raw_text)
 
-    skill_strs = [_skill_to_str(s) for s in skills[:50]]
-    skill_strs = [s for s in skill_strs if s]
-    cert_strs = [_cert_to_str(c) for c in certs[:30]]
-    cert_strs = [c for c in cert_strs if c]
-
-    years = toon.get('total_experience_years')
-    if years is None or years == '':
-        # Phase 6 safety net: recompute from experience dates / description ranges
-        try:
-            from app.ai.parser.enrichment.resume_text_inference import (
-                compute_total_experience_years,
-            )
-
-            recomputed = compute_total_experience_years(
-                [
-                    {
-                        'from': e.get('from') or e.get('start'),
-                        'to': e.get('to') or e.get('end'),
-                        'description': e.get('description') or '',
-                        'role': e.get('title') or e.get('role') or '',
-                        'company': e.get('company') or '',
-                    }
-                    for e in exp
-                    if isinstance(e, dict)
-                ]
-            )
-            years_out = recomputed if recomputed is not None else ''
-        except Exception:
-            years_out = ''
-    else:
-        years_out = years
-
-    current_location = _as_text(
-        person.get('location') or person.get('current_location')
-    )
-    preferred_location = _as_text(person.get('preferred_location')) or current_location
-    if form is not None:
-        form_cur = getattr(form, 'currentLocation', None)
-        form_pref = getattr(form, 'preferredLocation', None)
-        if form_cur is None and isinstance(form, dict):
-            form_cur = form.get('currentLocation')
-            form_pref = form.get('preferredLocation')
-        if form_cur:
-            current_location = _as_text(form_cur)
-        if form_pref:
-            preferred_location = _as_text(form_pref)
-        elif current_location:
-            preferred_location = current_location
-
-    return {
+    row = {
         'Filename': filename,
-        'Name': _as_text(person.get('name')),
-        'Email': _normalize_email(person.get('email')),
-        'Phone': _normalize_phone(person.get('phone')),
-        'LinkedIn': _as_text(person.get('linkedin')),
-        'GitHub': _as_text(person.get('github')),
+        'Name': name,
+        'Email': email,
+        'Phone': phone,
+        'LinkedIn': linkedin,
+        'GitHub': github,
         'Current Location': current_location,
         'Preferred Location': preferred_location,
-        'Summary': _as_text(toon.get('summary'))[:2000],
+        'Summary': summary,
         'Skills': ', '.join(skill_strs)[:4000],
         'Experience': '; '.join(exp_parts)[:8000],
         'Education': '; '.join(edu_parts)[:3000],
@@ -446,10 +837,19 @@ def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
         'ParseStatus': 'ok',
         'ParseNotes': '',
     }
+    row['_field_trace'] = _build_field_trace(
+        row,
+        filename=filename,
+        form=form,
+        raw_text=raw_text or '',
+        pref_fallback=pref_fallback,
+    )
+    row['_pref_fallback'] = pref_fallback
+    return row
 
 
 def _build_excel_bytes(rows: list[dict]) -> bytes:
-    """Build .xlsx from list of row dicts using openpyxl."""
+    """Build .xlsx with Resumes + Field Trace sheets."""
     from openpyxl import Workbook
     from openpyxl.utils import get_column_letter
 
@@ -461,7 +861,20 @@ def _build_excel_bytes(rows: list[dict]) -> bytes:
     for r in rows:
         ws.append([r.get(h, '') for h in headers])
     for col in range(1, len(headers) + 1):
-        ws.column_dimensions[get_column_letter(col)].width = min(40, max(10, len(str(headers[col - 1])) + 2))
+        ws.column_dimensions[get_column_letter(col)].width = min(
+            40, max(10, len(str(headers[col - 1])) + 2)
+        )
+
+    trace_ws = wb.create_sheet('Field Trace')
+    trace_ws.append(FIELD_TRACE_HEADERS)
+    for r in rows:
+        for t in r.get('_field_trace') or []:
+            trace_ws.append([t.get(h, '') for h in FIELD_TRACE_HEADERS])
+    for col in range(1, len(FIELD_TRACE_HEADERS) + 1):
+        trace_ws.column_dimensions[get_column_letter(col)].width = min(
+            36, max(10, len(str(FIELD_TRACE_HEADERS[col - 1])) + 2)
+        )
+
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -564,15 +977,117 @@ def _apply_coverage_parse_honesty(
     parse_status: str,
     note_bits: list[str],
 ) -> str:
-    """Mark partial + ParseNotes when coverage still has named gaps with evidence."""
+    """Mark partial + ParseNotes when coverage still has named gaps or ungrounded cells."""
     gaps = _coverage_gaps_from_form(form_dto)
     if gaps:
         parse_status = 'partial'
         labels = [_COVERAGE_GAP_LABELS.get(g, g) for g in gaps]
         note_bits.append('coverage_gaps=' + ','.join(labels))
+    weak_verdicts = []
+    for t in row.get('_field_trace') or []:
+        verdict = str(t.get('Verdict') or '')
+        field = str(t.get('Field') or '')
+        if verdict in ('weak_missing', 'weak_ungrounded') and field in _TRACE_CORE_FIELDS:
+            weak_verdicts.append(f'{field}:{verdict}')
+    if weak_verdicts:
+        parse_status = 'partial'
+        note_bits.append('trace_weak=' + ','.join(weak_verdicts[:8]))
     row['ParseStatus'] = parse_status
     row['ParseNotes'] = '; '.join(note_bits)[:2000]
     return parse_status
+
+
+def _bulk_det_skip_ok(
+    *,
+    toon: dict,
+    form: Any,
+    raw_text: str,
+    field_trace: list[dict] | None = None,
+) -> bool:
+    """True when bulk may skip residual LLM (same closed-world rules as single parse)."""
+    from app.ai.document_intelligence.canonical.from_toon import candidate_profile_from_toon
+    from app.ai.document_intelligence.pipeline import resume_deterministic_is_strong
+
+    if not isinstance(toon, dict):
+        return False
+    try:
+        profile = candidate_profile_from_toon(toon)
+    except Exception:
+        return False
+    cov = _coverage_report_from_form(form)
+    if not resume_deterministic_is_strong(profile, cov, source_text=raw_text or ''):
+        return False
+    if _experience_titles_implausible(toon):
+        return False
+    if _ocr_experience_slice_mushy(raw_text or ''):
+        return False
+    traces = field_trace if field_trace is not None else []
+    if any(
+        str(t.get('Field') or '') in ('location', 'education', 'experience')
+        and str(t.get('Verdict') or '') == 'weak_missing'
+        for t in traces
+    ):
+        return False
+    return True
+
+
+def _failed_excel_row(filename: str, *, code: str, message: str) -> dict:
+    """Stub Resumes row so failed files still appear in the downloaded workbook."""
+    note = f'{code}: {message}'.strip()[:2000]
+    return {
+        'Filename': filename,
+        'Name': '',
+        'Email': '',
+        'Phone': '',
+        'LinkedIn': '',
+        'GitHub': '',
+        'Current Location': '',
+        'Preferred Location': '',
+        'Summary': '',
+        'Skills': '',
+        'Experience': '',
+        'Education': '',
+        'Certifications': '',
+        'Total Experience Years': '',
+        'ParseStatus': 'failed',
+        'ParseNotes': note,
+        '_field_trace': [],
+    }
+
+
+def _reconcile_missing_excel_rows(
+    results: list[dict],
+    expected_filenames: list[str],
+    *,
+    code: str = 'not_processed',
+    message: str = 'Staged file was not written to Excel (missing disk, unclaimed, or cancelled).',
+) -> list[dict]:
+    """Ensure every expected filename has a Resumes row."""
+    have = {str(r.get('Filename') or '') for r in results}
+    for name in expected_filenames:
+        if name and name not in have:
+            results.append(_failed_excel_row(name, code=code, message=message))
+            have.add(name)
+    return results
+
+
+def _bulk_needs_ocr_retry(
+    ext: str,
+    raw_text: str,
+    extract_err: str | None,
+    *,
+    looks_like_garbage,
+) -> bool:
+    """Match single-parse pipeline: retry DPI on error, thin text, or short garbage."""
+    image_exts = ('pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp')
+    if (ext or '').lower() not in image_exts:
+        return False
+    if extract_err:
+        return True
+    t = (raw_text or '').strip()
+    if not t or len(t) < BULK_MIN_TEXT_CHARS:
+        return True
+    return bool(looks_like_garbage(raw_text))
 
 
 def _process_one_file(args: tuple) -> tuple[str, dict | None, bool, str, str]:
@@ -650,7 +1165,6 @@ def _process_one_file_inner(
         last_extract_err = None
         raw_text = ""
         t_text = time.perf_counter()
-        _IMAGE_EXTS = ('pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp')
         ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
         try:
             raw_text = extract_text(data, filename) or ""
@@ -676,9 +1190,11 @@ def _process_one_file_inner(
             )
             return ratio < 0.35 and not has_token
 
-        if (
-            (len(raw_text.strip()) < BULK_MIN_TEXT_CHARS or _looks_like_garbage_extract(raw_text))
-            and ext in _IMAGE_EXTS
+        if _bulk_needs_ocr_retry(
+            ext,
+            raw_text,
+            last_extract_err,
+            looks_like_garbage=_looks_like_garbage_extract,
         ):
             try:
                 raw_text = extract_text(data, filename, dpi=BULK_OCR_RETRY_DPI) or ""
@@ -729,50 +1245,41 @@ def _process_one_file_inner(
                 from app.ai.parser.engine import parse_resume_text_via_engine
                 from app.ai.parser.deterministic_resume import score_resume_toon
 
-                from app.ai.document_intelligence.coverage.resume_coverage import (
-                    has_experience_section_evidence,
-                )
-
                 det_toon, source, eng_notes, form_dto = parse_resume_text_via_engine(
                     raw_text,
                     allow_llm=False,
                     skip_llm_when_deterministic=True,
                 )
-                conf, missing, passes = score_resume_toon(
+                conf, missing, _passes = score_resume_toon(
                     det_toon if isinstance(det_toon, dict) else {},
                     source_text=raw_text,
                 )
-                # Do not skip LLM when experience section exists but Excel would lack Experience
-                exp_gap = (
-                    has_experience_section_evidence(raw_text)
-                    and isinstance(det_toon, dict)
-                    and not (det_toon.get("experience") or [])
+                row = _flatten_toon(
+                    det_toon if isinstance(det_toon, dict) else {},
+                    filename,
+                    form=form_dto,
+                    raw_text=raw_text,
                 )
-                # Phase 6: refuse det-skip on garbled titles or OCR-mushy experience
-                bad_titles = (
-                    isinstance(det_toon, dict)
-                    and _experience_titles_implausible(det_toon)
-                )
-                ocr_mush = _ocr_experience_slice_mushy(raw_text)
-                if (
-                    passes
-                    and isinstance(det_toon, dict)
-                    and not exp_gap
-                    and not bad_titles
-                    and not ocr_mush
+                if _bulk_det_skip_ok(
+                    toon=det_toon if isinstance(det_toon, dict) else {},
+                    form=form_dto,
+                    raw_text=raw_text,
+                    field_trace=row.get('_field_trace') or [],
                 ):
                     t_val = time.perf_counter()
-                    accept, notes, parse_status = validate_toon_format_bulk(det_toon, "resume")
+                    accept, notes, parse_status = validate_toon_format_bulk(
+                        det_toon if isinstance(det_toon, dict) else {},
+                        "resume",
+                    )
                     _bulk_stage(
                         "validate",
                         "completed" if accept else "failed",
                         (time.perf_counter() - t_val) * 1000.0,
                     )
-                    # Fast path: keep Ollama for true gaps (no experience / mushy OCR),
-                    # not for ordinary "partial" validation notes.
-                    if accept and parse_status in ("ok", "partial"):
+                    # Skip LLM only when the closed-world gate passed. Partial
+                    # validation notes alone never skip residual LLM.
+                    if accept:
                         t_persist = time.perf_counter()
-                        row = _flatten_toon(det_toon, filename, form=form_dto)
                         note_bits = [f"source=engine:{source}", f"conf={conf:.2f}"]
                         note_bits.extend(eng_notes[:4])
                         if missing:
@@ -855,7 +1362,7 @@ def _process_one_file_inner(
                     )
 
                     t_persist = time.perf_counter()
-                    row = _flatten_toon(toon, filename, form=form_dto)
+                    row = _flatten_toon(toon, filename, form=form_dto, raw_text=raw_text)
                     # Honest status: section evidence but still empty Experience → partial
                     if (
                         has_experience_section_evidence(raw_text)
@@ -1004,6 +1511,12 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
                 job['started_at'] = started_at
 
     files_list = _load_staged_files(job_id)
+    expected_filenames: list[str] = [item[0] for item in files_list]
+    with _local_jobs_lock:
+        job_now = _local_jobs.get(job_id) or {}
+        for name in list(job_now.get('staged_filenames') or []):
+            if name and name not in expected_filenames:
+                expected_filenames.append(name)
     total = len(files_list)
     results: list[dict] = []
     success_count = 0
@@ -1036,6 +1549,11 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
                 continue
             if is_failed:
                 failed_count += 1
+                results.append(
+                    row
+                    if row
+                    else _failed_excel_row(filename, code=code, message=message)
+                )
                 update_file_status(job_id, filename, 'Failed', error_message=message)
                 with _local_jobs_lock:
                     if job_id in _local_jobs:
@@ -1062,6 +1580,16 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
             # Checkpoint Excel during long runs so progress survives restarts
             if results and done > 0 and done % BULK_EXCEL_CHECKPOINT_EVERY == 0:
                 _persist_excel(job_id, list(results), append=append)
+
+    _reconcile_missing_excel_rows(results, expected_filenames)
+    extra_failed = sum(
+        1
+        for r in results
+        if str(r.get('ParseStatus') or '').lower() == 'failed'
+    )
+    if extra_failed > failed_count:
+        failed_count = extra_failed
+        success_count = max(0, len(results) - failed_count)
 
     with _local_jobs_lock:
         if job_id in _local_jobs:

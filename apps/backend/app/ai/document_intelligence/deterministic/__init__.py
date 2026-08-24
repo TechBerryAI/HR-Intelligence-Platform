@@ -30,10 +30,12 @@ _MONTH_MAP = {
 _DATE_RANGE_RE = re.compile(
     r'(?i)\b('
     r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+    r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:19|20)\d{2}(?:[/\-](?:0?[1-9]|1[0-2]))?'
     r')\s*(?:[-–—]|to)\s*('
     r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+    r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:19|20)\d{2}(?:[/\-](?:0?[1-9]|1[0-2]))?'
     r'|Present|Current|Now'
@@ -207,6 +209,12 @@ def normalize_month_token(token: str) -> str:
         return ''
     if re.match(r'(?i)^(present|current|now)$', t):
         return 'Present'
+    m_dmy = re.match(
+        r'^(0?[1-9]|[12]\d|3[01])[/\-](0?[1-9]|1[0-2])[/\-]((?:19|20)\d{2})$',
+        t,
+    )
+    if m_dmy:
+        return f'{m_dmy.group(3)}-{int(m_dmy.group(2)):02d}'
     m = re.match(
         r'(?i)^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+((?:19|20)\d{2})$',
         t,

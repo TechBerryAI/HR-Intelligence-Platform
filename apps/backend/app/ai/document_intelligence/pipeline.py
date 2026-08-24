@@ -87,7 +87,7 @@ _RESUME_CORE_COVERAGE = frozenset(
 )
 
 
-def _resume_deterministic_is_strong(profile, coverage=None) -> bool:
+def resume_deterministic_is_strong(profile, coverage=None, *, source_text: str = '') -> bool:
     """Skip residual LLM only when identity+body look solid and no core coverage gaps."""
     has_id = bool(
         (getattr(getattr(profile, 'personal', None), 'full_name', '') or '').strip()
@@ -106,11 +106,18 @@ def _resume_deterministic_is_strong(profile, coverage=None) -> bool:
     try:
         from app.ai.document_intelligence.experience_quality import experience_is_incomplete
 
-        if experience_is_incomplete(getattr(profile, 'experience', None) or [], ''):
+        if experience_is_incomplete(
+            getattr(profile, 'experience', None) or [],
+            source_text or '',
+        ):
             return False
     except Exception:
         pass
     return True
+
+
+# Back-compat alias used by in-module call sites
+_resume_deterministic_is_strong = resume_deterministic_is_strong
 
 
 def _apply_jd_repair(profile, raw_text: str):
@@ -474,7 +481,9 @@ def parse_resume_text_to_canonical(
     skip_semantic = allow_semantic is False
     force_semantic = allow_semantic is True
     run_semantic = (not skip_semantic) and (
-        force_semantic or (not _SKIP_LLM) or (not _resume_deterministic_is_strong(profile, coverage))
+        force_semantic
+        or (not _SKIP_LLM)
+        or (not resume_deterministic_is_strong(profile, coverage, source_text=text))
     )
     if run_semantic:
         t0 = _time.perf_counter()
@@ -791,7 +800,9 @@ def _run_resume(
 
     used_llm = False
     _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
-    if _SKIP_LLM and _resume_deterministic_is_strong(profile, coverage):
+    if _SKIP_LLM and resume_deterministic_is_strong(
+        profile, coverage, source_text=raw_text
+    ):
         _emit(
             parse_job_id,
             'semantic',

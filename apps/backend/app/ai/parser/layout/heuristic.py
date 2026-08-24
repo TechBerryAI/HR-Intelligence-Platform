@@ -15,7 +15,9 @@ _EXP_HEADER_PREFIX = re.compile(
 
 _HEADER_ALIASES = {
     'work experience': 'Experience',
+    'workexperience': 'Experience',
     'professional experience': 'Experience',
+    'professionalexperience': 'Experience',
     'employment': 'Experience',
     'work history': 'Experience',
     'internship': 'Experience',
@@ -43,6 +45,7 @@ _HEADER_ALIASES = {
     'educational qualifications': 'Education',
     'educational qualification': 'Education',
     'educational background': 'Education',
+    'qualification': 'Education',
     'qualifications': 'Education',
     'certificates': 'Certifications',
     'certifications and licenses': 'Certifications',
