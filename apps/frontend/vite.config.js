@@ -35,6 +35,28 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:3000',
           changeOrigin: true,
           secure: false,
+          // Long parse SSE streams (resume/JD) must not be cut off by the default proxy timeout.
+          timeout: 320000,
+          proxyTimeout: 320000,
+          configure(proxy) {
+            proxy.on('proxyRes', (proxyRes, _req, res) => {
+              const ct = String(proxyRes.headers['content-type'] || '')
+              if (!ct.includes('text/event-stream')) return
+              proxyRes.headers['cache-control'] = 'no-cache, no-transform'
+              proxyRes.headers['x-accel-buffering'] = 'no'
+              proxyRes.headers['connection'] = 'keep-alive'
+              delete proxyRes.headers['content-length']
+              delete proxyRes.headers['content-encoding']
+              const origWrite = typeof res.write === 'function' ? res.write.bind(res) : null
+              if (origWrite) {
+                res.write = (...args) => {
+                  const ok = origWrite(...args)
+                  if (typeof res.flush === 'function') res.flush()
+                  return ok
+                }
+              }
+            })
+          },
         },
         '/health': {
           target: 'http://127.0.0.1:3000',

@@ -18,6 +18,48 @@ from app.ai.document_intelligence.models.candidate import (
 _EMAIL_RE = re.compile(r'^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$')
 _PHONE_RE = re.compile(r'^\+?[\d\s\-().]{7,20}$')
 _URL_RE = re.compile(r'^(https?://)?([A-Za-z0-9\-]+\.)+[A-Za-z]{2,}(/.*)?$', re.I)
+# Degree abbreviations that look like hostnames because .IT / .IN / .COM are TLDs.
+_DEGREE_AS_HOST_RE = re.compile(
+    r'(?i)^(?:https?://)?(?:www\.)?'
+    r'(?:bsc|msc|bcom|mcom|bca|mca|bba|mba|btech|mtech|be|me|ba|ma|phd)'
+    r'\.[a-z]{2,6}/?$'
+)
+_DEGREE_CUE_RE = re.compile(
+    r'(?i)\b(?:'
+    r'(?:bachelor|master|doctor)(?:\'?s)?s?|'
+    r'diploma|doctorate|phd|'
+    r'b\.?\s*tech|m\.?\s*tech|b\.?\s*e\.?(?![a-z])|m\.?\s*e\.?(?![a-z])|'
+    r'b\.?\s*sc|m\.?\s*sc|bsc|msc|'
+    r'b\.?\s*com|m\.?\s*com|bcom|mcom|'
+    r'b\.?\s*s\.?(?![a-z])|m\.?\s*s\.?(?![a-z])|'
+    r'mba|mca|bca|bba|'
+    r'ph\.?\s*d|'
+    r'b\.?\s*pharm|d\.?\s*pharm|ll\.?\s*b|ll\.?\s*m|'
+    r'hsc|ssc|cbse|icse|puc|'
+    r'(?:10|12)(?:th)?|'
+    r'higher\s+secondary|senior\s+secondary|pre[\s\-]?university|'
+    r'high\s+school|secondary\s+school|'
+    r'associate(?:\'?s)?'
+    r')\b'
+)
+_EDU_DUTY_START_RE = re.compile(
+    r'(?i)^(?:'
+    r'helped|trained|taught|managed|executed|coordinated|collaborated|'
+    r'developed|designed|created|built|led|implemented|optimized|'
+    r'improved|worked|assisted|supported|handled|performed|conducted|'
+    r'analyzed|delivered|configured|setup|responsible|identifying|'
+    r'enabling|applied|resulting|drove|leading\s+to'
+    r')\b'
+)
+_SCHOOL_CUE_RE = re.compile(
+    r'(?i)\b(?:university|college|school|institute|academy|vidyalaya|'
+    r'polytechnic|campus|faculty|iit|nit|iiit|bits|mit)\b'
+)
+_COMPANY_NOT_SCHOOL_RE = re.compile(
+    r'(?i)\b(?:pvt\.?\s*ltd|private\s+limited|ltd|inc|llc|gmbh|corp|'
+    r'technologies|technology|solutions|systems|foundation|consulting|'
+    r'services|labs?|studio|ventures)\b'
+)
 _MONTH_YEAR_RE = re.compile(
     r'^(?:'
     r'(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
@@ -107,6 +149,8 @@ def validate_url(
             # allow gold lake example.com emails are separate; URLs with example.com rejected
             if 'linkedin' not in (host_hint or '') and 'github' not in (host_hint or ''):
                 return False, 'url_placeholder'
+    if _DEGREE_AS_HOST_RE.match(s):
+        return False, 'url_is_degree'
     if not _URL_RE.match(s) and not _URL_RE.match(f'https://{s}'):
         return False, 'url_invalid'
     if host_hint and host_hint.lower() not in lower:
@@ -151,6 +195,23 @@ def validate_institution(value: str) -> Tuple[bool, str]:
         return False, 'institution_is_date'
     if len(s) < 3:
         return False, 'institution_too_short'
+    if re.fullmatch(r'\d{1,3}(?:\.\d+)?\s*%', s) or re.fullmatch(
+        r'(?i)(?:cgpa|gpa)\s*[:\-]?\s*[\d.]+', s
+    ):
+        return False, 'institution_is_score'
+    if _EDU_DUTY_START_RE.match(s):
+        return False, 'institution_is_duty'
+    if s[:1].islower():
+        return False, 'institution_is_prose'
+    if _JOB_TITLE_CUE_RE.search(s) and not _SCHOOL_CUE_RE.search(s):
+        return False, 'institution_is_job_title'
+    if _COMPANY_NOT_SCHOOL_RE.search(s) and not _SCHOOL_CUE_RE.search(s):
+        return False, 'institution_is_company'
+    words = s.split()
+    if len(words) > 12 and not _SCHOOL_CUE_RE.search(s):
+        return False, 'institution_too_long'
+    if s.endswith('.') and len(words) >= 4 and not _SCHOOL_CUE_RE.search(s):
+        return False, 'institution_is_sentence'
     return True, 'ok'
 
 
@@ -160,7 +221,24 @@ def validate_degree(value: str) -> Tuple[bool, str]:
         return False, 'degree_empty'
     if _MONTH_ONLY_RE.match(s) or _MONTH_YEAR_RE.match(s):
         return False, 'degree_is_date'
+    if _EDU_DUTY_START_RE.match(s):
+        return False, 'degree_is_duty'
+    if s[:1].islower():
+        return False, 'degree_is_prose'
+    if len(s) > 80 and not _DEGREE_CUE_RE.search(s):
+        return False, 'degree_too_long'
+    if _JOB_TITLE_CUE_RE.search(s) and not _DEGREE_CUE_RE.search(s):
+        return False, 'degree_is_job_title'
+    if not _DEGREE_CUE_RE.search(s):
+        return False, 'degree_no_cue'
     return True, 'ok'
+
+
+def is_grounded_education_row(degree: str, institution: str) -> bool:
+    """True only when both sides look like education — used for every resume."""
+    deg_ok, _ = validate_degree(degree) if (degree or '').strip() else (False, '')
+    inst_ok, _ = validate_institution(institution) if (institution or '').strip() else (False, '')
+    return bool(deg_ok and inst_ok)
 
 
 _GEO_BARE_RE = re.compile(
@@ -180,10 +258,10 @@ _INSTITUTION_AS_JOB_RE = re.compile(
     r'(?i)\b(?:university|college|institute|polytechnic|iit|nit|school)\b'
 )
 _JOB_TITLE_CUE_RE = re.compile(
-    r'(?i)\b(?:intern|engineer|developer|analyst|trainee|manager|officer|'
-    r'associate|consultant|lead|executive|specialist|administrator|admin|'
-    r'architect|dba|designer|scientist|director|head|programmer|'
-    r'coordinator|supervisor)\b'
+    r'(?i)\b(?:intern(?:ship)?s?|engineer|developer|analyst|trainee|apprentice|'
+    r'manager|officer|associate|consultant|lead|executive|specialist|'
+    r'administrator|admin|architect|dba|designer|scientist|director|head|'
+    r'programmer|coordinator|supervisor|trainer|instructor)\b'
 )
 
 

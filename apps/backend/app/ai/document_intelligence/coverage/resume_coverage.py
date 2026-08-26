@@ -16,7 +16,7 @@ from app.ai.document_intelligence.parsers.resume import (
     parse_education,
     parse_experience,
 )
-from app.ai.document_intelligence.validation.engine import validate_phone
+from app.ai.document_intelligence.validation.engine import is_grounded_education_row, validate_phone
 
 # VALIDATION_FIX_experience_section_evidence
 _EXP_SECTION_RE = re.compile(
@@ -244,7 +244,7 @@ def recover_resume_profile_gaps(
         grounded = [
             e
             for e in parsed
-            if (e.degree or '').strip() and (e.institution or '').strip()
+            if is_grounded_education_row(e.degree, e.institution)
         ]
         if grounded and (not edu_list or len(grounded) > len(edu_list)):
             data['education'] = [e.model_dump() for e in grounded]

@@ -9,7 +9,6 @@ from __future__ import annotations
 import hmac
 import logging
 import os
-import time
 import uuid
 
 from flask import Blueprint, Response, jsonify, request, stream_with_context
@@ -27,6 +26,13 @@ from app.core import shared_store
 from app.domains.identity.authorization.rbac import STAFF_ROLES, get_role, get_user_id
 
 logger = logging.getLogger(__name__)
+
+_SSE_PAD = ':' + (' ' * 2048) + '\n\n'
+_SSE_HEADERS = {
+    'Cache-Control': 'no-cache, no-transform',
+    'X-Accel-Buffering': 'no',
+    'Connection': 'keep-alive',
+}
 
 
 def _safe_error_body(body: dict, status: int) -> dict:
@@ -135,13 +141,72 @@ def _public_parse_rate_limited(ip: str) -> bool:
     )
 
 
-# Re-export for tests / bulk workers that import from this module
-__all__ = [
-    'parsing_bp',
-    'run_resume_parse_pipeline',
-    'run_jd_parse_pipeline',
-    'calculate_confidence',
-]
+def _sse_pack(event_name: str, payload: dict) -> str:
+    import json
+
+    return f"event: {event_name}\ndata: {json.dumps(payload, default=str)}\n\n{_SSE_PAD}"
+
+
+def iter_parse_sse(run_with_on_stage, build_ok_payload):
+    """Yield SSE chunks while a parse pipeline runs in a worker thread.
+
+    Stage events are flushed as they happen so the upload overlay can track
+    live progress through Vite / reverse-proxy buffers.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from queue import Empty, Queue
+
+    from app.core.request_context import get_timing_context, run_in_timing_context
+
+    events_q: Queue = Queue()
+    timing_ctx = get_timing_context()
+
+    def on_stage(event):
+        events_q.put(event)
+
+    def _run():
+        if timing_ctx is not None:
+            return run_in_timing_context(timing_ctx, run_with_on_stage, on_stage)
+        return run_with_on_stage(on_stage)
+
+    yield _SSE_PAD
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_run)
+        while not future.done():
+            try:
+                ev = events_q.get(timeout=0.25)
+                yield _sse_pack('stage', ev.to_dict())
+            except Empty:
+                # Pad pings too — Vite / proxies otherwise buffer tiny comments
+                # and the overlay stays on the last flushed stage (usually "text").
+                yield _SSE_PAD
+        while True:
+            try:
+                ev = events_q.get_nowait()
+                yield _sse_pack('stage', ev.to_dict())
+            except Empty:
+                break
+        try:
+            body, status = future.result()
+        except Exception:
+            logger.exception('Parse SSE worker failed')
+            yield _sse_pack('error', {'status': 'error', 'error': 'Internal server error'})
+            return
+        if status == 200:
+            yield _sse_pack('result', build_ok_payload(body))
+        else:
+            yield _sse_pack('error', body)
+
+
+def _sse_response(generate):
+    resp = Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream; charset=utf-8',
+        headers=_SSE_HEADERS,
+        direct_passthrough=True,
+    )
+    resp.implicit_sequence_conversion = False
+    return resp
 
 
 @parsing_bp.route('/parse/resume/public', methods=['POST'])
@@ -370,33 +435,7 @@ def parse_resume_public_stream():
     public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
 
     def generate():
-        import json
-
-        events_q: list = []
-
-        def on_stage(event):
-            events_q.append(event)
-
-        # Run pipeline synchronously while flushing queued stage events
-        from concurrent.futures import ThreadPoolExecutor
-
-        from app.core.request_context import get_timing_context, run_in_timing_context
-
-        timing_ctx = get_timing_context()
-
-        def _run_pipeline():
-            if timing_ctx is not None:
-                return run_in_timing_context(
-                    timing_ctx,
-                    run_resume_parse_pipeline,
-                    file_data,
-                    filename,
-                    uploader_id=public_uploader_id,
-                    uploader_role='public',
-                    candidate_id=None,
-                    enrichment_context=None,
-                    on_stage=on_stage,
-                )
+        def _run(on_stage):
             return run_resume_parse_pipeline(
                 file_data,
                 filename,
@@ -407,31 +446,58 @@ def parse_resume_public_stream():
                 on_stage=on_stage,
             )
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(_run_pipeline)
-            while not future.done():
-                while events_q:
-                    ev = events_q.pop(0)
-                    yield f"event: stage\ndata: {json.dumps(ev.to_dict(), default=str)}\n\n"
-                time.sleep(0.05)
-            while events_q:
-                ev = events_q.pop(0)
-                yield f"event: stage\ndata: {json.dumps(ev.to_dict(), default=str)}\n\n"
-            body, status = future.result()
-            if status == 200:
-                payload = build_resume_client_payload(body)
-                yield f"event: result\ndata: {json.dumps(payload, default=str)}\n\n"
-            else:
-                yield f"event: error\ndata: {json.dumps(body, default=str)}\n\n"
+        yield from iter_parse_sse(_run, build_resume_client_payload)
 
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no',
-        },
-    )
+    return _sse_response(generate)
+
+
+@parsing_bp.route('/parse/resume/stream', methods=['POST'])
+@authenticate_token
+def parse_resume_stream():
+    """SSE stream of stage events for authenticated resume parse."""
+    current_user = request.user
+    if 'file' not in request.files:
+        return jsonify({'status': 'error', 'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'status': 'error', 'error': 'No file selected'}), 400
+
+    doc_reject = _reject_legacy_doc(file.filename)
+    if doc_reject:
+        return doc_reject
+
+    if not allowed_file(file.filename):
+        return jsonify({
+            'status': 'error',
+            'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
+        }), 400
+
+    file_data = file.read()
+    filename = secure_filename(file.filename)
+    uploader_id = get_user_id(current_user)
+    jwt_role = get_role(current_user)
+    if not uploader_id:
+        return jsonify({'status': 'error', 'error': 'User ID not found in authentication token'}), 401
+
+    uploader_role = 'recruiter' if jwt_role in STAFF_ROLES else 'recruiter'
+    candidate_id = request.form.get('candidate_id') or None
+
+    def generate():
+        def _run(on_stage):
+            return run_resume_parse_pipeline(
+                file_data,
+                filename,
+                uploader_id=uploader_id,
+                uploader_role=uploader_role,
+                candidate_id=candidate_id,
+                enrichment_context=None,
+                on_stage=on_stage,
+            )
+
+        yield from iter_parse_sse(_run, build_resume_client_payload)
+
+    return _sse_response(generate)
 
 
 @parsing_bp.route('/parse/jd/stream', methods=['POST'])
@@ -468,30 +534,7 @@ def parse_jd_stream():
     job_id = request.form.get('job_id')
 
     def generate():
-        import json
-        from concurrent.futures import ThreadPoolExecutor
-
-        from app.core.request_context import get_timing_context, run_in_timing_context
-
-        events_q: list = []
-
-        def on_stage(event):
-            events_q.append(event)
-
-        timing_ctx = get_timing_context()
-
-        def _run_pipeline():
-            if timing_ctx is not None:
-                return run_in_timing_context(
-                    timing_ctx,
-                    run_jd_parse_pipeline,
-                    file_data,
-                    filename,
-                    uploader_id=uploader_id,
-                    uploader_role=uploader_role,
-                    job_id=job_id,
-                    on_stage=on_stage,
-                )
+        def _run(on_stage):
             return run_jd_parse_pipeline(
                 file_data,
                 filename,
@@ -501,31 +544,9 @@ def parse_jd_stream():
                 on_stage=on_stage,
             )
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(_run_pipeline)
-            while not future.done():
-                while events_q:
-                    ev = events_q.pop(0)
-                    yield f"event: stage\ndata: {json.dumps(ev.to_dict(), default=str)}\n\n"
-                time.sleep(0.05)
-            while events_q:
-                ev = events_q.pop(0)
-                yield f"event: stage\ndata: {json.dumps(ev.to_dict(), default=str)}\n\n"
-            body, status = future.result()
-            if status == 200:
-                payload = build_jd_client_payload(body)
-                yield f"event: result\ndata: {json.dumps(payload, default=str)}\n\n"
-            else:
-                yield f"event: error\ndata: {json.dumps(body, default=str)}\n\n"
+        yield from iter_parse_sse(_run, build_jd_client_payload)
 
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no',
-        },
-    )
+    return _sse_response(generate)
 
 
 @parsing_bp.route('/parsed/resume/<parsed_id>', methods=['GET'])

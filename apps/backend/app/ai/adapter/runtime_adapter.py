@@ -119,6 +119,12 @@ def _apply_resume_text_fields(person: dict[str, Any], raw_resume_text: str | Non
         parts = host.split('.')
         if len(parts) == 2 and len(parts[0]) <= 1 and len(parts[1]) <= 3:
             return True
+        # Degree abbreviations mistaken for domains (BSc.IT, B.Com)
+        if re.match(
+            r'^(?:bsc|msc|bcom|mcom|bca|mca|bba|mba|btech|mtech|be|me|ba|ma|phd)\.[a-z]{2,6}$',
+            host,
+        ):
+            return True
         return False
 
     def _normalize_url(u: str) -> str | None:

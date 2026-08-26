@@ -250,3 +250,4 @@ def test_validators():
     assert validate_phone('12')[0] is False
     assert validate_url('https://github.com/x', host_hint='github')[0] is True
     assert validate_url('https://example.com', host_hint='github')[0] is False
+    assert validate_url('https://BSc.IT')[0] is False

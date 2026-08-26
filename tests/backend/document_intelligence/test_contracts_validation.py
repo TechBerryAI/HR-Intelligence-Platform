@@ -22,10 +22,13 @@ from app.ai.document_intelligence.models.candidate import (  # noqa: E402
     SkillEntry,
 )
 from app.ai.document_intelligence.validation.engine import (  # noqa: E402
+    is_grounded_education_row,
     sanitize_candidate_profile,
+    validate_degree,
     validate_institution,
     validate_person_name,
     validate_skill_item,
+    validate_url,
 )
 
 
@@ -51,6 +54,36 @@ def test_institution_rejects_month():
     ok, reason = validate_institution('January')
     assert not ok
     assert 'month' in reason or 'date' in reason
+
+
+def test_degree_rejects_job_titles_and_duty_prose():
+    assert validate_degree('B.Tech')[0] is True
+    assert validate_degree('BSc.IT')[0] is True
+    assert validate_degree('Bachelors of Mass Media - Advertising')[0] is True
+    assert validate_degree('Data Science Intern')[0] is False
+    assert validate_degree('Helped learners understand how AI can b')[0] is False
+    assert validate_degree('world projects and career growth.')[0] is False
+
+
+def test_institution_rejects_companies_and_sentence_fragments():
+    assert validate_institution('Mumbai University')[0] is True
+    assert validate_institution('State U')[0] is True
+    assert validate_institution('ONLie Technology')[0] is False
+    assert validate_institution('world projects and career growth.')[0] is False
+    assert validate_institution('Magic Bus India Foundation')[0] is False
+    assert validate_institution('84.40%')[0] is False
+    assert validate_institution('Information Technology (BSc.IT), Gurunanak Khalsa College, Mumbai')[0] is True
+
+
+def test_grounded_education_row_is_layout_agnostic():
+    assert is_grounded_education_row('B.Tech', 'Pune University') is True
+    assert is_grounded_education_row('Bachelor of Science', 'State University') is True
+    assert is_grounded_education_row('12th Passed', 'Maharashtra State Board') is True
+    assert is_grounded_education_row('HSC', "St. Xavier's College") is True
+    assert is_grounded_education_row('Software Engineer Intern', 'Infosenseglobal') is False
+    assert is_grounded_education_row('Developed APIs', 'internal tools') is False
+    assert is_grounded_education_row('Marketing Intern', 'Acme Solutions') is False
+    assert is_grounded_education_row('Data Science Intern', 'Bright Labs') is False
 
 
 def test_skill_rejects_experience_sentence():

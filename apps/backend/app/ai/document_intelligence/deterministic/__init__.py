@@ -199,6 +199,17 @@ def extract_portfolio(text: str) -> str:
         low = url.lower()
         if 'linkedin.com' in low or 'github.com' in low:
             return ''
+        host = re.sub(r'(?i)^https?://', '', low).split('/')[0]
+        if re.match(
+            r'^(?:bsc|msc|bcom|mcom|bca|mca|bba|mba|btech|mtech|be|me|ba|ma|phd)\.[a-z]{2,6}$',
+            host,
+        ):
+            return ''
+        if not re.search(r'(?i)https?://|www\.|/', m.group(1)) and not re.search(
+            r'(?i)\.(?:com|dev|io|net|org|co|app|in|me)(?:/|$)',
+            m.group(1),
+        ):
+            return ''
         return url
     return ''
 

@@ -18,6 +18,7 @@ from app.ai.document_intelligence.parsers.resume import (  # noqa: E402
     parse_education,
 )
 from app.ai.document_intelligence.pipeline import parse_resume_text_to_canonical  # noqa: E402
+from app.ai.document_intelligence.validation.engine import is_grounded_education_row  # noqa: E402
 
 ROSHAN_LIKE = """
 R O S H A N  P A N I C K E R
@@ -465,6 +466,204 @@ B.Tech Computer Science - IIT Bombay
     form = map_candidate_to_form(candidate_profile_from_toon(toon))
     assert all(e.degree.strip().lower() != 'education' for e in form.education)
     assert any('iit' in (e.institution or '').lower() for e in form.education)
+
+
+def test_education_rejects_internships_and_duty_wrap():
+    section = """
+BSc.IT | Mumbai University | 2023
+Helped learners understand how AI can b
+world projects and career growth.
+Data Science Intern | ONLie Technology | Apr 2024 – Jul 2024
+"""
+    rows = coalesce_education(parse_education(section))
+    blobs = ' '.join(f'{r.degree} {r.institution}' for r in rows).lower()
+    assert 'intern' not in blobs
+    assert 'helped learners' not in blobs
+    assert 'world projects' not in blobs
+    assert 'onlie' not in blobs
+    assert any('bsc' in (r.degree or '').lower() for r in rows)
+    assert any('mumbai' in (r.institution or '').lower() for r in rows)
+
+
+def test_education_rules_apply_across_resume_layouts():
+    """Same education gate for every CV — internships/duties never become degrees."""
+    cases = [
+        """
+Priya Shah
+priya@example.com | 9876543210 | Pune
+
+EDUCATION
+B.Tech Computer Science | COEP Pune | 2022
+Software Engineer Intern | Infosenseglobal | Jan 2021 – Jun 2021
+""",
+        """
+John Carter
+john@example.com | +1 555-0100 | Austin, TX
+
+EDUCATION
+Bachelor of Science, State University, 2020
+Developed APIs and improved latency for internal tools.
+""",
+        """
+Amit Kumar
+amit@example.com | 9123456789 | Mumbai
+
+EDUCATION
+12th Passed | Maharashtra State Board | 2018
+HSC | St. Xavier's College | 2018
+Marketing Intern | Acme Solutions | May 2019 – Jul 2019
+""",
+    ]
+    for text in cases:
+        rows = coalesce_education(parse_education('', text))
+        blob = ' '.join(f'{r.degree} {r.institution}' for r in rows).lower()
+        assert 'intern' not in blob, blob
+        assert 'developed apis' not in blob
+        assert any(is_grounded_education_row(r.degree, r.institution) for r in rows), blob
+
+
+def test_internships_under_education_heading_move_to_experience():
+    text = """
+Neha Patil
+neha@example.com | 9000011111 | Thane
+
+EDUCATION
+B.Sc IT | Mumbai University | 2024
+Data Analyst Intern | Bright Labs | Jan 2024 – Mar 2024
+"""
+    _profile, form, _ = parse_resume_text_to_canonical(text)
+    edu_blob = ' '.join(f'{e.degree} {e.institution}' for e in (form.education or [])).lower()
+    assert 'intern' not in edu_blob
+    assert any('b.sc' in (e.degree or '').lower() or 'bsc' in (e.degree or '').lower() or 'sc' in (e.degree or '').lower() for e in (form.education or []))
+    roles = ' '.join((e.role or '') for e in (form.experiences or [])).lower()
+    companies = ' '.join((e.company or '') for e in (form.experiences or [])).lower()
+    assert 'intern' in roles
+    assert 'bright' in companies or 'labs' in companies
+
+
+RANJU_LIKE = """
+Ranju Gupta
+Mumbai | ranjugupta11@gmail.com | +918828550821
+https://www.linkedin.com/in/ranju-gu | https://github.com/ranjuggupta
+Portfolio: BSc.IT
+
+SUMMARY
+Aspiring AI Engineer with hands-on experience in Python, Machine Learning.
+
+EXPERIENCE
+AI Trainer | Magic Bus India Foundation | Jan 2025 – Present
+Helped learners understand how AI can be applied to real world projects and career growth.
+
+Data Science Intern | ONLie Technology | Apr 2024 – Jul 2024
+Built SQL pipelines.
+
+EDUCATION
+BSc.IT | Mumbai University | 2023
+"""
+
+
+def test_comma_city_education_oneliners_split_degree_and_college():
+    """Real PDF extracts put city after college and year after a pipe."""
+    from app.ai.document_intelligence.parsers.resume import parse_education, split_education_oneliner
+
+    d, i, gpa, year = split_education_oneliner(
+        'B.Sc. in Information Technology (BSc.IT), Gurunanak Khalsa College, Mumbai - CGPA: 9.3 | 2025'
+    )
+    assert 'b.sc' in d.lower()
+    assert 'information technology' in d.lower()
+    assert 'khalsa' in i.lower()
+    assert 'mumbai' in i.lower()
+    assert 'information technology' not in i.lower()
+    assert '9.3' in gpa
+    assert year == '2025'
+
+    d, i, gpa, year = split_education_oneliner(
+        'Higher Secondary Certificate (HSC) - Science, Jai Hind College, Mumbai - 91.00% | 2021'
+    )
+    assert 'hsc' in d.lower() or 'higher secondary' in d.lower()
+    assert 'jai hind' in i.lower()
+    assert '91' in gpa
+    assert year == '2021'
+
+    section = """
+B.Sc. in Information Technology (BSc.IT), Gurunanak Khalsa College, Mumbai - CGPA: 9.3 | 2025
+Higher Secondary Certificate (HSC) - Science, Jai Hind College, Mumbai - 91.00% | 2021
+Secondary School Certificate (SSC), Shree Sarvajanik Balmandir High School, Mumbai - 84.40% | 2019
+"""
+    rows = parse_education(section)
+    blobs = ' '.join(f'{r.degree} {r.institution}' for r in rows).lower()
+    assert 'intern' not in blobs
+    assert 'helped' not in blobs
+    assert any('khalsa' in (r.institution or '').lower() for r in rows)
+    assert any('b.sc' in (r.degree or '').lower() or 'bsc' in (r.degree or '').lower() for r in rows)
+    assert any('jai hind' in (r.institution or '').lower() for r in rows)
+    assert any('balmandir' in (r.institution or '').lower() or 'school' in (r.institution or '').lower() for r in rows)
+    assert all('84.40%' not in (r.institution or '') for r in rows)
+    ssc = next((r for r in rows if 'ssc' in (r.degree or '').lower() or 'secondary school' in (r.degree or '').lower()), None)
+    assert ssc is not None
+    assert 'balmandir' in (ssc.institution or '').lower()
+    assert 'certificate' not in (ssc.institution or '').lower()
+
+
+RANJU_EXTRACTED = """
+Ranju Gupta
++91 8828550821 ranjuggupta11@gmail.com
+https://www.linkedin.com/in/ranju-gupta-08a983249/ https://github.com/ranjuggupta
+
+Experience
+AI Trainer | Magic Bus India Foundation | Mumbai | Aug 2025 – Present
+•
+Helped learners understand how AI can be used in real-world projects and career growth.
+Data Science Intern | ONLie Technology |Remote|Apr 2024- Jul 2024
+• Built data preprocessing pipelines using Python, Pandas, NumPy
+
+Summary
+Aspiring AI Engineer with hands-on experience in Python, Machine Learning.
+
+Education
+B.Sc. in Information Technology (BSc.IT), Gurunanak Khalsa College, Mumbai - CGPA: 9.3 | 2025
+Higher Secondary Certificate (HSC) - Science, Jai Hind College, Mumbai - 91.00% | 2021
+Secondary School Certificate (SSC), Shree Sarvajanik Balmandir High School, Mumbai - 84.40% | 2019
+"""
+
+
+def test_extracted_resume_education_not_polluted_by_experience():
+    _profile, form, _toon = parse_resume_text_to_canonical(RANJU_EXTRACTED, allow_semantic=False)
+    assert 'ranju' in (form.fullName or '').lower()
+    assert 'bsc.it' not in (form.portfolioUrl or '').lower()
+    edu_blob = ' '.join(f'{e.degree} {e.institution}' for e in (form.education or [])).lower()
+    assert 'intern' not in edu_blob
+    assert 'helped learners' not in edu_blob
+    assert 'onlie' not in edu_blob
+    assert any('khalsa' in (e.institution or '').lower() for e in (form.education or []))
+    assert any('balmandir' in (e.institution or '').lower() for e in (form.education or []))
+    assert any(
+        'b.sc' in (e.degree or '').lower() or 'bsc' in (e.degree or '').lower()
+        for e in (form.education or [])
+    )
+    assert not any(
+        (e.degree or '').strip().lower() in {'b.sc.', 'b.sc'}
+        and 'information' in (e.institution or '').lower()
+        for e in (form.education or [])
+    )
+    roles = ' '.join((e.role or '') for e in (form.experiences or [])).lower()
+    companies = ' '.join((e.company or '') for e in (form.experiences or [])).lower()
+    assert 'intern' in roles or 'trainer' in roles
+    assert 'onlie' in companies or 'magic bus' in companies
+
+    _profile, form, _toon = parse_resume_text_to_canonical(RANJU_LIKE)
+    assert form.fullName
+    assert 'ranju' in form.fullName.lower()
+    assert 'bsc.it' not in (form.portfolioUrl or '').lower()
+    edu_blob = ' '.join(f'{e.degree} {e.institution}' for e in (form.education or [])).lower()
+    assert 'intern' not in edu_blob
+    assert 'helped learners' not in edu_blob
+    assert 'onlie' not in edu_blob
+    assert any('bsc' in (e.degree or '').lower() for e in (form.education or []))
+    roles = ' '.join((e.role or '') for e in (form.experiences or [])).lower()
+    companies = ' '.join((e.company or '') for e in (form.experiences or [])).lower()
+    assert 'intern' in roles or 'trainer' in roles
+    assert 'onlie' in companies or 'magic bus' in companies
 
 
 def test_location_pipe_header_and_address_label():

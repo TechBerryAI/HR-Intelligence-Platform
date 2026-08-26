@@ -95,7 +95,8 @@ _JOB_TITLE_CUE = re.compile(
     r'intern|engineer|developer|analyst|trainee|manager|officer|associate|'
     r'consultant|lead|executive|specialist|administrator|admin|architect|'
     r'designer|scientist|director|head|dba|programmer|coordinator|supervisor|'
-    r'recruiter|accountant|teacher|professor|nurse|technician'
+    r'recruiter|accountant|teacher|professor|nurse|technician|trainer|'
+    r'instructor|apprentice'
     r')\b'
 )
 _PIPE_TWO = re.compile(r'^(.+?)\s*[|]\s*(.+)$')
@@ -140,6 +141,7 @@ _DEGREE_PAT = re.compile(
     r'Ph\.?\s?D\.?(?![a-z])|Diploma(?:\s+in\s+[A-Za-z &\-/]+)?'
     r'|Pre[\s\-]?University|Higher\s+Secondary|Senior\s+Secondary|Secondary\s+School'
     r'|(?:1[0-2](?:th|st|nd|rd)?|10th|12th)\s+Passed(?:\s+in\s+[A-Za-z &\-/]+)?'
+    r'|HSC|SSC|CBSE|ICSE|PUC'
     r')\b'
 )
 _EDU_DUTY_LINE = re.compile(
@@ -148,7 +150,8 @@ _EDU_DUTY_LINE = re.compile(
     r'implemented|maintained|monitoring|backup|restore|project\s+name|role\s*:|'
     r'duration\s*:|organizational\s+experience|executed|coordinated|facilitated|'
     r'optimized|increased|engagement|responsibilities|client\s+name|technologies\s+used|'
-    r'resulting\s+in|drove\s+a|leading\s+to'
+    r'resulting\s+in|drove\s+a|leading\s+to|helped|trained|taught|applied|'
+    r'identifying|enabling|assisted|supported|collaborated|created|built'
     r')\b'
 )
 _INSTITUTION_CUE = re.compile(
@@ -179,7 +182,89 @@ def _looks_like_degree_line(line: str) -> bool:
         return True
     if re.match(r'(?i)^(1[0-2](?:th)?|10th|12th)\s+passed\b', s):
         return True
+    if re.match(r'(?i)^(hsc|ssc|cbse|icse|puc)\b', s):
+        return True
     return False
+
+
+_EDU_TRAILING_YEAR = re.compile(r'(?i)\s*[|/\-–—,]*\s*((?:19|20)\d{2})\s*$')
+_EDU_GPA_TOKEN = re.compile(
+    r'(?i)(?:\b(?:cgpa|gpa)\s*[:\-]?\s*([\d]{1,2}(?:\.\d+)?)|(\d{1,3}(?:\.\d{1,2})?\s*%))'
+)
+
+
+def _peel_education_meta(line: str) -> tuple[str, str, str]:
+    """Strip trailing year / CGPA / percentage from an education one-liner."""
+    s = (line or '').strip()
+    gpa = ''
+    year = ''
+    ym = _EDU_TRAILING_YEAR.search(s)
+    if ym:
+        year = ym.group(1)
+        s = s[: ym.start()].strip(' \t|-–—,')
+    gm = _EDU_GPA_TOKEN.search(s)
+    if gm:
+        gpa = (gm.group(1) or gm.group(2) or '').strip()
+        s = (s[: gm.start()] + s[gm.end() :]).strip(' \t|-–—,')
+        s = re.sub(r'\s*[-–—]\s*$', '', s).strip()
+    return s, gpa, year
+
+
+_DEGREE_SCHOOL_PHRASE = re.compile(
+    r'(?i)\b(?:'
+    r'(?:secondary|high|higher\s+secondary|senior\s+secondary)\s+school\s+certificate'
+    r'|school\s+certificate|school\s+leaving|ssc|hsc'
+    r')\b'
+)
+
+
+def _comma_part_is_institution(part: str) -> bool:
+    p = (part or '').strip()
+    if not p:
+        return False
+    if _DEGREE_SCHOOL_PHRASE.search(p) and not re.search(
+        r'(?i)\b(?:college|university|institute|academy|vidyalaya)\b', p
+    ):
+        # "Secondary School Certificate (SSC)" is the degree, not the school
+        if _looks_like_degree_line(p) or re.search(r'(?i)\bcertificate\b', p):
+            return False
+    if _INSTITUTION_CUE.search(p) or is_institution_like(p):
+        return True
+    return False
+
+
+def split_education_oneliner(line: str) -> tuple[str, str, str, str]:
+    """Split compact education lines used on many CVs.
+
+    Examples:
+    - B.Sc. in Information Technology (BSc.IT), Gurunanak Khalsa College, Mumbai - CGPA: 9.3 | 2025
+    - Higher Secondary Certificate (HSC) - Science, Jai Hind College, Mumbai - 91.00% | 2021
+    - Bachelor of Science, State University, 2020
+    """
+    core, gpa, year = _peel_education_meta(line)
+    if not core:
+        return '', '', gpa, year
+    if ',' in core:
+        parts = [p.strip() for p in core.split(',') if p.strip()]
+        inst_idx = next(
+            (i for i, p in enumerate(parts) if _comma_part_is_institution(p)),
+            None,
+        )
+        if inst_idx is not None and inst_idx > 0:
+            degree = ', '.join(parts[:inst_idx]).strip()
+            institution = ', '.join(parts[inst_idx:]).strip()
+            return degree, institution, gpa, year
+        if inst_idx == 0 and len(parts) >= 2 and (
+            _looks_like_degree_line(parts[1]) or _DEGREE_PAT.search(parts[1])
+        ) and not _comma_part_is_institution(parts[1]):
+            return parts[1].strip(), parts[0].strip(), gpa, year
+    if re.search(r'[-–—]', core) and _DEGREE_PAT.search(core):
+        parts = re.split(r'\s*[-–—]\s*', core, maxsplit=1)
+        if len(parts) == 2 and _looks_like_degree_line(parts[0]) and (
+            _INSTITUTION_CUE.search(parts[1]) or is_institution_like(parts[1])
+        ):
+            return parts[0].strip(), parts[1].strip(), gpa, year
+    return core, '', gpa, year
 
 
 def _looks_like_institution_line(line: str) -> bool:
@@ -202,6 +287,10 @@ def _is_education_continuation(prev: str, nxt: str) -> bool:
     if not n or not p:
         return False
     if re.match(r'(?i)^(grade|cgpa|gpa|percentage|score)\s*:', n):
+        return False
+    if _EDU_DUTY_LINE.match(n) or _DUTY_VERB_START.match(n):
+        return False
+    if _has_job_title_cue(n) and not _looks_like_degree_line(n):
         return False
     if _looks_like_degree_line(n) or _looks_like_degree_line(p):
         return False
@@ -518,7 +607,12 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
         if not stripped or is_section_header_line(stripped):
             continue
         # Experience bullets leak into education when section bounds are weak
-        if _EDU_DUTY_LINE.match(stripped):
+        if _EDU_DUTY_LINE.match(stripped) or _DUTY_VERB_START.match(stripped):
+            continue
+        if stripped[:1].islower() and not _INSTITUTION_CUE.search(stripped) and not _looks_like_degree_line(stripped):
+            continue
+        # Internships / job headers belong in Experience, not Education
+        if _has_job_title_cue(stripped) and not _looks_like_degree_line(stripped):
             continue
         if re.match(r'(?i)^(grade|cgpa|gpa|percentage|score)\s*:', stripped):
             continue
@@ -531,10 +625,14 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
         line = lines[i]
         start, end = extract_date_range(line)
         line_wo_dates = _DATE_RANGE_STRIP.sub('', line).strip(' \t|-–—,') if start else line
+        line_wo_dates, row_gpa, row_year = _peel_education_meta(line_wo_dates)
+        if row_year and not end:
+            end = row_year
 
         institution = ''
         degree = ''
         field = ''
+        gpa = row_gpa
 
         # Table / KV rows: "B.Tech | XYZ College | 2024" or tab-separated
         if '|' in line_wo_dates or '\t' in line_wo_dates:
@@ -563,7 +661,15 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
                     or (extract_date_range(right)[0] and not _INSTITUTION_CUE.search(right))
                 )
                 if right_is_meta:
-                    if _looks_like_degree_line(left) or _DEGREE_PAT.search(left):
+                    # "B.Sc. in IT (BSc.IT), Khalsa College, Mumbai | 2025"
+                    # Year/GPA already peeled; remaining left is still a one-liner.
+                    d2, i2, g2, y2 = split_education_oneliner(left)
+                    if d2 and i2:
+                        degree, institution = d2, i2
+                        gpa = gpa or g2
+                        if y2 and not end:
+                            end = y2
+                    elif _looks_like_degree_line(left) or _DEGREE_PAT.search(left):
                         degree, institution = left, ''
                     else:
                         institution, degree = left, ''
@@ -573,6 +679,7 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
                                 degree=degree[:200],
                                 field=field,
                                 institution=institution[:200],
+                                gpa=gpa,
                                 start=start,
                                 end=end,
                             )
@@ -584,8 +691,14 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
                 elif _looks_like_degree_line(right) or _DEGREE_PAT.search(right):
                     institution, degree = left, right
                 elif is_institution_like(right) or _INSTITUTION_CUE.search(right):
+                    if _has_job_title_cue(left) and not _looks_like_degree_line(left):
+                        i += 1
+                        continue
                     degree, institution = left, right
                 else:
+                    if _has_job_title_cue(left) and not _looks_like_degree_line(left):
+                        i += 1
+                        continue
                     degree, institution = left, right
                 if degree and institution:
                     education.append(
@@ -593,12 +706,34 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
                             degree=degree[:200],
                             field=field,
                             institution=institution[:200],
+                            gpa=gpa,
                             start=start,
                             end=end,
                         )
                     )
                     i += 1
                     continue
+
+        # Compact one-liners: degree + college + city + year/CGPA
+        if not institution and not degree and _DEGREE_PAT.search(line_wo_dates):
+            d2, i2, g2, y2 = split_education_oneliner(line_wo_dates)
+            if d2 and i2:
+                degree, institution = d2, i2
+                gpa = gpa or g2
+                if y2 and not end:
+                    end = y2
+                i += 1
+                education.append(
+                    EducationEntry(
+                        degree=degree[:200],
+                        field=field,
+                        institution=institution[:200],
+                        gpa=gpa,
+                        start=start,
+                        end=end,
+                    )
+                )
+                continue
 
         # Prefer splitting "B.com – SV University" before institution-only classification
         if (
@@ -622,6 +757,7 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
                         degree=degree[:200],
                         field=field,
                         institution=institution[:200],
+                        gpa=gpa,
                         start=start,
                         end=end,
                     )
@@ -657,21 +793,14 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
             field = 'Computer Science'
 
         # Gold one-liner: "B.Tech Computer Science, State University, 2015"
-        if degree and not institution and ',' in degree:
-            parts = [p.strip() for p in degree.split(',') if p.strip()]
-            non_year = [p for p in parts if not re.fullmatch(r'(?:19|20)\d{2}', p)]
-            if len(non_year) >= 2 and (
-                is_institution_like(non_year[-1])
-                or 'university' in non_year[-1].lower()
-                or 'college' in non_year[-1].lower()
-                or 'state' in non_year[-1].lower()
-            ):
-                institution = non_year[-1]
-                degree = ', '.join(non_year[:-1])
-                if not end:
-                    ym = re.search(r'\b((?:19|20)\d{2})\b', ','.join(parts))
-                    if ym:
-                        end = ym.group(1)
+        if (degree and not institution) or (institution and not degree):
+            blob = degree or institution
+            d2, i2, g2, y2 = split_education_oneliner(blob)
+            if d2 and i2:
+                degree, institution = d2, i2
+                gpa = gpa or g2
+                if y2 and not end:
+                    end = y2
 
         # Compact "B.com – SV University, Tirupathi" one-liners (fallback)
         if degree and not institution and re.search(r'[-–—]', degree):
@@ -685,10 +814,15 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
         if degree or institution:
             # Drop duty / project lines that slipped through
             blob = f'{degree} {institution}'.strip()
-            if _EDU_DUTY_LINE.match(blob) or (
+            if _EDU_DUTY_LINE.match(blob) or _DUTY_VERB_START.match(blob) or (
                 len(blob) > 80
                 and not _DEGREE_PAT.search(blob)
                 and not _INSTITUTION_CUE.search(blob)
+            ):
+                continue
+            if (
+                (_has_job_title_cue(degree) and not _looks_like_degree_line(degree))
+                or (_has_job_title_cue(institution) and not _INSTITUTION_CUE.search(institution))
             ):
                 continue
             # Pipe-separated: "Mumbai University | BHARAT COLLEGE OF ENGINEERING"
@@ -709,6 +843,7 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
                     degree=degree[:200],
                     field=field,
                     institution=institution[:200],
+                    gpa=gpa,
                     start=start,
                     end=end,
                 )
@@ -1792,6 +1927,34 @@ def merge_resume_sections(
     return sanitize_candidate_profile(profile, source_text=source_text or '')
 
 
+_INTERNISH_ROLE_RE = re.compile(r'(?i)\b(?:intern(?:ship)?s?|trainee|apprentice)\b')
+
+
+def _merge_internships_listed_under_education(
+    experience: list[ExperienceEntry],
+    edu_text: str,
+) -> list[ExperienceEntry]:
+    """Fresher CVs often put internships under Education. Keep them as jobs."""
+    if not (edu_text or '').strip():
+        return experience
+    extra = parse_experience(edu_text, '')
+    seen = {
+        ((e.role or '').strip().lower(), (e.company or '').strip().lower())
+        for e in experience
+    }
+    out = list(experience)
+    for e in extra:
+        blob = f'{e.role or ""} {e.company or ""}'
+        if not _INTERNISH_ROLE_RE.search(blob):
+            continue
+        key = ((e.role or '').strip().lower(), (e.company or '').strip().lower())
+        if key in seen or not (e.role or e.company):
+            continue
+        seen.add(key)
+        out.append(e)
+    return out
+
+
 def parse_resume_from_sections(
     sections: list[SectionSpan],
     full_text: str,
@@ -1849,6 +2012,10 @@ def parse_resume_from_sections(
     results['contact'] = parse_contact(full_text, preamble)
     results['experience'] = parse_experience(exp_text, full_text)
     results['education'] = parse_education(edu_text, full_text)
+    results['experience'] = _merge_internships_listed_under_education(
+        results['experience'],
+        edu_text,
+    )
     results['skills'] = parse_skills(skills_text, full_text)
     results['summary'] = parse_summary(summary_text, full_text)
     results['certs'] = parse_certifications(cert_text, full_text)
