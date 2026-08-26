@@ -44,6 +44,13 @@ function isAuthPollError(err) {
   return status === 401 || status === 403
 }
 
+/** False-positive from optional external bulk parser (port 8001) — ignore when local job finished. */
+function isStaleBulkServiceError(message) {
+  return /service unavailable|bulk parsing service unavailable|BULK_PARSER_UNREACHABLE|BULK_PARSER_NOT_CONFIGURED/i.test(
+    String(message || '')
+  )
+}
+
 export default function BulkResumeParser({ embedded = false }) {
   const [inputFolderPath, setInputFolderPath] = useState('')
   const [inputFolderFound, setInputFolderFound] = useState(false)
@@ -268,6 +275,9 @@ export default function BulkResumeParser({ embedded = false }) {
           setJobId(saved.jobId)
           setProgress(data)
           setSessionExpired(false)
+          if (st === 'completed' || st === 'failed') {
+            setError((prev) => (isStaleBulkServiceError(prev) ? null : prev))
+          }
           if (st === 'paused') setRunControl('paused')
           else if (st === 'started' || st === 'pending') setRunControl('running')
           else setRunControl(null)
@@ -321,6 +331,7 @@ export default function BulkResumeParser({ embedded = false }) {
         } else if (status === 'completed' || status === 'failed' || status === 'cancelled') {
           setRunControl(null)
           ignorePausedUntilRef.current = 0
+          setError((prev) => (isStaleBulkServiceError(prev) ? null : prev))
         }
         if (status === 'completed' || status === 'failed') {
           return
@@ -352,13 +363,33 @@ export default function BulkResumeParser({ embedded = false }) {
   }, [jobId])
 
   const handleDownload = async () => {
-    if (!jobId || progress?.status !== 'completed') return
+    if (!jobId || (progress?.status !== 'completed' && progress?.status !== 'started')) return
+    // Allow download while regenerating (server returns 202 until Excel is ready)
+    if (progress?.status === 'started' && !/regenerat/i.test(String(progress?.message || ''))) {
+      return
+    }
     setDownloading(true)
     setError(null)
     try {
       await downloadBulkResult(jobId)
+      setError(null)
     } catch (e) {
-      setError(e?.message || 'Download failed')
+      const raw = e?.data?.error || e?.message || 'Download failed'
+      if (e?.data?.code === 'EXPORT_REGENERATING' || e?.status === 202) {
+        setError(raw)
+        setProgress((prev) => ({
+          ...(prev || {}),
+          status: 'started',
+          message: raw,
+        }))
+        setRunControl('running')
+      } else if (isStaleBulkServiceError(raw)) {
+        setError(
+          'Excel export is missing for this completed job. Re-run bulk parse to regenerate the download.'
+        )
+      } else {
+        setError(raw)
+      }
     } finally {
       setDownloading(false)
     }
@@ -390,7 +421,7 @@ export default function BulkResumeParser({ embedded = false }) {
     setResuming(true)
     setError(null)
     setRunControl('running')
-    ignorePausedUntilRef.current = Date.now() + 8000
+    ignorePausedUntilRef.current = Date.now() + 15000
     setProgress((prev) => ({
       ...(prev || {}),
       status: 'started',
@@ -401,10 +432,12 @@ export default function BulkResumeParser({ embedded = false }) {
       setProgress((prev) => ({
         ...(prev || {}),
         ...(data || {}),
-        status: 'started',
+        status: data?.status === 'paused' ? 'started' : (data?.status || 'started'),
         message: data?.message || 'Resuming…',
       }))
       setRunControl('running')
+      // Keep ignoring stale paused polls a bit longer after a successful resume.
+      ignorePausedUntilRef.current = Date.now() + 15000
     } catch (e) {
       ignorePausedUntilRef.current = 0
       setRunControl('paused')
@@ -433,6 +466,22 @@ export default function BulkResumeParser({ embedded = false }) {
     ignorePausedUntilRef.current = 0
   }
 
+  // Always drop false "service unavailable" once the local job is terminal
+  // (poll may already have stopped, so render-time + effect both clear it).
+  useEffect(() => {
+    const st = progress?.status
+    if (st !== 'completed' && st !== 'failed' && st !== 'cancelled') return
+    setError((prev) => (isStaleBulkServiceError(prev) ? null : prev))
+  }, [progress?.status])
+
+  // When export rebuild starts, clear the old "export is missing" nag
+  useEffect(() => {
+    if (!/regenerat/i.test(String(progress?.message || ''))) return
+    setError((prev) =>
+      prev && /excel export is missing|re-run bulk parse/i.test(String(prev)) ? null : prev
+    )
+  }, [progress?.message])
+
   const resumeFiles = files.filter((f) => /\.(pdf|docx?)$/i.test(f.name))
   const zipSelected = files.some((f) => /\.zip$/i.test(f.name))
   // Only treat files as "in queue" when a real job is running — avoids fake stuck UI after failed upload
@@ -440,6 +489,12 @@ export default function BulkResumeParser({ embedded = false }) {
   const processed = progress?.processed_files ?? 0
   const failed = progress?.failed_files ?? 0
   const failedDetails = progress?.failed_details ?? progress?.failedDetails ?? []
+  const terminalJob =
+    progress?.status === 'completed' ||
+    progress?.status === 'failed' ||
+    progress?.status === 'cancelled'
+  const displayError =
+    error && !(terminalJob && isStaleBulkServiceError(error)) ? error : null
   const failedFilenames =
     failedDetails.length > 0
       ? failedDetails.map((d) => d.filename || d.name).filter(Boolean)
@@ -598,10 +653,18 @@ export default function BulkResumeParser({ embedded = false }) {
             </div>
           )}
 
-          {error && (
+          {displayError && (
             <div className="org-error-banner flex items-start gap-2">
               <FiAlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>{error}</span>
+              <span className="flex-1 min-w-0">{displayError}</span>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="shrink-0 text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] p-0.5"
+                aria-label="Dismiss error"
+              >
+                <FiX className="w-4 h-4" />
+              </button>
             </div>
           )}
 
@@ -900,7 +963,8 @@ export default function BulkResumeParser({ embedded = false }) {
                       {processingCount} file{processingCount === 1 ? '' : 's'} remaining — click Resume to continue.
                     </p>
                   )}
-                  {progress?.status === 'completed' && (
+                  {(progress?.status === 'completed' ||
+                    /regenerat/i.test(String(progress?.message || ''))) && (
                     <div className="flex gap-2 flex-wrap pt-1">
                       <button
                         type="button"
@@ -913,7 +977,11 @@ export default function BulkResumeParser({ embedded = false }) {
                         }}
                       >
                         {downloading ? <FiLoader className="w-4 h-4 animate-spin" /> : <FiDownload className="w-4 h-4" />}
-                        {downloading ? 'Downloading…' : 'Download Excel'}
+                        {downloading
+                          ? /regenerat/i.test(String(progress?.message || ''))
+                            ? 'Regenerating Excel…'
+                            : 'Downloading…'
+                          : 'Download Excel'}
                       </button>
                       <button type="button" onClick={reset} className="org-btn-ghost">
                         <FiRefreshCw className="w-4 h-4" />

@@ -172,12 +172,54 @@ def enrich_resume_semantic(
 
     # Same resume_parser_v1 prompt + resume_milestone_v1 schema as parse_via_runtime.
     # Do not send a competing fragment-JSON instruction.
-    raw = _call_section_llm(unresolved_text[:6000], 'resume')
+    # Prefer summary/objective section text for the model when summary is still empty —
+    # never ask the LLM to invent a summary from contact/experience noise alone.
+    from app.ai.parser.enrichment.resume_text_inference import (
+        extract_summary_from_text,
+        is_valid_summary,
+    )
+
+    section_summary = (profile.personal.summary or '').strip()
+    if not is_valid_summary(section_summary):
+        section_summary = extract_summary_from_text(unresolved_text or '')
+    llm_payload = unresolved_text[:6000]
+    if not section_summary:
+        from app.ai.parser.enrichment.resume_text_inference import extract_summary_details
+
+        details = extract_summary_details(unresolved_text or '')
+        # If a summary heading exists but body failed validation, still scope the LLM
+        # to that section only (never the contact block).
+        if details.get('source_section'):
+            llm_payload = (
+                f"{details.get('source_section')}\n{details.get('raw_value') or ''}"
+            )[:4000] or llm_payload
+
+    raw = _call_section_llm(llm_payload, 'resume')
     if not isinstance(raw, dict):
+        # Still keep deterministic section summary if we found one
+        if section_summary and not profile.personal.summary:
+            return sanitize_candidate_profile(
+                profile.model_copy(
+                    update={
+                        'personal': profile.personal.model_copy(
+                            update={'summary': section_summary}
+                        )
+                    }
+                ),
+                source_text=unresolved_text,
+            )
         return profile
 
     # Merge AI only into empty gaps — convert via TOON adapter once for alias safety
     try:
+        ai_summary = str(raw.get('summary') or '').strip()
+        if section_summary:
+            chosen_summary = section_summary
+        elif is_valid_summary(ai_summary):
+            chosen_summary = ai_summary
+        else:
+            chosen_summary = ''
+
         partial_toon = {
             'type': 'resume',
             'person': {
@@ -189,7 +231,7 @@ def enrich_resume_semantic(
                 'github': profile.contact.github,
                 'portfolio': profile.contact.portfolio,
             },
-            'summary': profile.personal.summary or raw.get('summary') or '',
+            'summary': chosen_summary,
             'skills': [s.canonical or s.name for s in profile.skills] or raw.get('skills') or [],
             'experience': [
                 {
@@ -237,8 +279,7 @@ def enrich_resume_semantic(
                 )
         if not profile.skills and isinstance(raw.get('skills'), list):
             partial_toon['skills'] = [str(s) for s in raw['skills'] if s]
-        if not profile.personal.summary and raw.get('summary'):
-            partial_toon['summary'] = str(raw['summary'])
+        # summary already validated above — do not re-introduce raw LLM contact blobs
 
         merged = candidate_profile_from_toon(partial_toon)
         from app.ai.document_intelligence.experience_quality import (

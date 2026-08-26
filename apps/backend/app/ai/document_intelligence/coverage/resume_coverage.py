@@ -122,16 +122,30 @@ def recover_resume_profile_gaps(
         fields.append(FieldCoverage('fullName', 'filled', True))
     elif name_ev:
         found = extract_name_from_text(text[:2500])
-        if found and is_plausible_person_name(found) and not full_name:
-            personal['full_name'] = found
-            data['personal'] = personal
-            recovered.append('fullName')
-            fields.append(FieldCoverage('fullName', 'recovered', True, found[:80]))
+        if found and is_plausible_person_name(found):
+            # Replace missing OR implausible body/LLM names (e.g. "Lead Generation")
+            if not full_name or not is_plausible_person_name(full_name):
+                personal['full_name'] = found
+                data['personal'] = personal
+                recovered.append('fullName')
+                fields.append(FieldCoverage('fullName', 'recovered', True, found[:80]))
+            else:
+                fields.append(FieldCoverage('fullName', 'filled', True))
         elif not full_name:
+            fields.append(FieldCoverage('fullName', 'missing_with_evidence', True))
+        elif not is_plausible_person_name(full_name):
+            personal['full_name'] = ''
+            data['personal'] = personal
+            recovered.append('fullName_cleared_implausible')
             fields.append(FieldCoverage('fullName', 'missing_with_evidence', True))
         else:
             fields.append(FieldCoverage('fullName', 'filled', True, 'unvalidated'))
     else:
+        if full_name and not is_plausible_person_name(full_name):
+            personal['full_name'] = ''
+            data['personal'] = personal
+            recovered.append('fullName_cleared_implausible')
+            full_name = ''
         fields.append(
             FieldCoverage(
                 'fullName',

@@ -273,14 +273,28 @@ def map_candidate_to_form(
     )
 
     summary = profile.personal.summary.strip()
+    from app.ai.parser.enrichment.resume_text_inference import (
+        is_valid_summary,
+        summary_rejection_reason,
+    )
+
+    if summary and not is_valid_summary(summary):
+        summary = ''
+    sum_reason = 'ok' if summary else 'empty'
+    sum_validator = 'is_valid_summary' if summary else 'none'
+    if not summary:
+        # Record why extraction failed when a prior invalid value was present
+        rej = summary_rejection_reason(profile.personal.summary)
+        if rej and rej != 'empty':
+            sum_reason = rej
     traces.append(
         _trace(
             'summary',
             'personal.summary',
-            source='semantic_ai',
-            validator='validate_nonempty' if summary else 'none',
-            confidence=0.8 if summary else 0.0,
-            reason='ok' if summary else 'empty',
+            source='deterministic',
+            validator=sum_validator,
+            confidence=0.85 if summary else 0.0,
+            reason=sum_reason,
         )
     )
 

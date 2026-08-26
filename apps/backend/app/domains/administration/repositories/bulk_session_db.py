@@ -356,6 +356,52 @@ def mark_session_paused(session_id: str, *, message: str | None = None) -> bool:
     return bool(result and (result.get('changes') or 0) > 0)
 
 
+def force_claim_session_lease(
+    session_id: str,
+    worker_id: str,
+    *,
+    lease_seconds: int = DEFAULT_SESSION_LEASE_SECONDS,
+    total_files: int | None = None,
+) -> bool:
+    """
+    Claim a session for resume even if a stale Running lease is still present.
+    Prefer claim_session_lease first; use this when resume must take over.
+    """
+    until = _lease_until(lease_seconds)
+    if total_files is not None:
+        result = db_run(
+            """
+            UPDATE bulk_parse_sessions
+            SET status = 'Running',
+                leased_by = ?,
+                leased_until = ?,
+                started_at = COALESCE(started_at, NOW()),
+                updated_at = NOW(),
+                total_files = COALESCE(?, total_files),
+                error_summary = NULL
+            WHERE id = ?
+              AND status IN ('Queued', 'Paused', 'Running')
+            """,
+            (worker_id, until, total_files, session_id),
+        )
+    else:
+        result = db_run(
+            """
+            UPDATE bulk_parse_sessions
+            SET status = 'Running',
+                leased_by = ?,
+                leased_until = ?,
+                started_at = COALESCE(started_at, NOW()),
+                updated_at = NOW(),
+                error_summary = NULL
+            WHERE id = ?
+              AND status IN ('Queued', 'Paused', 'Running')
+            """,
+            (worker_id, until, session_id),
+        )
+    return bool(result and (result.get('changes') or 0) > 0)
+
+
 def claim_session_lease(
     session_id: str,
     worker_id: str,

@@ -18,6 +18,7 @@ def parse_resume_text_via_engine(
     *,
     allow_llm: bool = True,
     skip_llm_when_deterministic: bool | None = None,
+    source_filename: str = '',
 ) -> tuple[dict[str, Any], str, list[str], Any]:
     """
     Run the core resume intelligence stages on already-extracted text.
@@ -60,6 +61,7 @@ def parse_resume_text_via_engine(
         profile, form, toon = parse_resume_text_to_canonical(
             text,
             allow_semantic=allow_semantic,
+            source_filename=source_filename or '',
         )
         has_id = bool(profile.personal.full_name and profile.contact.email)
         has_body = bool(profile.skills and (profile.experience or profile.education))

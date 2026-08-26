@@ -126,7 +126,12 @@ def unresolved_semantic_text(sections: list[SectionSpan], doc_type: str) -> str:
     """
     Build a reduced prompt payload for LLM: only sections that need semantic reasoning.
     Falls back to full document if no semantic sections found.
+    Never includes Contact / Preamble contact blocks — those pollute summary/experience.
     """
+    _CONTACTISH = {
+        'contact', 'contact details', 'personal details', 'personal information',
+        'biodata', 'bio data', 'preamble',
+    }
     if doc_type == 'resume':
         # Never include Projects — LLM must not invent experience from project narratives
         keys = (
@@ -136,7 +141,12 @@ def unresolved_semantic_text(sections: list[SectionSpan], doc_type: str) -> str:
             'Internships',
             'Summary',
             'Professional Summary',
+            'Career Objective',
+            'Profile Summary',
             'Objective',
+            'Profile',
+            'About Me',
+            'Career Profile',
             'Skills',
             'Technical Skills',
             'Education',
@@ -154,8 +164,27 @@ def unresolved_semantic_text(sections: list[SectionSpan], doc_type: str) -> str:
     text = section_text_by_labels(sections, *keys)
     if text and len(text.strip()) >= 40:
         return text
-    # Fallback: everything except contact-like preamble if we have other sections
-    non_preamble = [s for s in sections if s.label.lower() != 'preamble']
-    if non_preamble:
-        return '\n'.join(s.text for s in non_preamble).strip()
+    # Fallback: everything except contact-like / preamble sections
+    non_contact = [
+        s for s in sections
+        if s.label.lower() not in _CONTACTISH
+    ]
+    if non_contact:
+        return '\n'.join(s.text for s in non_contact).strip()
     return '\n'.join(s.text for s in sections).strip()
+
+
+def summary_section_text(sections: list[SectionSpan]) -> str:
+    """Return only summary/objective section bodies for LLM cleanup."""
+    return section_text_by_labels(
+        sections,
+        'Summary',
+        'Professional Summary',
+        'Career Objective',
+        'Profile Summary',
+        'Objective',
+        'Profile',
+        'About Me',
+        'Career Profile',
+        'Career Summary',
+    )

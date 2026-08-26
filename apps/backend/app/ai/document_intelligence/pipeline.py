@@ -427,6 +427,7 @@ def parse_resume_text_to_canonical(
     *,
     max_workers: int | None = None,
     allow_semantic: bool | None = None,
+    source_filename: str = '',
 ):
     """In-memory resume parse for tests / gold / bulk (no DB).
 
@@ -449,7 +450,9 @@ def parse_resume_text_to_canonical(
     )
 
     t0 = _time.perf_counter()
-    profile = parse_resume_from_sections(sections, text, max_workers=workers)
+    profile = parse_resume_from_sections(
+        sections, text, max_workers=workers, source_filename=source_filename or '',
+    )
     record_pipeline_stage(
         'deterministic',
         'completed',
