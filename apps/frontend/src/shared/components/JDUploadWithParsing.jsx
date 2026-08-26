@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { uploadAndParseJDStream, takeJDFormDTO, validateFileForParsing } from '@/core/api/parsingApi.js';
+import { hintForStage, isPipelineComplete, overlayCatchupMs, progressPctForStage } from '@/shared/utils/parsePipelineProgress.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiZap } from 'react-icons/fi';
@@ -14,6 +15,7 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
   const [parseSuccess, setParseSuccess] = useState('');
   const [confidence, setConfidence] = useState(null);
   const [stageLabel, setStageLabel] = useState(null);
+  const [stageMessage, setStageMessage] = useState(null);
   const [progressPct, setProgressPct] = useState(null);
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -70,15 +72,21 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
 
     // Start AI parsing - show premium overlay
     setIsUploading(true);
-    setStageLabel(null);
-    setProgressPct(null);
+    setStageLabel('cache');
+    setStageMessage(hintForStage('cache'));
+    setProgressPct(8);
+    let lastStage = 'cache';
     
     try {
       const onStage = (ev) => {
-        if (ev?.stage) setStageLabel(ev.stage);
-        const order = ['cache', 'persist_raw', 'layout', 'text', 'sections', 'deterministic', 'semantic', 'knowledge', 'validate', 'persist'];
-        const idx = order.indexOf(ev?.stage);
-        if (idx >= 0) setProgressPct(Math.round(((idx + 1) / order.length) * 100));
+        if (ev?.stage) {
+          lastStage = ev.stage;
+          setStageLabel(ev.stage);
+          setStageMessage(hintForStage(ev.stage, ev.message));
+        }
+        const pct = progressPctForStage('jd', ev?.stage);
+        if (pct != null) setProgressPct((prev) => Math.max(prev ?? 0, pct));
+        if (isPipelineComplete(ev)) setProgressPct(100);
       };
 
       const result = await uploadAndParseJDStream(file, currentJobId, { onStage });
@@ -89,6 +97,9 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
         // Store confidence and parsed ID
         setConfidence(result.confidence);
         setProgressPct(100);
+        setStageLabel('persist');
+        setStageMessage(hintForStage('persist'));
+        await new Promise((r) => setTimeout(r, overlayCatchupMs('jd', lastStage)));
 
         const coverage = Array.isArray(formData.coverage)
           ? formData.coverage
@@ -157,6 +168,7 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
     } finally {
       setIsUploading(false);
       setStageLabel(null);
+      setStageMessage(null);
       setProgressPct(null);
     }
   };
@@ -168,6 +180,7 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
         isVisible={isUploading}
         type="jd"
         stageLabel={stageLabel}
+        stageMessage={stageMessage}
         progressPct={progressPct}
       />
 

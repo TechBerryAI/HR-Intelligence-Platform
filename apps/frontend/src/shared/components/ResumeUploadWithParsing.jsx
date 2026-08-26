@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  uploadAndParseResume,
+  uploadAndParseResumeStream,
   uploadAndParseResumePublicStream,
   takeResumeFormDTO,
   validateFileForParsing,
   extractParseErrorMessage,
 } from '@/core/api/parsingApi.js';
+import { hintForStage, isPipelineComplete, overlayCatchupMs, progressPctForStage } from '@/shared/utils/parsePipelineProgress.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiExternalLink, FiTrash2 } from 'react-icons/fi';
@@ -43,6 +44,7 @@ export default function ResumeUploadWithParsing({
   const [parseSuccess, setParseSuccess] = useState('');
   const [confidence, setConfidence] = useState(null);
   const [stageLabel, setStageLabel] = useState(null);
+  const [stageMessage, setStageMessage] = useState(null);
   const [progressPct, setProgressPct] = useState(null);
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -114,27 +116,34 @@ export default function ResumeUploadWithParsing({
     }
 
     setIsUploading(true);
-    // Leave stage/progress null so the overlay animates through steps (as before).
-    // Live SSE stages take over when the engine reports them.
-    setStageLabel(null);
-    setProgressPct(null);
+    setStageLabel('cache');
+    setStageMessage(hintForStage('cache'));
+    setProgressPct(8);
+    let lastStage = 'cache';
     
     try {
       const onStage = (ev) => {
-        if (ev?.stage) setStageLabel(ev.stage);
-        const order = ['cache', 'persist_raw', 'layout', 'text', 'sections', 'deterministic', 'coverage', 'semantic', 'knowledge', 'validate', 'persist'];
-        const idx = order.indexOf(ev?.stage);
-        if (idx >= 0) setProgressPct(Math.round(((idx + 1) / order.length) * 100));
+        if (ev?.stage) {
+          lastStage = ev.stage;
+          setStageLabel(ev.stage);
+          setStageMessage(hintForStage(ev.stage, ev.message));
+        }
+        const pct = progressPctForStage('resume', ev?.stage);
+        if (pct != null) setProgressPct((prev) => Math.max(prev ?? 0, pct));
+        if (isPipelineComplete(ev)) setProgressPct(100);
       };
 
       const result = publicMode
         ? await uploadAndParseResumePublicStream(file, { onStage })
-        : await uploadAndParseResume(file);
+        : await uploadAndParseResumeStream(file, null, { onStage });
 
       if (result.status === 'ok' && result.form) {
         const formData = takeResumeFormDTO(result);
         setConfidence(result.confidence);
         setProgressPct(100);
+        setStageLabel('persist');
+        setStageMessage(hintForStage('persist'));
+        await new Promise((r) => setTimeout(r, overlayCatchupMs('resume', lastStage)));
 
         const coverage = Array.isArray(formData.coverage)
           ? formData.coverage
@@ -228,6 +237,7 @@ export default function ResumeUploadWithParsing({
     } finally {
       setIsUploading(false);
       setStageLabel(null);
+      setStageMessage(null);
       setProgressPct(null);
     }
   };
@@ -241,6 +251,7 @@ export default function ResumeUploadWithParsing({
         isVisible={isUploading}
         type="resume"
         stageLabel={stageLabel}
+        stageMessage={stageMessage}
         progressPct={progressPct}
       />
 

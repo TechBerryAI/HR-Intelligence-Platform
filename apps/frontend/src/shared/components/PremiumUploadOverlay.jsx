@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiFile, FiCheck, FiZap, FiCpu, FiDatabase } from 'react-icons/fi';
+import { hintForStage, overlayStepIndex, overlayStepsFor, OVERLAY_STEP_DWELL_MS } from '@/shared/utils/parsePipelineProgress.js';
+
+const STEP_ICONS = [FiFile, FiCpu, FiDatabase, FiZap];
 
 /**
  * Premium Upload Overlay - Perfectly Centered & Visible
@@ -13,22 +16,20 @@ export default function PremiumUploadOverlay({
   stageLabel = null,
   stageIndex = null,
   progressPct = null,
+  stageMessage = null,
 }) {
   const [currentStep, setCurrentStep] = useState(0);
-  
-  const steps = type === 'resume' 
-    ? [
-        { icon: FiFile, text: 'Reading Document', color: '#60a5fa', stages: ['cache', 'persist_raw', 'layout', 'text'] },
-        { icon: FiCpu, text: 'Detecting Sections', color: '#a78bfa', stages: ['sections', 'deterministic'] },
-        { icon: FiDatabase, text: 'Knowledge & Semantics', color: '#f472b6', stages: ['knowledge', 'semantic'] },
-        { icon: FiZap, text: 'Validating & Autofill', color: '#4ade80', stages: ['validate', 'persist', 'toon'] },
-      ]
-    : [
-        { icon: FiFile, text: 'Reading Job Description', color: '#60a5fa', stages: ['cache', 'persist_raw', 'layout', 'text'] },
-        { icon: FiCpu, text: 'Parsing Requirements', color: '#a78bfa', stages: ['sections', 'deterministic'] },
-        { icon: FiDatabase, text: 'Knowledge & Semantics', color: '#f472b6', stages: ['knowledge', 'semantic'] },
-        { icon: FiZap, text: 'Preparing Form', color: '#4ade80', stages: ['validate', 'persist', 'toon'] },
-      ];
+  const targetStepRef = useRef(0);
+
+  const steps = useMemo(
+    () =>
+      overlayStepsFor(type).map((step, i) => ({
+        ...step,
+        icon: STEP_ICONS[i] || FiZap,
+        color: ['#60a5fa', '#a78bfa', '#f472b6', '#4ade80'][i] || '#60a5fa',
+      })),
+    [type],
+  );
 
   // Prevent body scroll
   useEffect(() => {
@@ -45,38 +46,49 @@ export default function PremiumUploadOverlay({
   useEffect(() => {
     if (!isVisible) {
       setCurrentStep(0);
+      targetStepRef.current = 0;
       return;
     }
 
-    // Prefer real stage mapping from Intelligence Engine
-    if (stageLabel) {
-      const idx = steps.findIndex((s) => (s.stages || []).includes(stageLabel));
-      if (idx >= 0) {
-        setCurrentStep(idx);
-        return;
-      }
+    const mapped = overlayStepIndex(type, stageLabel);
+    if (mapped >= 0) {
+      targetStepRef.current = Math.max(targetStepRef.current, mapped);
+    } else if (typeof stageIndex === 'number' && stageIndex >= 0) {
+      targetStepRef.current = Math.max(
+        targetStepRef.current,
+        Math.min(stageIndex, steps.length - 1),
+      );
     }
-    if (typeof stageIndex === 'number' && stageIndex >= 0) {
-      setCurrentStep(stageIndex % steps.length);
-      return;
+    if (progressPct != null && progressPct >= 100) {
+      targetStepRef.current = steps.length - 1;
     }
+  }, [isVisible, stageLabel, stageIndex, type, steps.length, progressPct]);
 
-    // Fallback cosmetic timer only when no real stage events
-    const interval = setInterval(() => {
-      setCurrentStep((prev) => (prev + 1) % steps.length);
-    }, 2000);
-    
-    return () => clearInterval(interval);
-  }, [isVisible, steps.length, stageLabel, stageIndex]);
+  useEffect(() => {
+    if (!isVisible) return undefined;
+    const tick = setInterval(() => {
+      setCurrentStep((prev) => {
+        const target = Math.min(targetStepRef.current, steps.length - 1);
+        if (prev < target) return prev + 1;
+        return prev;
+      });
+    }, OVERLAY_STEP_DWELL_MS);
+    return () => clearInterval(tick);
+  }, [isVisible, steps.length]);
 
-  const displayText = steps[currentStep]?.text || 'Processing';
+  const pipelineDone = progressPct != null && progressPct >= 100;
+  const allDone = pipelineDone && currentStep >= steps.length - 1;
+  const activeStep = Math.min(currentStep, steps.length - 1);
+  const displayText = allDone
+    ? (type === 'jd' ? 'Job description ready' : 'Document ready')
+    : (steps[activeStep]?.text || 'Processing');
+  const subtitle = allDone
+    ? 'Autofill complete'
+    : (stageMessage || (stageLabel ? hintForStage(stageLabel) : 'Takes 10–30 seconds'));
 
-  const barPct =
-    progressPct != null
-      ? Math.max(5, Math.min(100, progressPct))
-      : ((currentStep + 1) / steps.length) * 100;
+  const visualPct = ((activeStep + (allDone ? 1 : 0.55)) / steps.length) * 100;
+  const barPct = allDone ? 100 : Math.max(8, Math.min(96, visualPct));
 
-  // Use portal to ensure overlay is always at root level
   const overlayContent = (
     <AnimatePresence>
       {isVisible && (
@@ -176,17 +188,21 @@ export default function PremiumUploadOverlay({
         {/* Top Icon */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '18px' }}>
           <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+            animate={allDone ? { rotate: 0 } : { rotate: 360 }}
+            transition={allDone ? { duration: 0.2 } : { duration: 3, repeat: Infinity, ease: "linear" }}
             style={{
               width: '60px',
               height: '60px',
               borderRadius: '50%',
-              background: 'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)',
+              background: allDone
+                ? 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
+                : 'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 0 35px rgba(139, 92, 246, 0.6), 0 0 70px rgba(59, 130, 246, 0.3)',
+              boxShadow: allDone
+                ? '0 0 35px rgba(34, 197, 94, 0.6)'
+                : '0 0 35px rgba(139, 92, 246, 0.6), 0 0 70px rgba(59, 130, 246, 0.3)',
               position: 'relative',
               flexShrink: 0
             }}
@@ -198,14 +214,20 @@ export default function PremiumUploadOverlay({
                 position: 'absolute',
                 inset: '-8px',
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.5), rgba(59, 130, 246, 0.5))',
+                background: allDone
+                  ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.5), rgba(22, 163, 74, 0.5))'
+                  : 'linear-gradient(135deg, rgba(139, 92, 246, 0.5), rgba(59, 130, 246, 0.5))',
                 filter: 'blur(15px)',
                 zIndex: -1
               }}
             />
-            {React.createElement(steps[currentStep].icon, {
-              style: { width: '30px', height: '30px', color: '#ffffff', strokeWidth: 2, flexShrink: 0 }
-            })}
+            {allDone ? (
+              <FiCheck style={{ width: '30px', height: '30px', color: '#ffffff', strokeWidth: 3, flexShrink: 0 }} />
+            ) : (
+              React.createElement(steps[activeStep].icon, {
+                style: { width: '30px', height: '30px', color: '#ffffff', strokeWidth: 2, flexShrink: 0 }
+              })
+            )}
           </motion.div>
         </div>
 
@@ -213,7 +235,7 @@ export default function PremiumUploadOverlay({
         <div style={{ textAlign: 'center', marginBottom: '20px' }}>
           <AnimatePresence mode="wait">
             <motion.h1
-              key={currentStep}
+              key={displayText}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -221,13 +243,13 @@ export default function PremiumUploadOverlay({
               style={{
                 fontSize: '19px',
                 fontWeight: '800',
-                background: `linear-gradient(135deg, ${steps[currentStep].color}, ${steps[currentStep].color}cc)`,
+                background: `linear-gradient(135deg, ${steps[activeStep].color}, ${steps[activeStep].color}cc)`,
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text',
                 margin: '0 0 6px 0',
                 letterSpacing: '-0.3px',
-                filter: `drop-shadow(0 0 15px ${steps[currentStep].color}70)`,
+                filter: `drop-shadow(0 0 15px ${steps[activeStep].color}70)`,
                 lineHeight: '1.2'
               }}
             >
@@ -241,15 +263,15 @@ export default function PremiumUploadOverlay({
             fontWeight: '500',
             lineHeight: '1.4'
           }}>
-            {stageLabel ? 'Live pipeline progress' : 'Takes 10–30 seconds'}
+            {subtitle}
           </p>
         </div>
 
         {/* Progress Steps */}
         <div style={{ marginBottom: '16px', minHeight: 0 }}>
           {steps.map((step, index) => {
-            const isActive = index === currentStep;
-            const isCompleted = index < currentStep;
+            const isCompleted = allDone || index < activeStep;
+            const isActive = !allDone && index === activeStep;
             
             return (
               <motion.div
@@ -366,16 +388,18 @@ export default function PremiumUploadOverlay({
               top: 0,
               left: 0,
               height: '100%',
-              width: `${barPct}%`,
               background: 'linear-gradient(90deg, #8b5cf6 0%, #3b82f6 50%, #06b6d4 100%)',
               backgroundSize: '200% 100%',
               borderRadius: '2.5px',
               boxShadow: '0 0 12px rgba(139, 92, 246, 0.5)'
             }}
+            initial={{ width: '8%' }}
             animate={{
+              width: `${barPct}%`,
               backgroundPosition: ['0% 50%', '200% 50%'],
             }}
             transition={{
+              width: { duration: 0.4, ease: 'easeOut' },
               backgroundPosition: { duration: 2, repeat: Infinity, ease: "linear" },
             }}
           />
@@ -410,7 +434,6 @@ export default function PremiumUploadOverlay({
     </AnimatePresence>
   );
 
-  // Render in portal to ensure it's always on top
   if (typeof document !== 'undefined') {
     return createPortal(overlayContent, document.body);
   }

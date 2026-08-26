@@ -45,21 +45,6 @@ export function extractParseErrorMessage(payload, fallback = 'Unable to parse th
   return fallback;
 }
 
-function isGenericParseFailure(message) {
-  return /^failed to parse (resume|document|job description)?\.?$/i.test(String(message || '').trim())
-    || /^parse failed\.?$/i.test(String(message || '').trim())
-    || /^unable to parse this document\.?$/i.test(String(message || '').trim());
-}
-
-function isStreamTransportFailure(err) {
-  const msg = err?.message || '';
-  return (
-    err instanceof TypeError
-    || /failed to fetch|networkerror|load failed|aborterror/i.test(msg)
-    || /parse stream ended without result/i.test(msg)
-  );
-}
-
 /**
  * Upload and parse resume file (authenticated).
  * @returns {Promise<Object>} Parse result with `form` Form DTO
@@ -112,6 +97,27 @@ export async function uploadAndParseResumePublic(file) {
   return await response.json();
 }
 
+function applySseChunk(chunk, { onStage, sink }) {
+  const lines = String(chunk || '').split('\n');
+  let eventName = 'message';
+  const dataLines = [];
+  for (const line of lines) {
+    const trimmed = line.replace(/\r$/, '');
+    if (trimmed.startsWith('event:')) eventName = trimmed.slice(6).trim();
+    else if (trimmed.startsWith('data:')) dataLines.push(trimmed.slice(5).trimStart());
+  }
+  if (!dataLines.length) return;
+  let data;
+  try {
+    data = JSON.parse(dataLines.join('\n'));
+  } catch {
+    return;
+  }
+  if (eventName === 'stage' && onStage) onStage(data);
+  if (eventName === 'result') sink.result = data;
+  if (eventName === 'error') sink.errorPayload = data;
+}
+
 /**
  * Parse SSE stream from Document Intelligence Engine.
  */
@@ -131,43 +137,44 @@ async function consumeParseSSE(response, { onStage } = {}) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let result = null;
-  let errorPayload = null;
+  const sink = { result: null, errorPayload: null };
+
+  const drainBuffer = (flush) => {
+    buffer = buffer.replace(/\r\n/g, '\n');
+    const chunks = buffer.split('\n\n');
+    if (!flush) {
+      buffer = chunks.pop() || '';
+    } else {
+      buffer = '';
+    }
+    for (const chunk of chunks) {
+      applySseChunk(chunk, { onStage, sink });
+    }
+  };
 
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split('\n\n');
-    buffer = chunks.pop() || '';
-    for (const chunk of chunks) {
-      const lines = chunk.split('\n');
-      let eventName = 'message';
-      let dataLine = '';
-      for (const line of lines) {
-        if (line.startsWith('event:')) eventName = line.slice(6).trim();
-        if (line.startsWith('data:')) dataLine += line.slice(5).trim();
-      }
-      if (!dataLine) continue;
-      let data;
-      try {
-        data = JSON.parse(dataLine);
-      } catch {
-        continue;
-      }
-      if (eventName === 'stage' && onStage) onStage(data);
-      if (eventName === 'result') result = data;
-      if (eventName === 'error') errorPayload = data;
+    if (done) {
+      buffer += decoder.decode();
+      drainBuffer(true);
+      break;
     }
+    buffer += decoder.decode(value, { stream: true });
+    drainBuffer(false);
   }
-  if (errorPayload) {
-    throw new Error(extractParseErrorMessage(errorPayload, 'Parse failed'));
+  if (sink.errorPayload) {
+    throw new Error(extractParseErrorMessage(sink.errorPayload, 'Parse failed'));
   }
-  if (!result) {
+  if (!sink.result) {
     throw new Error('Parse stream ended without result');
   }
-  return result;
+  return sink.result;
 }
+
+const SSE_HEADERS = {
+  Accept: 'text/event-stream',
+  'Cache-Control': 'no-cache',
+};
 
 /**
  * Public resume parse with live stage events (SSE).
@@ -181,6 +188,7 @@ export async function uploadAndParseResumePublicStream(file, { onStage } = {}) {
     response = await fetch(`${API_URL}/api/parse/resume/public/stream`, {
       method: 'POST',
       headers: {
+        ...SSE_HEADERS,
         ...validationHeaders(),
       },
       body: formData,
@@ -189,23 +197,36 @@ export async function uploadAndParseResumePublicStream(file, { onStage } = {}) {
     return uploadAndParseResumePublic(file);
   }
 
-  try {
-    return await consumeParseSSE(response, { onStage });
-  } catch (err) {
-    if (!isStreamTransportFailure(err)) throw err;
-    try {
-      return await uploadAndParseResumePublic(file);
-    } catch (syncErr) {
-      if (!isGenericParseFailure(err?.message) && isGenericParseFailure(syncErr?.message)) {
-        throw err;
-      }
-      throw syncErr;
-    }
-  }
+  // Do not fall back to the blocking /public parse after the stream started.
+  // A second OCR pass freezes the overlay on the last SSE stage ("Extracting text").
+  return await consumeParseSSE(response, { onStage });
 }
 
 /**
- * JD parse with live stage events (SSE), sync fallback.
+ * Authenticated resume parse with live stage events (SSE).
+ * Falls back to sync only for transport/stream issues.
+ */
+export async function uploadAndParseResumeStream(file, candidateId = null, { onStage } = {}) {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (candidateId) formData.append('candidate_id', candidateId);
+  const token = localStorage.getItem('jwtToken');
+  let response;
+  try {
+    response = await fetch(`${API_URL}/api/parse/resume/stream`, {
+      method: 'POST',
+      headers: { ...SSE_HEADERS, Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+  } catch {
+    return uploadAndParseResume(file, candidateId);
+  }
+
+  return await consumeParseSSE(response, { onStage });
+}
+
+/**
+ * JD parse with live stage events (SSE).
  */
 export async function uploadAndParseJDStream(file, jobId = null, { onStage } = {}) {
   const formData = new FormData();
@@ -216,26 +237,14 @@ export async function uploadAndParseJDStream(file, jobId = null, { onStage } = {
   try {
     response = await fetch(`${API_URL}/api/parse/jd/stream`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { ...SSE_HEADERS, Authorization: `Bearer ${token}` },
       body: formData,
     });
   } catch {
     return uploadAndParseJD(file, jobId);
   }
 
-  try {
-    return await consumeParseSSE(response, { onStage });
-  } catch (err) {
-    if (!isStreamTransportFailure(err)) throw err;
-    try {
-      return await uploadAndParseJD(file, jobId);
-    } catch (syncErr) {
-      if (!isGenericParseFailure(err?.message) && isGenericParseFailure(syncErr?.message)) {
-        throw err;
-      }
-      throw syncErr;
-    }
-  }
+  return await consumeParseSSE(response, { onStage });
 }
 
 /**

@@ -72,6 +72,10 @@ def normalize_section_header(line: str) -> str | None:
     stripped = (line or '').strip().strip(':').strip('*').strip()
     if not stripped or len(stripped) > 80:
         return None
+    # Isolated bullets / replacement glyphs are not headers (PDF extracts often
+    # put "•" on its own line). Treating them as headers splits Experience/Skills.
+    if re.fullmatch(r'[\s#*•·●○▪▫►▸‣\-–—\ufffd]+', stripped):
+        return None
     low = stripped.lower()
     if low in _HEADER_ALIASES:
         return _HEADER_ALIASES[low]

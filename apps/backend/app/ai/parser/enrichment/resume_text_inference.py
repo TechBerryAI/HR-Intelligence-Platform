@@ -1383,6 +1383,13 @@ def extract_education_from_text(text: str, max_items: int = 8) -> list[dict[str,
             continue
         if is_date_range_only_line(stripped) or is_biodata_or_address_line(stripped):
             continue
+        if _JOB_BULLET_INSTITUTION.search(stripped):
+            continue
+        if re.search(
+            r'(?i)\b(?:intern(?:ship)?s?|trainee|apprentice)\b',
+            stripped,
+        ) and not degree_pat.search(stripped):
+            continue
         from_d, to_d = extract_date_range_from_line(stripped)
         year = ''
         if to_d and to_d != 'Present':
