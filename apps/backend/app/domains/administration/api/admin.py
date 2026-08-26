@@ -244,7 +244,14 @@ def bulk_parse_download(job_id):
     if not success:
         if payload.get('code') == ERROR_CODE_UNREACHABLE or payload.get('code') == 'BULK_PARSER_NOT_CONFIGURED':
             return jsonify(payload), 503
-        return jsonify(payload), 404 if 'not found' in str(payload.get('error', '')).lower() else 502
+        if payload.get('code') == 'EXPORT_REGENERATING':
+            return jsonify(payload), 202
+        err = str(payload.get('error', '')).lower()
+        if 'not found' in err or 'export is missing' in err:
+            return jsonify(payload), 404
+        if 'not completed' in err:
+            return jsonify(payload), 409
+        return jsonify(payload), 502
     iterator, filename, content_type = payload
     return Response(
         iterator,

@@ -242,8 +242,13 @@ def _apply_resume_text_recovery(repaired: dict[str, Any], raw_resume_text: str |
     if not _str(repaired.get("summary")):
         summary = _str(inferred.get("summary"))
         if summary:
-            repaired["summary"] = summary
-            actions.append("inferred_summary_from_text")
+            from app.ai.parser.enrichment.resume_text_inference import is_valid_summary
+
+            if is_valid_summary(summary):
+                repaired["summary"] = summary
+                actions.append("inferred_summary_from_text")
+            else:
+                actions.append("rejected_invalid_inferred_summary")
 
     person = repaired.get("person")
     if not isinstance(person, dict):

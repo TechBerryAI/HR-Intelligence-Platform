@@ -34,12 +34,14 @@ from app.ai.document_intelligence.validation.engine import (
 from app.ai.parser.enrichment.resume_text_inference import (
     compute_total_experience_years,
     extract_name_from_text,
+    extract_summary_details,
     extract_summary_from_text,
     filter_skill_items,
     is_institution_like,
     is_plausible_job_title,
     is_plausible_person_name,
     is_section_header_line,
+    is_valid_summary,
     split_list_items,
 )
 
@@ -914,16 +916,26 @@ def parse_personal(text: str, preamble: str, *, source_filename: str = '') -> Pe
             cand = cand.rstrip('-:–—|').strip()
             if not cand or '@' in cand or re.search(r'\d{6,}', cand):
                 continue
+            if re.search(
+                r'(?i)\b(?:b\.?\s*tech|m\.?\s*tech|btech|bachelor|diploma|mba|mca|bca)\b',
+                cand,
+            ):
+                continue
             if is_plausible_person_name(cand):
                 name = cand.title() if cand.isupper() else cand
                 break
     file_name = name_from_resume_filename(source_filename) if source_filename else ''
-    # Prefer a multi-word filename name over a weak single-token body guess
+    # Prefer filename when body name is missing, single-token, or fails plausibility
     if file_name:
-        if not name:
+        if not name or not is_plausible_person_name(name):
             name = file_name
         elif len(name.split()) == 1 and len(file_name.split()) >= 2:
             name = file_name
+        elif len(file_name.split()) >= 2 and len(name.split()) > len(file_name.split()) + 1:
+            # Body glued a title onto the name ("Ashutosh Kosta Database Admin")
+            name = file_name
+    if name and not is_plausible_person_name(name):
+        name = file_name or ''
     if name:
         name = re.sub(r'(?i)^(mr|mrs|ms|miss|dr|prof)\.?\s+', '', name).strip()
         if name.isupper() and len(name.split()) >= 2:
@@ -1827,8 +1839,11 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
 
 
 def parse_summary(section_text: str, full_text: str = '') -> str:
+    """Prefer section body when valid; else section-aware full-text extraction."""
     if section_text.strip():
-        return ' '.join(section_text.split())[:2000]
+        cleaned = ' '.join(section_text.split())[:2000]
+        if is_valid_summary(cleaned):
+            return cleaned
     return extract_summary_from_text(full_text)
 
 
@@ -1999,8 +2014,18 @@ def parse_resume_from_sections(
     skills_text = pick_section(
         sections, 'Skills', 'Technical Skills', 'Core Skills', 'Key Skills', 'Technologies', 'Tools',
     )
+    # Prefer explicit summary/objective labels (aliases also map to Summary).
     summary_text = pick_section(
-        sections, 'Summary', 'Professional Summary', 'Objective', 'Profile', 'About Me',
+        sections,
+        'Career Objective',
+        'Professional Summary',
+        'Profile Summary',
+        'Summary',
+        'Objective',
+        'Profile',
+        'About Me',
+        'Career Profile',
+        'Career Summary',
     )
     cert_text = pick_section(sections, 'Certifications', 'Certificates', 'Licenses')
     proj_text = pick_section(sections, 'Projects', 'Project')
@@ -2018,6 +2043,7 @@ def parse_resume_from_sections(
     )
     results['skills'] = parse_skills(skills_text, full_text)
     results['summary'] = parse_summary(summary_text, full_text)
+    results['summary_trace'] = extract_summary_details(full_text)
     results['certs'] = parse_certifications(cert_text, full_text)
     results['projects'] = parse_projects(proj_text)
     results['languages'] = parse_languages(lang_text)
@@ -2025,15 +2051,32 @@ def parse_resume_from_sections(
 
     personal: PersonalInfo = results['personal']
     summary = results['summary'] or ''
+    if summary and not is_valid_summary(summary):
+        summary = ''
+    if not summary:
+        # Prefer validated section-aware extraction over preamble heuristics
+        traced = results.get('summary_trace') or extract_summary_details(full_text)
+        summary = (traced.get('value') or '') if isinstance(traced, dict) else ''
     if not summary and preamble:
-        # Unlabeled intro paragraph after contact (common in Indian resumes)
+        # Unlabeled intro paragraph after contact (common in Indian resumes).
+        # Never accept contact / phone / email blocks as summary.
         paras = [p.strip() for p in re.split(r'\n\s*\n', preamble) if p.strip()]
         for p in paras:
-            if len(p) > 80 and not re.search(r'@|linkedin|github|\+\d', p, re.I):
-                summary = ' '.join(p.split())[:2000]
+            candidate = ' '.join(p.split())[:2000]
+            # Require substantial unlabeled prose — not a name/contact crumb
+            if len(candidate) < 80:
+                continue
+            if is_valid_summary(candidate):
+                summary = candidate
                 break
-    if summary:
-        personal = personal.model_copy(update={'summary': summary or personal.summary})
+    # Keep personal.summary only when validated; never leak contact blobs
+    personal_summary = personal.summary if is_valid_summary(personal.summary) else ''
+    if summary and is_valid_summary(summary):
+        personal = personal.model_copy(update={'summary': summary})
+    elif personal_summary:
+        personal = personal.model_copy(update={'summary': personal_summary})
+    else:
+        personal = personal.model_copy(update={'summary': ''})
 
     return merge_resume_sections(
         personal=personal,
