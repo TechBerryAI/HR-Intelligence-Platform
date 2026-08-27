@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiFile, FiCheck, FiZap, FiCpu, FiDatabase } from 'react-icons/fi';
-import { hintForStage, overlayStepIndex, overlayStepsFor, OVERLAY_STEP_DWELL_MS } from '@/shared/utils/parsePipelineProgress.js';
+import { hintForStage, overlayStepIndex, overlayStepsFor, OVERLAY_STEP_DWELL_MS, formatStepMs } from '@/shared/utils/parsePipelineProgress.js';
 
 const STEP_ICONS = [FiFile, FiCpu, FiDatabase, FiZap];
 
@@ -17,6 +17,7 @@ export default function PremiumUploadOverlay({
   stageIndex = null,
   progressPct = null,
   stageMessage = null,
+  stepMs = null,
 }) {
   const [currentStep, setCurrentStep] = useState(0);
   const targetStepRef = useRef(0);
@@ -43,16 +44,35 @@ export default function PremiumUploadOverlay({
     };
   }, [isVisible]);
 
+  const [liveMs, setLiveMs] = useState(0)
+  const [elapsedMs, setElapsedMs] = useState(0)
+  const liveStartRef = useRef(0)
+  const liveIdxRef = useRef(-1)
+  const overlayOpenedAt = useRef(0)
+
   useEffect(() => {
     if (!isVisible) {
       setCurrentStep(0);
       targetStepRef.current = 0;
+      setLiveMs(0)
+      setElapsedMs(0)
+      liveStartRef.current = 0
+      liveIdxRef.current = -1
+      overlayOpenedAt.current = 0
       return;
     }
 
+    if (!overlayOpenedAt.current) overlayOpenedAt.current = performance.now()
+
     const mapped = overlayStepIndex(type, stageLabel);
     if (mapped >= 0) {
+      if (mapped !== liveIdxRef.current) {
+        liveIdxRef.current = mapped
+        liveStartRef.current = performance.now()
+        setLiveMs(0)
+      }
       targetStepRef.current = Math.max(targetStepRef.current, mapped);
+      setCurrentStep((prev) => Math.max(prev, mapped))
     } else if (typeof stageIndex === 'number' && stageIndex >= 0) {
       targetStepRef.current = Math.max(
         targetStepRef.current,
@@ -65,8 +85,13 @@ export default function PremiumUploadOverlay({
   }, [isVisible, stageLabel, stageIndex, type, steps.length, progressPct]);
 
   useEffect(() => {
-    if (!isVisible) return undefined;
+    if (!isVisible) return undefined
+    if (!liveStartRef.current) liveStartRef.current = performance.now()
+    if (!overlayOpenedAt.current) overlayOpenedAt.current = performance.now()
     const tick = setInterval(() => {
+      const now = performance.now()
+      setLiveMs(now - (liveStartRef.current || now))
+      setElapsedMs(now - (overlayOpenedAt.current || now))
       setCurrentStep((prev) => {
         const target = Math.min(targetStepRef.current, steps.length - 1);
         if (prev < target) return prev + 1;
@@ -82,9 +107,16 @@ export default function PremiumUploadOverlay({
   const displayText = allDone
     ? (type === 'jd' ? 'Job description ready' : 'Document ready')
     : (steps[activeStep]?.text || 'Processing');
+  const staleFirstGroup =
+    !allDone &&
+    activeStep === 0 &&
+    liveMs > 1500 &&
+    (!stageLabel || ['upload', 'client_wait', 'cache', 'persist_raw'].includes(stageLabel));
   const subtitle = allDone
     ? 'Autofill complete'
-    : (stageMessage || (stageLabel ? hintForStage(stageLabel) : 'Takes 10–30 seconds'));
+    : staleFirstGroup
+      ? 'Extracting text — scanned pages can take a few minutes'
+      : (stageMessage || (stageLabel ? hintForStage(stageLabel) : 'Reading document'));
 
   const visualPct = ((activeStep + (allDone ? 1 : 0.55)) / steps.length) * 100;
   const barPct = allDone ? 100 : Math.max(8, Math.min(96, visualPct));
@@ -346,6 +378,25 @@ export default function PremiumUploadOverlay({
                   {step.text}
                 </span>
 
+                <span
+                  style={{
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    fontVariantNumeric: 'tabular-nums',
+                    color: isActive ? '#7dd3ff' : isCompleted ? '#86efac' : '#6b7280',
+                    flexShrink: 0,
+                    minWidth: '3.25rem',
+                    textAlign: 'right',
+                  }}
+                >
+                  {(() => {
+                    const recorded = Array.isArray(stepMs) ? Number(stepMs[index]) : 0
+                    if (isActive) return formatStepMs(liveMs)
+                    if (isCompleted && recorded > 0) return formatStepMs(recorded)
+                    return isCompleted ? formatStepMs(recorded || 0) : ''
+                  })()}
+                </span>
+
                 {isActive && (
                   <motion.div
                     animate={{ rotate: 360 }}
@@ -398,6 +449,20 @@ export default function PremiumUploadOverlay({
             }}
           />
         </div>
+
+        <p
+          style={{
+            margin: '0 0 12px',
+            textAlign: 'center',
+            fontSize: '11px',
+            fontWeight: 600,
+            fontVariantNumeric: 'tabular-nums',
+            color: '#94a3b8',
+            letterSpacing: '0.02em',
+          }}
+        >
+          {formatStepMs(elapsedMs)} elapsed
+        </p>
 
         {/* AI Badge */}
         <div style={{ 

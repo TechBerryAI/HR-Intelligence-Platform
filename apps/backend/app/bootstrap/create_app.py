@@ -114,7 +114,15 @@ def create_app() -> Flask:
             r"/*": {
                 "origins": cors_origins,
                 "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
-                "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With", "X-Platform-Key"],
+                "allow_headers": [
+                    "Content-Type",
+                    "Authorization",
+                    "Accept",
+                    "X-Requested-With",
+                    "X-Platform-Key",
+                    "X-Validation-Token",
+                    "Cache-Control",
+                ],
                 "expose_headers": ["Content-Type", "Authorization"],
                 "supports_credentials": True,
                 "max_age": 3600,

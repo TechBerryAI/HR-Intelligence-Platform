@@ -31,7 +31,6 @@ _SSE_PAD = ':' + (' ' * 2048) + '\n\n'
 _SSE_HEADERS = {
     'Cache-Control': 'no-cache, no-transform',
     'X-Accel-Buffering': 'no',
-    'Connection': 'keep-alive',
 }
 
 
@@ -283,11 +282,12 @@ def _sse_generate(run_with_on_stage, build_ok_payload):
 
 
 def _sse_response(generate):
+    # Do not set direct_passthrough: Werkzeug then skips stream_with_context and
+    # closes the socket after headers (browser: "Failed to fetch" / network error).
     resp = Response(
         stream_with_context(generate()),
         mimetype='text/event-stream; charset=utf-8',
         headers=_SSE_HEADERS,
-        direct_passthrough=True,
     )
     resp.implicit_sequence_conversion = False
     return resp

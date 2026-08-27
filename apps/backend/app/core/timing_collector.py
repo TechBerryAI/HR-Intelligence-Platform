@@ -1079,7 +1079,9 @@ def _classify_session(session: TimingSession) -> str:
 
 
 _CLIENT_SPAN_KEYS: frozenset[str] = frozenset(
-    {"upload", "client_wait", "deliver", "autofill"}
+    {k for k, _ in RESUME_PIPELINE_STEPS}
+    | {k for k, _ in JD_PIPELINE_STEPS}
+    | {k for k, _ in APPLY_PIPELINE_STEPS}
 )
 _MAX_CLIENT_SPAN_MS = 30 * 60 * 1000.0
 

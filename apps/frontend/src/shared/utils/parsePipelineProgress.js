@@ -4,17 +4,17 @@
  */
 
 export const RESUME_OVERLAY_STEPS = [
-  { text: 'Reading Document', stages: ['cache', 'persist_raw', 'text', 'layout'] },
+  { text: 'Reading Document', stages: ['upload', 'client_wait', 'cache', 'persist_raw', 'text', 'layout'] },
   { text: 'Detecting Sections', stages: ['sections', 'deterministic'] },
   { text: 'Knowledge & Semantics', stages: ['coverage', 'semantic', 'knowledge'] },
-  { text: 'Validating & Autofill', stages: ['validate', 'persist', 'toon'] },
+  { text: 'Validating & Autofill', stages: ['validate', 'persist', 'toon', 'deliver', 'autofill'] },
 ];
 
 export const JD_OVERLAY_STEPS = [
-  { text: 'Reading Job Description', stages: ['cache', 'persist_raw', 'text', 'layout'] },
+  { text: 'Reading Job Description', stages: ['upload', 'client_wait', 'cache', 'persist_raw', 'text', 'layout'] },
   { text: 'Parsing Requirements', stages: ['sections', 'deterministic'] },
   { text: 'Knowledge & Semantics', stages: ['knowledge', 'coverage', 'semantic'] },
-  { text: 'Preparing Form', stages: ['validate', 'persist', 'toon'] },
+  { text: 'Preparing Form', stages: ['validate', 'persist', 'toon', 'deliver', 'autofill'] },
 ];
 
 export const RESUME_STAGE_ORDER = [
@@ -46,6 +46,8 @@ export const JD_STAGE_ORDER = [
 ];
 
 export const STAGE_HINTS = {
+  upload: 'Uploading resume',
+  client_wait: 'Waiting for parser',
   cache: 'Checking document cache',
   persist_raw: 'Saving original file',
   text: 'Extracting text',
@@ -58,6 +60,8 @@ export const STAGE_HINTS = {
   validate: 'Validating results',
   persist: 'Preparing form autofill',
   toon: 'Preparing form autofill',
+  deliver: 'Sending result',
+  autofill: 'Filling the form',
 };
 
 export function overlayStepsFor(type) {
@@ -95,4 +99,44 @@ export function overlayCatchupMs(type, lastStage) {
   return 500 + Math.max(0, lastIdx - from) * 600;
 }
 
-export const OVERLAY_STEP_DWELL_MS = 550;
+export const OVERLAY_STEP_DWELL_MS = 200;
+
+/** Format overlay / dashboard step times. */
+export function formatStepMs(ms) {
+  const n = Number(ms)
+  if (!Number.isFinite(n) || n < 0) return '—'
+  if (n < 1000) return `${Math.round(n)} ms`
+  if (n < 60_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)} s`
+  const m = Math.floor(n / 60_000)
+  const s = Math.round((n % 60_000) / 1000)
+  return `${m}m ${s}s`
+}
+
+/**
+ * Track per-stage durations from SSE (prefers server duration_ms so buffered
+ * streams still report the real extract/OCR time).
+ */
+export function createStageClock() {
+  const starts = Object.create(null)
+  const spans = []
+  return {
+    onEvent(ev) {
+      const stage = ev?.stage
+      if (!stage) return
+      const status = String(ev.status || '').toLowerCase()
+      const serverMs = Number(ev.duration_ms ?? ev.detail?.duration_ms)
+      if (status === 'started') {
+        starts[stage] = performance.now()
+        return
+      }
+      if (!['completed', 'failed', 'skipped'].includes(status)) return
+      const local = starts[stage] != null ? performance.now() - starts[stage] : 0
+      delete starts[stage]
+      const duration_ms = Math.max(Number.isFinite(serverMs) ? serverMs : 0, local)
+      spans.push({ key: stage, duration_ms: Math.max(0, duration_ms), status })
+    },
+    getSpans() {
+      return spans.slice()
+    },
+  }
+}

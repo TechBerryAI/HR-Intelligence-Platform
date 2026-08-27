@@ -6,6 +6,16 @@
  */
 import { BASE_URL as API_URL } from './api';
 
+/** Same-origin /api (Vite proxy). Never call 127.0.0.1 from localhost — that is CORS. */
+function parseUrl(path) {
+  return `${API_URL || ''}${path}`
+}
+
+function isTransportError(err) {
+  const msg = String(err?.message || err || '')
+  return /failed to fetch|network error|networkerror|failed to reach parse api|empty response stream|parse stream ended without result/i.test(msg)
+}
+
 function validationHeaders() {
   // Never embed validation bypass tokens in production bundles.
   if (import.meta.env.PROD) return {};
@@ -178,7 +188,6 @@ async function consumeParseSSE(response, { onStage, onFirstChunk } = {}) {
 
 const SSE_HEADERS = {
   Accept: 'text/event-stream',
-  'Cache-Control': 'no-cache',
 };
 
 /**
@@ -188,9 +197,8 @@ const SSE_HEADERS = {
 export async function uploadAndParseResumePublicStream(file, { onStage, onFirstChunk } = {}) {
   const formData = new FormData();
   formData.append('file', file);
-  let response;
   try {
-    response = await fetch(`${API_URL}/api/parse/resume/public/stream`, {
+    const response = await fetch(parseUrl('/api/parse/resume/public/stream'), {
       method: 'POST',
       headers: {
         ...SSE_HEADERS,
@@ -198,13 +206,12 @@ export async function uploadAndParseResumePublicStream(file, { onStage, onFirstC
       },
       body: formData,
     });
-  } catch {
-    return uploadAndParseResumePublic(file);
+    return await consumeParseSSE(response, { onStage, onFirstChunk });
+  } catch (err) {
+    if (!isTransportError(err)) throw err
+    // Live stream dropped (empty SSE body). JSON parse still fills the apply form.
+    return uploadAndParseResumePublic(file)
   }
-
-  // Do not fall back to the blocking /public parse after the stream started.
-  // A second OCR pass freezes the overlay on the last SSE stage ("Extracting text").
-  return await consumeParseSSE(response, { onStage, onFirstChunk });
 }
 
 /**
@@ -216,18 +223,17 @@ export async function uploadAndParseResumeStream(file, candidateId = null, { onS
   formData.append('file', file);
   if (candidateId) formData.append('candidate_id', candidateId);
   const token = localStorage.getItem('jwtToken');
-  let response;
   try {
-    response = await fetch(`${API_URL}/api/parse/resume/stream`, {
+    const response = await fetch(parseUrl('/api/parse/resume/stream'), {
       method: 'POST',
       headers: { ...SSE_HEADERS, Authorization: `Bearer ${token}` },
       body: formData,
     });
-  } catch {
-    return uploadAndParseResume(file, candidateId);
+    return await consumeParseSSE(response, { onStage, onFirstChunk });
+  } catch (err) {
+    if (!isTransportError(err)) throw err
+    return uploadAndParseResume(file, candidateId)
   }
-
-  return await consumeParseSSE(response, { onStage, onFirstChunk });
 }
 
 /**
@@ -238,18 +244,17 @@ export async function uploadAndParseJDStream(file, jobId = null, { onStage, onFi
   formData.append('file', file);
   if (jobId) formData.append('job_id', jobId);
   const token = localStorage.getItem('jwtToken');
-  let response;
   try {
-    response = await fetch(`${API_URL}/api/parse/jd/stream`, {
+    const response = await fetch(parseUrl('/api/parse/jd/stream'), {
       method: 'POST',
       headers: { ...SSE_HEADERS, Authorization: `Bearer ${token}` },
       body: formData,
     });
-  } catch {
-    return uploadAndParseJD(file, jobId);
+    return await consumeParseSSE(response, { onStage, onFirstChunk });
+  } catch (err) {
+    if (!isTransportError(err)) throw err
+    return uploadAndParseJD(file, jobId)
   }
-
-  return await consumeParseSSE(response, { onStage, onFirstChunk });
 }
 
 /**
@@ -353,6 +358,7 @@ export function startParseClock() {
     fetchStarted: start,
     firstChunk: null,
     resultAt: null,
+    stageSpans: [],
     markFetch() {
       clock.fetchStarted = performance.now()
     },
@@ -361,6 +367,11 @@ export function startParseClock() {
     },
     markResult() {
       clock.resultAt = performance.now()
+    },
+    addStageSpans(spans) {
+      if (Array.isArray(spans) && spans.length) {
+        clock.stageSpans = spans
+      }
     },
   }
   return clock
@@ -381,10 +392,11 @@ export async function reportClientParseTiming(result, clock, extra = {}) {
       { key: 'client_wait', duration_ms: Math.max(0, first - clock.fetchStarted) },
       { key: 'deliver', duration_ms: Math.max(0, resultAt - first) },
       { key: 'autofill', duration_ms: Math.max(0, done - resultAt + overlayMs) },
+      ...(clock.stageSpans || []),
     ],
   }
   try {
-    await fetch(`${API_URL}/api/parse/timing-client`, {
+    await fetch(parseUrl('/api/parse/timing-client'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

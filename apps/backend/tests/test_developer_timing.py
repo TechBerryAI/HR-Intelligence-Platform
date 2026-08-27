@@ -484,6 +484,7 @@ class TimingDecoratorTests(unittest.TestCase):
                         "spans": [
                             {"key": "upload", "duration_ms": 800},
                             {"key": "client_wait", "duration_ms": 120000},
+                            {"key": "text", "duration_ms": 180000},
                             {"key": "autofill", "duration_ms": 1400},
                         ],
                     },
@@ -496,6 +497,7 @@ class TimingDecoratorTests(unittest.TestCase):
             self.assertEqual(by_key["client_wait"]["duration_ms"], 120000)
             self.assertEqual(by_key["autofill"]["duration_ms"], 1400)
             self.assertEqual(by_key["autofill"]["status"], "completed")
+            self.assertEqual(by_key["text"]["duration_ms"], 180000)
         finally:
             tc.timing_collector = prev
 
