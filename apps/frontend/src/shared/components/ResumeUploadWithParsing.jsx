@@ -5,6 +5,8 @@ import {
   takeResumeFormDTO,
   validateFileForParsing,
   extractParseErrorMessage,
+  startParseClock,
+  reportClientParseTiming,
 } from '@/core/api/parsingApi.js';
 import { hintForStage, isPipelineComplete, overlayCatchupMs, progressPctForStage } from '@/shared/utils/parsePipelineProgress.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
@@ -120,6 +122,7 @@ export default function ResumeUploadWithParsing({
     setStageMessage(hintForStage('cache'));
     setProgressPct(8);
     let lastStage = 'cache';
+    const clock = startParseClock();
     
     try {
       const onStage = (ev) => {
@@ -133,9 +136,11 @@ export default function ResumeUploadWithParsing({
         if (isPipelineComplete(ev)) setProgressPct(100);
       };
 
+      clock.markFetch();
       const result = publicMode
-        ? await uploadAndParseResumePublicStream(file, { onStage })
-        : await uploadAndParseResumeStream(file, null, { onStage });
+        ? await uploadAndParseResumePublicStream(file, { onStage, onFirstChunk: clock.markFirstChunk })
+        : await uploadAndParseResumeStream(file, null, { onStage, onFirstChunk: clock.markFirstChunk });
+      clock.markResult();
 
       if (result.status === 'ok' && result.form) {
         const formData = takeResumeFormDTO(result);
@@ -201,6 +206,8 @@ export default function ResumeUploadWithParsing({
             _trace: formData.trace || [],
           });
         }
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        await reportClientParseTiming(result, clock);
 
         // Low-confidence warning only when no named coverage gaps (JD parity)
         if (coreGaps.length === 0 && (result.partial || result.confidence < 0.75)) {

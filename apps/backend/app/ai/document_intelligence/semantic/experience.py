@@ -1,7 +1,8 @@
-"""AI experience extraction for apply-form autofill.
+"""AI experience merge for apply-form autofill.
 
-Uses the resume_parsing capability on the Experience section, then merges
-with deterministic rows only when the AI set is more complete and grounded.
+Merges experience rows from a full resume_parsing JSON payload with
+deterministic rows only when the AI set is more complete and grounded.
+Ollama is invoked once by enrich_resume_semantic, not here.
 """
 from __future__ import annotations
 
@@ -56,34 +57,25 @@ def _entries_from_ai_payload(raw: dict[str, Any]) -> list[ExperienceEntry]:
     return out
 
 
-@timing
-def extract_and_merge_experience(
+def merge_experience_from_ai(
     profile: CandidateProfile,
+    raw: dict[str, Any],
     source_text: str,
 ) -> CandidateProfile:
-    """Run resume AI on the experience span and keep the better grounded set."""
-    from app.ai.document_intelligence.coverage.resume_coverage import _experience_section_text
-    from app.ai.document_intelligence.semantic import _call_section_llm
+    """Keep the better grounded experience set from an existing resume_parsing payload.
 
+    Does not invoke Ollama. Callers must obtain ``raw`` from the single
+    full-resume semantic call in ``enrich_resume_semantic``.
+    """
     text = (source_text or '').strip()
-    if len(text) < 40:
-        return profile
-    section = _experience_section_text(text) or text
-    payload = (
-        'Parse this resume. Put every WORK job in experience[]. '
-        'title = job title only. company = employer only. Never swap them. '
-        'Stacked layout example: "Database Administrator" then '
-        '"Infosenseglobal | Dec 2024 – Present". Skip projects and training.\n\n'
-        f'{section[:7000]}'
-    )
-    raw = _call_section_llm(payload, 'resume')
     if not isinstance(raw, dict):
         return profile
     try:
         ai_rows = _entries_from_ai_payload(raw)
         if not ai_rows:
-            # Standard resume_parsing output may need the TOON adapter
-            adapted = candidate_profile_from_toon(raw if raw.get('type') else {**raw, 'type': 'resume'})
+            adapted = candidate_profile_from_toon(
+                raw if raw.get('type') else {**raw, 'type': 'resume'}
+            )
             ai_rows = list(adapted.experience or [])
         ai_rows = ground_experience_rows(ai_rows, text)
         merged = merge_experience_rows(list(profile.experience or []), ai_rows)
@@ -95,7 +87,26 @@ def extract_and_merge_experience(
         return profile
 
 
+@timing
+def extract_and_merge_experience(
+    profile: CandidateProfile,
+    source_text: str,
+    *,
+    raw: dict[str, Any] | None = None,
+) -> CandidateProfile:
+    """Merge experience from a resume_parsing JSON payload.
+
+    Ollama is owned by ``enrich_resume_semantic`` (at most one full resume call
+    per parse). Pass ``raw`` from that response. A missing payload is a no-op
+    so this helper cannot issue a second inference.
+    """
+    if not isinstance(raw, dict):
+        return profile
+    return merge_experience_from_ai(profile, raw, source_text)
+
+
 __all__ = [
     'experience_is_incomplete',
     'extract_and_merge_experience',
+    'merge_experience_from_ai',
 ]

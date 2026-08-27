@@ -224,6 +224,13 @@ def create_app() -> Flask:
                     wall_ms = (_time.perf_counter() - started) * 1000.0
                 if exc is not None:
                     timing_collector.mark_error(rid)
+                if getattr(request, 'timing_keep_open', False):
+                    # SSE parse: the generator ends the session after the stream
+                    # finishes (upload → result). Ending here would freeze totals
+                    # at view-return time. Still clear this thread's contextvar
+                    # so the next request on the same worker is not polluted.
+                    set_timing_context(None)
+                    return
                 timing_collector.end_session(rid, wall_duration_ms=wall_ms)
             set_timing_context(None)
         except Exception:
@@ -295,20 +302,14 @@ def create_app() -> Flask:
             return 'error'
 
     def _check_ollama() -> str:
-        base = (
-            (os.getenv('OLLAMA_HOST') or os.getenv('OLLAMA_BASE_URL') or '')
-            .strip()
-            .rstrip('/')
-        )
-        if not base:
-            return 'not_configured'
-        try:
-            import requests
+        from app.ai.parser.engine.ollama_health import inspect_ollama_runtime
 
-            r = requests.get(f'{base}/api/tags', timeout=2)
-            return 'ok' if r.ok else 'unreachable'
-        except Exception:
-            return 'unreachable'
+        info = inspect_ollama_runtime()
+        if info.get('error') == 'not_configured':
+            return 'not_configured'
+        if info.get('reachable'):
+            return 'ok'
+        return 'unreachable'
 
     def _check_bulk_parser() -> str:
         bulk_url = (os.getenv('BULK_PARSER_URL') or '').rstrip('/')
@@ -418,5 +419,12 @@ def create_app() -> Flask:
 
     if app.config.get('DEVELOPER_MODE'):
         print("[DEVELOPER MODE] Enabled — Admin performance collector active")
+
+    try:
+        from app.ai.parser.engine.ollama_health import log_ollama_runtime
+
+        log_ollama_runtime()
+    except Exception as exc:
+        print(f"[ollama] startup probe skipped: {exc}")
 
     return app

@@ -449,6 +449,25 @@ function modelIsPresent(tags, modelName) {
   });
 }
 
+/** Pull a model onto `host` (local or LAN). Sets OLLAMA_HOST so the CLI does not hit a different daemon. */
+async function pullOllamaModel(host, model) {
+  log(`Pulling Ollama model ${model} at ${host} (this can take several minutes on first run)...`);
+  try {
+    await runCmd(
+      'ollama',
+      ['pull', model],
+      ROOT,
+      { ...process.env, OLLAMA_HOST: host },
+      process.platform === 'win32'
+    );
+    log(`Model ${model} pulled successfully`);
+    return true;
+  } catch (err) {
+    log(`Failed to pull model ${model} at ${host}: ${err.message || err}`, 'err');
+    return false;
+  }
+}
+
 function resolveAdaptiveOllamaModel(envMap = {}) {
   const pinned = explicitOllamaModel(envMap);
   if (pinned) {
@@ -493,8 +512,8 @@ async function setupOllama() {
   log(`Using Ollama host: ${host}`);
 
   if (!isOllamaLoopbackHost(host)) {
-    log('Remote Ollama host — health-check only (no local serve or model pull)');
-    const tags = await httpGetJson(`${host}/api/tags`);
+    log('Remote Ollama host — will not start a local daemon; JD/resume/bulk parse use this IP');
+    let tags = await httpGetJson(`${host}/api/tags`);
     if (!tags) {
       log(
         `Ollama did not become ready at ${host}. Parsing may fail until the central server is reachable.`,
@@ -503,15 +522,23 @@ async function setupOllama() {
       return { host, model, ready: false };
     }
     log('Ollama API is reachable');
-    const ready = modelIsPresent(tags, model);
-    if (ready) {
+    if (modelIsPresent(tags, model)) {
       log(`Ollama setup complete (model ${model} listed)`);
-    } else {
+      return { host, model, ready: true };
+    }
+    if (!commandExists('ollama')) {
       log(
-        `Ollama is reachable but model ${model} is not listed. Pull it on the central server.`,
+        `Ollama is reachable but model ${model} is not listed. Install the Ollama CLI or pull it on ${host}.`,
         'warn'
       );
+      return { host, model, ready: false };
     }
+    const pulled = await pullOllamaModel(host, model);
+    if (!pulled) return { host, model, ready: false };
+    tags = await httpGetJson(`${host}/api/tags`);
+    const ready = modelIsPresent(tags, model);
+    if (ready) log('Ollama setup complete');
+    else log(`Model ${model} still not listed after pull`, 'warn');
     return { host, model, ready };
   }
 
@@ -548,12 +575,7 @@ async function setupOllama() {
   log('Ollama API is reachable');
 
   if (!modelIsPresent(tags, model)) {
-    log(`Pulling Ollama model ${model} (this can take several minutes on first run)...`);
-    try {
-      await runCmd('ollama', ['pull', model], ROOT, process.env, process.platform === 'win32');
-      log(`Model ${model} pulled successfully`);
-    } catch (err) {
-      log(`Failed to pull model ${model}: ${err.message || err}`, 'err');
+    if (!(await pullOllamaModel(host, model))) {
       return { host, model, ready: false };
     }
   } else {
@@ -652,6 +674,7 @@ function startBackend() {
 
 function startFrontend() {
   logStep(7, 7, 'Starting frontend (Vite)');
+  freePort(FRONTEND_PORT);
   // On Windows use shell with single command string to avoid spawn deprecation (args + shell).
   const useShell = process.platform === 'win32';
   const cmd = useShell ? 'npm run dev' : 'npm';
@@ -779,6 +802,7 @@ module.exports = {
   readEnvFile,
   upsertEnvKeys,
   DEFAULT_OLLAMA_HOST,
+  pullOllamaModel,
   explicitOllamaModel,
   ollamaModelIsExplicit,
   isOllamaLoopbackHost,

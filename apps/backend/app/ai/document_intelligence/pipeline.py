@@ -272,10 +272,13 @@ def _emit(
         if status_l not in ('completed', 'failed', 'skipped'):
             return
         elapsed = take_pipeline_stage_elapsed_ms(stage)
-        # Missing start mark → unknown duration. Still record outcome for the checklist;
-        # the UI formats measured 0 / sub-ms as "<1 ms" (never a misleading "0 ms").
         if elapsed is None:
-            elapsed = 0.0
+            # Missing start mark (thread context gap). Do not record 0 ms —
+            # @timing on extract_text / parse_via_runtime still has the real duration.
+            if status_l in ('skipped', 'failed'):
+                elapsed = 0.0
+            else:
+                return
         timing_collector.record(
             make_timing_event(
                 function=stage,

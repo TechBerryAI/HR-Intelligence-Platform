@@ -61,7 +61,7 @@ Primary model: **hardware-adaptive** when `OLLAMA_MODEL` is unset (`gpu_high`→
 `node start.js` now:
 1. Installs backend deps from `requirements.txt` (includes **RapidOCR** via `rapidocr-onnxruntime`, pymupdf, Pillow)
 2. Verifies OCR Python imports
-3. Health-checks `OLLAMA_HOST` (default `http://192.168.1.200:11434`). Local `ollama serve` / pull only when the host is loopback
+3. Health-checks `OLLAMA_HOST` (default `http://192.168.1.200:11434`). Pulls the selected model onto that host (local `ollama serve` only when the host is loopback)
 4. Normalizes `OLLAMA_HOST` (also accepts legacy `OLLAMA_BASE_URL`) — does not rewrite keys already present in `.env`
 
 ```bash

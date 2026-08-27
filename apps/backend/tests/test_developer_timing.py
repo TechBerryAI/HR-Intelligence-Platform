@@ -44,10 +44,13 @@ class TimingCollectorTests(unittest.TestCase):
         )
 
     def test_session_grouping_and_stats(self):
+        from datetime import datetime, timezone
+
         rid = "abc123"
+        started = datetime.now(timezone.utc).isoformat()
         self.collector.begin_session(
             request_id=rid,
-            started_at="2026-08-05T12:00:00+00:00",
+            started_at=started,
             path="/api/parse/resume",
             method="POST",
         )
@@ -63,7 +66,7 @@ class TimingCollectorTests(unittest.TestCase):
         self.assertIsNotNone(session)
         self.assertEqual(session.kind, "resume_parse")
         self.assertEqual(session.candidate_id, "C1")
-        self.assertAlmostEqual(session.total_duration_ms, 2600, places=1)
+        self.assertAlmostEqual(session.total_duration_ms, 2650, places=1)
         detail = session.to_detail()
         self.assertTrue(any("Extract Text" in s["stage"] for s in detail["timeline"]))
 
@@ -270,6 +273,7 @@ class TimingDecoratorTests(unittest.TestCase):
                     "Layout Analysis",
                     "Section Detection",
                     "Deterministic Parse",
+                    "Coverage Check",
                     "Semantic Enrichment (LLM)",
                     "Knowledge Enrichment",
                     "Validation",
@@ -280,6 +284,8 @@ class TimingDecoratorTests(unittest.TestCase):
             self.assertEqual(text_step["duration_ms"], 50)
             cache_step = next(c for c in checklist if c["key"] == "cache")
             self.assertEqual(cache_step["status"], "skipped")
+            coverage_step = next(c for c in checklist if c["key"] == "coverage")
+            self.assertEqual(coverage_step["status"], "not_run")
 
             # Resume filter must not include bulk; Bulk filter gets one grouped row
             resume_rows = col.list_recent_summaries(limit=20, kind="resume_parse")
@@ -301,6 +307,197 @@ class TimingDecoratorTests(unittest.TestCase):
         finally:
             tc.timing_collector = prev
             set_timing_context(None)
+
+    def test_apply_checklist_shows_each_step_time(self):
+        from app.core.timing_collector import TimingCollector, TimingEvent
+
+        col = TimingCollector(max_sessions=10)
+        rid = "apply1"
+        col.begin_session(
+            request_id=rid,
+            started_at="2026-08-27T05:00:00+00:00",
+            path="/api/jobs/job-9/apply",
+            method="POST",
+        )
+        for fn, ms, depth in (
+            ("_internal_match", 12, 2),
+            ("match_candidate_to_job", 15, 2),
+            ("_persist_application_atomic", 8, 2),
+            ("public_apply_to_job", 40, 1),
+        ):
+            col.record(
+                TimingEvent(
+                    request_id=rid,
+                    timestamp="2026-08-27T05:00:01+00:00",
+                    function=fn,
+                    module="apply",
+                    duration_ms=ms,
+                    success=True,
+                    depth=depth,
+                    stage=fn,
+                )
+            )
+        col.end_session(rid, wall_duration_ms=5)
+        sess = col.get_session(rid)
+        self.assertEqual(sess.kind, "apply")
+        self.assertAlmostEqual(sess.total_duration_ms, 40)
+        by_key = {c["key"]: c for c in sess.parse_checklist() if not c.get("detail")}
+        self.assertEqual(by_key["ats_score"]["duration_ms"], 12)
+        self.assertEqual(by_key["ats_match"]["duration_ms"], 15)
+        self.assertEqual(by_key["persist_application"]["duration_ms"], 8)
+        self.assertEqual(by_key["apply_submit"]["duration_ms"], 40)
+        for row in by_key.values():
+            self.assertEqual(row["status"], "completed")
+
+    def test_zero_ms_engine_stage_does_not_hide_real_extract_time(self):
+        from app.core.timing_collector import TimingCollector, TimingEvent
+
+        col = TimingCollector(max_sessions=10)
+        rid = "resume-zero"
+        col.begin_session(
+            request_id=rid,
+            started_at="2026-08-27T05:00:00+00:00",
+            path="/api/parse/resume/public/stream",
+            method="POST",
+        )
+        col.record(
+            TimingEvent(
+                request_id=rid,
+                timestamp="2026-08-27T05:00:01+00:00",
+                function="text",
+                module="pipeline",
+                duration_ms=0,
+                success=True,
+                depth=2,
+                stage="text",
+            )
+        )
+        col.record(
+            TimingEvent(
+                request_id=rid,
+                timestamp="2026-08-27T05:00:01+00:00",
+                function="extract_text",
+                module="text_extraction",
+                duration_ms=820,
+                success=True,
+                depth=2,
+                stage="extract_text",
+            )
+        )
+        col.record(
+            TimingEvent(
+                request_id=rid,
+                timestamp="2026-08-27T05:00:02+00:00",
+                function="_run_resume",
+                module="pipeline",
+                duration_ms=900,
+                success=True,
+                depth=1,
+                stage="_run_resume",
+            )
+        )
+        col.end_session(rid, wall_duration_ms=10)
+        text_step = next(c for c in col.get_session(rid).parse_checklist() if c["key"] == "text")
+        self.assertEqual(text_step["duration_ms"], 820)
+        self.assertEqual(text_step["status"], "completed")
+        coverage = next(c for c in col.get_session(rid).parse_checklist() if c["key"] == "coverage")
+        self.assertEqual(coverage["status"], "not_run")
+        upload = next(c for c in col.get_session(rid).parse_checklist() if c["key"] == "upload")
+        self.assertEqual(upload["status"], "not_run")
+        autofill = next(c for c in col.get_session(rid).parse_checklist() if c["key"] == "autofill")
+        self.assertEqual(autofill["status"], "not_run")
+
+    def test_wall_clock_beats_parse_wrapper_total(self):
+        """SSE teardown used to freeze total at _run_resume (49s) while the user waited minutes."""
+        from app.core.timing_collector import TimingCollector, TimingEvent
+
+        col = TimingCollector(max_sessions=10)
+        rid = "resume-wall"
+        col.begin_session(
+            request_id=rid,
+            started_at="2026-08-27T05:00:00+00:00",
+            path="/api/parse/resume/stream",
+            method="POST",
+        )
+        col.record(
+            TimingEvent(
+                request_id=rid,
+                timestamp="2026-08-27T05:00:01+00:00",
+                function="text",
+                module="pipeline",
+                duration_ms=27000,
+                success=True,
+                depth=2,
+                stage="text",
+            )
+        )
+        col.record(
+            TimingEvent(
+                request_id=rid,
+                timestamp="2026-08-27T05:00:50+00:00",
+                function="_run_resume",
+                module="pipeline",
+                duration_ms=49000,
+                success=True,
+                depth=1,
+                stage="_run_resume",
+            )
+        )
+        col.end_session(rid, wall_duration_ms=150000)
+        sess = col.get_session(rid)
+        self.assertAlmostEqual(sess.total_duration_ms, 150000, places=1)
+        self.assertAlmostEqual(sess.wall_duration_ms, 150000, places=1)
+
+    def test_client_autofill_timing_sets_user_visible_total(self):
+        from app.core.timing_collector import TimingCollector, TimingEvent, attach_client_timings
+        import app.core.timing_collector as tc
+
+        col = TimingCollector(max_sessions=10)
+        prev = tc.timing_collector
+        tc.timing_collector = col
+        try:
+            rid = "resume-client"
+            col.begin_session(
+                request_id=rid,
+                started_at="2026-08-27T05:00:00+00:00",
+                path="/api/parse/resume/public/stream",
+                method="POST",
+            )
+            col.record(
+                TimingEvent(
+                    request_id=rid,
+                    timestamp="2026-08-27T05:00:01+00:00",
+                    function="_run_resume",
+                    module="pipeline",
+                    duration_ms=49000,
+                    success=True,
+                    depth=1,
+                    stage="_run_resume",
+                )
+            )
+            col.end_session(rid, wall_duration_ms=52000)
+            self.assertTrue(
+                attach_client_timings(
+                    rid,
+                    {
+                        "total_ms": 185000,
+                        "spans": [
+                            {"key": "upload", "duration_ms": 800},
+                            {"key": "client_wait", "duration_ms": 120000},
+                            {"key": "autofill", "duration_ms": 1400},
+                        ],
+                    },
+                )
+            )
+            sess = col.get_session(rid)
+            self.assertAlmostEqual(sess.total_duration_ms, 185000, places=1)
+            by_key = {c["key"]: c for c in sess.parse_checklist() if not c.get("detail")}
+            self.assertEqual(by_key["upload"]["duration_ms"], 800)
+            self.assertEqual(by_key["client_wait"]["duration_ms"], 120000)
+            self.assertEqual(by_key["autofill"]["duration_ms"], 1400)
+            self.assertEqual(by_key["autofill"]["status"], "completed")
+        finally:
+            tc.timing_collector = prev
 
 
 if __name__ == "__main__":

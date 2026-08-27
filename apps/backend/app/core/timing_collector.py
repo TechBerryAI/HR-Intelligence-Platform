@@ -17,6 +17,8 @@ from app.core.developer_mode import developer_mode_max_sessions, is_developer_mo
 
 # Engine stage key -> display name (matches Document Intelligence pipeline)
 ENGINE_STEP_LABELS: dict[str, str] = {
+    "upload": "Receive Upload",
+    "client_wait": "Wait for First Progress",
     "cache": "Cache Check",
     "persist_raw": "Store Raw File",
     "text": "Extract Text",
@@ -28,23 +30,36 @@ ENGINE_STEP_LABELS: dict[str, str] = {
     "semantic": "Semantic Enrichment (LLM)",
     "validate": "Validation",
     "persist": "Save Parsed Result",
+    "deliver": "Send Result to Browser",
+    "autofill": "Autofill Form",
 }
 
-# Full ordered checklists — every step always shown on the dashboard
-RESUME_PIPELINE_STEPS: tuple[tuple[str, str], ...] = (
+# Upload → first SSE byte / overlay (browser). Recorded from the client.
+_USER_FLOW_PREFIX: tuple[tuple[str, str], ...] = (
+    ("upload", "Receive Upload"),
+    ("client_wait", "Wait for First Progress"),
+)
+# After persist: stream the Form DTO, then React writes the fields.
+_USER_FLOW_SUFFIX: tuple[tuple[str, str], ...] = (
+    ("deliver", "Send Result to Browser"),
+    ("autofill", "Autofill Form"),
+)
+
+_RESUME_ENGINE_STEPS: tuple[tuple[str, str], ...] = (
     ("cache", "Cache Check"),
     ("persist_raw", "Store Raw File"),
     ("text", "Extract Text"),
     ("layout", "Layout Analysis"),
     ("sections", "Section Detection"),
     ("deterministic", "Deterministic Parse"),
+    ("coverage", "Coverage Check"),
     ("semantic", "Semantic Enrichment (LLM)"),
     ("knowledge", "Knowledge Enrichment"),
     ("validate", "Validation"),
     ("persist", "Save Parsed Result"),
 )
 
-JD_PIPELINE_STEPS: tuple[tuple[str, str], ...] = (
+_JD_ENGINE_STEPS: tuple[tuple[str, str], ...] = (
     ("cache", "Cache Check"),
     ("persist_raw", "Store Raw File"),
     ("text", "Extract Text"),
@@ -58,10 +73,38 @@ JD_PIPELINE_STEPS: tuple[tuple[str, str], ...] = (
     ("persist", "Save Parsed Result"),
 )
 
+# Full ordered checklists — every step always shown on the dashboard
+RESUME_PIPELINE_STEPS: tuple[tuple[str, str], ...] = (
+    *_USER_FLOW_PREFIX,
+    *_RESUME_ENGINE_STEPS,
+    *_USER_FLOW_SUFFIX,
+)
+
+JD_PIPELINE_STEPS: tuple[tuple[str, str], ...] = (
+    *_USER_FLOW_PREFIX,
+    *_JD_ENGINE_STEPS,
+    *_USER_FLOW_SUFFIX,
+)
+
+# Bulk worker has no browser upload/autofill
+BULK_PIPELINE_STEPS: tuple[tuple[str, str], ...] = _RESUME_ENGINE_STEPS
+
+# Public apply / ATS submit (parse already finished on /parse/resume/public/stream)
+APPLY_PIPELINE_STEPS: tuple[tuple[str, str], ...] = (
+    ("ats_match", "ATS Matching"),
+    ("ats_score", "ATS Score Computation"),
+    ("persist_application", "Save Application"),
+    ("apply_submit", "Submit Application"),
+)
+
 # Display / classification helpers — product labels for timed functions + DI stages
 STAGE_LABELS: dict[str, str] = {
     **{k: v for k, v in ENGINE_STEP_LABELS.items()},
     "extract_text": "Extract Text",
+    "upload": "Receive Upload",
+    "client_wait": "Wait for First Progress",
+    "deliver": "Send Result to Browser",
+    "autofill": "Autofill Form",
     "parse_via_runtime": "LLM Inference (AI Runtime)",
     "_call_section_llm": "LLM Call (Semantic)",
     "enrich_resume_semantic": "Semantic Enrichment (LLM)",
@@ -70,11 +113,11 @@ STAGE_LABELS: dict[str, str] = {
     "run_document_intelligence": "Document Intelligence (total)",
     "_run_resume": "Resume Parsing (total)",
     "_run_jd": "JD Parsing (total)",
-    "match_candidate_to_job": "ATS Matching (total)",
+    "match_candidate_to_job": "ATS Matching",
     "_internal_match": "ATS Score Computation",
     "_optional_llm_narrative": "ATS Narrative (LLM)",
-    "_persist_application_atomic": "Database Save",
-    "public_apply_to_job": "Public Apply (total)",
+    "_persist_application_atomic": "Save Application",
+    "public_apply_to_job": "Submit Application",
 }
 
 # Canonical order for mixed timelines
@@ -88,9 +131,12 @@ PIPELINE_ORDER: tuple[str, ...] = tuple(
             "Resume Parsing (total)",
             "JD Parsing (total)",
             "Document Intelligence (total)",
-            "ATS Matching (total)",
+            "ATS Matching",
             "ATS Score Computation",
             "ATS Narrative (LLM)",
+            "Save Application",
+            "Submit Application",
+            "ATS Matching (total)",
             "Database Save",
             "Public Apply (total)",
         ]
@@ -104,18 +150,26 @@ WRAPPER_STAGES: frozenset[str] = frozenset(
         "Document Intelligence (total)",
         "Public Apply (total)",
         "ATS Matching (total)",
+        "Submit Application",
     }
 )
 
 STAGE_GROUP: dict[str, str] = {
     **{name: "Parsing" for _, name in RESUME_PIPELINE_STEPS},
     **{name: "Parsing" for _, name in JD_PIPELINE_STEPS},
+    "Receive Upload": "Upload",
+    "Wait for First Progress": "Upload",
+    "Send Result to Browser": "Autofill",
+    "Autofill Form": "Autofill",
     "Semantic Enrichment (LLM)": "LLM",
     "LLM Call (Semantic)": "LLM",
     "LLM Inference (AI Runtime)": "LLM",
     "ATS Narrative (LLM)": "LLM",
     "ATS Matching (total)": "ATS Matching",
+    "ATS Matching": "ATS Matching",
     "ATS Score Computation": "ATS Matching",
+    "Save Application": "Persist",
+    "Submit Application": "Apply",
     "Database Save": "Persist",
     "Public Apply (total)": "Apply",
     "Resume Parsing (total)": "Parsing",
@@ -152,7 +206,21 @@ FUNCTION_TO_STEP_KEY: dict[str, str] = {
     "enrich_jd_semantic": "semantic",
     "_call_section_llm": "semantic",
     "parse_via_runtime": "semantic",
+    "match_candidate_to_job": "ats_match",
+    "_internal_match": "ats_score",
+    "_persist_application_atomic": "persist_application",
+    "public_apply_to_job": "apply_submit",
 }
+
+_WRAPPER_TOTAL_FNS: frozenset[str] = frozenset(
+    {
+        "run_document_intelligence",
+        "_run_resume",
+        "_run_jd",
+        "public_apply_to_job",
+        "match_candidate_to_job",
+    }
+)
 
 
 
@@ -187,6 +255,8 @@ class TimingSession:
     job_id: Optional[str] = None
     status: str = "ok"  # ok | error
     total_duration_ms: float = 0.0
+    wall_duration_ms: float = 0.0
+    client_duration_ms: float = 0.0
     kind: str = "other"
     events: list[TimingEvent] = field(default_factory=list)
     finished_at: Optional[str] = None
@@ -194,6 +264,7 @@ class TimingSession:
     def to_summary(self) -> dict[str, Any]:
         # Re-resolve so path-based bulk vs single resume stays accurate in filters
         kind = _classify_session(self)
+        total_ms = _refresh_session_totals(self)
         return {
             "request_id": self.request_id,
             "started_at": self.started_at,
@@ -204,7 +275,9 @@ class TimingSession:
             "candidate_id": self.candidate_id,
             "job_id": self.job_id,
             "status": self.status,
-            "total_duration_ms": round(self.total_duration_ms, 2),
+            "total_duration_ms": round(total_ms, 2),
+            "wall_duration_ms": round(float(self.wall_duration_ms or 0), 2),
+            "client_duration_ms": round(float(self.client_duration_ms or 0), 2),
             "kind": kind,
             "event_count": len(self.events),
             "stages": self.stage_timeline(),
@@ -230,14 +303,18 @@ class TimingSession:
         """
         kind = (
             self.kind
-            if self.kind in ("resume_parse", "jd_parse", "bulk_parse")
+            if self.kind in ("resume_parse", "jd_parse", "bulk_parse", "apply", "ats")
             else _classify_session(self)
         )
         path = (self.path or "").lower()
         names = {e.function for e in self.events}
 
         # Prefer path / function signals so resume never accidentally uses JD list
-        if "/bulk-parse" in path or "bulk_parse" in path:
+        if "public_apply_to_job" in names or "/apply" in path:
+            kind = "apply"
+        elif "match_candidate_to_job" in names or "_internal_match" in names:
+            kind = "ats"
+        elif "/bulk-parse" in path or "bulk_parse" in path:
             kind = "bulk_parse"
         elif "/parse/jd" in path or "_run_jd" in names or "enrich_jd_semantic" in names:
             kind = "jd_parse"
@@ -247,38 +324,41 @@ class TimingSession:
             or "enrich_resume_semantic" in names
         ):
             kind = "resume_parse"
-        elif kind not in ("resume_parse", "jd_parse", "bulk_parse"):
-            if "coverage" in names:
-                kind = "jd_parse"
-            elif names & ENGINE_STAGES or names & set(FUNCTION_TO_STEP_KEY):
+        elif kind not in ("resume_parse", "jd_parse", "bulk_parse", "apply", "ats"):
+            if names & ENGINE_STAGES or names & set(FUNCTION_TO_STEP_KEY):
                 kind = "resume_parse"
             else:
                 return []
 
-        # Bulk resume uses the same step checklist as single-file resume parse
-        template = JD_PIPELINE_STEPS if kind == "jd_parse" else RESUME_PIPELINE_STEPS
+        if kind in ("apply", "ats"):
+            template = APPLY_PIPELINE_STEPS
+        elif kind == "jd_parse":
+            template = JD_PIPELINE_STEPS
+        elif kind == "bulk_parse":
+            template = BULK_PIPELINE_STEPS
+        else:
+            template = RESUME_PIPELINE_STEPS
+        template_keys = {key for key, _ in template}
 
-        # Best event per engine key
+        # Best event per checklist key — never let a fake 0 ms engine row hide @timing
         by_key: dict[str, TimingEvent] = {}
         for ev in self.events:
             key = ev.function
-            if key in FUNCTION_TO_STEP_KEY:
-                mapped = FUNCTION_TO_STEP_KEY[key]
-                # Keep engine-stage event preferred over aliased @timing
-                if key in ENGINE_STAGES:
-                    pass  # key already engine stage
-                else:
-                    key = mapped
-            if key not in ENGINE_STAGES:
+            if key not in template_keys and key in FUNCTION_TO_STEP_KEY:
+                key = FUNCTION_TO_STEP_KEY[key]
+            if key not in template_keys:
                 continue
             prev = by_key.get(key)
             if prev is None:
                 by_key[key] = ev
-            elif ev.function in ENGINE_STAGES and prev.function not in ENGINE_STAGES:
+                continue
+            prev_skip = (prev.outcome or "") in ("skipped", "failed")
+            ev_skip = (ev.outcome or "") in ("skipped", "failed")
+            if ev_skip and not prev_skip and prev.duration_ms > 0:
+                continue
+            if (ev.duration_ms or 0) > (prev.duration_ms or 0):
                 by_key[key] = ev
-            elif ev.duration_ms >= prev.duration_ms and (
-                ev.function in ENGINE_STAGES or prev.function not in ENGINE_STAGES
-            ):
+            elif (prev.duration_ms or 0) <= 0 < (ev.duration_ms or 0):
                 by_key[key] = ev
 
         rows: list[dict[str, Any]] = []
@@ -567,14 +647,12 @@ class TimingCollector:
             if not session.events:
                 return
             session.finished_at = datetime.now(timezone.utc).isoformat()
-            # Prefer outermost timed duration as pipeline total; fall back to wall clock
-            top = [e for e in session.events if e.depth <= 1]
-            timed_total = max((e.duration_ms for e in (top or session.events)), default=0.0)
-            if timed_total > 0:
-                session.total_duration_ms = timed_total
-            elif wall_duration_ms is not None:
-                session.total_duration_ms = wall_duration_ms
+            if wall_duration_ms is not None:
+                session.wall_duration_ms = max(
+                    float(session.wall_duration_ms or 0.0), float(wall_duration_ms)
+                )
             session.kind = _classify_session(session)
+            _refresh_session_totals(session)
             self._sessions[request_id] = session
             self._order.append(request_id)
             alive = set(self._order)
@@ -589,12 +667,7 @@ class TimingCollector:
                 return None
             if (not session.kind or session.kind == "other") and session.events:
                 session.kind = _classify_session(session)
-            if session.total_duration_ms <= 0 and session.events:
-                top = [e for e in session.events if e.depth <= 1]
-                session.total_duration_ms = max(
-                    (e.duration_ms for e in (top or session.events)),
-                    default=0.0,
-                )
+            _refresh_session_totals(session)
             return session
 
     def list_recent(
@@ -629,6 +702,7 @@ class TimingCollector:
                 continue
             # Finalize kind before filtering so open/legacy sessions match UI filters
             s.kind = _classify_session(s)
+            _refresh_session_totals(s)
             if kind and s.kind != kind:
                 continue
             if function_name:
@@ -639,8 +713,6 @@ class TimingCollector:
                 continue
             if date_to and s.started_at > date_to:
                 continue
-            if s.total_duration_ms <= 0 and s.events:
-                s.total_duration_ms = max(e.duration_ms for e in s.events)
             out.append(s)
             if len(out) >= limit:
                 break
@@ -882,7 +954,7 @@ def _bulk_group_summary(job_id: str, kids: list[TimingSession]) -> dict[str, Any
 def _bulk_group_detail(job_id: str, kids: list[TimingSession]) -> dict[str, Any]:
     summary = _bulk_group_summary(job_id, kids)
     # Aggregate checklist: average duration for completed steps; skipped if all skipped
-    templates = list(RESUME_PIPELINE_STEPS)
+    templates = list(BULK_PIPELINE_STEPS)
     by_key: dict[str, list[dict[str, Any]]] = {k: [] for k, _ in templates}
     for s in kids:
         for row in s.parse_checklist():
@@ -995,7 +1067,7 @@ def _classify_session(session: TimingSession) -> str:
         return "resume_parse"
     if "/parse/jd" in path or "_run_jd" in names or "enrich_jd_semantic" in names:
         return "jd_parse"
-    if "coverage" in names:
+    if "coverage" in names and "_run_resume" not in names and "text" not in names:
         return "jd_parse"
     if "run_document_intelligence" in names or (names & ENGINE_STAGES):
         if "jd" in path:
@@ -1004,6 +1076,102 @@ def _classify_session(session: TimingSession) -> str:
     if "extract_text" in names or "text" in names:
         return "jd_parse" if "jd" in path else "resume_parse"
     return "other"
+
+
+_CLIENT_SPAN_KEYS: frozenset[str] = frozenset(
+    {"upload", "client_wait", "deliver", "autofill"}
+)
+_MAX_CLIENT_SPAN_MS = 30 * 60 * 1000.0
+
+
+def _refresh_session_totals(session: TimingSession) -> float:
+    """
+    User-visible total: upload → form filled.
+
+    Prefer client wall-clock (file chosen until autofill) and HTTP wall-clock
+    (request start until SSE stream ends) over nested @timing wrappers, which
+    only cover the parse function and miss upload / stream / autofill.
+    """
+    candidates: list[float] = []
+    if session.client_duration_ms:
+        candidates.append(float(session.client_duration_ms))
+    if session.wall_duration_ms:
+        candidates.append(float(session.wall_duration_ms))
+    wrappers = [e.duration_ms for e in session.events if e.function in _WRAPPER_TOTAL_FNS]
+    if wrappers:
+        candidates.append(max(wrappers))
+    parse_keys = {k for k, _ in _RESUME_ENGINE_STEPS} | {k for k, _ in _JD_ENGINE_STEPS}
+    engine = [
+        float(e.duration_ms or 0)
+        for e in session.events
+        if e.function in parse_keys and (e.outcome or "completed") == "completed"
+    ]
+    if engine:
+        candidates.append(sum(engine))
+    if session.events:
+        candidates.append(max(e.duration_ms for e in session.events))
+    if session.total_duration_ms:
+        candidates.append(float(session.total_duration_ms))
+    session.total_duration_ms = max(candidates) if candidates else 0.0
+    return session.total_duration_ms
+
+
+def attach_client_timings(request_id: str, payload: dict[str, Any]) -> bool:
+    """
+    Merge browser spans (upload → first byte → autofill) into an existing session.
+
+    Called after the form is filled so the dashboard total matches what the user waited.
+    """
+    if not is_developer_mode_enabled():
+        return False
+    rid = (request_id or "").strip()
+    if not rid:
+        return False
+    spans = payload.get("spans") if isinstance(payload, dict) else None
+    if not isinstance(spans, list):
+        spans = []
+    try:
+        client_total = payload.get("total_ms") if isinstance(payload, dict) else None
+        client_total_f = float(client_total) if client_total is not None else 0.0
+    except (TypeError, ValueError):
+        client_total_f = 0.0
+    client_total_f = min(max(0.0, client_total_f), _MAX_CLIENT_SPAN_MS)
+
+    with timing_collector._lock:
+        session = timing_collector._sessions.get(rid) or timing_collector._open.get(rid)
+        if session is None:
+            return False
+        if client_total_f > 0:
+            session.client_duration_ms = max(float(session.client_duration_ms or 0.0), client_total_f)
+        for span in spans:
+            if not isinstance(span, dict):
+                continue
+            key = str(span.get("key") or "").strip()
+            if key not in _CLIENT_SPAN_KEYS:
+                continue
+            try:
+                ms = float(span.get("duration_ms") or 0.0)
+            except (TypeError, ValueError):
+                continue
+            ms = min(max(0.0, ms), _MAX_CLIENT_SPAN_MS)
+            status = str(span.get("status") or "completed").lower()
+            if status not in ("completed", "failed", "skipped"):
+                status = "completed"
+            session.events.append(
+                TimingEvent(
+                    request_id=rid,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    function=key,
+                    module="client.parse_timing",
+                    duration_ms=round(ms, 2),
+                    success=status != "failed",
+                    depth=1,
+                    stage=STAGE_LABELS.get(key, key),
+                    outcome=status,
+                )
+            )
+        _refresh_session_totals(session)
+        return True
 
 
 def record_pipeline_stage(

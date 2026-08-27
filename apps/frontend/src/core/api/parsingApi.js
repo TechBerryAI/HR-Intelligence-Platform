@@ -121,7 +121,7 @@ function applySseChunk(chunk, { onStage, sink }) {
 /**
  * Parse SSE stream from Document Intelligence Engine.
  */
-async function consumeParseSSE(response, { onStage } = {}) {
+async function consumeParseSSE(response, { onStage, onFirstChunk } = {}) {
   const contentType = response.headers.get('content-type') || '';
   if (!response.ok) {
     if (contentType.includes('application/json')) {
@@ -152,8 +152,13 @@ async function consumeParseSSE(response, { onStage } = {}) {
     }
   };
 
+  let sawChunk = false
   while (true) {
     const { done, value } = await reader.read();
+    if (!sawChunk && value) {
+      sawChunk = true
+      onFirstChunk?.()
+    }
     if (done) {
       buffer += decoder.decode();
       drainBuffer(true);
@@ -180,7 +185,7 @@ const SSE_HEADERS = {
  * Public resume parse with live stage events (SSE).
  * Falls back to sync only for transport/stream issues — never hides a real parse error.
  */
-export async function uploadAndParseResumePublicStream(file, { onStage } = {}) {
+export async function uploadAndParseResumePublicStream(file, { onStage, onFirstChunk } = {}) {
   const formData = new FormData();
   formData.append('file', file);
   let response;
@@ -199,14 +204,14 @@ export async function uploadAndParseResumePublicStream(file, { onStage } = {}) {
 
   // Do not fall back to the blocking /public parse after the stream started.
   // A second OCR pass freezes the overlay on the last SSE stage ("Extracting text").
-  return await consumeParseSSE(response, { onStage });
+  return await consumeParseSSE(response, { onStage, onFirstChunk });
 }
 
 /**
  * Authenticated resume parse with live stage events (SSE).
  * Falls back to sync only for transport/stream issues.
  */
-export async function uploadAndParseResumeStream(file, candidateId = null, { onStage } = {}) {
+export async function uploadAndParseResumeStream(file, candidateId = null, { onStage, onFirstChunk } = {}) {
   const formData = new FormData();
   formData.append('file', file);
   if (candidateId) formData.append('candidate_id', candidateId);
@@ -222,13 +227,13 @@ export async function uploadAndParseResumeStream(file, candidateId = null, { onS
     return uploadAndParseResume(file, candidateId);
   }
 
-  return await consumeParseSSE(response, { onStage });
+  return await consumeParseSSE(response, { onStage, onFirstChunk });
 }
 
 /**
  * JD parse with live stage events (SSE).
  */
-export async function uploadAndParseJDStream(file, jobId = null, { onStage } = {}) {
+export async function uploadAndParseJDStream(file, jobId = null, { onStage, onFirstChunk } = {}) {
   const formData = new FormData();
   formData.append('file', file);
   if (jobId) formData.append('job_id', jobId);
@@ -244,7 +249,7 @@ export async function uploadAndParseJDStream(file, jobId = null, { onStage } = {
     return uploadAndParseJD(file, jobId);
   }
 
-  return await consumeParseSSE(response, { onStage });
+  return await consumeParseSSE(response, { onStage, onFirstChunk });
 }
 
 /**
@@ -335,4 +340,59 @@ export function validateFileForParsing(file) {
   }
 
   return { valid: true, error: null };
+}
+
+/**
+ * Wall-clock from file chosen until the parsed form is visible.
+ * Reported to Developer Mode so the dashboard total matches what the user waited.
+ */
+export function startParseClock() {
+  const start = performance.now()
+  const clock = {
+    start,
+    fetchStarted: start,
+    firstChunk: null,
+    resultAt: null,
+    markFetch() {
+      clock.fetchStarted = performance.now()
+    },
+    markFirstChunk() {
+      if (clock.firstChunk == null) clock.firstChunk = performance.now()
+    },
+    markResult() {
+      clock.resultAt = performance.now()
+    },
+  }
+  return clock
+}
+
+export async function reportClientParseTiming(result, clock, extra = {}) {
+  const requestId = result?.timing_request_id
+  if (!requestId || !clock) return
+  const done = performance.now()
+  const first = clock.firstChunk ?? clock.resultAt ?? done
+  const resultAt = clock.resultAt ?? done
+  const overlayMs = Number(extra.overlayMs) || 0
+  const payload = {
+    request_id: requestId,
+    total_ms: done - clock.start,
+    spans: [
+      { key: 'upload', duration_ms: Math.max(0, clock.fetchStarted - clock.start) },
+      { key: 'client_wait', duration_ms: Math.max(0, first - clock.fetchStarted) },
+      { key: 'deliver', duration_ms: Math.max(0, resultAt - first) },
+      { key: 'autofill', duration_ms: Math.max(0, done - resultAt + overlayMs) },
+    ],
+  }
+  try {
+    await fetch(`${API_URL}/api/parse/timing-client`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...validationHeaders(),
+      },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // Developer Mode only; never block autofill
+  }
 }

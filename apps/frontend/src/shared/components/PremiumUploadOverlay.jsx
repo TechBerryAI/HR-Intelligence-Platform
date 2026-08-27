@@ -185,11 +185,9 @@ export default function PremiumUploadOverlay({
           contain: 'layout style paint'
         }}
       >
-        {/* Top Icon */}
+        {/* Top Icon — static document badge; live work is shown on the active step spinner */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '18px' }}>
-          <motion.div
-            animate={allDone ? { rotate: 0 } : { rotate: 360 }}
-            transition={allDone ? { duration: 0.2 } : { duration: 3, repeat: Infinity, ease: "linear" }}
+          <div
             style={{
               width: '60px',
               height: '60px',
@@ -207,9 +205,7 @@ export default function PremiumUploadOverlay({
               flexShrink: 0
             }}
           >
-            <motion.div
-              animate={{ scale: [1, 1.3, 1], opacity: [0.4, 0, 0.4] }}
-              transition={{ duration: 2, repeat: Infinity }}
+            <div
               style={{
                 position: 'absolute',
                 inset: '-8px',
@@ -224,11 +220,9 @@ export default function PremiumUploadOverlay({
             {allDone ? (
               <FiCheck style={{ width: '30px', height: '30px', color: '#ffffff', strokeWidth: 3, flexShrink: 0 }} />
             ) : (
-              React.createElement(steps[activeStep].icon, {
-                style: { width: '30px', height: '30px', color: '#ffffff', strokeWidth: 2, flexShrink: 0 }
-              })
+              <FiFile style={{ width: '30px', height: '30px', color: '#ffffff', strokeWidth: 2, flexShrink: 0 }} />
             )}
-          </motion.div>
+          </div>
         </div>
 
         {/* Status Text */}

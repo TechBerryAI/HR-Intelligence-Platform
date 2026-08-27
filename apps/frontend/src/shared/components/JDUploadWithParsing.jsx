@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { uploadAndParseJDStream, takeJDFormDTO, validateFileForParsing } from '@/core/api/parsingApi.js';
+import { uploadAndParseJDStream, takeJDFormDTO, validateFileForParsing, startParseClock, reportClientParseTiming } from '@/core/api/parsingApi.js';
 import { hintForStage, isPipelineComplete, overlayCatchupMs, progressPctForStage } from '@/shared/utils/parsePipelineProgress.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion } from 'framer-motion';
@@ -76,6 +76,7 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
     setStageMessage(hintForStage('cache'));
     setProgressPct(8);
     let lastStage = 'cache';
+    const clock = startParseClock();
     
     try {
       const onStage = (ev) => {
@@ -89,7 +90,12 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
         if (isPipelineComplete(ev)) setProgressPct(100);
       };
 
-      const result = await uploadAndParseJDStream(file, currentJobId, { onStage });
+      clock.markFetch();
+      const result = await uploadAndParseJDStream(file, currentJobId, {
+        onStage,
+        onFirstChunk: clock.markFirstChunk,
+      });
+      clock.markResult();
 
       if (result.status === 'ok' && result.form) {
         const formData = takeJDFormDTO(result);
@@ -145,6 +151,8 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
             _missingFields: coreGaps,
           });
         }
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        await reportClientParseTiming(result, clock);
 
         // Show low confidence warning (only if no coverage gap message)
         if (coreGaps.length === 0 && result.confidence < 0.75) {
