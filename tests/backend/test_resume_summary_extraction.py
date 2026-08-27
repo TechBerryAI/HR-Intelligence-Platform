@@ -55,6 +55,135 @@ def test_is_valid_summary_rejects_contact_phone_email():
     assert is_valid_summary(OBJECTIVE_PROSE)
 
 
+def test_graduation_year_marks_are_not_phones():
+    """Years + percentages / calendar dates must not trip phone rejection."""
+    prose = (
+        'Willing to work in a professional company which will provide me with an '
+        'elegant platform to use my skills and progress in my career.'
+    )
+    assert is_valid_summary(prose)
+    assert summary_rejection_reason(prose + ' 2019 60.81%') is None
+    assert summary_rejection_reason(
+        'Seeking assignments in DBA roles. Working from Dt- 15-04-2021 to till date.'
+    ) is None
+    assert not is_valid_summary(f'Seeking a role. Call {PHONE}')
+
+
+def test_summary_scrubs_sidebar_contact_bleed():
+    text = f"""Name
+
+Summary
+A motivated, proactive and keen individual, looking to gain practical and hands
+on experience. Always ready to learn new technologies.
+IT ENGINEER
+Anuj Hegishte
+A-103, New Swati CHS Ltd.
+www.linkedin.com/in/anuj-hegishte
+anuj@example.com
+
+Experience
+Middleware Admin
+"""
+    details = extract_summary_details(text)
+    assert details['validation'] == 'passed'
+    assert 'motivated, proactive' in details['value'].lower()
+    assert '@' not in details['value']
+    assert 'linkedin' not in details['value'].lower()
+
+
+def test_empty_summary_heading_uses_intro_prose():
+    text = """ANANT VIJAY SHARMA
+Dynamic Technical Architect with a proven track record at Publicis Sapient,
+specializing in Generative AI, Data and Cloud solutions. Expert in deploying
+LLM-based systems and optimizing cloud architectures.
+PROFESSIONAL
+
+Summary
+
+Certifications
+AWS Certified
+Experience
+Architect at Sapient
+"""
+    details = extract_summary_details(text)
+    assert details['validation'] == 'passed'
+    assert 'Technical Architect' in details['value']
+    assert 'Generative AI' in details['value']
+
+
+def test_rejects_experience_crumb_and_skills_dump_as_summary():
+    assert summary_rejection_reason('WORK EXPERIENCE:- 2.8 YEARS') in {
+        'experience_header',
+        'section_heading_only',
+        'too_short',
+    }
+    assert summary_rejection_reason(
+        'EXPERTISE Ticketing tools (ServiceNow, Jira), remote support '
+        '(TeamViewer, AnyDesk), Basic networking (TCP/IP, DNS, VPN)'
+    ) == 'skills_list'
+    assert summary_rejection_reason(
+        'EVENTSDONETILLNOW DAY EVENT COMPANY 1Day CorporateEvent HyattHotel'
+    ) == 'non_summary_content'
+
+
+def test_location_rejects_section_headers():
+    from app.ai.parser.enrichment.resume_text_inference import (
+        heal_location_candidate,
+        is_plausible_location_value,
+    )
+
+    assert not is_plausible_location_value('Professional Profile')
+    assert not is_plausible_location_value('Certificate')
+    assert not is_plausible_location_value('Personal Profile')
+    assert heal_location_candidate('Professional Profile') == ''
+    assert heal_location_candidate('Certificate') == ''
+    assert is_plausible_location_value('Pune')
+    assert is_plausible_location_value('Mumbai')
+
+
+def test_personal_profile_heading_extracts_summary():
+    text = """ANUJ CHAFLE
+Pune
+PERSONAL PROFILE
+To leverage my skills and experience as a DBA Administrator to contribute
+effectively to a dynamic organization that values professionalism.
+
+Experience
+Database Administrator
+"""
+    details = extract_summary_details(text)
+    assert details['validation'] == 'passed'
+    assert 'leverage my skills' in details['value'].lower()
+
+
+def test_objective_not_rejected_as_skills_list_with_tech_commas():
+    prose = (
+        'Proficient in designing, developing, and implementing web applications '
+        'using .NET technologies (C#, ASP.NET, MVC). Successfully led and '
+        'contributed to multiple full-cycle projects.'
+    )
+    assert is_valid_summary(prose)
+    assert summary_rejection_reason(prose) is None
+
+
+def test_operating_system_distros_does_not_pollute_summary():
+    text = """Name
+Summary
+To obtain a position that will enable me to use my strong skills, educational
+background, and ability to work well with people.
+
+OPERATING SYSTEM DISTROS
+Linux (CentOS 7), Windows
+
+Skills
+Linux
+"""
+    details = extract_summary_details(text)
+    assert details['validation'] == 'passed'
+    assert 'obtain a position' in details['value'].lower()
+    assert 'centos' not in details['value'].lower()
+
+
 def test_career_objective_becomes_summary():
     text = f"""Candidate Name
 
@@ -169,7 +298,13 @@ BSc
 """
     details = extract_summary_details(text)
     assert details['validation'] == 'failed'
-    assert details['reason'] in {'contains_phone_number', 'contact_information'}
+    assert details['reason'] in {
+        'contains_phone_number',
+        'contact_information',
+        'section_heading_only',
+        'empty',
+        'too_short',
+    }
     assert details['value'] == ''
     profile = _parse_text(text)
     assert not (profile.personal.summary or '').strip()

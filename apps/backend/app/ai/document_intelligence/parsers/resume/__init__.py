@@ -1840,8 +1840,10 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
 
 def parse_summary(section_text: str, full_text: str = '') -> str:
     """Prefer section body when valid; else section-aware full-text extraction."""
+    from app.ai.parser.enrichment.resume_text_inference import _normalize_summary_body
+
     if section_text.strip():
-        cleaned = ' '.join(section_text.split())[:2000]
+        cleaned = _normalize_summary_body(section_text, max_len=2000)
         if is_valid_summary(cleaned):
             return cleaned
     return extract_summary_from_text(full_text)
@@ -2019,6 +2021,8 @@ def parse_resume_from_sections(
         sections,
         'Career Objective',
         'Professional Summary',
+        'Professional Profile',
+        'Personal Profile',
         'Profile Summary',
         'Summary',
         'Objective',
@@ -2060,17 +2064,33 @@ def parse_resume_from_sections(
     if not summary and preamble:
         # Unlabeled intro paragraph after contact (common in Indian resumes).
         # Never accept contact / phone / email blocks as summary.
+        from app.ai.parser.enrichment.resume_text_inference import _normalize_summary_body
+
         paras = [p.strip() for p in re.split(r'\n\s*\n', preamble) if p.strip()]
         for p in paras:
-            candidate = ' '.join(p.split())[:2000]
+            candidate = _normalize_summary_body(p, max_len=2000)
             # Require substantial unlabeled prose — not a name/contact crumb
-            if len(candidate) < 80:
+            if len(candidate) < 40:
                 continue
             if is_valid_summary(candidate):
                 summary = candidate
                 break
-    # Keep personal.summary only when validated; never leak contact blobs
-    personal_summary = personal.summary if is_valid_summary(personal.summary) else ''
+        if not summary:
+            # Single-block preamble (no blank lines) still may hold intro prose
+            candidate = _normalize_summary_body(preamble, max_len=2000)
+            if len(candidate) >= 40 and is_valid_summary(candidate):
+                summary = candidate
+    # Keep personal.summary only when validated; scrub contact bleed when possible
+    personal_summary = ''
+    if personal.summary:
+        if is_valid_summary(personal.summary):
+            personal_summary = personal.summary.strip()
+        else:
+            from app.ai.parser.enrichment.resume_text_inference import _normalize_summary_body
+
+            scrubbed = _normalize_summary_body(personal.summary, max_len=2000)
+            if is_valid_summary(scrubbed):
+                personal_summary = scrubbed
     if summary and is_valid_summary(summary):
         personal = personal.model_copy(update={'summary': summary})
     elif personal_summary:
