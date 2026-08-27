@@ -160,7 +160,7 @@ def get_ocr_engine_status() -> tuple[bool, str]:
         _ocr_engine_status = (False, 'OCR_ENABLED=false')
         return _ocr_engine_status
     try:
-        import rapidocr_onnxruntime  # noqa: F401
+        import rapidocr_onnxruntime  # noqa: F401  # type: ignore
 
         _ocr_engine_status = (True, 'rapidocr')
         return _ocr_engine_status
@@ -204,7 +204,7 @@ def _get_rapidocr_engine() -> Any:
     global _rapidocr_engine
     if _rapidocr_engine is not None:
         return _rapidocr_engine
-    from rapidocr_onnxruntime import RapidOCR
+    from rapidocr_onnxruntime import RapidOCR  # type: ignore
 
     with _rapidocr_lock:
         if _rapidocr_engine is None:

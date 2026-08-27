@@ -51,6 +51,8 @@ _HEADER_ALIASES = {
     'certifications and licenses': 'Certifications',
     'certifications & licenses': 'Certifications',
     'professional summary': 'Summary',
+    'professional profile': 'Summary',
+    'personal profile': 'Summary',
     'profile summary': 'Summary',
     'career objective': 'Summary',
     'career profile': 'Summary',

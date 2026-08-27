@@ -4,5 +4,9 @@
   },
   "typescript.tsdk": "apps/frontend/node_modules/typescript/lib",
   "typescript.enablePromptUseWorkspaceTsdk": true,
-  "js/ts.implicitProjectConfig.checkJs": false
+  "js/ts.implicitProjectConfig.checkJs": false,
+  "python.defaultInterpreterPath": "${workspaceFolder}/apps/backend/venv/Scripts/python.exe",
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/apps/backend"
+  ]
 }

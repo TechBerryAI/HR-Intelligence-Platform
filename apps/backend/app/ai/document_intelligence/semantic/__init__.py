@@ -316,9 +316,13 @@ def enrich_resume_semantic(
     from app.ai.parser.enrichment.resume_text_inference import (
         extract_summary_from_text,
         is_valid_summary,
+        _normalize_summary_body,
     )
 
     section_summary = (profile.personal.summary or '').strip()
+    if section_summary and not is_valid_summary(section_summary):
+        scrubbed = _normalize_summary_body(section_summary, max_len=2000)
+        section_summary = scrubbed if is_valid_summary(scrubbed) else ''
     if not is_valid_summary(section_summary):
         section_summary = extract_summary_from_text(unresolved_text or '')
     llm_payload = unresolved_text[:6000]
@@ -377,6 +381,12 @@ def enrich_resume_semantic(
                     )
                 }
             )
+        # Scrub invalid AI summary before gap-fill merge
+        ai_summary = str(raw.get('summary') or '').strip()
+        if ai_summary and not is_valid_summary(ai_summary):
+            scrubbed_ai = _normalize_summary_body(ai_summary, max_len=2000)
+            raw = dict(raw)
+            raw['summary'] = scrubbed_ai if is_valid_summary(scrubbed_ai) else ''
         merged, merged_experience = _merge_resume_semantic_profile(
             profile,
             raw,
