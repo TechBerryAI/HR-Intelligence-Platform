@@ -84,6 +84,12 @@ def test_grounded_education_row_is_layout_agnostic():
     assert is_grounded_education_row('Developed APIs', 'internal tools') is False
     assert is_grounded_education_row('Marketing Intern', 'Acme Solutions') is False
     assert is_grounded_education_row('Data Science Intern', 'Bright Labs') is False
+    from app.ai.document_intelligence.validation.engine import is_keepable_education_form_row
+
+    assert is_keepable_education_form_row('B.Tech', '') is True
+    assert is_keepable_education_form_row('', 'State University') is True
+    assert is_keepable_education_form_row('Education', '') is False
+    assert is_keepable_education_form_row('Software Engineer Intern', 'Acme') is False
 
 
 def test_skill_rejects_experience_sentence():

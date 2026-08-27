@@ -251,3 +251,60 @@ def test_validators():
     assert validate_url('https://github.com/x', host_hint='github')[0] is True
     assert validate_url('https://example.com', host_hint='github')[0] is False
     assert validate_url('https://BSc.IT')[0] is False
+
+
+def test_form_keeps_degree_only_education_row():
+    from app.ai.document_intelligence.models.candidate import (
+        CandidateProfile,
+        ContactInfo,
+        EducationEntry,
+        PersonalInfo,
+    )
+
+    profile = CandidateProfile(
+        personal=PersonalInfo(full_name='Jane Doe'),
+        contact=ContactInfo(email='jane@example.com'),
+        education=[EducationEntry(degree='B.Tech', institution='')],
+    )
+    form = map_candidate_to_form(profile)
+    assert any(e.degree == 'B.Tech' and e.institution == '' for e in form.education)
+
+
+def test_form_keeps_institution_only_education_row():
+    from app.ai.document_intelligence.models.candidate import (
+        CandidateProfile,
+        ContactInfo,
+        EducationEntry,
+        PersonalInfo,
+    )
+
+    profile = CandidateProfile(
+        personal=PersonalInfo(full_name='Jane Doe'),
+        contact=ContactInfo(email='jane@example.com'),
+        education=[EducationEntry(degree='', institution='State University')],
+    )
+    form = map_candidate_to_form(profile)
+    assert any(e.institution == 'State University' and e.degree == '' for e in form.education)
+
+
+def test_form_drops_ungrounded_education_placeholders():
+    from app.ai.document_intelligence.models.candidate import (
+        CandidateProfile,
+        ContactInfo,
+        EducationEntry,
+        PersonalInfo,
+    )
+
+    profile = CandidateProfile(
+        personal=PersonalInfo(full_name='Jane Doe'),
+        contact=ContactInfo(email='jane@example.com'),
+        education=[
+            EducationEntry(degree='Education', institution=''),
+            EducationEntry(degree='Qualification', institution=''),
+            EducationEntry(degree='Software Engineer Intern', institution='Acme Solutions'),
+            EducationEntry(degree='', institution='Qualification'),
+        ],
+    )
+    form = map_candidate_to_form(profile)
+    kept = [(e.degree, e.institution) for e in form.education if e.degree or e.institution]
+    assert kept == []

@@ -250,6 +250,26 @@ def is_grounded_education_row(degree: str, institution: str) -> bool:
     return bool(deg_ok and inst_ok)
 
 
+_EDU_HEADING_TOKENS = frozenset(
+    {'education', 'educational', 'qualification', 'qualifications', 'academics'}
+)
+
+
+def is_keepable_education_form_row(degree: str, institution: str) -> bool:
+    """Apply-form rows: keep when one side is grounded and the other is empty."""
+    deg = (degree or '').strip()
+    inst = (institution or '').strip()
+    if not deg and not inst:
+        return False
+    if deg.lower() in _EDU_HEADING_TOKENS or inst.lower() in _EDU_HEADING_TOKENS:
+        return False
+    deg_ok, _ = validate_degree(deg) if deg else (True, 'empty')
+    inst_ok, _ = validate_institution(inst) if inst else (True, 'empty')
+    if not deg_ok or not inst_ok:
+        return False
+    return bool((deg and deg_ok) or (inst and inst_ok))
+
+
 _GEO_BARE_RE = re.compile(
     r'(?i)^(?:'
     r'india|usa|uk|uae|remote|hybrid|wfh|work\s+from\s+home|'

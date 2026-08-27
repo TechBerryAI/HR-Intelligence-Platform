@@ -1051,6 +1051,7 @@ def _looks_like_role_only_line(text: str) -> bool:
 def _is_role_comma_company_header(text: str) -> bool:
     """True for 'Role, Company' / 'Role,Company' job headers (not duty prose)."""
     stripped = re.sub(r'^[\s•·\-\*●▪▸►]+', '', (text or '').strip())
+    stripped = _strip_date_range(stripped).strip(' ,|-–—')
     comma_parts = re.split(r',\s*', stripped, maxsplit=1)
     if len(comma_parts) != 2:
         return False
@@ -1061,7 +1062,9 @@ def _is_role_comma_company_header(text: str) -> bool:
         return False
     if _DUTY_VERB_START.match(left) or _DUTY_VERB_START.match(right):
         return False
-    if len(left.split()) > 6 or not (1 <= len(right.split()) <= 8):
+    # Optional city after the company: "Role, Acme Ltd, Mumbai"
+    right_company = re.split(r',\s*', right, maxsplit=1)[0].strip()
+    if len(left.split()) > 6 or not (1 <= len(right_company.split()) <= 8):
         return False
     # Duty sentences have many clauses / conjunctions on the right
     if re.search(r'(?i)\b(?:resulting|ensuring|improving|including|across|and|wrote|reported)\b', right):
@@ -1090,6 +1093,18 @@ def _is_bullet_or_duty_line(line: str) -> bool:
     # Company, City | Role, dates — pipe + range is a header, not a comma duty
     if '|' in stripped and extract_date_range(stripped)[0]:
         return False
+    start, _end = extract_date_range(stripped)
+    wo_dates = _strip_date_range(stripped).strip(' ,|-–—')
+    if start and wo_dates:
+        # Dated Role, Company / Company, City — not a duty even when > 40 chars
+        if _has_job_title_cue(wo_dates) or re.search(r'(?i)\bintern\b', wo_dates):
+            return False
+        comma_parts = re.split(r',\s*', wo_dates, maxsplit=1)
+        if len(comma_parts) == 2:
+            right = comma_parts[1].strip()
+            city_bit = re.split(r',\s*', right)[-1].strip()
+            if _CITY_LIKE.match(right) or _CITY_LIKE.match(city_bit):
+                return False
     # Mid/long prose with comma clauses is a duty sentence, not a title
     # (Saloni-style: "Trends, and Revenue KPIs, enabling data…")
     if ',' in stripped and len(stripped) > 40:
@@ -1110,6 +1125,11 @@ def _looks_like_job_header_line(line: str) -> bool:
         return False
     if _DASH_ROLE_COMPANY_DATES.match(stripped) or _PIPE_EXP.match(stripped):
         return True
+    if '|' in stripped:
+        left, _, right = stripped.partition('|')
+        left, right = left.strip(), right.strip()
+        if left and _CITY_LIKE.match(right) and not _DUTY_VERB_START.match(left):
+            return True
     start, _end = extract_date_range(stripped)
     if start and (
         ' - ' in stripped or ' – ' in stripped or '|' in stripped or ' at ' in stripped.lower()
@@ -1162,11 +1182,15 @@ def _join_wrapped_experience_lines(lines: list[str]) -> list[str]:
         p = prev.strip()
         if not n:
             continue
+        if is_section_header_line(p):
+            out.append(n)
+            continue
         if (
             _looks_like_job_header_line(n)
             or _is_role_comma_company_header(n)
             or n[:1] in '•·*●▪▸►'
             or n.startswith('●')
+            or _looks_like_company_line(n)
         ):
             out.append(n)
             continue
@@ -1525,6 +1549,9 @@ def _parse_experience_line(line: str) -> ExperienceEntry | None:
         return ExperienceEntry(role=line_wo.strip()[:200])
     if not start and _looks_like_company_line(line_wo):
         return ExperienceEntry(company=line_wo.strip()[:200])
+    leftover = (line_wo or '').strip(' |-–—,()')
+    if start and not leftover:
+        return ExperienceEntry(start=start, end=end, is_current=is_current)
 
     return None
 
@@ -1536,10 +1563,48 @@ def _coalesce_stacked_experience_entries(rows: list[ExperienceEntry]) -> list[Ex
     while i < len(rows):
         cur = rows[i]
         nxt = rows[i + 1] if i + 1 < len(rows) else None
+        nxt2 = rows[i + 2] if i + 2 < len(rows) else None
         if nxt:
             cur_role, cur_co = (cur.role or '').strip(), (cur.company or '').strip()
             nxt_role, nxt_co = (nxt.role or '').strip(), (nxt.company or '').strip()
             dates_conflict = bool(cur.start and nxt.start and cur.start != nxt.start)
+            n2_role = (nxt2.role or '').strip() if nxt2 else ''
+            n2_co = (nxt2.company or '').strip() if nxt2 else ''
+            n2_dates_conflict = bool(
+                nxt2
+                and (
+                    (cur.start and nxt2.start and cur.start != nxt2.start)
+                    or (nxt.start and nxt2.start and nxt.start != nxt2.start)
+                )
+            )
+            # Company then role then dates on three stacked lines
+            if (
+                nxt2
+                and not n2_dates_conflict
+                and cur_co
+                and not cur_role
+                and nxt_role
+                and not nxt_co
+                and nxt2.start
+                and not n2_role
+                and not n2_co
+            ):
+                out.append(
+                    cur.model_copy(
+                        update={
+                            'role': nxt_role[:200],
+                            'start': cur.start or nxt.start or nxt2.start,
+                            'end': cur.end or nxt.end or nxt2.end,
+                            'is_current': cur.is_current or nxt.is_current or nxt2.is_current,
+                            'location': (cur.location or nxt.location or nxt2.location or '')[:120],
+                            'description': (
+                                cur.description or nxt.description or nxt2.description or ''
+                            ).strip(),
+                        }
+                    )
+                )
+                i += 3
+                continue
             if not dates_conflict and cur_role and not cur_co and nxt_co and not nxt_role:
                 out.append(
                     cur.model_copy(
@@ -1560,6 +1625,26 @@ def _coalesce_stacked_experience_entries(rows: list[ExperienceEntry]) -> list[Ex
                     cur.model_copy(
                         update={
                             'role': nxt_role[:200],
+                            'start': cur.start or nxt.start,
+                            'end': cur.end or nxt.end,
+                            'is_current': cur.is_current or nxt.is_current,
+                            'location': (cur.location or nxt.location or '')[:120],
+                            'description': (cur.description or nxt.description or '').strip(),
+                        }
+                    )
+                )
+                i += 2
+                continue
+            if (
+                not dates_conflict
+                and (cur_role or cur_co)
+                and nxt.start
+                and not nxt_role
+                and not nxt_co
+            ):
+                out.append(
+                    cur.model_copy(
+                        update={
                             'start': cur.start or nxt.start,
                             'end': cur.end or nxt.end,
                             'is_current': cur.is_current or nxt.is_current,

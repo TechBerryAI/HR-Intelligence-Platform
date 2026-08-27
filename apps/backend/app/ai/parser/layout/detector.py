@@ -99,15 +99,27 @@ def ocr_image_with_layout(
                 return refined, 'doclayout'
             return text, 'heuristic_ocr'
 
-    # RapidOCR ran and found nothing — OpenCV per-block OCR will also be empty
-    # and was costing ~12s per blank page. Only crop-OCR when the engine failed.
-    if detections is None:
+    # RapidOCR found nothing. One OpenCV block pass only when the page still has ink
+    # (blank pages used to cost ~12s). Engine failure (None) still falls through.
+    if detections is None or (
+        detections == [] and _layout_image_has_ink(image_bytes)
+    ):
         blocks = _opencv_then_ocr(processed, ocr_fn)
         if blocks.strip():
             return structure_text_by_headers(blocks), 'opencv_blocks'
-        return (ocr_fn(processed) or '', 'plain_ocr')
+        if detections is None:
+            return (ocr_fn(processed) or '', 'plain_ocr')
 
     return ('', 'empty')
+
+
+def _layout_image_has_ink(image_bytes: bytes) -> bool:
+    try:
+        from app.ai.parser.text_extraction import _png_has_ink
+
+        return bool(_png_has_ink(image_bytes))
+    except Exception:
+        return False
 
 
 def _rapidocr_detections(image_bytes: bytes) -> list | None:
