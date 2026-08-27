@@ -232,3 +232,43 @@ def test_h_no_not_extracted_as_portfolio():
     port = str(person.get('portfolio') or person.get('website') or '')
     assert 'h.no' not in port.lower()
     assert not any('h.no' in str(u).lower() for u in (person.get('otherUrls') or []))
+
+
+def test_section_header_aliases_map_experience_and_education():
+    from app.ai.parser.layout.heuristic import normalize_section_header
+
+    assert normalize_section_header('Career Timeline') == 'Experience'
+    assert normalize_section_header('Employment Details') == 'Experience'
+    assert normalize_section_header('Employment History') == 'Experience'
+    assert normalize_section_header('Employment / History') == 'Experience'
+    assert normalize_section_header('Professional History') == 'Experience'
+    assert normalize_section_header('Work') == 'Experience'
+    assert normalize_section_header('Organisational Experience') == 'Experience'
+    assert normalize_section_header('Organizational Experience') == 'Experience'
+    assert normalize_section_header('Academic Qualifications') == 'Education'
+    assert normalize_section_header('Educational Details') == 'Education'
+    assert normalize_section_header('•') is None
+    assert normalize_section_header('Key Projects') == 'Projects'
+    assert normalize_section_header('Projects') != 'Experience'
+
+
+def test_detect_sections_yields_aliased_experience_and_education():
+    from app.ai.parser.engine.sections import detect_sections
+
+    text = """
+Jane Doe
+jane@example.com
+
+Career Timeline
+Software Engineer | Acme | Jan 2020 - Present
+
+Academic Qualifications
+B.Tech Computer Science, State University
+"""
+    labels = [s.label for s in detect_sections(text, 'resume')]
+    assert 'Experience' in labels
+    assert 'Education' in labels
+    exp = next(s for s in detect_sections(text, 'resume') if s.label == 'Experience')
+    assert 'Acme' in exp.text
+    edu = next(s for s in detect_sections(text, 'resume') if s.label == 'Education')
+    assert 'B.Tech' in edu.text

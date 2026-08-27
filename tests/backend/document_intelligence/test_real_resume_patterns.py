@@ -983,3 +983,72 @@ def test_adawet_role_comma_company_wrapped_dates_two_jobs():
     assert 'OpenCV' in (form.experiences[1].description or '') or 'prototype' in (
         form.experiences[1].description or ''
     ).lower()
+
+
+STACKED_COMPANY_THEN_ROLE = """
+Jane Doe
+jane@example.com | +1 555-0100
+
+Experience
+Techberry Infotech | Mumbai
+Software Engineer
+Jan 2020 – Present
+Built APIs for the payments platform.
+
+Acme Labs | Pune
+Backend Intern
+Jun 2018 – Dec 2019
+Wrote integration tests.
+"""
+
+ROLE_COMMA_COMPANY_LONG = """
+Adawet Rath
+adawet@example.com
+
+Experience
+Software Engineer Intern, Heavy Engineering Corporation Limited
+Jan 2020 – June 2020
+Built dashboards for plant operations.
+
+Marketing Analyst, Acme Solutions Pvt Ltd
+July 2020 – Present
+Analyzed campaign KPIs across paid channels.
+"""
+
+
+def test_stacked_company_then_role_coalesces_into_jobs():
+    _p, form, _ = parse_resume_text_to_canonical(STACKED_COMPANY_THEN_ROLE)
+    rows = [(e.role, e.company, e.startMonth) for e in form.experiences]
+    assert len(form.experiences) >= 2, rows
+    assert any(
+        'Software Engineer' in (e.role or '') and 'Techberry' in (e.company or '')
+        for e in form.experiences
+    ), rows
+    assert any(
+        'Intern' in (e.role or '') and 'Acme' in (e.company or '')
+        for e in form.experiences
+    ), rows
+    assert form.experiences[0].startMonth.startswith('2020') or form.experiences[0].isCurrent
+
+
+def test_role_comma_company_with_dates_not_dropped_as_duty():
+    from app.ai.document_intelligence.parsers.resume import _is_bullet_or_duty_line
+
+    header = 'Software Engineer Intern, Heavy Engineering Corporation Limited'
+    assert len(header) > 40
+    assert _is_bullet_or_duty_line(header) is False
+    _p, form, _ = parse_resume_text_to_canonical(ROLE_COMMA_COMPANY_LONG)
+    rows = [(e.role, e.company) for e in form.experiences]
+    assert len(form.experiences) >= 2, rows
+    assert any('Intern' in (e.role or '') and 'Heavy Engineering' in (e.company or '') for e in form.experiences), rows
+    assert any('Analyst' in (e.role or '') and 'Acme' in (e.company or '') for e in form.experiences), rows
+
+
+def test_projects_only_parse_experience_stays_empty():
+    from app.ai.document_intelligence.parsers.resume import parse_experience
+
+    assert parse_experience('') == []
+    assert parse_experience('   ') == []
+    profile, form, _ = parse_resume_text_to_canonical(ROSHAN_WITH_PROJECTS)
+    assert profile.experience == []
+    assert form.experiences == [] or all(not (e.role or e.company) for e in form.experiences)

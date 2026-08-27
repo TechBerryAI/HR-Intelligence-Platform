@@ -1458,7 +1458,11 @@ def _process_one_file_inner(
     *,
     job_id: str | None = None,
 ) -> tuple[str, dict | None, bool, str, str]:
-    from app.ai.parser.text_extraction import extract_text
+    from app.ai.parser.text_extraction import (
+        extract_text,
+        last_extract_max_dpi,
+        looks_like_garbage_extract,
+    )
     from app.domains.recruitment.services.parsing_storage import validate_toon_format_bulk
 
     try:
@@ -1479,26 +1483,13 @@ def _process_one_file_inner(
         if raw_text and '\x00' in raw_text:
             raw_text = raw_text.replace('\x00', '')
 
-        def _looks_like_garbage_extract(s: str) -> bool:
-            t = (s or '').strip()
-            if len(t) < BULK_MIN_TEXT_CHARS:
-                return True
-            if len(t) > 400:
-                return False
-            alnum = sum(1 for c in t if c.isalnum())
-            ratio = alnum / max(len(t), 1)
-            has_token = bool(
-                re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', t)
-                or re.search(r'\b[6-9]\d{9}\b|\+\d[\d\s\-()]{8,}\d', t)
-                or re.search(r'(?i)\b(?:experience|education|skills|summary)\b', t)
-            )
-            return ratio < 0.35 and not has_token
-
-        if _bulk_needs_ocr_retry(
+        if last_extract_max_dpi() < BULK_OCR_RETRY_DPI and _bulk_needs_ocr_retry(
             ext,
             raw_text,
             last_extract_err,
-            looks_like_garbage=_looks_like_garbage_extract,
+            looks_like_garbage=lambda s: looks_like_garbage_extract(
+                s, min_chars=BULK_MIN_TEXT_CHARS
+            ),
         ):
             try:
                 raw_text = extract_text(data, filename, dpi=BULK_OCR_RETRY_DPI) or ""

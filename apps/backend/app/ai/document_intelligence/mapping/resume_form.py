@@ -18,7 +18,7 @@ from app.ai.document_intelligence.models.form_dtos import (
     FieldTrace,
 )
 from app.ai.document_intelligence.validation.engine import (
-    is_grounded_education_row,
+    is_keepable_education_form_row,
     validate_email,
     validate_location,
     validate_nonempty,
@@ -376,19 +376,10 @@ def map_candidate_to_form(
                     parts[1],
                 ):
                     degree, institution = parts[0].strip()[:200], parts[1].strip()[:200]
-        # Still missing one side: only keep when both sides are grounded (no invented placeholders)
-        if (degree or '').strip() and not (institution or '').strip():
-            continue
-        if (institution or '').strip() and not (degree or '').strip():
-            continue
-        if not is_grounded_education_row(degree, institution):
-            continue
-        if degree.strip().lower() in {'education', 'educational', 'qualification', 'qualifications'}:
+        # Keep degree-only or institution-only when that side is grounded; never invent the rest.
+        if not is_keepable_education_form_row(degree, institution):
             continue
         if not (degree or institution or edu.gpa or edu.start or edu.end):
-            continue
-        # Require both sides for apply-form education (matches frontend validator)
-        if not ((degree or '').strip() and (institution or '').strip()):
             continue
         education_rows.append(
             EducationFormRow(

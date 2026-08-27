@@ -687,7 +687,7 @@ def _run_resume(
     raw_file_id = raw_file_record['id']
     _emit(parse_job_id, 'persist_raw', 'completed', on_stage=on_stage)
 
-    from app.ai.parser.text_extraction import extract_text
+    from app.ai.parser.text_extraction import extract_text, should_retry_high_dpi_extract
 
     # Time text and layout separately (layout must not include extract_text wall time)
     _emit(parse_job_id, 'text', 'started', on_stage=on_stage)
@@ -705,29 +705,10 @@ def _run_resume(
 
     text_length = len(raw_text.strip()) if raw_text else 0
     _IMAGE_EXTS = ('pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp')
-
-    def _looks_like_garbage_extract(s: str) -> bool:
-        """Narrow heuristic: enough chars but almost no signal (bad OCR)."""
-        t = (s or '').strip()
-        if len(t) < 30:
-            return True
-        if len(t) > 400:
-            return False
-        alnum = sum(1 for c in t if c.isalnum())
-        ratio = alnum / max(len(t), 1)
-        has_token = bool(
-            re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', t)
-            or re.search(r'\b[6-9]\d{9}\b|\+\d[\d\s\-()]{8,}\d', t)
-            or re.search(r'(?i)\b(?:experience|education|skills|summary)\b', t)
-        )
-        return ratio < 0.35 and not has_token
-
-    # VALIDATION_FIX_ocr_dpi_retry — thin, failed, or garbage extract on scan-friendly formats
-    needs_dpi_retry = filename.lower().rsplit('.', 1)[-1] in _IMAGE_EXTS and (
-        extract_err is not None
-        or not raw_text
-        or text_length < 30
-        or _looks_like_garbage_extract(raw_text)
+    needs_dpi_retry = filename.lower().rsplit('.', 1)[-1] in _IMAGE_EXTS and should_retry_high_dpi_extract(
+        filename,
+        raw_text,
+        extract_failed=extract_err is not None,
     )
     if needs_dpi_retry:
         try:
