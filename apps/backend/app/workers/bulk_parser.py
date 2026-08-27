@@ -24,8 +24,15 @@ from app.core.errors import log_unexpected
 _local_jobs: dict[str, dict[str, Any]] = {}
 _local_jobs_lock = threading.Lock()
 
-_BULK_EXPORT_DIR = media_storage.bulk_exports_dir()
 _BULK_UPLOAD_DIR = media_storage.bulk_uploads_dir()
+
+# openpyxl rejects these control chars in cell values (common in OCR/PDF extract).
+_ILLEGAL_XLSX_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
+_OPENPYXL_MAX_CELL = 32767
+
+# job_id -> True while a background Excel rebuild from staging is running
+_export_rebuild_lock = threading.Lock()
+_export_rebuild_inflight: set[str] = set()
 
 ALLOWED_EXT = {'pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff'}
 # Legacy .doc is not extractable by current text_extraction — reject before staging.
@@ -61,6 +68,7 @@ _TRACE_CORE_FIELDS = (
     'email',
     'phone',
     'location',
+    'summary',
     'skills',
     'education',
     'experience',
@@ -71,6 +79,7 @@ _TRACE_EXCEL_COL = {
     'email': 'Email',
     'phone': 'Phone',
     'location': 'Current Location',
+    'summary': 'Summary',
     'skills': 'Skills',
     'education': 'Education',
     'experience': 'Experience',
@@ -82,6 +91,7 @@ _TRACE_COVERAGE_FIELD = {
     'email': 'email',
     'phone': 'phone',
     'location': 'location',
+    'summary': 'summary',
     'education': 'education',
     'experience': 'experience',
 }
@@ -185,12 +195,222 @@ def _call_llm_throttled(raw_text: str, doc_type: str = 'resume'):
         return call_llm(raw_text, doc_type)
 
 
+def _export_dir() -> Path:
+    """Resolve at call time so MEDIA_ROOT changes after import are respected."""
+    return media_storage.bulk_exports_dir()
+
+
 def _export_path(job_id: str) -> Path:
-    return _BULK_EXPORT_DIR / f'{job_id}.xlsx'
+    return _export_dir() / f'{job_id}.xlsx'
+
+
+def _results_sidecar_path(job_id: str) -> Path:
+    return _export_dir() / f'{job_id}.rows.json'
 
 
 def _staging_dir(job_id: str) -> Path:
     return _BULK_UPLOAD_DIR / job_id
+
+
+def _excel_safe_cell(value: Any) -> Any:
+    """Coerce values for openpyxl; strip illegal XML control characters."""
+    if value is None:
+        return ''
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value
+    s = str(value)
+    if not s:
+        return ''
+    s = _ILLEGAL_XLSX_CHARS.sub('', s)
+    if len(s) > _OPENPYXL_MAX_CELL:
+        s = s[:_OPENPYXL_MAX_CELL]
+    return s
+
+
+def _staging_file_count(job_id: str) -> int:
+    d = _staging_dir(job_id)
+    if not d.is_dir():
+        return 0
+    n = 0
+    for p in d.iterdir():
+        if not p.is_file():
+            continue
+        ext = p.suffix.lower().lstrip('.')
+        if ext in ALLOWED_EXT or ext == 'doc':
+            n += 1
+    return n
+
+
+def _load_all_staged_disk_files(job_id: str) -> list[tuple[str, Path]]:
+    """All staged resume files on disk (ignores DB Queued filter — for export rebuild)."""
+    d = _staging_dir(job_id)
+    if not d.is_dir():
+        return []
+    out: list[tuple[str, Path]] = []
+    for p in sorted(d.iterdir(), key=lambda x: x.name.lower()):
+        if not p.is_file():
+            continue
+        ext = p.suffix.lower().lstrip('.')
+        if ext in ALLOWED_EXT or ext == 'doc':
+            out.append((p.name, p))
+    return out
+
+
+def _serialize_rows_for_sidecar(rows: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    for r in rows:
+        item = {h: _excel_safe_cell(r.get(h, '')) for h in EXCEL_HEADERS}
+        traces = []
+        for t in r.get('_field_trace') or []:
+            if isinstance(t, dict):
+                traces.append({h: _excel_safe_cell(t.get(h, '')) for h in FIELD_TRACE_HEADERS})
+        if traces:
+            item['_field_trace'] = traces
+        out.append(item)
+    return out
+
+
+def _persist_results_sidecar(job_id: str, rows: list[dict]) -> None:
+    try:
+        export_dir = _export_dir()
+        export_dir.mkdir(parents=True, exist_ok=True)
+        path = _results_sidecar_path(job_id)
+        import json
+
+        path.write_text(
+            json.dumps(_serialize_rows_for_sidecar(rows), ensure_ascii=False),
+            encoding='utf-8',
+        )
+    except Exception as e:
+        log_unexpected('local_bulk_parser.persist_sidecar', e, job_id=job_id)
+
+
+def _load_results_sidecar(job_id: str) -> list[dict] | None:
+    path = _results_sidecar_path(job_id)
+    if not path.is_file():
+        return None
+    try:
+        import json
+
+        data = json.loads(path.read_text(encoding='utf-8'))
+        return data if isinstance(data, list) else None
+    except Exception as e:
+        log_unexpected('local_bulk_parser.load_sidecar', e, job_id=job_id)
+        return None
+
+
+def _ensure_export_rebuild_started(job_id: str) -> bool:
+    """Start background rebuild from staging when Excel is missing. Returns True if (now) running."""
+    if not job_id:
+        return False
+    if _export_path(job_id).is_file():
+        return False
+    if _staging_file_count(job_id) < 1:
+        return False
+    with _export_rebuild_lock:
+        if job_id in _export_rebuild_inflight:
+            return True
+        _export_rebuild_inflight.add(job_id)
+
+    def _runner():
+        try:
+            _rebuild_export_from_staging(job_id)
+        finally:
+            with _export_rebuild_lock:
+                _export_rebuild_inflight.discard(job_id)
+
+    threading.Thread(
+        target=_runner,
+        name=f'bulk-export-rebuild-{job_id[:8]}',
+        daemon=True,
+    ).start()
+    return True
+
+
+def _rebuild_export_from_staging(job_id: str) -> bool:
+    """Re-parse staged files and write Excel (recovery when worker died before persist)."""
+    files = _load_all_staged_disk_files(job_id)
+    if not files:
+        return False
+
+    with _local_jobs_lock:
+        job = _local_jobs.get(job_id)
+        if not job:
+            _local_jobs[job_id] = {
+                'status': 'started',
+                'total_files': len(files),
+                'processed_files': 0,
+                'failed_files': 0,
+                'results': [],
+                'message': 'Regenerating Excel export…',
+                'failed_filenames': [],
+                'success_filenames': [],
+                'failed_details': [],
+                'staged_filenames': [n for n, _ in files],
+                'started_by': None,
+                'append': False,
+                'started_at': time.time(),
+            }
+        else:
+            job['status'] = 'started'
+            job['total_files'] = len(files)
+            job['processed_files'] = 0
+            job['failed_files'] = 0
+            job['message'] = 'Regenerating Excel export…'
+            job['results'] = []
+
+    results: list[dict] = []
+    success_count = 0
+    failed_count = 0
+    for idx, (filename, path) in enumerate(files, start=1):
+        try:
+            fname, row, is_failed, message, code = _process_one_file((filename, path, job_id))
+        except Exception as e:
+            fname, row, is_failed, message, code = (
+                filename,
+                None,
+                True,
+                f'Failed: {filename} - {str(e)[:100]}',
+                'exception',
+            )
+        if is_failed:
+            failed_count += 1
+            results.append(row if row else _failed_excel_row(fname, code=code, message=message))
+        else:
+            success_count += 1
+            if row:
+                results.append(row)
+        with _local_jobs_lock:
+            if job_id in _local_jobs:
+                _local_jobs[job_id]['processed_files'] = idx
+                _local_jobs[job_id]['failed_files'] = failed_count
+                _local_jobs[job_id]['message'] = f'Regenerating Excel: {filename} ({idx}/{len(files)})'
+        if results and idx % BULK_EXCEL_CHECKPOINT_EVERY == 0:
+            _persist_excel(job_id, list(results), append=False)
+
+    if results:
+        _persist_excel(job_id, results, append=False)
+    else:
+        _persist_excel(job_id, [], append=False)
+
+    with _local_jobs_lock:
+        if job_id in _local_jobs:
+            _local_jobs[job_id]['status'] = 'completed'
+            _local_jobs[job_id]['processed_files'] = success_count + failed_count
+            _local_jobs[job_id]['failed_files'] = failed_count
+            _local_jobs[job_id]['results'] = results
+            _local_jobs[job_id]['message'] = (
+                f'Completed: {success_count} successful, {failed_count} failed'
+            )
+    try:
+        from app.domains.administration.repositories.bulk_session_db import finalize_session
+
+        finalize_session(job_id, time.time(), success_count, failed_count)
+    except Exception as e:
+        log_unexpected('local_bulk_parser.rebuild_finalize', e, job_id=job_id)
+    return _export_path(job_id).is_file()
 
 
 def _safe_filename(name: str) -> str:
@@ -218,7 +438,8 @@ def _unique_staged_name(job_id: str, filename: str) -> str:
 
 def _persist_excel(job_id: str, rows: list[dict], append: bool = False) -> None:
     try:
-        _BULK_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+        export_dir = _export_dir()
+        export_dir.mkdir(parents=True, exist_ok=True)
         path = _export_path(job_id)
         if append and path.is_file():
             existing = _read_excel_rows(path)
@@ -228,10 +449,23 @@ def _persist_excel(job_id: str, rows: list[dict], append: bool = False) -> None:
                 by_name[r.get('Filename')] = r
             merged = list(by_name.values()) if by_name else (existing + rows)
             path.write_bytes(_build_excel_bytes(merged))
+            _persist_results_sidecar(job_id, merged)
         else:
             path.write_bytes(_build_excel_bytes(rows))
+            _persist_results_sidecar(job_id, rows)
+        with _local_jobs_lock:
+            if job_id in _local_jobs:
+                _local_jobs[job_id].pop('export_error', None)
     except Exception as e:
-        log_unexpected('local_bulk_parser.persist_excel', e)
+        log_unexpected('local_bulk_parser.persist_excel', e, job_id=job_id)
+        # Still try to keep a JSON sidecar so download can rebuild the xlsx later
+        try:
+            _persist_results_sidecar(job_id, rows)
+        except Exception:
+            pass
+        with _local_jobs_lock:
+            if job_id in _local_jobs:
+                _local_jobs[job_id]['export_error'] = str(e)[:300]
 
 
 def _sheet_to_dicts(ws) -> list[dict]:
@@ -452,6 +686,14 @@ def _source_has_field_evidence(field: str, raw_text: str, coverage: dict) -> boo
     src = raw_text or ''
     if field == 'skills':
         return bool(re.search(r'(?im)^(?:\*\*)?(?:skills?|technical\s+skills?|core\s+skills?)\b', src))
+    if field == 'summary':
+        return bool(
+            re.search(
+                r'(?im)^(?:\*\*)?(?:career\s+objective|professional\s+summary|profile\s+summary|'
+                r'summary|objective|profile|about\s+me|career\s+profile)\b',
+                src,
+            )
+        )
     if field == 'years':
         return _source_has_years_evidence(src)
     if field == 'name':
@@ -661,6 +903,41 @@ def _build_field_trace(
             verdict = 'fallback'
             note = 'fallback_current'
             cov_status = cov_status or 'fallback_current'
+        elif field == 'summary':
+            from app.ai.parser.enrichment.resume_text_inference import (
+                extract_summary_details,
+                is_valid_summary,
+                summary_rejection_reason,
+            )
+
+            details = extract_summary_details(raw_text or '')
+            form_reason = _form_trace_reason(form, 'summary') if form is not None else ''
+            if excel_val and is_valid_summary(excel_val):
+                verdict = 'ok'
+                src_sec = details.get('source_section') or form_reason or 'grounded'
+                note = f"source_section={src_sec};validation=passed"
+            elif excel_val and not is_valid_summary(excel_val):
+                verdict = 'weak_ungrounded'
+                reason = summary_rejection_reason(excel_val) or 'invalid_summary'
+                note = f'validation=failed;reason={reason}'
+            elif details.get('value'):
+                verdict = 'weak_missing'
+                note = (
+                    f"source_section={details.get('source_section')};"
+                    f"validation=passed;excel_empty"
+                )
+            elif details.get('reason') and details.get('reason') != 'empty':
+                verdict = 'absent'
+                note = (
+                    f"candidate_rejected;reason={details.get('reason')};"
+                    f"source_section={details.get('source_section') or 'none'}"
+                )
+            elif has_evidence or cov_status == 'missing_with_evidence':
+                verdict = 'weak_missing'
+                note = cov_status or 'evidence_in_resume'
+            else:
+                verdict = 'absent'
+                note = cov_status or 'missing_no_evidence'
         elif not excel_val:
             if cov_status == 'missing_with_evidence' or (has_evidence and cov_status != 'missing_no_evidence'):
                 verdict = 'weak_missing'
@@ -819,6 +1096,22 @@ def _flatten_toon(
         cert_strs = [c for c in cert_strs if c]
         years_out = _years_from_form_or_toon(None, toon, exp_dicts, raw_text=raw_text)
 
+    # Refine person name: reject role/UI labels; prefer Naukri_/filename when needed
+    try:
+        from app.ai.parser.enrichment.resume_text_inference import (
+            is_plausible_person_name,
+            name_from_resume_filename,
+        )
+
+        file_name = name_from_resume_filename(filename)
+        if not is_plausible_person_name(name):
+            name = file_name or ''
+        elif file_name and len(file_name.split()) >= 2:
+            if len(name.split()) == 1 or len(name.split()) > len(file_name.split()) + 1:
+                name = file_name
+    except Exception:
+        pass
+
     row = {
         'Filename': filename,
         'Name': name,
@@ -859,7 +1152,7 @@ def _build_excel_bytes(rows: list[dict]) -> bytes:
     headers = EXCEL_HEADERS
     ws.append(headers)
     for r in rows:
-        ws.append([r.get(h, '') for h in headers])
+        ws.append([_excel_safe_cell(r.get(h, '')) for h in headers])
     for col in range(1, len(headers) + 1):
         ws.column_dimensions[get_column_letter(col)].width = min(
             40, max(10, len(str(headers[col - 1])) + 2)
@@ -869,7 +1162,7 @@ def _build_excel_bytes(rows: list[dict]) -> bytes:
     trace_ws.append(FIELD_TRACE_HEADERS)
     for r in rows:
         for t in r.get('_field_trace') or []:
-            trace_ws.append([t.get(h, '') for h in FIELD_TRACE_HEADERS])
+            trace_ws.append([_excel_safe_cell(t.get(h, '')) for h in FIELD_TRACE_HEADERS])
     for col in range(1, len(FIELD_TRACE_HEADERS) + 1):
         trace_ws.column_dimensions[get_column_letter(col)].width = min(
             36, max(10, len(str(FIELD_TRACE_HEADERS[col - 1])) + 2)
@@ -1078,9 +1371,20 @@ def _bulk_needs_ocr_retry(
     *,
     looks_like_garbage,
 ) -> bool:
-    """Match single-parse pipeline: retry DPI on error, thin text, or short garbage."""
+    """Match single-parse pipeline: retry DPI on error, thin text, or short garbage.
+
+    Fail-fast: never retry high-DPI OCR when no local OCR engine is installed —
+    that path previously burned minutes per scanned PDF in bulk.
+    """
     image_exts = ('pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp')
     if (ext or '').lower() not in image_exts:
+        return False
+    try:
+        from app.ai.parser.text_extraction import ocr_engines_available
+
+        if not ocr_engines_available():
+            return False
+    except Exception:
         return False
     if extract_err:
         return True
@@ -1249,6 +1553,7 @@ def _process_one_file_inner(
                     raw_text,
                     allow_llm=False,
                     skip_llm_when_deterministic=True,
+                    source_filename=filename,
                 )
                 conf, missing, _passes = score_resume_toon(
                     det_toon if isinstance(det_toon, dict) else {},
@@ -1342,6 +1647,7 @@ def _process_one_file_inner(
                     raw_text,
                     allow_llm=True,
                     skip_llm_when_deterministic=False,
+                    source_filename=filename,
                 )
                 if not isinstance(toon, dict):
                     last_err = "Engine returned non-object"
@@ -1655,6 +1961,12 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
         _persist_excel(job_id, results, append=append)
 
     if stop_reason == 'paused':
+        # If the user already clicked Resume, a new worker owns the session —
+        # do not flip durable status back to Paused.
+        with _local_jobs_lock:
+            current = (_local_jobs.get(job_id) or {}).get('status')
+        if current == 'started':
+            return
         try:
             reclaim_session_running_files(job_id)
         except Exception:
@@ -1665,8 +1977,7 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
         except Exception:
             pass
         with _local_jobs_lock:
-            if job_id in _local_jobs:
-                _local_jobs[job_id]['status'] = 'paused'
+            if job_id in _local_jobs and _local_jobs[job_id].get('status') == 'paused':
                 _local_jobs[job_id]['processed_files'] = success_count + failed_count
                 _local_jobs[job_id]['failed_files'] = failed_count
                 _local_jobs[job_id]['message'] = msg
@@ -1895,9 +2206,11 @@ def start_staged_job(job_id: str, append: bool | None = None) -> tuple[bool, dic
     """Start processing all staged files for a job (DB-backed, multi-worker safe)."""
     from app.domains.administration.repositories.bulk_session_db import (
         claim_session_lease,
+        force_claim_session_lease,
         get_session_owner,
         get_session_progress,
         list_queued_filenames,
+        reclaim_session_running_files,
         reclaim_stale_file_leases,
     )
 
@@ -1992,6 +2305,14 @@ def start_staged_job(job_id: str, append: bool | None = None) -> tuple[bool, dic
 
     worker_id = f'pid-{os.getpid()}-{uuid.uuid4().hex[:8]}'
     claimed = claim_session_lease(job_id, worker_id, total_files=total)
+    if not claimed and was_resume:
+        # Pause clears the lease, but a dying worker may still hold Running.
+        # Force-take the session so Resume always restarts remaining Queued files.
+        try:
+            reclaim_session_running_files(job_id)
+        except Exception:
+            pass
+        claimed = force_claim_session_lease(job_id, worker_id, total_files=total)
     if not claimed:
         with _local_jobs_lock:
             j = _local_jobs.get(job_id)
@@ -2027,36 +2348,25 @@ def pause_local_job(job_id: str) -> tuple[bool, dict]:
 
     with _local_jobs_lock:
         job = _local_jobs.get(job_id)
+        local_status = job.get('status') if job else None
         if job:
-            status = job.get('status')
-            if status == 'paused':
-                return True, {
-                    'job_id': job_id,
-                    'status': 'paused',
-                    'message': job.get('message') or 'Already paused',
-                }
-            if status in ('completed', 'failed', 'cancelled'):
-                return False, {'error': f'Cannot pause a {status} job'}
-            if status == 'started':
+            if local_status in ('completed', 'failed', 'cancelled'):
+                return False, {'error': f'Cannot pause a {local_status} job'}
+            if local_status == 'started':
                 job['status'] = 'paused'
                 job['message'] = 'Pausing after current file(s)…'
-                return True, {
-                    'job_id': job_id,
-                    'status': 'paused',
-                    'message': 'Pause requested — finishing in-flight file(s), then stopping.',
-                }
-            if status not in ('pending',):
-                return False, {'error': f'Cannot pause job in status {status}'}
+            elif local_status not in ('pending', 'paused', None):
+                return False, {'error': f'Cannot pause job in status {local_status}'}
 
     db_prog = get_session_progress(job_id)
     if not db_prog and not job:
         return False, {'error': 'Job not found'}
     mapped = (db_prog or {}).get('status')
-    if mapped == 'paused':
-        return True, {'job_id': job_id, 'status': 'paused', 'message': 'Already paused'}
     if mapped in ('completed', 'failed', 'cancelled'):
         return False, {'error': f'Cannot pause a {mapped} job'}
 
+    # Persist Paused + clear lease immediately so Resume can claim the session
+    # without waiting for the old worker thread to exit.
     try:
         reclaim_session_running_files(job_id)
         mark_session_paused(job_id, message='Paused')
@@ -2067,12 +2377,13 @@ def pause_local_job(job_id: str) -> tuple[bool, dict]:
         j = _local_jobs.get(job_id)
         if j:
             j['status'] = 'paused'
-            j['message'] = 'Paused'
+            if not j.get('message'):
+                j['message'] = 'Paused'
 
     return True, {
         'job_id': job_id,
         'status': 'paused',
-        'message': 'Parsing paused.',
+        'message': 'Parsing paused. Click Resume to continue.',
     }
 
 
@@ -2146,6 +2457,16 @@ def get_local_progress(job_id: str, check_only: bool = False) -> tuple[bool, dic
     if db_progress:
         if check_only:
             return True, {'started_by': db_progress.get('started_by')}
+        # Zombie: files done / UI says completed, but Excel never written — rebuild from staging.
+        export_ok = _export_path(job_id).is_file()
+        if not export_ok and _staging_file_count(job_id) > 0:
+            if db_progress.get('status') in ('completed', 'started', 'pending'):
+                if _ensure_export_rebuild_started(job_id):
+                    db_progress = {
+                        **db_progress,
+                        'status': 'started',
+                        'message': 'Regenerating Excel export from staged resumes…',
+                    }
         return True, db_progress
 
     owner = get_session_owner(job_id)
@@ -2161,39 +2482,71 @@ def get_local_download(job_id: str) -> tuple[bool, Any]:
     Else (False, error_dict).
     """
     export_file = _export_path(job_id)
+    content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+    def _ok(data: bytes):
+        return True, (io.BytesIO(data), 'Parsed_Resumes.xlsx', content_type)
+
+    if export_file.is_file():
+        return _ok(export_file.read_bytes())
+
+    # Rebuild from JSON sidecar written during checkpoints
+    sidecar_rows = _load_results_sidecar(job_id)
+    if sidecar_rows:
+        try:
+            xlsx_bytes = _build_excel_bytes(sidecar_rows)
+            try:
+                _export_dir().mkdir(parents=True, exist_ok=True)
+                export_file.write_bytes(xlsx_bytes)
+            except Exception as write_err:
+                log_unexpected('local_bulk_parser.repair_from_sidecar', write_err, job_id=job_id)
+            return _ok(xlsx_bytes)
+        except Exception as e:
+            log_unexpected('local_bulk_parser.sidecar_excel', e, job_id=job_id)
+
     with _local_jobs_lock:
         job = _local_jobs.get(job_id)
     if job:
-        if job['status'] != 'completed':
+        status = job.get('status')
+        if status == 'started' and job_id in _export_rebuild_inflight:
+            return False, {
+                'error': 'Regenerating Excel export from staged resumes. Try Download again shortly.',
+                'code': 'EXPORT_REGENERATING',
+            }
+        if status != 'completed':
             return False, {'error': 'Job not completed yet'}
-        if export_file.is_file():
-            return True, (
-                io.BytesIO(export_file.read_bytes()),
-                'Parsed_Resumes.xlsx',
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            )
         rows = job.get('results') or []
         try:
             xlsx_bytes = _build_excel_bytes(rows)
+            try:
+                _export_dir().mkdir(parents=True, exist_ok=True)
+                export_file.write_bytes(xlsx_bytes)
+                _persist_results_sidecar(job_id, rows)
+            except Exception as write_err:
+                log_unexpected('local_bulk_parser.repair_export', write_err, job_id=job_id)
         except Exception as e:
-            return False, {'error': f'Excel build failed: {e}'}
-        return True, (
-            io.BytesIO(xlsx_bytes),
-            'Parsed_Resumes.xlsx',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        )
-
-    if export_file.is_file():
-        return True, (
-            io.BytesIO(export_file.read_bytes()),
-            'Parsed_Resumes.xlsx',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        )
+            export_err = job.get('export_error')
+            detail = f'Excel build failed: {e}'
+            if export_err:
+                detail = f'{detail} (persist: {export_err})'
+            return False, {'error': detail}
+        return _ok(xlsx_bytes)
 
     from app.domains.administration.repositories.bulk_session_db import get_session_progress
 
     db_progress = get_session_progress(job_id)
-    if db_progress and db_progress.get('status') == 'completed':
-        return False, {'error': 'Export file not found for completed session'}
+    if db_progress and db_progress.get('status') in ('completed', 'started', 'pending'):
+        if _staging_file_count(job_id) > 0:
+            _ensure_export_rebuild_started(job_id)
+            return False, {
+                'error': 'Regenerating Excel export from staged resumes. Try Download again shortly.',
+                'code': 'EXPORT_REGENERATING',
+            }
+        return False, {
+            'error': (
+                'Excel export is missing for this completed job. '
+                'Re-run bulk parse to regenerate the download.'
+            )
+        }
 
     return False, {'error': 'Job not found'}

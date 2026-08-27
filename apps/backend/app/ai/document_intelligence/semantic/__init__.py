@@ -299,12 +299,46 @@ def enrich_resume_semantic(
     )
     logger.info('[semantic] started reason=%s', reason)
 
+    from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+    if allow_experience_fill and experience_is_incomplete(profile.experience, unresolved_text):
+        from app.ai.document_intelligence.semantic.experience import extract_and_merge_experience
+
+        profile = extract_and_merge_experience(profile, unresolved_text)
+        data = profile.model_dump()
+        if not force and not _needs_resume_semantic(data, unresolved_text):
+            return sanitize_candidate_profile(profile, source_text=unresolved_text)
+
+    # Same resume_parser_v1 prompt + resume_milestone_v1 schema as parse_via_runtime.
+    # Do not send a competing fragment-JSON instruction.
+    # Prefer summary/objective section text for the model when summary is still empty —
+    # never ask the LLM to invent a summary from contact/experience noise alone.
+    from app.ai.parser.enrichment.resume_text_inference import (
+        extract_summary_from_text,
+        is_valid_summary,
+    )
+
+    section_summary = (profile.personal.summary or '').strip()
+    if not is_valid_summary(section_summary):
+        section_summary = extract_summary_from_text(unresolved_text or '')
+    llm_payload = unresolved_text[:6000]
+    if not section_summary:
+        from app.ai.parser.enrichment.resume_text_inference import extract_summary_details
+
+        details = extract_summary_details(unresolved_text or '')
+        # If a summary heading exists but body failed validation, still scope the LLM
+        # to that section only (never the contact block).
+        if details.get('source_section'):
+            llm_payload = (
+                f"{details.get('source_section')}\n{details.get('raw_value') or ''}"
+            )[:4000] or llm_payload
+
     # One full resume_parser_v1 + resume_milestone_v1 call. Never a second.
     llm_calls = 0
     duration_ms = 0.0
     t0 = time.perf_counter()
     logger.info('[semantic] ollama_call=1')
-    raw = _call_section_llm(unresolved_text[:6000], 'resume')
+    raw = _call_section_llm(llm_payload, 'resume')
     llm_calls = 1
     duration_ms = (time.perf_counter() - t0) * 1000.0
     _record_semantic_meta(llm_calls=llm_calls, duration_ms=duration_ms)
@@ -320,10 +354,29 @@ def enrich_resume_semantic(
                 'semantic_llm_duration_ms': round(duration_ms, 2),
             },
         )
+        if section_summary and not profile.personal.summary:
+            return sanitize_candidate_profile(
+                profile.model_copy(
+                    update={
+                        'personal': profile.personal.model_copy(
+                            update={'summary': section_summary}
+                        )
+                    }
+                ),
+                source_text=unresolved_text,
+            )
         return profile
 
     logger.info('[semantic] response_received')
     try:
+        if section_summary and not is_valid_summary((profile.personal.summary or '').strip()):
+            profile = profile.model_copy(
+                update={
+                    'personal': profile.personal.model_copy(
+                        update={'summary': section_summary}
+                    )
+                }
+            )
         merged, merged_experience = _merge_resume_semantic_profile(
             profile,
             raw,

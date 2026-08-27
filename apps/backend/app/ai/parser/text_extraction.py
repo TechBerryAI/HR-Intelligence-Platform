@@ -24,6 +24,14 @@ logger = logging.getLogger(__name__)
 
 PARSING_API_URL = os.getenv('PARSING_API_URL', 'http://localhost:4000')
 PARSING_API_KEY = os.getenv('PARSING_API_KEY', 'your-api-key-here')
+PARSING_API_FALLBACK = os.getenv('PARSING_API_FALLBACK', 'true').lower() in (
+    '1',
+    'true',
+    'yes',
+)
+# Connect timeout kept short so a dead localhost:4000 fails fast in bulk.
+PARSING_API_CONNECT_TIMEOUT = float(os.getenv('PARSING_API_CONNECT_TIMEOUT', '1.5'))
+PARSING_API_READ_TIMEOUT = float(os.getenv('PARSING_API_READ_TIMEOUT', '30'))
 PDF_MAX_PAGES = max(0, int(os.getenv('PDF_MAX_PAGES', '0')))
 OCR_ENABLED = os.getenv('OCR_ENABLED', 'true').lower() in ('1', 'true', 'yes')
 OCR_LANG = os.getenv('OCR_LANG', 'eng')
@@ -125,10 +133,70 @@ def normalize_extracted_text(text: str) -> str:
 
 _rapidocr_engine: Any = None
 _rapidocr_lock = threading.Lock()
+# Cached probe: (available, engine_name_or_reason)
+_ocr_engine_status: tuple[bool, str] | None = None
 
 
 def _tesseract_available() -> bool:
     return bool(shutil.which('tesseract'))
+
+
+def reset_ocr_engine_status_cache() -> None:
+    """Test helper — clear the OCR availability probe cache."""
+    global _ocr_engine_status
+    _ocr_engine_status = None
+
+
+def get_ocr_engine_status() -> tuple[bool, str]:
+    """
+    Return (available, detail). Probes once per process.
+
+    available=True when RapidOCR import works or system Tesseract + pytesseract exist.
+    """
+    global _ocr_engine_status
+    if _ocr_engine_status is not None:
+        return _ocr_engine_status
+    if not OCR_ENABLED:
+        _ocr_engine_status = (False, 'OCR_ENABLED=false')
+        return _ocr_engine_status
+    try:
+        import rapidocr_onnxruntime  # noqa: F401
+
+        _ocr_engine_status = (True, 'rapidocr')
+        return _ocr_engine_status
+    except ImportError:
+        pass
+    except Exception as exc:
+        logger.debug('RapidOCR probe failed: %s', exc)
+    if _tesseract_available():
+        try:
+            import pytesseract  # noqa: F401
+
+            _ocr_engine_status = (True, 'tesseract')
+            return _ocr_engine_status
+        except ImportError:
+            _ocr_engine_status = (
+                False,
+                'tesseract binary found but pytesseract is not installed',
+            )
+            return _ocr_engine_status
+    _ocr_engine_status = (
+        False,
+        'RapidOCR not installed and Tesseract unavailable '
+        '(pip install rapidocr-onnxruntime, or install system Tesseract)',
+    )
+    return _ocr_engine_status
+
+
+def ocr_engines_available() -> bool:
+    """True when at least one local OCR engine can run."""
+    ok, _ = get_ocr_engine_status()
+    return ok
+
+
+def ocr_unavailable_reason() -> str:
+    _, detail = get_ocr_engine_status()
+    return detail
 
 
 def _get_rapidocr_engine() -> Any:
@@ -277,9 +345,17 @@ def _ocr_image_bytes(image_bytes: bytes, *, lang: str | None = None) -> str:
 
     Primary: RapidOCR (+ OpenCV preprocess, optional layout).
     Secondary: system Tesseract if available.
+    Fail-fast when no OCR engine is installed (avoids per-page layout retries).
     """
     if not OCR_ENABLED:
         raise ValueError('OCR is disabled (OCR_ENABLED=false)')
+
+    if not ocr_engines_available():
+        raise ValueError(
+            f'OCR engines unavailable: {ocr_unavailable_reason()}. '
+            'Install RapidOCR with Python 3.10–3.12 '
+            '(pip install rapidocr-onnxruntime), or install system Tesseract.'
+        )
 
     if RESUME_LAYOUT_ENABLED:
         try:
@@ -371,6 +447,8 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
         text_parts: list[str] = []
         used_ocr = False
         max_dpi_used = fast_dpi
+        ocr_ok = OCR_ENABLED and ocr_engines_available()
+        ocr_skip_logged = False
 
         for page_num in range(page_count):
             page = doc[page_num]
@@ -378,7 +456,7 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
             table_text = _extract_pdf_page_tables(page)
 
             if _page_needs_ocr(page, digital):
-                if OCR_ENABLED:
+                if ocr_ok:
                     try:
                         png = _render_page_png(page, dpi=fast_dpi)
                         if not _png_has_ink(png):
@@ -437,6 +515,9 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
                         logger.warning(
                             'OCR failed for PDF page %s: %s', page_num + 1, ocr_err
                         )
+                        # If engines disappeared mid-run, stop trying OCR on later pages
+                        if not ocr_engines_available():
+                            ocr_ok = False
                         page_bits = []
                         if digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
                             page_bits.append(digital)
@@ -446,8 +527,17 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
                             text_parts.append('\n\n'.join(page_bits))
                         continue
                 else:
+                    if OCR_ENABLED and not ocr_skip_logged:
+                        logger.warning(
+                            'OCR engines unavailable — skipping per-page OCR for this PDF (%s)',
+                            ocr_unavailable_reason(),
+                        )
+                        ocr_skip_logged = True
                     page_bits = []
                     if digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
+                        page_bits.append(digital)
+                    elif digital:
+                        # Keep whatever digital text exists; better than minutes of failed OCR
                         page_bits.append(digital)
                     if table_text:
                         _dedupe_append(page_bits, table_text)
@@ -526,7 +616,12 @@ def extract_text_from_pdf_via_api(file_data: bytes, filename: str) -> str:
             headers['X-API-Key'] = PARSING_API_KEY
 
         files = {'file': (filename, file_data, 'application/pdf')}
-        response = requests.post(endpoint, files=files, headers=headers, timeout=60)
+        response = requests.post(
+            endpoint,
+            files=files,
+            headers=headers,
+            timeout=(PARSING_API_CONNECT_TIMEOUT, PARSING_API_READ_TIMEOUT),
+        )
 
         if response.status_code == 200:
             data = response.json()
@@ -639,6 +734,10 @@ def extract_text_from_docx(file_data: bytes) -> str:
 
 def _force_pdf_ocr(file_data: bytes, *, dpi: int = 300) -> str:
     """Render every PDF page and OCR — last resort for scanned / empty digital layers."""
+    if not ocr_engines_available():
+        raise ValueError(
+            f'Cannot force PDF OCR: {ocr_unavailable_reason()}'
+        )
     try:
         import fitz
     except ImportError as exc:
@@ -677,6 +776,8 @@ def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> 
         except ValueError as e:
             error_msg = str(e)
             if 'Insufficient text' in error_msg or 'Failed to extract' in error_msg or 'OCR' in error_msg:
+                if not PARSING_API_FALLBACK:
+                    raise
                 logger.info('Local PDF extraction failed, trying parsing API fallback...')
                 try:
                     text = extract_text_from_pdf_via_api(file_data, filename)
@@ -687,14 +788,20 @@ def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> 
                     ) from api_error
             else:
                 raise
-        # Empty digital layer / failed OCR → force full-page OCR
+        # Empty digital layer / failed OCR → force full-page OCR (only when engines exist)
         if len((text or '').strip()) < MIN_TEXT_CHARS:
-            try:
-                forced = _force_pdf_ocr(file_data, dpi=max(dpi or 0, 300))
-                if len(forced) >= MIN_TEXT_CHARS:
-                    text = forced
-            except Exception as force_err:
-                logger.warning('Force PDF OCR failed: %s', force_err)
+            if ocr_engines_available():
+                try:
+                    forced = _force_pdf_ocr(file_data, dpi=max(dpi or 0, 300))
+                    if len(forced) >= MIN_TEXT_CHARS:
+                        text = forced
+                except Exception as force_err:
+                    logger.warning('Force PDF OCR failed: %s', force_err)
+            else:
+                logger.warning(
+                    'Skipping force PDF OCR — %s',
+                    ocr_unavailable_reason(),
+                )
     elif ext == 'doc':
         raise ValueError('Legacy .doc format is not supported. Please use DOCX or PDF.')
     elif ext == 'docx':

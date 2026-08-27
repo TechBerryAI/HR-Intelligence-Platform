@@ -201,22 +201,68 @@ export function getBulkDownloadUrl(jobId) {
 
 /**
  * Download Excel file (requires token via fetch). Fetches blob and triggers download.
+ * If the server is regenerating a missing export, poll until ready (or timeout).
  */
 export async function downloadBulkResult(jobId, filename = 'Parsed_Resumes.xlsx') {
   const url = `${BASE_URL}/api/admin/bulk-parse/download/${jobId}`
   const token = tokenService.getToken()
-  const res = await fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    credentials: 'include',
-  })
-  if (!res.ok) throw new Error(res.statusText || 'Download failed')
-  const blob = await res.blob()
-  const disposition = res.headers.get('Content-Disposition')
-  const match = disposition && disposition.match(/filename="?([^"]+)"?/)
-  const name = match ? match[1] : filename
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = name
-  a.click()
-  URL.revokeObjectURL(a.href)
+  const maxAttempts = 90
+  const waitMs = 5000
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
+    })
+    if (res.ok) {
+      const blob = await res.blob()
+      const disposition = res.headers.get('Content-Disposition')
+      const match = disposition && disposition.match(/filename="?([^"]+)"?/)
+      const name = match ? match[1] : filename
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = name
+      a.click()
+      URL.revokeObjectURL(a.href)
+      return
+    }
+
+    let message = res.statusText || 'Download failed'
+    let code = ''
+    try {
+      const data = await res.json()
+      if (data?.error) message = data.error
+      if (data?.code) code = data.code
+    } catch {
+      // response was not JSON
+    }
+
+    if (res.status === 202 || code === 'EXPORT_REGENERATING') {
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, waitMs))
+        continue
+      }
+      const err = new Error(
+        message || 'Excel export is still regenerating. Wait a minute and try Download again.'
+      )
+      err.status = 202
+      err.data = { error: message, code: 'EXPORT_REGENERATING' }
+      throw err
+    }
+
+    if (res.status === 502 || res.status === 503) {
+      const err = new Error(
+        message === 'Service Unavailable' || /unavailable/i.test(message)
+          ? 'Download failed. The Excel export may still be writing — wait a moment and try again, or re-run the parse.'
+          : message
+      )
+      err.status = res.status
+      err.data = { error: message }
+      throw err
+    }
+    const err = new Error(message)
+    err.status = res.status
+    err.data = { error: message, code }
+    throw err
+  }
 }

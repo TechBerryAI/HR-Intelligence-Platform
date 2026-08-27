@@ -170,9 +170,18 @@ def validate_person_name(value: str) -> Tuple[bool, str]:
         return False, 'name_not_person'
     if re.search(r'\d', s):
         return False, 'name_has_digits'
+    if _DEGREE_CUE_RE.search(s):
+        return False, 'name_is_degree'
     words = s.split()
     if not (1 <= len(words) <= 5):
         return False, 'name_word_count'
+    try:
+        from app.ai.parser.enrichment.resume_text_inference import is_plausible_person_name
+
+        if not is_plausible_person_name(s):
+            return False, 'name_implausible'
+    except Exception:
+        pass
     return True, 'ok'
 
 
@@ -518,6 +527,17 @@ def sanitize_skills(skills: list[SkillEntry], *, companies: set[str] | None = No
     return out
 
 
+def _summary_ok(summary: str | None) -> bool:
+    """Reject contact/phone/email blobs that must never become personal.summary."""
+    try:
+        from app.ai.parser.enrichment.resume_text_inference import is_valid_summary
+
+        return is_valid_summary(summary)
+    except Exception:
+        s = (summary or '').strip()
+        return bool(s) and '@' not in s and not re.search(r'\b\d{10}\b', s)
+
+
 def sanitize_candidate_profile(
     profile: CandidateProfile,
     *,
@@ -600,7 +620,11 @@ def sanitize_candidate_profile(
         personal=profile.personal.model_copy(
             update={
                 'full_name': raw_name if name_ok else '',
-                'summary': profile.personal.summary.strip(),
+                'summary': (
+                    profile.personal.summary.strip()
+                    if _summary_ok(profile.personal.summary)
+                    else ''
+                ),
             }
         ),
         contact=profile.contact.model_copy(
