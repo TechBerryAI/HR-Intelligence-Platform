@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { uploadAndParseJDStream, takeJDFormDTO, validateFileForParsing } from '@/core/api/parsingApi.js';
-import { hintForStage, isPipelineComplete, overlayCatchupMs, progressPctForStage } from '@/shared/utils/parsePipelineProgress.js';
+import { uploadAndParseJDStream, takeJDFormDTO, validateFileForParsing, startParseClock, reportClientParseTiming } from '@/core/api/parsingApi.js';
+import { hintForStage, isPipelineComplete, overlayCatchupMs, overlayStepIndex, progressPctForStage, createStageClock } from '@/shared/utils/parsePipelineProgress.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiZap } from 'react-icons/fi';
@@ -17,6 +17,7 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
   const [stageLabel, setStageLabel] = useState(null);
   const [stageMessage, setStageMessage] = useState(null);
   const [progressPct, setProgressPct] = useState(null);
+  const [overlayGroupMs, setOverlayGroupMs] = useState([0, 0, 0, 0]);
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -72,24 +73,46 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
 
     // Start AI parsing - show premium overlay
     setIsUploading(true);
-    setStageLabel('cache');
-    setStageMessage(hintForStage('cache'));
-    setProgressPct(8);
-    let lastStage = 'cache';
+    setOverlayGroupMs([0, 0, 0, 0]);
+    setStageLabel('upload');
+    setStageMessage(hintForStage('upload'));
+    setProgressPct(4);
+    let lastStage = 'upload';
+    const clock = startParseClock();
+    const stageClock = createStageClock();
     
     try {
       const onStage = (ev) => {
+        stageClock.onEvent(ev);
         if (ev?.stage) {
           lastStage = ev.stage;
           setStageLabel(ev.stage);
           setStageMessage(hintForStage(ev.stage, ev.message));
+          const g = overlayStepIndex('jd', ev.stage);
+          const ms = Number(ev.duration_ms ?? ev.detail?.duration_ms);
+          if (
+            g >= 0 &&
+            Number.isFinite(ms) &&
+            ['completed', 'failed', 'skipped'].includes(String(ev.status || '').toLowerCase())
+          ) {
+            setOverlayGroupMs((prev) => {
+              const next = [...prev];
+              next[g] = (Number(next[g]) || 0) + ms;
+              return next;
+            });
+          }
         }
         const pct = progressPctForStage('jd', ev?.stage);
         if (pct != null) setProgressPct((prev) => Math.max(prev ?? 0, pct));
         if (isPipelineComplete(ev)) setProgressPct(100);
       };
 
-      const result = await uploadAndParseJDStream(file, currentJobId, { onStage });
+      clock.markFetch();
+      const result = await uploadAndParseJDStream(file, currentJobId, {
+        onStage,
+        onFirstChunk: clock.markFirstChunk,
+      });
+      clock.markResult();
 
       if (result.status === 'ok' && result.form) {
         const formData = takeJDFormDTO(result);
@@ -145,6 +168,9 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
             _missingFields: coreGaps,
           });
         }
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        clock.addStageSpans(stageClock.getSpans());
+        await reportClientParseTiming(result, clock);
 
         // Show low confidence warning (only if no coverage gap message)
         if (coreGaps.length === 0 && result.confidence < 0.75) {
@@ -182,6 +208,7 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
         stageLabel={stageLabel}
         stageMessage={stageMessage}
         progressPct={progressPct}
+        stepMs={overlayGroupMs}
       />
 
       <motion.div

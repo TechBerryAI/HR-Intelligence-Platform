@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import shutil
+import threading
 from typing import Any
 
 import requests
@@ -131,6 +132,7 @@ def normalize_extracted_text(text: str) -> str:
 
 
 _rapidocr_engine: Any = None
+_rapidocr_lock = threading.Lock()
 # Cached probe: (available, engine_name_or_reason)
 _ocr_engine_status: tuple[bool, str] | None = None
 
@@ -198,14 +200,16 @@ def ocr_unavailable_reason() -> str:
 
 
 def _get_rapidocr_engine() -> Any:
-    """Lazy-load RapidOCR (bundled ONNX models via pip)."""
+    """Lazy-load RapidOCR once (shared by extract + layout detections)."""
     global _rapidocr_engine
     if _rapidocr_engine is not None:
         return _rapidocr_engine
     from rapidocr_onnxruntime import RapidOCR
 
-    _rapidocr_engine = RapidOCR()
-    return _rapidocr_engine
+    with _rapidocr_lock:
+        if _rapidocr_engine is None:
+            _rapidocr_engine = RapidOCR()
+        return _rapidocr_engine
 
 
 def _ocr_with_rapidocr(image_bytes: bytes) -> str:
@@ -304,6 +308,37 @@ def _ocr_image_bytes_plain(image_bytes: bytes, *, lang: str | None = None) -> st
     )
 
 
+def _png_has_ink(image_bytes: bytes) -> bool:
+    """True when a rendered page has enough contrast to be worth OCR.
+
+    Blank / near-white pages still cost 10–15s of RapidOCR today. Detecting
+    them after the cheap render (~100ms) does not skip Extract / Layout stages.
+    """
+    if not image_bytes or len(image_bytes) < 64:
+        return False
+    try:
+        from PIL import Image
+
+        image = Image.open(io.BytesIO(image_bytes))
+        gray = image.convert('L')
+        gray.thumbnail((240, 240))
+        extrema = gray.getextrema()
+        if extrema is None:
+            return False
+        lo, hi = int(extrema[0]), int(extrema[1])
+        if hi - lo < 18:
+            return False
+        hist = gray.histogram()
+        pixels = gray.size[0] * gray.size[1]
+        if pixels <= 0:
+            return False
+        # Ink: darker than light-gray. Blank scans are almost all 240–255.
+        dark = sum(hist[:200])
+        return dark > pixels * 0.004
+    except Exception:
+        return True
+
+
 def _ocr_image_bytes(image_bytes: bytes, *, lang: str | None = None) -> str:
     """
     Run OCR on raw image bytes.
@@ -333,6 +368,15 @@ def _ocr_image_bytes(image_bytes: bytes, *, lang: str | None = None) -> str:
             if text and text.strip():
                 logger.debug('Layout OCR source=%s chars=%s', source, len(text))
                 return text.strip()
+            # Layout already ran RapidOCR. A second plain pass on the same
+            # image is what made blank pages take ~12s each.
+            raise ValueError(
+                'OCR failed (RapidOCR returned empty text). Install RapidOCR with '
+                'Python 3.10–3.12 (pip install rapidocr-onnxruntime), or install '
+                'system Tesseract as a fallback.'
+            )
+        except ValueError:
+            raise
         except Exception as exc:
             logger.warning('Layout OCR failed, falling back to plain OCR: %s', exc)
 
@@ -415,16 +459,47 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
                 if ocr_ok:
                     try:
                         png = _render_page_png(page, dpi=fast_dpi)
-                        ocr_text = _ocr_image_bytes(png)
-                        # Escalate DPI when fast pass is too thin
+                        if not _png_has_ink(png):
+                            logger.info(
+                                'PDF page %s has no ink; skipping OCR (digital=%s)',
+                                page_num + 1,
+                                len(digital),
+                            )
+                            page_bits = []
+                            if digital:
+                                page_bits.append(digital)
+                            if table_text:
+                                _dedupe_append(page_bits, table_text)
+                            if page_bits:
+                                text_parts.append('\n\n'.join(page_bits))
+                            continue
+                        ocr_text = ''
+                        try:
+                            ocr_text = _ocr_image_bytes(png)
+                        except ValueError as ocr_err:
+                            logger.warning(
+                                'OCR failed for PDF page %s: %s', page_num + 1, ocr_err
+                            )
+                        ocr_len = len((ocr_text or '').strip())
+                        # Escalate DPI when the fast pass was thin, or empty on a
+                        # page that still has ink (scanned page RapidOCR missed).
                         if (
                             forced_dpi is None
                             and full_dpi > fast_dpi
-                            and len((ocr_text or '').strip()) < PAGE_OCR_TEXT_THRESHOLD
+                            and ocr_len < PAGE_OCR_TEXT_THRESHOLD
                         ):
                             png = _render_page_png(page, dpi=full_dpi)
-                            ocr_text = _ocr_image_bytes(png)
-                            max_dpi_used = max(max_dpi_used, full_dpi)
+                            if _png_has_ink(png):
+                                try:
+                                    ocr_text = _ocr_image_bytes(png)
+                                    max_dpi_used = max(max_dpi_used, full_dpi)
+                                except ValueError as ocr_err:
+                                    logger.warning(
+                                        'OCR failed for PDF page %s at %sdpi: %s',
+                                        page_num + 1,
+                                        full_dpi,
+                                        ocr_err,
+                                    )
                         page_bits: list[str] = []
                         if ocr_text:
                             page_bits.append(ocr_text)

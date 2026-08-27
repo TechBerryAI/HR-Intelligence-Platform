@@ -28,15 +28,19 @@ class StageEvent:
     message: str = ''
     detail: dict[str, Any] = field(default_factory=dict)
     job_id: Optional[str] = None
+    duration_ms: Optional[float] = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             'stage': self.stage,
             'status': self.status,
             'message': self.message,
             'detail': self.detail,
             'job_id': self.job_id,
         }
+        if self.duration_ms is not None:
+            payload['duration_ms'] = round(float(self.duration_ms), 2)
+        return payload
 
 
 # Regex-friendly fields: deterministic always wins over LLM when both present

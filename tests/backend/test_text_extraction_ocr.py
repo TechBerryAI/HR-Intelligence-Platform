@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -118,6 +119,7 @@ def test_extract_text_from_pdf_pymupdf_ocr_when_page_image_based():
 
     with patch.dict(sys.modules, {"fitz": fake_fitz}), \
          patch.object(te, "_render_page_png", return_value=b"png"), \
+         patch.object(te, "_png_has_ink", return_value=True), \
          patch.object(te, "_ocr_image_bytes", return_value="Scanned resume text " + ("y" * 20)), \
          patch.object(te, "ocr_engines_available", return_value=True), \
          patch.object(te, "OCR_ENABLED", True), \
@@ -126,6 +128,73 @@ def test_extract_text_from_pdf_pymupdf_ocr_when_page_image_based():
 
     assert "Scanned resume" in text
     assert len(text) >= 30
+
+
+def _white_png_bytes() -> bytes:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (120, 160), (255, 255, 255)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _ink_png_bytes() -> bytes:
+    from PIL import Image, ImageDraw
+
+    img = Image.new("RGB", (200, 200), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((20, 20, 180, 180), fill=(10, 10, 10))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_png_has_ink_detects_blank_and_content():
+    assert te._png_has_ink(_white_png_bytes()) is False
+    assert te._png_has_ink(_ink_png_bytes()) is True
+
+
+def test_blank_pdf_page_does_not_run_ocr():
+    page = MagicMock()
+    page.get_text.return_value = ""
+    page.get_images.return_value = []
+    page.find_tables.side_effect = Exception("no tables")
+
+    page2 = MagicMock()
+    page2.get_text.return_value = "Digital resume body " + ("x" * 80)
+    page2.get_images.return_value = []
+    page2.find_tables.side_effect = Exception("no tables")
+
+    doc = MagicMock()
+    doc.__len__.return_value = 2
+    doc.__getitem__.side_effect = lambda i: page if i == 0 else page2
+    doc.close = MagicMock()
+
+    fake_fitz = MagicMock()
+    fake_fitz.open.return_value = doc
+    fake_fitz.Matrix = MagicMock(return_value="matrix")
+
+    with patch.dict(sys.modules, {"fitz": fake_fitz}), \
+         patch.object(te, "_render_page_png", return_value=_white_png_bytes()), \
+         patch.object(te, "_ocr_image_bytes") as ocr, \
+         patch.object(te, "OCR_ENABLED", True):
+        text = te.extract_text_from_pdf_pymupdf(b"%PDF-fake")
+
+    ocr.assert_not_called()
+    assert "Digital resume body" in text
+
+
+def test_ocr_layout_empty_does_not_call_plain_again():
+    with patch.object(te, "OCR_ENABLED", True), \
+         patch.object(te, "RESUME_LAYOUT_ENABLED", True), \
+         patch(
+             "app.ai.parser.layout.detector.ocr_image_with_layout",
+             return_value=("", "empty"),
+         ), \
+         patch.object(te, "_ocr_image_bytes_plain") as plain:
+        with pytest.raises(ValueError, match="empty"):
+            te._ocr_image_bytes(b"png")
+        plain.assert_not_called()
 
 
 def test_extract_text_docx_still_works():

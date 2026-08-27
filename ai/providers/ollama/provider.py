@@ -47,6 +47,9 @@ class OllamaProvider(BaseProvider):
         response_format = resolve_response_format(request.schema_id, schema_doc)
         timeout_seconds = request.timeout_seconds or self._ollama_config.default_timeout_seconds
         use_stream = bool(self._ollama_config.stream)
+        cancel_event = None
+        if request.metadata:
+            cancel_event = request.metadata.get("cancel_event")
 
         start = time.perf_counter()
         try:
@@ -58,6 +61,8 @@ class OllamaProvider(BaseProvider):
                 response_format=response_format,
                 stream=use_stream,
                 timeout_seconds=timeout_seconds,
+                keep_alive=self._ollama_config.keep_alive,
+                cancel_event=cancel_event if cancel_event is not None else None,
             )
         except Exception as exc:
             self._health.record_failure(str(exc))

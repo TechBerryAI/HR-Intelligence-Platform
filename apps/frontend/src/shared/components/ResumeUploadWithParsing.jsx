@@ -5,8 +5,10 @@ import {
   takeResumeFormDTO,
   validateFileForParsing,
   extractParseErrorMessage,
+  startParseClock,
+  reportClientParseTiming,
 } from '@/core/api/parsingApi.js';
-import { hintForStage, isPipelineComplete, overlayCatchupMs, progressPctForStage } from '@/shared/utils/parsePipelineProgress.js';
+import { hintForStage, isPipelineComplete, overlayCatchupMs, overlayStepIndex, progressPctForStage, createStageClock } from '@/shared/utils/parsePipelineProgress.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiExternalLink, FiTrash2 } from 'react-icons/fi';
@@ -20,6 +22,14 @@ function humanizeParseError(raw) {
   }
   if (/^failed to parse resume\.?$/i.test(detail) || /^parse failed\.?$/i.test(detail)) {
     return 'Unable to parse this resume. Please try another file or fill the form manually.';
+  }
+  if (
+    /failed to fetch/i.test(detail) ||
+    /^network error$/i.test(detail) ||
+    /networkerror/i.test(detail) ||
+    /failed to reach parse api/i.test(detail)
+  ) {
+    return 'Could not reach the parser. Confirm the backend is running on port 3000, then try the resume again.';
   }
   return detail;
 }
@@ -46,6 +56,7 @@ export default function ResumeUploadWithParsing({
   const [stageLabel, setStageLabel] = useState(null);
   const [stageMessage, setStageMessage] = useState(null);
   const [progressPct, setProgressPct] = useState(null);
+  const [overlayGroupMs, setOverlayGroupMs] = useState([0, 0, 0, 0]);
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const { theme } = useTheme();
@@ -116,26 +127,45 @@ export default function ResumeUploadWithParsing({
     }
 
     setIsUploading(true);
-    setStageLabel('cache');
-    setStageMessage(hintForStage('cache'));
-    setProgressPct(8);
-    let lastStage = 'cache';
+    setOverlayGroupMs([0, 0, 0, 0]);
+    setStageLabel('upload');
+    setStageMessage('Uploading resume');
+    setProgressPct(4);
+    let lastStage = 'upload';
+    const clock = startParseClock();
+    const stageClock = createStageClock();
     
     try {
       const onStage = (ev) => {
+        stageClock.onEvent(ev);
         if (ev?.stage) {
           lastStage = ev.stage;
           setStageLabel(ev.stage);
           setStageMessage(hintForStage(ev.stage, ev.message));
+          const g = overlayStepIndex('resume', ev.stage);
+          const ms = Number(ev.duration_ms ?? ev.detail?.duration_ms);
+          if (
+            g >= 0 &&
+            Number.isFinite(ms) &&
+            ['completed', 'failed', 'skipped'].includes(String(ev.status || '').toLowerCase())
+          ) {
+            setOverlayGroupMs((prev) => {
+              const next = [...prev];
+              next[g] = (Number(next[g]) || 0) + ms;
+              return next;
+            });
+          }
         }
         const pct = progressPctForStage('resume', ev?.stage);
         if (pct != null) setProgressPct((prev) => Math.max(prev ?? 0, pct));
         if (isPipelineComplete(ev)) setProgressPct(100);
       };
 
+      clock.markFetch();
       const result = publicMode
-        ? await uploadAndParseResumePublicStream(file, { onStage })
-        : await uploadAndParseResumeStream(file, null, { onStage });
+        ? await uploadAndParseResumePublicStream(file, { onStage, onFirstChunk: clock.markFirstChunk })
+        : await uploadAndParseResumeStream(file, null, { onStage, onFirstChunk: clock.markFirstChunk });
+      clock.markResult();
 
       if (result.status === 'ok' && result.form) {
         const formData = takeResumeFormDTO(result);
@@ -201,6 +231,9 @@ export default function ResumeUploadWithParsing({
             _trace: formData.trace || [],
           });
         }
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        clock.addStageSpans(stageClock.getSpans());
+        await reportClientParseTiming(result, clock);
 
         // Low-confidence warning only when no named coverage gaps (JD parity)
         if (coreGaps.length === 0 && (result.partial || result.confidence < 0.75)) {
@@ -220,12 +253,13 @@ export default function ResumeUploadWithParsing({
         throw new Error(extractParseErrorMessage(result, 'Parsing failed'));
       }
     } catch (error) {
-      onParseComplete?.(null, error?.message || String(error));
-      if (error.message.includes('Invalid or expired token') || error.message.includes('Access token required')) {
+      const raw = error?.message || String(error || '');
+      onParseComplete?.(null, raw);
+      if (raw.includes('Invalid or expired token') || raw.includes('Access token required')) {
         console.warn('Session expired, allowing manual upload');
         if (onFileSelect) onFileSelect(file);
       } else {
-        const message = humanizeParseError(error.message);
+        const message = humanizeParseError(raw);
         setParseSuccess('');
         setParseError(message);
         onParseError?.(message);
@@ -253,6 +287,7 @@ export default function ResumeUploadWithParsing({
         stageLabel={stageLabel}
         stageMessage={stageMessage}
         progressPct={progressPct}
+        stepMs={overlayGroupMs}
       />
 
       <div className="space-y-4">

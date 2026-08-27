@@ -44,6 +44,8 @@ def test_semantic_timeout_default_is_bounded():
     assert "DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC', '90'" in src
     assert 'max_attempts=1' in src
     assert 'wait=False' in src
+    assert 'abort_in_flight_requests' in src
+    assert 'cancel_event' in src
 
 
 def test_section_llm_timeout_does_not_deadlock_when_slot_held(monkeypatch):
@@ -69,6 +71,38 @@ def test_section_llm_timeout_does_not_deadlock_when_slot_held(monkeypatch):
     reset_ollama_limit_for_tests()
     assert result is None
     assert elapsed < 8
+
+
+def test_section_llm_timeout_aborts_in_flight_http(monkeypatch):
+    import time
+
+    from app.ai.document_intelligence.semantic import _call_section_llm
+
+    abort_calls: list[int] = []
+    captured: dict = {}
+
+    def fake_abort():
+        abort_calls.append(1)
+        return 1
+
+    def never_return(*_args, **kwargs):
+        captured['metadata'] = kwargs.get('metadata') or {}
+        time.sleep(30)
+        return {}
+
+    monkeypatch.setenv('DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC', '1')
+    monkeypatch.setattr('app.ai.adapter.runtime_adapter.parse_via_runtime', never_return)
+    monkeypatch.setattr('providers.ollama.client.abort_in_flight_requests', fake_abort)
+
+    started = time.perf_counter()
+    result = _call_section_llm('hello world ' * 8, 'resume')
+    elapsed = time.perf_counter() - started
+    assert result is None
+    assert elapsed < 8
+    assert abort_calls == [1]
+    event = captured['metadata'].get('cancel_event')
+    assert event is not None
+    assert event.is_set()
 
 
 def test_bulk_llm_path_does_not_wrap_engine_in_ollama_slot():

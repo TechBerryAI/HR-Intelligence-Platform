@@ -14,6 +14,7 @@ runtime:
       enabled: true
       base_url: ${OLLAMA_HOST:http://192.168.1.200:11434}
       default_timeout_seconds: 120
+      keep_alive: "10m"
 
   retry:
     max_attempts: 3

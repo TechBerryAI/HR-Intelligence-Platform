@@ -17,7 +17,7 @@ _PROFILE_LOCK = threading.Lock()
 _APPLIED = False
 
 # Conservative output cap until the performance harness proves a lower limit is safe.
-DEFAULT_MAX_TOKENS_RESUME_JD = 8192
+DEFAULT_MAX_TOKENS_RESUME_JD = 4096
 
 _FORCED_PROFILES = frozenset({'gpu_high', 'gpu_mid', 'unknown', 'cpu'})
 

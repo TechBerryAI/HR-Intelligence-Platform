@@ -2,13 +2,15 @@
 Section-scoped semantic AI — only for unresolved semantic fields.
 
 Returns canonical JSON fragments, never root TOON for the live path.
+
+Invariant: enrich_resume_semantic issues at most one full `resume` Ollama call.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
-import re
+import threading
+import time
 from typing import Any, Optional
 
 from app.core.timing import timing
@@ -93,6 +95,7 @@ def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
 
     timeout_sec = float(os.getenv('DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC', '90'))
     timing_ctx = get_timing_context()
+    cancel_event = threading.Event()
 
     def _invoke() -> Optional[dict[str, Any]]:
         try:
@@ -105,6 +108,7 @@ def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
                     'resume' if doc_kind == 'resume' else 'jd',
                     timeout_seconds=timeout_sec,
                     max_attempts=1,
+                    metadata={'cancel_event': cancel_event},
                 )
             if isinstance(result, dict):
                 return result
@@ -122,7 +126,20 @@ def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
         fut = pool.submit(_invoke_timed)
         return fut.result(timeout=timeout_sec)
     except concurrent.futures.TimeoutError:
-        logger.warning('semantic AI timed out after %ss for %s', timeout_sec, doc_kind)
+        cancel_event.set()
+        cancelled = 0
+        try:
+            from providers.ollama.client import abort_in_flight_requests
+
+            cancelled = abort_in_flight_requests()
+        except Exception:
+            logger.debug('ollama abort_in_flight_requests failed', exc_info=True)
+        logger.warning(
+            'semantic AI timed out after %ss for %s; cancelled_in_flight=%s',
+            timeout_sec,
+            doc_kind,
+            cancelled,
+        )
         return None
     except Exception as exc:
         logger.debug('semantic AI failed: %s', exc)
@@ -131,6 +148,116 @@ def _call_section_llm(prompt: str, doc_kind: str) -> Optional[dict[str, Any]]:
         # wait=False: if the worker is blocked on ollama_slot (nested acquire),
         # shutdown(wait=True) would hang forever and freeze bulk parse.
         pool.shutdown(wait=False, cancel_futures=True)
+
+
+def _filled_text(deterministic: str, ai: str) -> str:
+    det = (deterministic or '').strip()
+    return det if det else (ai or '').strip()
+
+
+def _prefer_list(deterministic, ai):
+    return list(deterministic) if deterministic else list(ai or [])
+
+
+def _semantic_reason(
+    profile,
+    unresolved_text: str,
+    *,
+    force: bool,
+    allow_experience_fill: bool,
+) -> str:
+    from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+
+    parts: list[str] = []
+    if force:
+        parts.append('force')
+    if allow_experience_fill and experience_is_incomplete(
+        getattr(profile, 'experience', None), unresolved_text or ''
+    ):
+        parts.append('experience_incomplete')
+    if _needs_resume_semantic(profile.model_dump(), unresolved_text or ''):
+        parts.append('coverage_gaps')
+    return ','.join(parts) or 'requested'
+
+
+def _record_semantic_meta(*, llm_calls: int, duration_ms: float) -> None:
+    try:
+        from app.core.request_context import get_timing_context
+
+        ctx = get_timing_context()
+        if ctx is None:
+            return
+        ctx.meta['semantic_llm_calls'] = int(llm_calls)
+        ctx.meta['semantic_llm_duration_ms'] = round(float(duration_ms), 2)
+    except Exception:
+        pass
+
+
+def _merge_resume_semantic_profile(
+    profile,
+    raw: dict[str, Any],
+    *,
+    unresolved_text: str,
+    allow_experience_fill: bool,
+):
+    """Reconcile one full resume_parsing JSON into the deterministic profile.
+
+    Deterministic non-empty scalars and populated lists win. AI fills gaps.
+    Experience uses the existing grounded merge when the det set is incomplete.
+    """
+    from app.ai.document_intelligence.canonical.from_toon import candidate_profile_from_toon
+    from app.ai.document_intelligence.experience_quality import experience_is_incomplete
+    from app.ai.document_intelligence.semantic.experience import merge_experience_from_ai
+
+    payload = dict(raw)
+    if not payload.get('type'):
+        payload['type'] = 'resume'
+    ai = candidate_profile_from_toon(payload)
+
+    merged_experience = False
+    working = profile
+    if allow_experience_fill and experience_is_incomplete(
+        profile.experience, unresolved_text or ''
+    ):
+        working = merge_experience_from_ai(profile, raw, unresolved_text or '')
+        merged_experience = working.experience is not profile.experience
+
+    contact = working.contact.model_copy(
+        update={
+            'email': _filled_text(working.contact.email, ai.contact.email),
+            'phone': _filled_text(working.contact.phone, ai.contact.phone),
+            'location': _filled_text(working.contact.location, ai.contact.location),
+            'preferred_location': _filled_text(
+                working.contact.preferred_location, ai.contact.preferred_location
+            ),
+            'linkedin': _filled_text(working.contact.linkedin, ai.contact.linkedin),
+            'github': _filled_text(working.contact.github, ai.contact.github),
+            'portfolio': _filled_text(working.contact.portfolio, ai.contact.portfolio),
+            'other_links': _prefer_list(working.contact.other_links, ai.contact.other_links),
+        }
+    )
+    personal = working.personal.model_copy(
+        update={
+            'full_name': _filled_text(working.personal.full_name, ai.personal.full_name),
+            'summary': _filled_text(working.personal.summary, ai.personal.summary),
+        }
+    )
+    merged = working.model_copy(
+        update={
+            'personal': personal,
+            'contact': contact,
+            'education': _prefer_list(working.education, ai.education),
+            'skills': _prefer_list(working.skills, ai.skills),
+            'projects': _prefer_list(working.projects, ai.projects),
+            'certificates': _prefer_list(working.certificates, ai.certificates),
+            'languages': _prefer_list(working.languages, ai.languages),
+            'links': _prefer_list(working.links, ai.links),
+            'total_experience_years': working.total_experience_years
+            if working.total_experience_years is not None
+            else ai.total_experience_years,
+        }
+    )
+    return merged, merged_experience
 
 
 @timing
@@ -145,8 +272,10 @@ def enrich_resume_semantic(
 
     When allow_experience_fill is False (Experience section empty), never invent
     experience rows from project / assignment narratives.
+
+    Issues at most one full ``resume`` capability Ollama call. The complete JSON
+    is reused for experience merge and residual gap fill.
     """
-    from app.ai.document_intelligence.canonical.from_toon import candidate_profile_from_toon
     from app.ai.document_intelligence.models.candidate import CandidateProfile
     from app.ai.document_intelligence.validation.engine import sanitize_candidate_profile
 
@@ -156,9 +285,19 @@ def enrich_resume_semantic(
         return profile
     data = profile.model_dump()
     if not force and not _needs_resume_semantic(data, unresolved_text or ''):
+        logger.info('[semantic] skipped reason=deterministic_coverage')
+        _record_semantic_meta(llm_calls=0, duration_ms=0.0)
         return profile
     if not unresolved_text or len(unresolved_text.strip()) < 40:
         return profile
+
+    reason = _semantic_reason(
+        profile,
+        unresolved_text,
+        force=force,
+        allow_experience_fill=allow_experience_fill,
+    )
+    logger.info('[semantic] started reason=%s', reason)
 
     from app.ai.document_intelligence.experience_quality import experience_is_incomplete
 
@@ -194,9 +333,27 @@ def enrich_resume_semantic(
                 f"{details.get('source_section')}\n{details.get('raw_value') or ''}"
             )[:4000] or llm_payload
 
+    # One full resume_parser_v1 + resume_milestone_v1 call. Never a second.
+    llm_calls = 0
+    duration_ms = 0.0
+    t0 = time.perf_counter()
+    logger.info('[semantic] ollama_call=1')
     raw = _call_section_llm(llm_payload, 'resume')
+    llm_calls = 1
+    duration_ms = (time.perf_counter() - t0) * 1000.0
+    _record_semantic_meta(llm_calls=llm_calls, duration_ms=duration_ms)
+
     if not isinstance(raw, dict):
-        # Still keep deterministic section summary if we found one
+        logger.info(
+            '[semantic] completed llm_calls=%s duration_ms=%.0f response=empty',
+            llm_calls,
+            duration_ms,
+            extra={
+                'event': 'semantic_enrichment',
+                'semantic_llm_calls': llm_calls,
+                'semantic_llm_duration_ms': round(duration_ms, 2),
+            },
+        )
         if section_summary and not profile.personal.summary:
             return sanitize_candidate_profile(
                 profile.model_copy(
@@ -210,103 +367,51 @@ def enrich_resume_semantic(
             )
         return profile
 
-    # Merge AI only into empty gaps — convert via TOON adapter once for alias safety
+    logger.info('[semantic] response_received')
     try:
-        ai_summary = str(raw.get('summary') or '').strip()
-        if section_summary:
-            chosen_summary = section_summary
-        elif is_valid_summary(ai_summary):
-            chosen_summary = ai_summary
-        else:
-            chosen_summary = ''
-
-        partial_toon = {
-            'type': 'resume',
-            'person': {
-                'name': profile.personal.full_name,
-                'email': profile.contact.email,
-                'phone': profile.contact.phone,
-                'location': profile.contact.location,
-                'linkedin': profile.contact.linkedin,
-                'github': profile.contact.github,
-                'portfolio': profile.contact.portfolio,
+        if section_summary and not is_valid_summary((profile.personal.summary or '').strip()):
+            profile = profile.model_copy(
+                update={
+                    'personal': profile.personal.model_copy(
+                        update={'summary': section_summary}
+                    )
+                }
+            )
+        merged, merged_experience = _merge_resume_semantic_profile(
+            profile,
+            raw,
+            unresolved_text=unresolved_text,
+            allow_experience_fill=allow_experience_fill,
+        )
+        logger.info(
+            '[semantic] merged_experience=%s merged_other_fields=true',
+            str(merged_experience).lower(),
+        )
+        logger.info('[semantic] ollama_call=2 SKIPPED')
+        logger.info(
+            '[semantic] completed llm_calls=%s duration_ms=%.0f',
+            llm_calls,
+            duration_ms,
+            extra={
+                'event': 'semantic_enrichment',
+                'semantic_llm_calls': llm_calls,
+                'semantic_llm_duration_ms': round(duration_ms, 2),
             },
-            'summary': chosen_summary,
-            'skills': [s.canonical or s.name for s in profile.skills] or raw.get('skills') or [],
-            'experience': [
-                {
-                    'title': e.role,
-                    'company': e.company,
-                    'from': e.start,
-                    'to': 'Present' if e.is_current else e.end,
-                    'description': e.description,
-                }
-                for e in profile.experience
-            ],
-            'education': [
-                {
-                    'degree': e.degree,
-                    'field': e.field,
-                    'institution': e.institution,
-                    'from': e.start,
-                    'to': e.end,
-                    'gpa': e.gpa,
-                }
-                for e in profile.education
-            ]
-            or raw.get('education')
-            or [],
-        }
-        # Fill or replace weak experience from AI when the Experience section exists
-        from app.ai.document_intelligence.experience_quality import experience_is_incomplete
-
-        exp_weak = allow_experience_fill and experience_is_incomplete(
-            profile.experience, unresolved_text or ''
-        )
-        if exp_weak and isinstance(raw.get('experience'), list):
-            partial_toon['experience'] = []
-            for item in raw['experience']:
-                if not isinstance(item, dict):
-                    continue
-                partial_toon['experience'].append(
-                    {
-                        'title': item.get('role') or item.get('title') or '',
-                        'company': item.get('company') or '',
-                        'from': item.get('start') or item.get('from') or '',
-                        'to': item.get('end') or item.get('to') or '',
-                        'description': item.get('description') or '',
-                    }
-                )
-        if not profile.skills and isinstance(raw.get('skills'), list):
-            partial_toon['skills'] = [str(s) for s in raw['skills'] if s]
-        # summary already validated above — do not re-introduce raw LLM contact blobs
-
-        merged = candidate_profile_from_toon(partial_toon)
-        from app.ai.document_intelligence.experience_quality import (
-            ground_experience_rows,
-            merge_experience_rows,
-        )
-
-        if not allow_experience_fill:
-            exp_keep = profile.experience
-        else:
-            ai_exp = ground_experience_rows(list(merged.experience or []), unresolved_text or '')
-            exp_keep = merge_experience_rows(list(profile.experience or []), ai_exp)
-        merged = merged.model_copy(
-            update={
-                'personal': merged.personal.model_copy(
-                    update={
-                        'full_name': profile.personal.full_name or merged.personal.full_name,
-                        'summary': profile.personal.summary or merged.personal.summary,
-                    }
-                ),
-                'contact': profile.contact,
-                'experience': exp_keep,
-            }
         )
         return sanitize_candidate_profile(merged, source_text=unresolved_text or '')
     except Exception as exc:
         logger.debug('semantic merge failed: %s', exc)
+        logger.info('[semantic] ollama_call=2 SKIPPED')
+        logger.info(
+            '[semantic] completed llm_calls=%s duration_ms=%.0f merge=failed',
+            llm_calls,
+            duration_ms,
+            extra={
+                'event': 'semantic_enrichment',
+                'semantic_llm_calls': llm_calls,
+                'semantic_llm_duration_ms': round(duration_ms, 2),
+            },
+        )
         return profile
 
 

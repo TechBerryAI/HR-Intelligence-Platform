@@ -37,6 +37,30 @@ def test_iter_parse_sse_yields_stages_before_result():
     assert 'Checking parse cache' in joined
 
 
+def test_stage_event_includes_duration_ms():
+    ev = StageEvent(
+        stage='text',
+        status='completed',
+        message='Extracted 1200 chars',
+        duration_ms=180000.4,
+    )
+    payload = ev.to_dict()
+    assert payload['stage'] == 'text'
+    assert payload['duration_ms'] == 180000.4
+
+
+def test_iter_parse_sse_forwards_stage_duration_ms():
+    def run(on_stage):
+        on_stage(StageEvent(stage='text', status='completed', duration_ms=27100))
+        return ({'status': 'ok', 'form': {'fullName': 'Ada'}}, 200)
+
+    joined = ''.join(iter_parse_sse(run, lambda body: body))
+    assert 'event: stage' in joined
+    assert '27100' in joined
+    assert 'duration_ms' in joined
+    assert 'event: result' in joined
+
+
 def test_iter_parse_sse_error_event_on_nonzero_status():
     def run(on_stage):
         on_stage(StageEvent(stage='cache', status='started'))

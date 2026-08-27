@@ -242,12 +242,29 @@ def _emit(
     detail: dict | None = None,
     on_stage: StageCallback | None = None,
 ) -> None:
+    from app.core.request_context import mark_pipeline_stage_start, take_pipeline_stage_elapsed_ms
+
+    status_l = (status or '').lower()
+    elapsed_ms: float | None = None
+    if stage:
+        if status_l == 'started':
+            mark_pipeline_stage_start(stage)
+        elif status_l in ('completed', 'failed', 'skipped'):
+            elapsed_ms = take_pipeline_stage_elapsed_ms(stage)
+            if elapsed_ms is None and status_l in ('skipped', 'failed'):
+                elapsed_ms = 0.0
+
+    det = dict(detail or {})
+    if elapsed_ms is not None:
+        det['duration_ms'] = round(max(0.0, float(elapsed_ms)), 2)
+
     event = StageEvent(
         stage=stage,
         status=status,
         message=message,
-        detail=detail or {},
+        detail=det,
         job_id=job_id,
+        duration_ms=elapsed_ms,
     )
     emit_stage(job_id, event)
     trace_stage(stage, message=f'{status}:{message}')
@@ -260,27 +277,21 @@ def _emit(
     # Developer Mode: record per-stage duration for the Performance Dashboard
     try:
         from app.core.developer_mode import is_developer_mode_enabled
-        from app.core.request_context import mark_pipeline_stage_start, take_pipeline_stage_elapsed_ms
         from app.core.timing_collector import make_timing_event, timing_collector
 
         if not is_developer_mode_enabled() or not stage:
             return
-        status_l = (status or '').lower()
-        if status_l == 'started':
-            mark_pipeline_stage_start(stage)
-            return
         if status_l not in ('completed', 'failed', 'skipped'):
             return
-        elapsed = take_pipeline_stage_elapsed_ms(stage)
-        # Missing start mark → unknown duration. Still record outcome for the checklist;
-        # the UI formats measured 0 / sub-ms as "<1 ms" (never a misleading "0 ms").
-        if elapsed is None:
-            elapsed = 0.0
+        if elapsed_ms is None:
+            # Missing start mark (thread context gap). Do not record 0 ms —
+            # @timing on extract_text / parse_via_runtime still has the real duration.
+            return
         timing_collector.record(
             make_timing_event(
                 function=stage,
                 module='app.ai.document_intelligence.pipeline',
-                duration_ms=max(0.0, float(elapsed)),
+                duration_ms=max(0.0, float(elapsed_ms)),
                 success=status_l != 'failed',
                 exception_name='StageFailed' if status_l == 'failed' else None,
                 depth=2,
