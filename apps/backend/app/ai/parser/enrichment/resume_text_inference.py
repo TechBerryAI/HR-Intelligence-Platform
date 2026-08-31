@@ -1121,6 +1121,7 @@ _SUMMARY_ADDRESS_ONLY_RE = re.compile(
     r'[\w\s,.\-/]*$'
 )
 # Inline bleed cutters inside a joined summary body (education tables, skills blocks).
+# Do NOT match mid-sentence "software" / "diploma in …" capability bullets.
 _SUMMARY_INLINE_BLEED_RE = re.compile(
     r'(?i)\s+(?:'
     r'course\s*/?\s*degree|college\s*/?\s*university|year\s+of\s+passing|aggregate|'
@@ -1128,9 +1129,11 @@ _SUMMARY_INLINE_BLEED_RE = re.compile(
     r'areas?\s+of\s+expertise|technical\s+skills?|key\s+skills?|skill\s*sets?|'
     r'work\s+experience|professional\s+experience|employment\s+history|'
     r'operating\s+systems?(?:\s+distros?)?|distros?|'
-    r'certifications?|educational\s+qualifications?|softwares?\b|'
-    r'bachelor\'?s?\s+of|master\'?s?\s+of|diploma\s+in'
-    r')\b'
+    r'certifications?|educational\s+qualifications?|'
+    r'softwares?\s*:|'
+    r'(?:bachelor\'?s?|master\'?s?)\s+of\s+(?:engineering|technology|science|arts|commerce)\b|'
+    r'diploma\s+in\s+(?:engineering|technology|computer)\b'
+    r')'
 )
 _SUMMARY_SOFT_STOP_LINE_RE = re.compile(
     r'(?i)^(?:'
@@ -1139,9 +1142,9 @@ _SUMMARY_SOFT_STOP_LINE_RE = re.compile(
     r'areas?\s+of\s+expertise|it\s+engineer|software\s+engineer|'
     r'work\s+experience|professional\s+experience|'
     r'operating\s+systems?(?:\s+distros?)?|distros?|'
-    r'softwares?|erp\s+platforms?|tools\s*:|modules\s*:|'
+    r'erp\s+platforms?|tools\s*:|modules\s*:|'
     r'date\s+of\s+birth|nationality|gender'
-    r')\b'
+    r')\b|^softwares?\s*:?\s*$'
 )
 _SUMMARY_SKILL_LIST_RE = re.compile(
     r'(?i)^(?:expertise|technical\s+skills?|key\s+skills?|skills?\s*:|'
@@ -1161,7 +1164,8 @@ _SUMMARY_PROSE_CUE_RE = re.compile(
     r'full[\s\-]?stack|graduate|internship|career|proven|track\s+record|'
     r'specializing|expertise\s+in|looking\s+(?:out\s+)?for|opportunity|'
     r'proficient|successfully|contributed|leverage|implementing|designing|'
-    r'obtain\s+a\s+position|to\s+leverage)\b'
+    r'obtain\s+a\s+position|to\s+leverage|working\s+as|administrator|'
+    r'production\s+environment|database)\b'
 )
 
 
@@ -1467,6 +1471,18 @@ def extract_summary_details(text: str, max_len: int = 2000) -> dict[str, str]:
         normalized = _normalize_summary_body(raw, max_len=max_len)
         reason = summary_rejection_reason(normalized)
         if reason is None:
+            # Thin one-liner from a bullet list — prefer richer Experience lead-in if present
+            if len(normalized) < 80:
+                exp_lead = _extract_experience_lead_prose(text, max_len=max_len)
+                if exp_lead and len(exp_lead) >= max(len(normalized) + 40, 80):
+                    return {
+                        'value': exp_lead,
+                        'source_section': 'EXPERIENCE_LEAD',
+                        'raw_value': exp_lead,
+                        'validation': 'passed',
+                        'reason': f'thin_{heading.upper()};upgrade_EXPERIENCE_LEAD',
+                        'fallback_section': heading.upper(),
+                    }
             details = {
                 'value': normalized,
                 'source_section': heading.upper(),
@@ -1493,6 +1509,23 @@ def extract_summary_details(text: str, max_len: int = 2000) -> dict[str, str]:
                 'reason': reason,
                 'fallback_section': '',
             }
+
+    # Experience-section lead-in (prose parked under Experience before first job).
+    exp_lead = _extract_experience_lead_prose(text, max_len=max_len)
+    if exp_lead:
+        details = {
+            'value': exp_lead,
+            'source_section': 'EXPERIENCE_LEAD',
+            'raw_value': exp_lead,
+            'validation': 'passed',
+            'reason': 'ok',
+            'fallback_section': 'EXPERIENCE_LEAD',
+        }
+        if first_rejected is not None:
+            details['reason'] = (
+                f"rejected_{first_rejected['reason']};fallback_EXPERIENCE_LEAD"
+            )
+        return details
 
     # Unlabeled intro paragraph (common when "Summary" heading is empty / split).
     intro = _extract_unlabeled_intro_summary(text, max_len=max_len)
@@ -1528,9 +1561,164 @@ def extract_summary_details(text: str, max_len: int = 2000) -> dict[str, str]:
             )
         return details
 
+    # Last resort: first-job duty highlights when resume has no Summary/Objective at all
+    highlights = _extract_experience_highlights_summary(text, max_len=min(max_len, 900))
+    if highlights:
+        details = {
+            'value': highlights,
+            'source_section': 'EXPERIENCE_HIGHLIGHTS',
+            'raw_value': highlights,
+            'validation': 'passed',
+            'reason': 'ok',
+            'fallback_section': 'EXPERIENCE_HIGHLIGHTS',
+        }
+        if first_rejected is not None:
+            details['reason'] = (
+                f"rejected_{first_rejected['reason']};fallback_EXPERIENCE_HIGHLIGHTS"
+            )
+        return details
+
     if first_rejected is not None:
         return first_rejected
     return empty
+
+
+_EXPERIENCE_LEAD_STOP_RE = re.compile(
+    r'(?i)^(?:'
+    r'company|employer|client|organization|organisation|firm|'
+    r'position|designation|role|title|job\s+title'
+    r')\s*[:\-–—]|'
+    r'^(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|'
+    r'jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|'
+    r'dec(?:ember)?)\s+\d{2,4}\b|'
+    r'^\d{1,2}[-/]\d{4}\b|'
+    r'^(?:19|20)\d{2}\s*[-–—]'
+)
+
+
+def _extract_experience_lead_prose(text: str, max_len: int = 2000) -> str:
+    """
+    Capture summary-like prose under Experience before the first job entry.
+
+    Some Naukri/PDF layouts put a career blurb under 'Experience' and only then
+    list companies — treat that lead-in as a summary candidate.
+    """
+    if not (text or '').strip():
+        return ''
+    heading = re.search(
+        r'(?im)^(?:\*\*)?(?:experience|work\s+experience|professional\s+experience|'
+        r'employment|work\s+history)(?:\*\*)?\s*:?\s*$',
+        text,
+    )
+    if not heading:
+        return ''
+    collected: list[str] = []
+    for line in text[heading.end():].splitlines()[:40]:
+        cleaned = re.sub(r'^[\s•·\-\*]+', '', line.strip())
+        if not cleaned:
+            if collected and len(' '.join(collected)) >= 60:
+                break
+            continue
+        if is_section_header_line(cleaned) or _SUMMARY_SOFT_STOP_LINE_RE.match(cleaned):
+            break
+        if _EXPERIENCE_LEAD_STOP_RE.match(cleaned):
+            break
+        if _is_contactish_summary_line(cleaned):
+            continue
+        # Skip bare bullets that are duty crumbs once we already have prose
+        alpha_words = re.findall(r"[A-Za-z][A-Za-z\-']{1,}", cleaned)
+        if (
+            collected
+            and len(alpha_words) <= 6
+            and not _SUMMARY_PROSE_CUE_RE.search(cleaned)
+            and not re.search(r'[.!?]$', cleaned)
+        ):
+            break
+        collected.append(cleaned)
+        if len(' '.join(collected)) >= max_len:
+            break
+    if not collected:
+        return ''
+    normalized = _normalize_summary_body('\n'.join(collected), max_len=max_len)
+    if len(normalized) < 60 or summary_rejection_reason(normalized) is not None:
+        return ''
+    # Require a professional / role cue so duty lists alone do not become Summary
+    if not re.search(
+        r'(?i)\b(?:working\s+as|administrator|engineer|developer|consultant|'
+        r'professional|responsible\s+for|experience\s+in|management|'
+        r'administration|production\s+environment|years?\s+of)\b',
+        normalized,
+    ):
+        return ''
+    return normalized
+
+
+def _extract_experience_highlights_summary(text: str, max_len: int = 900) -> str:
+    """
+    When a resume has no Summary/Objective, use the first role's duty bullets.
+
+    Common for TBI/Naukri templates that only list Personal info → Education → Experience.
+    """
+    if not (text or '').strip():
+        return ''
+    heading = re.search(
+        r'(?im)^(?:\*\*)?(?:experience|work\s+experience|professional\s+experience|'
+        r'employment|work\s+history)(?:\*\*)?\s*:?\s*$',
+        text,
+    )
+    if not heading:
+        return ''
+    body = text[heading.end():]
+    # Prefer content after the first Position/Designation line
+    pos = re.search(
+        r'(?im)^(?:\*\*)?(?:position|designation|role|title|job\s+title)'
+        r'(?:\*\*)?\s*[:\-–—]\s*(.+?)\s*$',
+        body,
+    )
+    start_at = pos.end() if pos else 0
+    role = (pos.group(1).strip() if pos else '').strip()
+    bullets: list[str] = []
+    for line in body[start_at:].splitlines()[:50]:
+        cleaned = re.sub(r'^[\s•·\-\*▪▫►▸‣]+', '', line.strip())
+        if not cleaned:
+            continue
+        if is_section_header_line(cleaned) or _SUMMARY_SOFT_STOP_LINE_RE.match(cleaned):
+            break
+        if _EXPERIENCE_LEAD_STOP_RE.match(cleaned):
+            # Next company / position → stop (keep what we have)
+            if bullets:
+                break
+            continue
+        if _is_contactish_summary_line(cleaned):
+            continue
+        if len(cleaned) < 18:
+            continue
+        bullets.append(cleaned)
+        if len(bullets) >= 8 or len('; '.join(bullets)) >= max_len:
+            break
+    if len(bullets) < 3:
+        return ''
+    joined = '; '.join(bullets)
+    if role and len(role) >= 4 and not re.search(re.escape(role), joined, re.I):
+        joined = f'{role}. {joined}'
+    normalized = _normalize_summary_body(joined, max_len=max_len)
+    # Soften validation: duty lists rarely look like prose objectives
+    if len(normalized) < 100:
+        return ''
+    if summary_rejection_reason(normalized) in {
+        'empty',
+        'contact_information',
+        'contains_email',
+        'contains_phone_number',
+        'contains_social_or_url',
+        'section_heading_only',
+        'experience_header',
+    }:
+        return ''
+    # Reject pure comma skill dumps
+    if _SUMMARY_SKILL_LIST_RE.match(normalized):
+        return ''
+    return normalized
 
 
 def _extract_unlabeled_intro_summary(text: str, max_len: int = 2000) -> str:
@@ -1602,7 +1790,8 @@ def _extract_objective_like_prose(text: str, max_len: int = 2000) -> str:
         r'(?i)\b(?:seeking|looking\s+(?:out\s+)?for|willing|motivated|passionate|'
         r'graduate|objective|proven\s+track|specializing|dedicated|aspiring|'
         r'opportunity|professional\s+with|years?\s+of\s+experience|'
-        r'i\s+am\s+a\b|complete\s+solution)\b'
+        r'i\s+am\s+a\b|complete\s+solution|working\s+as|'
+        r'database\s+administrator|production\s+environment)\b'
     )
     # Prefer blank-line paragraphs, then sliding windows of consecutive lines
     chunks: list[str] = []

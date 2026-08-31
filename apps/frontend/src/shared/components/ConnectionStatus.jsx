@@ -7,11 +7,10 @@ export default function ConnectionStatus() {
   
   useEffect(() => {
     if (!backendHealthy) {
-      // Only show warning after 3 seconds of being unhealthy
-      // This prevents flashing during normal page loads
+      // Longer delay: bulk parsing can stall the probe briefly without being down
       const timer = setTimeout(() => {
         setShowWarning(true)
-      }, 3000)
+      }, 8000)
       
       return () => clearTimeout(timer)
     } else {
@@ -32,7 +31,7 @@ export default function ConnectionStatus() {
           <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
         <span className="font-medium">Connecting to server...</span>
-        <span className="text-xs opacity-90">(Please wait, backend is starting up)</span>
+        <span className="text-xs opacity-90">(Backend not responding — keep one node start.js running)</span>
       </div>
     </div>
   )

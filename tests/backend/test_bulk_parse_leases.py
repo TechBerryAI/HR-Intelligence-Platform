@@ -38,8 +38,14 @@ def test_claim_session_lease_allows_stale_recovery(monkeypatch):
 
     monkeypatch.setattr(bdb, 'db_run', fake_db_run)
     assert bdb.claim_session_lease('s1', 'worker-c', total_files=3) is True
-    assert 'leased_until IS NULL OR leased_until < NOW()' in captured['sql']
-    assert 'status = \'Queued\'' in captured['sql'] or "status = 'Queued'" in captured['sql']
+    sql = captured['sql']
+    # Claim wins for Queued/Paused, or Running with expired/missing lease
+    assert "status IN ('Queued', 'Paused')" in sql
+    assert 'leased_until IS NULL OR leased_until < NOW()' in sql
+    assert "status = 'Running'" in sql
+    assert captured['params'][0] == 'worker-c'
+    assert captured['params'][2] == 3
+    assert captured['params'][3] == 's1'
 
 
 def test_reclaim_stale_file_leases_returns_count(monkeypatch):
