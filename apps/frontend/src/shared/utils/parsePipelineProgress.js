@@ -81,9 +81,25 @@ export function progressPctForStage(type, stage) {
 }
 
 export function hintForStage(stage, message) {
-  const msg = String(message || '').trim();
-  if (msg) return msg;
-  return STAGE_HINTS[stage] || 'Live pipeline progress';
+  const fallback = STAGE_HINTS[stage] || 'Live pipeline progress';
+  return userFacingParseMessage(message, fallback);
+}
+
+/** Engine/cache version tags must never appear in candidate or recruiter UI. */
+const INTERNAL_ENGINE_LABEL =
+  /ai-runtime|canonical-v\d+|extract-shortlist|\+deterministic|\+hybrid|document-intelligence-v\d+|text-fallback/i;
+
+export function isInternalEngineLabel(message) {
+  return INTERNAL_ENGINE_LABEL.test(String(message || ''));
+}
+
+export function userFacingParseMessage(message, fallback = '') {
+  const stripped = String(message || '')
+    .replace(/\s*\((?:[^)]*(?:ai-runtime|canonical-v\d+|extract-shortlist|\+deterministic|\+hybrid)[^)]*)\)\s*/gi, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  if (!stripped || isInternalEngineLabel(stripped)) return fallback;
+  return stripped;
 }
 
 export function isPipelineComplete(ev) {

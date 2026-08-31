@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { uploadAndParseJDStream, takeJDFormDTO, validateFileForParsing, startParseClock, reportClientParseTiming } from '@/core/api/parsingApi.js';
-import { hintForStage, isPipelineComplete, overlayCatchupMs, overlayStepIndex, progressPctForStage, createStageClock } from '@/shared/utils/parsePipelineProgress.js';
+import { hintForStage, isPipelineComplete, overlayCatchupMs, overlayStepIndex, progressPctForStage, createStageClock, userFacingParseMessage } from '@/shared/utils/parsePipelineProgress.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiZap } from 'react-icons/fi';
@@ -151,9 +151,9 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
             `Parsed with incomplete fields — please review: ${labels}. Other fields were auto-filled below.`,
           );
         } else if (result.is_duplicate) {
-          setParseSuccess('Job description recognized! Using previously parsed data.');
+          setParseSuccess('Job description recognized. Using previously parsed details.');
         } else {
-          setParseSuccess('Job description parsed successfully! Fields auto-filled below.');
+          setParseSuccess('Job description parsed successfully. Details were filled in below.');
         }
 
         // Autofill form from Form DTO only
@@ -303,21 +303,21 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
                 >
                   <FiCheck className="w-4 h-4 text-white" />
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold" style={{ color: 'var(--ei-tone-success)' }}>{parseSuccess}</p>
-                  {confidence !== null && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--ei-border-primary)' }}>
-                        <motion.div
-                          initial={{ width: 0 }}
-                          animate={{ width: `${confidence * 100}%` }}
-                          transition={{ duration: 1, ease: 'easeOut' }}
-                          className="h-full rounded-full"
-                          style={{ background: 'var(--ei-tone-success)' }}
-                        />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold leading-snug" style={{ color: 'var(--ei-tone-success)' }}>
+                    {userFacingParseMessage(parseSuccess, 'Job description parsed successfully. Details were filled in below.')}
+                  </p>
+                  {confidence != null && confidence < 0.99 ? (
+                    <p className="mt-1 text-xs" style={{ color: 'var(--ei-text-secondary)' }}>
+                      Please double-check the details below.
+                    </p>
+                  ) : (
+                    <div className="mt-2.5 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--ei-tone-success-border)' }}>
+                        <div className="h-full w-full rounded-full" style={{ background: 'var(--ei-tone-success)' }} />
                       </div>
-                      <span className="text-xs font-medium min-w-[45px] text-right" style={{ color: 'var(--ei-tone-success)' }}>
-                        {(confidence * 100).toFixed(0)}%
+                      <span className="text-xs font-semibold tabular-nums" style={{ color: 'var(--ei-tone-success)' }}>
+                        100%
                       </span>
                     </div>
                   )}
