@@ -62,6 +62,18 @@ describe('parse pipeline overlay mapping', () => {
     expect(isPipelineComplete({ stage: 'persist', status: 'started' })).toBe(false)
   })
 
+  it('hides internal engine version tags from overlay copy', () => {
+    expect(
+      hintForStage(
+        'persist',
+        'Resume parsed successfully! Fields auto-filled below. (ai-runtime-v1+canonical-v13-extract-shortlist+deterministic)',
+      ),
+    ).toBe('Resume parsed successfully! Fields auto-filled below.')
+    expect(hintForStage('persist', 'ai-runtime-v1+canonical-v13-extract-shortlist+deterministic')).toBe(
+      'Preparing form autofill',
+    )
+  })
+
   it('formats overlay step times', () => {
     expect(formatStepMs(420)).toBe('420 ms')
     expect(formatStepMs(1500)).toBe('1.5 s')
