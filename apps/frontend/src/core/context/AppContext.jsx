@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { apiRequest, setUnauthorizedHandler, setOnTokensRefreshed } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
-import { checkBackendHealth } from '@/core/api/healthCheck.js'
+import { checkBackendHealth, onBackendHealthChange } from '@/core/api/healthCheck.js'
 import { isStaffRecruiter } from '@/core/permissions/rbac.js'
 
 // App state: jobs and auth via backend
@@ -98,10 +98,17 @@ export function AppProvider({ children }) {
         }
       })
     }, 30000)
+
+    // Instant clear of banner when any API call proves the backend is up
+    const unsubscribe = onBackendHealthChange((healthy) => {
+      setBackendHealthy(healthy)
+      if (healthy) setHealthCheckAttempts(0)
+    })
     
     return () => {
       clearTimeout(initialCheckTimer)
       clearInterval(healthCheckInterval)
+      unsubscribe()
     }
     
     // If migrating to HttpOnly cookies in production:

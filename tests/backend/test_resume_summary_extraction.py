@@ -184,6 +184,76 @@ Linux
     assert 'centos' not in details['value'].lower()
 
 
+def test_summary_bullet_list_keeps_software_capability_lines():
+    """Naukri DBA resumes: Summary is bullets; 'database software' must not bleed-cut."""
+    text = """KHALID ANSARI
+ORACLE DBA
+
+Experience
+Working as an Oracle Database Administrator in (24x7) Production Environment.
+Management, Administration, Backup, Performance of Oracle databases.
+
+Summary
+• Available to work in 24X7 capability.
+• Installing and maintaining Oracle database software 11g, 12c and 19c
+• Strong DBA skills and relevant working experience with Oracle Database 11g
+• Standalone DB upgrade from 11g to 12c or 19c.
+
+Education
+B.Sc
+"""
+    details = extract_summary_details(text)
+    assert details['validation'] == 'passed'
+    value = details['value']
+    assert '24X7' in value or 'Oracle Database Administrator' in value
+    assert 'database software' in value or 'Production Environment' in value
+    assert len(value) > 80
+
+
+def test_experience_lead_prose_used_when_no_summary_heading():
+    text = """Name
+
+Experience
+Working as an Oracle Database Administrator in (24x7) Production Environment.
+Management, Administration, Backup and Recovery of Oracle databases.
+
+Company: Acme Corp
+March 2020 – Present
+Position: Oracle DBA
+"""
+    details = extract_summary_details(text)
+    assert details['validation'] == 'passed'
+    assert 'Oracle Database Administrator' in details['value']
+    assert details['source_section'] == 'EXPERIENCE_LEAD'
+
+
+def test_experience_highlights_when_no_summary_or_lead_prose():
+    text = """Personal info
+Name : Ashwin R Gedekar
+Mob: 7757807216
+
+Education
+B.E.
+
+Experience
+Company: Comtel infosystem pvt ltd
+March 2023 – Present
+Position: System-Administrator-Security-L2
+Deploying Event log analyser as Central and managed server set-up on Ubuntu Linux
+Performing server migration using rsync across datacenter hosts
+Configuration of log forwarding from linux system and windows system to SIEM
+Vulnerabilities patching of Centos-7, RHEL-7, Ubuntu 18 and 20
+Installing Crowdstrike Agent on linux as well windows machine
+
+Projects
+Deployed VPC infra
+"""
+    details = extract_summary_details(text)
+    assert details['validation'] == 'passed'
+    assert details['source_section'] == 'EXPERIENCE_HIGHLIGHTS'
+    assert 'Event log analyser' in details['value'] or 'rsync' in details['value']
+
+
 def test_career_objective_becomes_summary():
     text = f"""Candidate Name
 

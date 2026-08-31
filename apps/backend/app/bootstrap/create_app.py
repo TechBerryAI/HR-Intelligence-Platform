@@ -333,23 +333,31 @@ def create_app() -> Flask:
 
     @app.route('/health', methods=['GET'])
     def health():
-        """Liveness: process is up. Reports dependency status; does not fail on Ollama/DB."""
-        from app.core.shared_store import redis_status
+        """
+        Liveness: process is up. Fast path for UI / load balancers.
 
-        checks = {
-            'postgres': _check_postgres(),
-            'redis': redis_status(),
-            'ollama': _check_ollama(),
-            'bulk_parser': _check_bulk_parser(),
-        }
-        return jsonify({
+        Dependency probes (Postgres, Ollama, …) are expensive and block under bulk
+        parse load — only run them when ``?deps=1`` (or use ``GET /ready``).
+        """
+        from flask import request
+
+        body = {
             'status': 'ok',
             'message': 'HR Intelligence API is running',
             'pid': os.getpid(),
-            'checks': checks,
-            # Back-compat for older probes
-            'bulk_parser': checks['bulk_parser'],
-        })
+        }
+        if request.args.get('deps') in ('1', 'true', 'yes'):
+            from app.core.shared_store import redis_status
+
+            checks = {
+                'postgres': _check_postgres(),
+                'redis': redis_status(),
+                'ollama': _check_ollama(),
+                'bulk_parser': _check_bulk_parser(),
+            }
+            body['checks'] = checks
+            body['bulk_parser'] = checks['bulk_parser']
+        return jsonify(body)
 
     @app.route('/ready', methods=['GET'])
     def ready():
