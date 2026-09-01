@@ -42,7 +42,7 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
 - **Frontend:** Single-page app; single AppContext for auth, jobs, applicant state; role-based route guards (Recruiter, Candidate, Head of HR, CEO).
 - **Backend:** Monolithic Flask app; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, head-hr. Connection-pooled PostgreSQL; raw SQL via `db_run`/`db_get`/`db_all`.
 
-Docs: **[docs/README.md](docs/README.md)** · setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** · **media storage:** **[docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md)** · user manuals: **[docs/user-manual/](docs/user-manual/README.md)**.
+Docs: **[docs/GUIDE.md](docs/GUIDE.md)** (full app map) · **[docs/README.md](docs/README.md)** · setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** · **operations:** **[docs/OPERATIONS.md](docs/OPERATIONS.md)** · **AI:** **[docs/AI.md](docs/AI.md)** · user manuals: **[docs/user-manual/](docs/user-manual/README.md)**.
 
 ---
 
@@ -182,14 +182,11 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 ├── ai/                   # AI platform (runtime, providers, capabilities, dataset, toon)
 └── docs/
     ├── README.md
-    ├── WORKFLOWS.md
-    ├── DEVELOPMENT.md
-    ├── MEDIA_AND_BACKUPS.md
-    ├── DOCUMENT_INTELLIGENCE.md
-    ├── AI_WORKFLOW.md
-    ├── AI_DATA_PIPELINE.md
-    ├── ADRS.md
-    └── user-manual/         # Word/PDF + screenshots (only subfolder)
+    ├── GUIDE.md           # App architecture, flows, API, data model
+    ├── DEVELOPMENT.md     # Setup, production, troubleshooting
+    ├── OPERATIONS.md      # Media + backups
+    ├── AI.md              # AI platform + document intelligence
+    └── user-manual/       # Word/PDF + screenshots (only subfolder)
 ```
 
 ---
@@ -206,7 +203,7 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 | Admin | `/api/admin` | `POST /bulk-parse/upload`, `GET /bulk-parse/progress/:id`, `GET /job-matches` |
 | Head of HR | `/api/head-hr` | `GET /stats`, `GET /admins`, `GET /candidates`, `GET /jobs`, `GET /applications` |
 
-For full route details, inspect Flask blueprints under `apps/backend/` (see [docs/WORKFLOWS.md](docs/WORKFLOWS.md)).
+For full route details, inspect Flask blueprints under `apps/backend/` (see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)).
 
 ---
 
@@ -250,7 +247,7 @@ Electron opens a window that loads the app and uses OS folder dialogs.
 
 Resumes/JDs live in a durable folder **outside** the repo (`…/Projects/hcip-data/`). Postgres backups are owned by the DB team.
 
-**Full command reference:** **[docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md)**
+**Full command reference:** **[docs/OPERATIONS.md](docs/OPERATIONS.md)**
 
 Quick commands:
 
@@ -276,7 +273,7 @@ Do **not** delete `D:/Projects/hcip-data` (or your `HCIP_DATA_HOME`) — that is
 - **Email not sending:** Set `MAIL_SUPPRESS_SEND=true` in `apps/backend/.env` for testing.
 - **Other device cannot reach API:** Leave `VITE_API_URL` empty and open the Vite URL (`http://<host-ip>:5173`), not a hardcoded `localhost` API URL. Ensure firewall allows port 5173.
 
-More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · media: [docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md).
+More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · media: [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ---
 

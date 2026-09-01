@@ -8,13 +8,12 @@ Single entry point for HR Intelligence Platform docs. Prefer live code when docs
 
 | If you are… | Read this |
 |-------------|-----------|
+| **External team / career page integration** | [external/HR_Intelligence_Platform_Partner_Guide.pdf](external/HR_Intelligence_Platform_Partner_Guide.pdf) · [GUIDE.md](GUIDE.md#career-page-integration) |
+| **Engineer onboarding (full app map)** | [GUIDE.md](GUIDE.md) |
+| **Engineer (local setup + production)** | [DEVELOPMENT.md](DEVELOPMENT.md) · root [README.md](../README.md) |
 | **End user / trainer** | [user-manual/](user-manual/README.md) (Word/PDF) |
-| **Engineer (local setup)** | [DEVELOPMENT.md](DEVELOPMENT.md) · root [README.md](../README.md) |
-| **Production release** | [PRODUCTION_RELEASE.md](PRODUCTION_RELEASE.md) |
-| **Workflows** | [WORKFLOWS.md](WORKFLOWS.md) |
-| **Media storage** | [MEDIA_AND_BACKUPS.md](MEDIA_AND_BACKUPS.md) · [BACKUP_RUNBOOK.md](BACKUP_RUNBOOK.md) |
-| **Document intelligence** | [DOCUMENT_INTELLIGENCE.md](DOCUMENT_INTELLIGENCE.md) |
-| **AI workflows** | [AI_WORKFLOW.md](AI_WORKFLOW.md) · [AI_DATA_PIPELINE.md](AI_DATA_PIPELINE.md) · [ADRS.md](ADRS.md) |
+| **Media storage & backups** | [OPERATIONS.md](OPERATIONS.md) |
+| **AI / document intelligence** | [AI.md](AI.md) |
 
 ---
 
@@ -22,17 +21,13 @@ Single entry point for HR Intelligence Platform docs. Prefer live code when docs
 
 ```text
 docs/
-  README.md
-  WORKFLOWS.md
-  DEVELOPMENT.md
-  PRODUCTION_RELEASE.md
-  MEDIA_AND_BACKUPS.md
-  BACKUP_RUNBOOK.md
-  DOCUMENT_INTELLIGENCE.md
-  AI_WORKFLOW.md
-  AI_DATA_PIPELINE.md
-  ADRS.md
-  user-manual/          ← only subfolder (Word/PDF + screenshots + build scripts)
+  README.md           ← you are here
+  GUIDE.md            ← app architecture, flows, API, data model, integrations
+  DEVELOPMENT.md      ← setup, workflows, production release, troubleshooting
+  OPERATIONS.md       ← media storage + backup/restore
+  AI.md               ← document intelligence, AI features, pipeline, ADRs
+  external/           ← partner PDF for other teams
+  user-manual/        ← only subfolder (Word/PDF + screenshots + build scripts)
 ```
 
 ---
