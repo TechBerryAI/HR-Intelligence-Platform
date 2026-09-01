@@ -18,6 +18,8 @@ jobs:
         run: |
           pip install -r apps/backend/requirements.txt
           pip install pytest
+      - name: Verify PyMuPDF (PDF roundtrip tests)
+        run: python -c "import fitz; print('PyMuPDF', fitz.version)"
       - name: Run unit tests
         env:
           # Unit/mock only — no live Postgres or Ollama required

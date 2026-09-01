@@ -421,7 +421,7 @@ def _make_docx_bytes(paragraphs: list[str]) -> bytes:
 
 
 def _make_pdf_bytes(lines: list[str]) -> bytes:
-    fitz = pytest.importorskip('fitz', reason='pymupdf required for PDF roundtrip tests')
+    import fitz
 
     doc = fitz.open()
     page = doc.new_page()
