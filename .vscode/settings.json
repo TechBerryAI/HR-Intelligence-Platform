@@ -8,5 +8,9 @@
   "python.defaultInterpreterPath": "${workspaceFolder}/apps/backend/venv/Scripts/python.exe",
   "python.analysis.extraPaths": [
     "${workspaceFolder}/apps/backend"
-  ]
+  ],
+  "basedpyright.analysis.extraPaths": [
+    "${workspaceFolder}/apps/backend"
+  ],
+  "basedpyright.analysis.diagnosticMode": "workspace"
 }

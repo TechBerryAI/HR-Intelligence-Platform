@@ -1,0 +1,23 @@
+{
+  "include": ["apps/backend", "tests/backend", "ai", "scripts"],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.pytest_cache",
+    "apps/backend/venv",
+    "ai/.venv"
+  ],
+  "venvPath": "apps/backend",
+  "venv": "venv",
+  "extraPaths": ["apps/backend"],
+  "executionEnvironments": [
+    {
+      "root": "apps/backend"
+    },
+    {
+      "root": "tests/backend",
+      "extraPaths": ["apps/backend"]
+    }
+  ],
+  "typeCheckingMode": "basic"
+}
