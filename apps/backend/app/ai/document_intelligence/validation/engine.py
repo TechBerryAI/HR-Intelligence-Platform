@@ -170,9 +170,18 @@ def validate_person_name(value: str) -> Tuple[bool, str]:
         return False, 'name_not_person'
     if re.search(r'\d', s):
         return False, 'name_has_digits'
+    if _DEGREE_CUE_RE.search(s):
+        return False, 'name_is_degree'
     words = s.split()
     if not (1 <= len(words) <= 5):
         return False, 'name_word_count'
+    try:
+        from app.ai.parser.enrichment.resume_text_inference import is_plausible_person_name
+
+        if not is_plausible_person_name(s):
+            return False, 'name_implausible'
+    except Exception:
+        pass
     return True, 'ok'
 
 
@@ -239,6 +248,26 @@ def is_grounded_education_row(degree: str, institution: str) -> bool:
     deg_ok, _ = validate_degree(degree) if (degree or '').strip() else (False, '')
     inst_ok, _ = validate_institution(institution) if (institution or '').strip() else (False, '')
     return bool(deg_ok and inst_ok)
+
+
+_EDU_HEADING_TOKENS = frozenset(
+    {'education', 'educational', 'qualification', 'qualifications', 'academics'}
+)
+
+
+def is_keepable_education_form_row(degree: str, institution: str) -> bool:
+    """Apply-form rows: keep when one side is grounded and the other is empty."""
+    deg = (degree or '').strip()
+    inst = (institution or '').strip()
+    if not deg and not inst:
+        return False
+    if deg.lower() in _EDU_HEADING_TOKENS or inst.lower() in _EDU_HEADING_TOKENS:
+        return False
+    deg_ok, _ = validate_degree(deg) if deg else (True, 'empty')
+    inst_ok, _ = validate_institution(inst) if inst else (True, 'empty')
+    if not deg_ok or not inst_ok:
+        return False
+    return bool((deg and deg_ok) or (inst and inst_ok))
 
 
 _GEO_BARE_RE = re.compile(
@@ -518,6 +547,17 @@ def sanitize_skills(skills: list[SkillEntry], *, companies: set[str] | None = No
     return out
 
 
+def _summary_ok(summary: str | None) -> bool:
+    """Reject contact/phone/email blobs that must never become personal.summary."""
+    try:
+        from app.ai.parser.enrichment.resume_text_inference import is_valid_summary
+
+        return is_valid_summary(summary)
+    except Exception:
+        s = (summary or '').strip()
+        return bool(s) and '@' not in s and not re.search(r'\b\d{10}\b', s)
+
+
 def sanitize_candidate_profile(
     profile: CandidateProfile,
     *,
@@ -600,7 +640,11 @@ def sanitize_candidate_profile(
         personal=profile.personal.model_copy(
             update={
                 'full_name': raw_name if name_ok else '',
-                'summary': profile.personal.summary.strip(),
+                'summary': (
+                    profile.personal.summary.strip()
+                    if _summary_ok(profile.personal.summary)
+                    else ''
+                ),
             }
         ),
         contact=profile.contact.model_copy(

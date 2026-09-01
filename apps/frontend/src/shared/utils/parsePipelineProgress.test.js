@@ -5,10 +5,13 @@ import {
   overlayCatchupMs,
   overlayStepIndex,
   progressPctForStage,
+  formatStepMs,
+  createStageClock,
 } from './parsePipelineProgress.js'
 
 describe('parse pipeline overlay mapping', () => {
   it('maps resume engine stages onto the four overlay steps', () => {
+    expect(overlayStepIndex('resume', 'upload')).toBe(0)
     expect(overlayStepIndex('resume', 'text')).toBe(0)
     expect(overlayStepIndex('resume', 'layout')).toBe(0)
     expect(overlayStepIndex('resume', 'sections')).toBe(1)
@@ -18,6 +21,7 @@ describe('parse pipeline overlay mapping', () => {
     expect(overlayStepIndex('resume', 'knowledge')).toBe(2)
     expect(overlayStepIndex('resume', 'validate')).toBe(3)
     expect(overlayStepIndex('resume', 'persist')).toBe(3)
+    expect(overlayStepIndex('resume', 'autofill')).toBe(3)
   })
 
   it('maps JD engine stages onto the four overlay steps', () => {
@@ -56,5 +60,37 @@ describe('parse pipeline overlay mapping', () => {
     expect(hintForStage('semantic', '')).toBe('Understanding content')
     expect(isPipelineComplete({ stage: 'persist', status: 'completed' })).toBe(true)
     expect(isPipelineComplete({ stage: 'persist', status: 'started' })).toBe(false)
+  })
+
+  it('hides internal engine version tags from overlay copy', () => {
+    expect(
+      hintForStage(
+        'persist',
+        'Resume parsed successfully! Fields auto-filled below. (ai-runtime-v1+canonical-v13-extract-shortlist+deterministic)',
+      ),
+    ).toBe('Resume parsed successfully! Fields auto-filled below.')
+    expect(hintForStage('persist', 'ai-runtime-v1+canonical-v13-extract-shortlist+deterministic')).toBe(
+      'Preparing form autofill',
+    )
+  })
+
+  it('formats overlay step times', () => {
+    expect(formatStepMs(420)).toBe('420 ms')
+    expect(formatStepMs(1500)).toBe('1.5 s')
+    expect(formatStepMs(185000)).toBe('3m 5s')
+  })
+
+  it('prefers server duration_ms when SSE events arrive in a burst', () => {
+    const clock = createStageClock()
+    clock.onEvent({ stage: 'text', status: 'started' })
+    clock.onEvent({ stage: 'text', status: 'completed', duration_ms: 180000 })
+    clock.onEvent({
+      stage: 'semantic',
+      status: 'completed',
+      detail: { duration_ms: 3200 },
+    })
+    const byKey = Object.fromEntries(clock.getSpans().map((s) => [s.key, s.duration_ms]))
+    expect(byKey.text).toBe(180000)
+    expect(byKey.semantic).toBe(3200)
   })
 })

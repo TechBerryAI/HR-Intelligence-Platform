@@ -18,7 +18,7 @@ from app.ai.document_intelligence.models.form_dtos import (
     FieldTrace,
 )
 from app.ai.document_intelligence.validation.engine import (
-    is_grounded_education_row,
+    is_keepable_education_form_row,
     validate_email,
     validate_location,
     validate_nonempty,
@@ -273,14 +273,28 @@ def map_candidate_to_form(
     )
 
     summary = profile.personal.summary.strip()
+    from app.ai.parser.enrichment.resume_text_inference import (
+        is_valid_summary,
+        summary_rejection_reason,
+    )
+
+    if summary and not is_valid_summary(summary):
+        summary = ''
+    sum_reason = 'ok' if summary else 'empty'
+    sum_validator = 'is_valid_summary' if summary else 'none'
+    if not summary:
+        # Record why extraction failed when a prior invalid value was present
+        rej = summary_rejection_reason(profile.personal.summary)
+        if rej and rej != 'empty':
+            sum_reason = rej
     traces.append(
         _trace(
             'summary',
             'personal.summary',
-            source='semantic_ai',
-            validator='validate_nonempty' if summary else 'none',
-            confidence=0.8 if summary else 0.0,
-            reason='ok' if summary else 'empty',
+            source='deterministic',
+            validator=sum_validator,
+            confidence=0.85 if summary else 0.0,
+            reason=sum_reason,
         )
     )
 
@@ -362,19 +376,10 @@ def map_candidate_to_form(
                     parts[1],
                 ):
                     degree, institution = parts[0].strip()[:200], parts[1].strip()[:200]
-        # Still missing one side: only keep when both sides are grounded (no invented placeholders)
-        if (degree or '').strip() and not (institution or '').strip():
-            continue
-        if (institution or '').strip() and not (degree or '').strip():
-            continue
-        if not is_grounded_education_row(degree, institution):
-            continue
-        if degree.strip().lower() in {'education', 'educational', 'qualification', 'qualifications'}:
+        # Keep degree-only or institution-only when that side is grounded; never invent the rest.
+        if not is_keepable_education_form_row(degree, institution):
             continue
         if not (degree or institution or edu.gpa or edu.start or edu.end):
-            continue
-        # Require both sides for apply-form education (matches frontend validator)
-        if not ((degree or '').strip() and (institution or '').strip()):
             continue
         education_rows.append(
             EducationFormRow(

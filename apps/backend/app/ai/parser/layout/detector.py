@@ -99,23 +99,35 @@ def ocr_image_with_layout(
                 return refined, 'doclayout'
             return text, 'heuristic_ocr'
 
-    # OpenCV block proposals + per-block OCR (scanned pages with weak RapidOCR global sort)
-    blocks = _opencv_then_ocr(processed, ocr_fn)
-    if blocks.strip():
-        return structure_text_by_headers(blocks), 'opencv_blocks'
+    # RapidOCR found nothing. One OpenCV block pass only when the page still has ink
+    # (blank pages used to cost ~12s). Engine failure (None) still falls through.
+    if detections is None or (
+        detections == [] and _layout_image_has_ink(image_bytes)
+    ):
+        blocks = _opencv_then_ocr(processed, ocr_fn)
+        if blocks.strip():
+            return structure_text_by_headers(blocks), 'opencv_blocks'
+        if detections is None:
+            return (ocr_fn(processed) or '', 'plain_ocr')
 
-    return (ocr_fn(processed) or '', 'plain_ocr')
+    return ('', 'empty')
 
 
-_rapidocr_det_engine = None
+def _layout_image_has_ink(image_bytes: bytes) -> bool:
+    try:
+        from app.ai.parser.text_extraction import _png_has_ink
+
+        return bool(_png_has_ink(image_bytes))
+    except Exception:
+        return False
 
 
 def _rapidocr_detections(image_bytes: bytes) -> list | None:
-    global _rapidocr_det_engine
+    """One RapidOCR pass shared with text_extraction (do not construct a second engine)."""
     try:
         import numpy as np
         from PIL import Image
-        from rapidocr_onnxruntime import RapidOCR
+        from app.ai.parser.text_extraction import _get_rapidocr_engine
     except ImportError:
         return None
 
@@ -124,9 +136,8 @@ def _rapidocr_detections(image_bytes: bytes) -> list | None:
         if image.mode not in ('RGB', 'L'):
             image = image.convert('RGB')
         arr = np.array(image)
-        if _rapidocr_det_engine is None:
-            _rapidocr_det_engine = RapidOCR()
-        result, _ = _rapidocr_det_engine(arr)
+        engine = _get_rapidocr_engine()
+        result, _ = engine(arr)
         return result or []
     except Exception as exc:
         logger.debug('RapidOCR detections failed: %s', exc)

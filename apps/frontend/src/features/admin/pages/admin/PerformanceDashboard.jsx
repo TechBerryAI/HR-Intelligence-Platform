@@ -27,19 +27,26 @@ import {
 import { DurationBadge, formatDuration } from '@/features/admin/components/PerformanceCharts.jsx'
 
 const RESUME_STEPS = [
+  { key: 'upload', name: 'Receive Upload' },
+  { key: 'client_wait', name: 'Wait for First Progress' },
   { key: 'cache', name: 'Cache Check' },
   { key: 'persist_raw', name: 'Store Raw File' },
   { key: 'text', name: 'Extract Text' },
   { key: 'layout', name: 'Layout Analysis' },
   { key: 'sections', name: 'Section Detection' },
   { key: 'deterministic', name: 'Deterministic Parse' },
+  { key: 'coverage', name: 'Coverage Check' },
   { key: 'semantic', name: 'Semantic Enrichment (LLM)' },
   { key: 'knowledge', name: 'Knowledge Enrichment' },
   { key: 'validate', name: 'Validation' },
   { key: 'persist', name: 'Save Parsed Result' },
+  { key: 'deliver', name: 'Send Result to Browser' },
+  { key: 'autofill', name: 'Autofill Form' },
 ]
 
 const JD_STEPS = [
+  { key: 'upload', name: 'Receive Upload' },
+  { key: 'client_wait', name: 'Wait for First Progress' },
   { key: 'cache', name: 'Cache Check' },
   { key: 'persist_raw', name: 'Store Raw File' },
   { key: 'text', name: 'Extract Text' },
@@ -51,6 +58,29 @@ const JD_STEPS = [
   { key: 'semantic', name: 'Semantic Enrichment (LLM)' },
   { key: 'validate', name: 'Validation' },
   { key: 'persist', name: 'Save Parsed Result' },
+  { key: 'deliver', name: 'Send Result to Browser' },
+  { key: 'autofill', name: 'Autofill Form' },
+]
+
+const BULK_STEPS = [
+  { key: 'cache', name: 'Cache Check' },
+  { key: 'persist_raw', name: 'Store Raw File' },
+  { key: 'text', name: 'Extract Text' },
+  { key: 'layout', name: 'Layout Analysis' },
+  { key: 'sections', name: 'Section Detection' },
+  { key: 'deterministic', name: 'Deterministic Parse' },
+  { key: 'coverage', name: 'Coverage Check' },
+  { key: 'semantic', name: 'Semantic Enrichment (LLM)' },
+  { key: 'knowledge', name: 'Knowledge Enrichment' },
+  { key: 'validate', name: 'Validation' },
+  { key: 'persist', name: 'Save Parsed Result' },
+]
+
+const APPLY_STEPS = [
+  { key: 'ats_match', name: 'ATS Matching' },
+  { key: 'ats_score', name: 'ATS Score Computation' },
+  { key: 'persist_application', name: 'Save Application' },
+  { key: 'apply_submit', name: 'Submit Application' },
 ]
 
 const STEP_ALIASES = {
@@ -60,6 +90,10 @@ const STEP_ALIASES = {
   enrich_jd_semantic: 'semantic',
   _call_section_llm: 'semantic',
   parse_via_runtime: 'semantic',
+  match_candidate_to_job: 'ats_match',
+  _internal_match: 'ats_score',
+  _persist_application_atomic: 'persist_application',
+  public_apply_to_job: 'apply_submit',
 }
 
 function formatTime(iso) {
@@ -87,18 +121,30 @@ function formatRelative(iso) {
 
 function pipelineTitle(kind, session) {
   if (kind === 'jd_parse') return 'JD Parsing'
+  if (kind === 'apply') return 'Apply to Job'
   if (kind === 'ats') return 'ATS Matching'
-  if (kind === 'apply') return 'Apply'
   if (kind === 'bulk_parse') {
     const n = session?.resume_count
     if (n != null && n > 0) return `Bulk Parse · ${n} resume${n === 1 ? '' : 's'}`
     return 'Bulk Parse'
   }
-  if (kind === 'resume_parse') return 'Resume Parsing'
+  if (kind === 'resume_parse') {
+    const path = (session?.path || '').toLowerCase()
+    if (path.includes('/public')) return 'Apply · Resume parse'
+    return 'Resume Parsing'
+  }
   return 'Pipeline'
 }
 
-function kindMeta(kind) {
+function kindMeta(kind, session) {
+  const path = (session?.path || '').toLowerCase()
+  if (kind === 'resume_parse' && path.includes('/public')) {
+    return {
+      label: 'Apply parse',
+      Icon: FiUpload,
+      chip: 'bg-[rgba(54,214,160,0.14)] text-[#67DFB4] ring-[rgba(54,214,160,0.3)]',
+    }
+  }
   if (kind === 'jd_parse') {
     return {
       label: 'JD',
@@ -113,9 +159,9 @@ function kindMeta(kind) {
       chip: 'bg-[rgba(168,85,247,0.16)] text-[#D8B4FE] ring-[rgba(168,85,247,0.35)]',
     }
   }
-  if (kind === 'apply') {
+  if (kind === 'apply' || kind === 'ats') {
     return {
-      label: 'Apply',
+      label: kind === 'ats' ? 'ATS' : 'Apply',
       Icon: FiUpload,
       chip: 'bg-[rgba(54,214,160,0.14)] text-[#67DFB4] ring-[rgba(54,214,160,0.3)]',
     }
@@ -132,7 +178,9 @@ function detectKind(detail) {
   if (
     detail.kind === 'jd_parse' ||
     detail.kind === 'resume_parse' ||
-    detail.kind === 'bulk_parse'
+    detail.kind === 'bulk_parse' ||
+    detail.kind === 'apply' ||
+    detail.kind === 'ats'
   ) {
     return detail.kind
   }
@@ -140,8 +188,10 @@ function detectKind(detail) {
   if (path.includes('/bulk-parse') || path.includes('bulk-parse')) return 'bulk_parse'
   if (path.includes('/parse/jd')) return 'jd_parse'
   if (path.includes('/parse/resume')) return 'resume_parse'
+  if (path.includes('/apply')) return 'apply'
   const fns = new Set((detail.events || []).map((e) => e.function))
-  if (fns.has('coverage') || fns.has('_run_jd') || fns.has('enrich_jd_semantic')) return 'jd_parse'
+  if (fns.has('public_apply_to_job') || fns.has('_persist_application_atomic')) return 'apply'
+  if (fns.has('_run_jd') || fns.has('enrich_jd_semantic')) return 'jd_parse'
   if (
     fns.has('_run_resume') ||
     fns.has('enrich_resume_semantic') ||
@@ -158,9 +208,13 @@ function buildParseSteps(detail) {
   const template =
     kind === 'jd_parse'
       ? JD_STEPS
-      : kind === 'resume_parse' || kind === 'bulk_parse'
-        ? RESUME_STEPS
-        : null
+      : kind === 'apply' || kind === 'ats'
+        ? APPLY_STEPS
+        : kind === 'bulk_parse'
+          ? BULK_STEPS
+          : kind === 'resume_parse'
+            ? RESUME_STEPS
+            : null
   if (!template) return detail?.parse_steps || []
 
   const fromApi = Array.isArray(detail?.parse_steps) ? detail.parse_steps : []
@@ -173,7 +227,13 @@ function buildParseSteps(detail) {
     let key = e.function
     if (STEP_ALIASES[key]) key = STEP_ALIASES[key]
     const existing = byKey.get(key)
-    if (!existing || (e.duration_ms != null && existing.duration_ms == null)) {
+    const incomingMs = e.duration_ms
+    const existingMs = existing?.duration_ms
+    if (
+      !existing ||
+      (incomingMs != null && existingMs == null) ||
+      (incomingMs != null && existingMs != null && incomingMs > existingMs)
+    ) {
       const status = e.outcome || (e.success === false ? 'failed' : 'completed')
       byKey.set(key, {
         key,
@@ -212,10 +272,11 @@ function buildParseSteps(detail) {
   })
 
   // If the pipeline clearly ran, treat idle steps as skipped (clearer than "Not run")
+  const CLIENT_FLOW = new Set(['upload', 'client_wait', 'deliver', 'autofill'])
   const hasWork = rows.some((r) => r.status === 'completed' || r.status === 'failed')
   if (hasWork) {
     for (const r of rows) {
-      if (r.status === 'not_run') r.status = 'skipped'
+      if (r.status === 'not_run' && !CLIENT_FLOW.has(r.key)) r.status = 'skipped'
     }
   }
 
@@ -238,7 +299,10 @@ function buildParseSteps(detail) {
 }
 
 function StepRow({ step, maxMs, isLast }) {
-  const showTime = step.status === 'completed' && step.duration_ms != null
+  const showTime =
+    (step.status === 'completed' || step.status === 'failed') &&
+    step.duration_ms != null &&
+    Number.isFinite(Number(step.duration_ms))
   const pct = showTime ? Math.min(100, (step.duration_ms / maxMs) * 100) : 0
   const isIdle = step.status === 'skipped' || step.status === 'not_run'
   const n = step.step
@@ -299,6 +363,10 @@ function StepRow({ step, maxMs, isLast }) {
             ) : step.status === 'failed' ? (
               <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-300">
                 Failed
+              </span>
+            ) : step.status === 'not_run' ? (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-md text-[var(--ei-text-muted)] bg-[var(--ei-bg-primary)]">
+                Not run
               </span>
             ) : (
               <span className="text-[11px] font-medium px-2 py-0.5 rounded-md text-amber-300/90 bg-amber-500/10">
@@ -385,7 +453,7 @@ function BulkResumeAccordion({ file, defaultOpen = false }) {
   )
 }
 
-function ParseStepsView({ steps, title, kind, totalMs, files, resumeCount }) {
+function ParseStepsView({ steps, title, kind, totalMs, files, resumeCount, path }) {
   const maxMs = Math.max(
     ...steps.filter((s) => s.status === 'completed').map((s) => s.duration_ms || 0),
     1
@@ -393,7 +461,7 @@ function ParseStepsView({ steps, title, kind, totalMs, files, resumeCount }) {
   const completed = steps.filter((s) => s.status === 'completed').length
   const skipped = steps.filter((s) => s.status === 'skipped' || s.status === 'not_run').length
   const failed = steps.filter((s) => s.status === 'failed').length
-  const km = kindMeta(kind)
+  const km = kindMeta(kind, { path })
   const KindIcon = km.Icon
   const isBulk = kind === 'bulk_parse'
 
@@ -418,12 +486,12 @@ function ParseStepsView({ steps, title, kind, totalMs, files, resumeCount }) {
           <p className="text-xs text-[var(--ei-text-muted)] mt-0.5">
             {isBulk
               ? 'Expand each resume to see its pipeline steps'
-              : 'How long each pipeline step took'}
+              : 'From choosing the file until fields appear on the form. Total is that wait — not the sum of overlapping steps.'}
           </p>
         </div>
         <div className="text-right shrink-0 rounded-xl bg-[rgba(0,166,255,0.08)] ring-1 ring-[rgba(0,166,255,0.25)] px-3.5 py-2.5">
           <p className="text-[10px] uppercase tracking-wide text-[var(--ei-text-muted)] font-semibold">
-            Total
+            Upload → Autofill
           </p>
           <p className="text-xl font-bold tabular-nums text-[#00A6FF] leading-tight">
             {formatDuration(totalMs)}
@@ -510,6 +578,7 @@ function PipelineView({ detail }) {
       totalMs={detail.total_duration_ms}
       files={detail.files}
       resumeCount={detail.resume_count}
+      path={detail.path}
     />
   )
 }
@@ -531,6 +600,14 @@ function matchesKindFilter(session, filter) {
   }
   if (filter === 'resume_parse') {
     return kind === 'resume_parse' && !session?.is_bulk_group
+  }
+  if (filter === 'apply') {
+    const path = (session?.path || '').toLowerCase()
+    return (
+      kind === 'apply' ||
+      kind === 'ats' ||
+      (kind === 'resume_parse' && path.includes('/public'))
+    )
   }
   return kind === filter
 }
@@ -607,7 +684,7 @@ function KindFilterDropdown({ value, onChange }) {
 
 function SessionRow({ session, active, onSelect }) {
   const kind = session.kind
-  const km = kindMeta(kind)
+  const km = kindMeta(kind, session)
   const KindIcon = km.Icon
   const isBulk = kind === 'bulk_parse'
   const fileList = Array.isArray(session.files) ? session.files : []
@@ -715,16 +792,17 @@ function DashboardBody() {
     return sessions.filter((s) => matchesKindFilter(s, kindFilter))
   }, [sessions, kindFilter])
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async (opts = {}) => {
+    const silent = opts.silent === true
+    if (!silent) setLoading(true)
     try {
       const recent = await fetchPerformanceRecent({ limit: 50 })
       const list = recent?.sessions || []
       setSessions(list)
     } catch (err) {
-      toast.error(err?.message || 'Failed to load performance data')
+      if (!silent) toast.error(err?.message || 'Failed to load performance data')
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
     // toast methods are stable; omit from deps to avoid remount refetch races
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -767,6 +845,8 @@ function DashboardBody() {
 
   useEffect(() => {
     load()
+    const id = setInterval(() => load({ silent: true }), 4000)
+    return () => clearInterval(id)
   }, [load])
 
   // Keep selection inside the active filter
@@ -787,16 +867,19 @@ function DashboardBody() {
       return
     }
     let cancelled = false
-    ;(async () => {
+    const pull = async () => {
       try {
         const data = await fetchPerformanceRequest(selectedId)
         if (!cancelled) setDetail(data)
       } catch {
         if (!cancelled) setDetail(null)
       }
-    })()
+    }
+    pull()
+    const id = setInterval(pull, 4000)
     return () => {
       cancelled = true
+      clearInterval(id)
     }
   }, [selectedId])
 

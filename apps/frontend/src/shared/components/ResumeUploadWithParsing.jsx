@@ -5,8 +5,10 @@ import {
   takeResumeFormDTO,
   validateFileForParsing,
   extractParseErrorMessage,
+  startParseClock,
+  reportClientParseTiming,
 } from '@/core/api/parsingApi.js';
-import { hintForStage, isPipelineComplete, overlayCatchupMs, progressPctForStage } from '@/shared/utils/parsePipelineProgress.js';
+import { hintForStage, isPipelineComplete, overlayCatchupMs, overlayStepIndex, progressPctForStage, createStageClock, userFacingParseMessage } from '@/shared/utils/parsePipelineProgress.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiExternalLink, FiTrash2 } from 'react-icons/fi';
@@ -20,6 +22,14 @@ function humanizeParseError(raw) {
   }
   if (/^failed to parse resume\.?$/i.test(detail) || /^parse failed\.?$/i.test(detail)) {
     return 'Unable to parse this resume. Please try another file or fill the form manually.';
+  }
+  if (
+    /failed to fetch/i.test(detail) ||
+    /^network error$/i.test(detail) ||
+    /networkerror/i.test(detail) ||
+    /failed to reach parse api/i.test(detail)
+  ) {
+    return 'Could not reach the parser. Confirm the backend is running on port 3000, then try the resume again.';
   }
   return detail;
 }
@@ -46,6 +56,7 @@ export default function ResumeUploadWithParsing({
   const [stageLabel, setStageLabel] = useState(null);
   const [stageMessage, setStageMessage] = useState(null);
   const [progressPct, setProgressPct] = useState(null);
+  const [overlayGroupMs, setOverlayGroupMs] = useState([0, 0, 0, 0]);
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const { theme } = useTheme();
@@ -116,26 +127,45 @@ export default function ResumeUploadWithParsing({
     }
 
     setIsUploading(true);
-    setStageLabel('cache');
-    setStageMessage(hintForStage('cache'));
-    setProgressPct(8);
-    let lastStage = 'cache';
+    setOverlayGroupMs([0, 0, 0, 0]);
+    setStageLabel('upload');
+    setStageMessage('Uploading resume');
+    setProgressPct(4);
+    let lastStage = 'upload';
+    const clock = startParseClock();
+    const stageClock = createStageClock();
     
     try {
       const onStage = (ev) => {
+        stageClock.onEvent(ev);
         if (ev?.stage) {
           lastStage = ev.stage;
           setStageLabel(ev.stage);
           setStageMessage(hintForStage(ev.stage, ev.message));
+          const g = overlayStepIndex('resume', ev.stage);
+          const ms = Number(ev.duration_ms ?? ev.detail?.duration_ms);
+          if (
+            g >= 0 &&
+            Number.isFinite(ms) &&
+            ['completed', 'failed', 'skipped'].includes(String(ev.status || '').toLowerCase())
+          ) {
+            setOverlayGroupMs((prev) => {
+              const next = [...prev];
+              next[g] = (Number(next[g]) || 0) + ms;
+              return next;
+            });
+          }
         }
         const pct = progressPctForStage('resume', ev?.stage);
         if (pct != null) setProgressPct((prev) => Math.max(prev ?? 0, pct));
         if (isPipelineComplete(ev)) setProgressPct(100);
       };
 
+      clock.markFetch();
       const result = publicMode
-        ? await uploadAndParseResumePublicStream(file, { onStage })
-        : await uploadAndParseResumeStream(file, null, { onStage });
+        ? await uploadAndParseResumePublicStream(file, { onStage, onFirstChunk: clock.markFirstChunk })
+        : await uploadAndParseResumeStream(file, null, { onStage, onFirstChunk: clock.markFirstChunk });
+      clock.markResult();
 
       if (result.status === 'ok' && result.form) {
         const formData = takeResumeFormDTO(result);
@@ -177,12 +207,11 @@ export default function ResumeUploadWithParsing({
             `Parsed with incomplete fields — please review: ${labels}. Other fields were auto-filled below.`,
           );
         } else if (result.is_duplicate) {
-          setParseSuccess('Resume recognized! Using previously parsed data.');
+          setParseSuccess('Resume recognized. Using your previously parsed details.');
           setParseError('');
           onParseError?.(null);
         } else {
-          const modelInfo = result.model_version ? ` (${result.model_version})` : '';
-          setParseSuccess(`Resume parsed successfully! Fields auto-filled below.${modelInfo}`);
+          setParseSuccess('Resume parsed successfully. Your details were filled in below.');
           setParseError('');
           onParseError?.(null);
         }
@@ -201,6 +230,9 @@ export default function ResumeUploadWithParsing({
             _trace: formData.trace || [],
           });
         }
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        clock.addStageSpans(stageClock.getSpans());
+        await reportClientParseTiming(result, clock);
 
         // Low-confidence warning only when no named coverage gaps (JD parity)
         if (coreGaps.length === 0 && (result.partial || result.confidence < 0.75)) {
@@ -220,12 +252,13 @@ export default function ResumeUploadWithParsing({
         throw new Error(extractParseErrorMessage(result, 'Parsing failed'));
       }
     } catch (error) {
-      onParseComplete?.(null, error?.message || String(error));
-      if (error.message.includes('Invalid or expired token') || error.message.includes('Access token required')) {
+      const raw = error?.message || String(error || '');
+      onParseComplete?.(null, raw);
+      if (raw.includes('Invalid or expired token') || raw.includes('Access token required')) {
         console.warn('Session expired, allowing manual upload');
         if (onFileSelect) onFileSelect(file);
       } else {
-        const message = humanizeParseError(error.message);
+        const message = humanizeParseError(raw);
         setParseSuccess('');
         setParseError(message);
         onParseError?.(message);
@@ -253,6 +286,7 @@ export default function ResumeUploadWithParsing({
         stageLabel={stageLabel}
         stageMessage={stageMessage}
         progressPct={progressPct}
+        stepMs={overlayGroupMs}
       />
 
       <div className="space-y-4">
@@ -400,28 +434,40 @@ export default function ResumeUploadWithParsing({
         {/* Success message (e.g. after parsing) */}
         {parseSuccess && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="glass-card border-2 border-green-500/30 bg-green-500/10 px-5 py-4 rounded-xl"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={
+              light
+                ? 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3.5'
+                : 'rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3.5'
+            }
+            role="status"
           >
             <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-glow">
-                <FiCheck className="w-5 h-5 text-white" />
+              <div
+                className={
+                  light
+                    ? 'flex-shrink-0 w-9 h-9 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center'
+                    : 'flex-shrink-0 w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center'
+                }
+              >
+                <FiCheck className={`w-5 h-5 ${light ? 'text-emerald-600' : 'text-emerald-400'}`} />
               </div>
-              <div className="flex-1">
-                <p className="font-semibold text-green-300">{parseSuccess}</p>
-                {confidence !== null && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${confidence * 100}%` }}
-                        transition={{ duration: 1, ease: 'easeOut' }}
-                        className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full"
-                      />
+              <div className="min-w-0 flex-1 pt-0.5">
+                <p className={`text-sm font-semibold leading-snug ${light ? 'text-emerald-900' : 'text-emerald-100'}`}>
+                  {userFacingParseMessage(parseSuccess, 'Resume parsed successfully. Your details were filled in below.')}
+                </p>
+                {confidence != null && confidence < 0.99 ? (
+                  <p className={`mt-1 text-xs ${light ? 'text-emerald-700/80' : 'text-emerald-200/70'}`}>
+                    Please double-check the details below.
+                  </p>
+                ) : (
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <div className={`flex-1 h-1.5 rounded-full overflow-hidden ${light ? 'bg-emerald-200' : 'bg-emerald-500/20'}`}>
+                      <div className={`h-full w-full rounded-full ${light ? 'bg-emerald-500' : 'bg-emerald-400'}`} />
                     </div>
-                    <span className="text-xs font-medium text-green-300 min-w-[50px] text-right">
-                      {(confidence * 100).toFixed(0)}%
+                    <span className={`text-xs font-semibold tabular-nums ${light ? 'text-emerald-700' : 'text-emerald-200/80'}`}>
+                      100%
                     </span>
                   </div>
                 )}

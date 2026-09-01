@@ -34,12 +34,14 @@ from app.ai.document_intelligence.validation.engine import (
 from app.ai.parser.enrichment.resume_text_inference import (
     compute_total_experience_years,
     extract_name_from_text,
+    extract_summary_details,
     extract_summary_from_text,
     filter_skill_items,
     is_institution_like,
     is_plausible_job_title,
     is_plausible_person_name,
     is_section_header_line,
+    is_valid_summary,
     split_list_items,
 )
 
@@ -914,16 +916,26 @@ def parse_personal(text: str, preamble: str, *, source_filename: str = '') -> Pe
             cand = cand.rstrip('-:–—|').strip()
             if not cand or '@' in cand or re.search(r'\d{6,}', cand):
                 continue
+            if re.search(
+                r'(?i)\b(?:b\.?\s*tech|m\.?\s*tech|btech|bachelor|diploma|mba|mca|bca)\b',
+                cand,
+            ):
+                continue
             if is_plausible_person_name(cand):
                 name = cand.title() if cand.isupper() else cand
                 break
     file_name = name_from_resume_filename(source_filename) if source_filename else ''
-    # Prefer a multi-word filename name over a weak single-token body guess
+    # Prefer filename when body name is missing, single-token, or fails plausibility
     if file_name:
-        if not name:
+        if not name or not is_plausible_person_name(name):
             name = file_name
         elif len(name.split()) == 1 and len(file_name.split()) >= 2:
             name = file_name
+        elif len(file_name.split()) >= 2 and len(name.split()) > len(file_name.split()) + 1:
+            # Body glued a title onto the name ("Ashutosh Kosta Database Admin")
+            name = file_name
+    if name and not is_plausible_person_name(name):
+        name = file_name or ''
     if name:
         name = re.sub(r'(?i)^(mr|mrs|ms|miss|dr|prof)\.?\s+', '', name).strip()
         if name.isupper() and len(name.split()) >= 2:
@@ -1039,6 +1051,7 @@ def _looks_like_role_only_line(text: str) -> bool:
 def _is_role_comma_company_header(text: str) -> bool:
     """True for 'Role, Company' / 'Role,Company' job headers (not duty prose)."""
     stripped = re.sub(r'^[\s•·\-\*●▪▸►]+', '', (text or '').strip())
+    stripped = _strip_date_range(stripped).strip(' ,|-–—')
     comma_parts = re.split(r',\s*', stripped, maxsplit=1)
     if len(comma_parts) != 2:
         return False
@@ -1049,7 +1062,9 @@ def _is_role_comma_company_header(text: str) -> bool:
         return False
     if _DUTY_VERB_START.match(left) or _DUTY_VERB_START.match(right):
         return False
-    if len(left.split()) > 6 or not (1 <= len(right.split()) <= 8):
+    # Optional city after the company: "Role, Acme Ltd, Mumbai"
+    right_company = re.split(r',\s*', right, maxsplit=1)[0].strip()
+    if len(left.split()) > 6 or not (1 <= len(right_company.split()) <= 8):
         return False
     # Duty sentences have many clauses / conjunctions on the right
     if re.search(r'(?i)\b(?:resulting|ensuring|improving|including|across|and|wrote|reported)\b', right):
@@ -1078,6 +1093,18 @@ def _is_bullet_or_duty_line(line: str) -> bool:
     # Company, City | Role, dates — pipe + range is a header, not a comma duty
     if '|' in stripped and extract_date_range(stripped)[0]:
         return False
+    start, _end = extract_date_range(stripped)
+    wo_dates = _strip_date_range(stripped).strip(' ,|-–—')
+    if start and wo_dates:
+        # Dated Role, Company / Company, City — not a duty even when > 40 chars
+        if _has_job_title_cue(wo_dates) or re.search(r'(?i)\bintern\b', wo_dates):
+            return False
+        comma_parts = re.split(r',\s*', wo_dates, maxsplit=1)
+        if len(comma_parts) == 2:
+            right = comma_parts[1].strip()
+            city_bit = re.split(r',\s*', right)[-1].strip()
+            if _CITY_LIKE.match(right) or _CITY_LIKE.match(city_bit):
+                return False
     # Mid/long prose with comma clauses is a duty sentence, not a title
     # (Saloni-style: "Trends, and Revenue KPIs, enabling data…")
     if ',' in stripped and len(stripped) > 40:
@@ -1098,6 +1125,11 @@ def _looks_like_job_header_line(line: str) -> bool:
         return False
     if _DASH_ROLE_COMPANY_DATES.match(stripped) or _PIPE_EXP.match(stripped):
         return True
+    if '|' in stripped:
+        left, _, right = stripped.partition('|')
+        left, right = left.strip(), right.strip()
+        if left and _CITY_LIKE.match(right) and not _DUTY_VERB_START.match(left):
+            return True
     start, _end = extract_date_range(stripped)
     if start and (
         ' - ' in stripped or ' – ' in stripped or '|' in stripped or ' at ' in stripped.lower()
@@ -1150,11 +1182,15 @@ def _join_wrapped_experience_lines(lines: list[str]) -> list[str]:
         p = prev.strip()
         if not n:
             continue
+        if is_section_header_line(p):
+            out.append(n)
+            continue
         if (
             _looks_like_job_header_line(n)
             or _is_role_comma_company_header(n)
             or n[:1] in '•·*●▪▸►'
             or n.startswith('●')
+            or _looks_like_company_line(n)
         ):
             out.append(n)
             continue
@@ -1513,6 +1549,9 @@ def _parse_experience_line(line: str) -> ExperienceEntry | None:
         return ExperienceEntry(role=line_wo.strip()[:200])
     if not start and _looks_like_company_line(line_wo):
         return ExperienceEntry(company=line_wo.strip()[:200])
+    leftover = (line_wo or '').strip(' |-–—,()')
+    if start and not leftover:
+        return ExperienceEntry(start=start, end=end, is_current=is_current)
 
     return None
 
@@ -1524,10 +1563,48 @@ def _coalesce_stacked_experience_entries(rows: list[ExperienceEntry]) -> list[Ex
     while i < len(rows):
         cur = rows[i]
         nxt = rows[i + 1] if i + 1 < len(rows) else None
+        nxt2 = rows[i + 2] if i + 2 < len(rows) else None
         if nxt:
             cur_role, cur_co = (cur.role or '').strip(), (cur.company or '').strip()
             nxt_role, nxt_co = (nxt.role or '').strip(), (nxt.company or '').strip()
             dates_conflict = bool(cur.start and nxt.start and cur.start != nxt.start)
+            n2_role = (nxt2.role or '').strip() if nxt2 else ''
+            n2_co = (nxt2.company or '').strip() if nxt2 else ''
+            n2_dates_conflict = bool(
+                nxt2
+                and (
+                    (cur.start and nxt2.start and cur.start != nxt2.start)
+                    or (nxt.start and nxt2.start and nxt.start != nxt2.start)
+                )
+            )
+            # Company then role then dates on three stacked lines
+            if (
+                nxt2
+                and not n2_dates_conflict
+                and cur_co
+                and not cur_role
+                and nxt_role
+                and not nxt_co
+                and nxt2.start
+                and not n2_role
+                and not n2_co
+            ):
+                out.append(
+                    cur.model_copy(
+                        update={
+                            'role': nxt_role[:200],
+                            'start': cur.start or nxt.start or nxt2.start,
+                            'end': cur.end or nxt.end or nxt2.end,
+                            'is_current': cur.is_current or nxt.is_current or nxt2.is_current,
+                            'location': (cur.location or nxt.location or nxt2.location or '')[:120],
+                            'description': (
+                                cur.description or nxt.description or nxt2.description or ''
+                            ).strip(),
+                        }
+                    )
+                )
+                i += 3
+                continue
             if not dates_conflict and cur_role and not cur_co and nxt_co and not nxt_role:
                 out.append(
                     cur.model_copy(
@@ -1548,6 +1625,26 @@ def _coalesce_stacked_experience_entries(rows: list[ExperienceEntry]) -> list[Ex
                     cur.model_copy(
                         update={
                             'role': nxt_role[:200],
+                            'start': cur.start or nxt.start,
+                            'end': cur.end or nxt.end,
+                            'is_current': cur.is_current or nxt.is_current,
+                            'location': (cur.location or nxt.location or '')[:120],
+                            'description': (cur.description or nxt.description or '').strip(),
+                        }
+                    )
+                )
+                i += 2
+                continue
+            if (
+                not dates_conflict
+                and (cur_role or cur_co)
+                and nxt.start
+                and not nxt_role
+                and not nxt_co
+            ):
+                out.append(
+                    cur.model_copy(
+                        update={
                             'start': cur.start or nxt.start,
                             'end': cur.end or nxt.end,
                             'is_current': cur.is_current or nxt.is_current,
@@ -1827,8 +1924,13 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
 
 
 def parse_summary(section_text: str, full_text: str = '') -> str:
+    """Prefer section body when valid; else section-aware full-text extraction."""
+    from app.ai.parser.enrichment.resume_text_inference import _normalize_summary_body
+
     if section_text.strip():
-        return ' '.join(section_text.split())[:2000]
+        cleaned = _normalize_summary_body(section_text, max_len=2000)
+        if is_valid_summary(cleaned):
+            return cleaned
     return extract_summary_from_text(full_text)
 
 
@@ -1999,8 +2101,20 @@ def parse_resume_from_sections(
     skills_text = pick_section(
         sections, 'Skills', 'Technical Skills', 'Core Skills', 'Key Skills', 'Technologies', 'Tools',
     )
+    # Prefer explicit summary/objective labels (aliases also map to Summary).
     summary_text = pick_section(
-        sections, 'Summary', 'Professional Summary', 'Objective', 'Profile', 'About Me',
+        sections,
+        'Career Objective',
+        'Professional Summary',
+        'Professional Profile',
+        'Personal Profile',
+        'Profile Summary',
+        'Summary',
+        'Objective',
+        'Profile',
+        'About Me',
+        'Career Profile',
+        'Career Summary',
     )
     cert_text = pick_section(sections, 'Certifications', 'Certificates', 'Licenses')
     proj_text = pick_section(sections, 'Projects', 'Project')
@@ -2018,6 +2132,7 @@ def parse_resume_from_sections(
     )
     results['skills'] = parse_skills(skills_text, full_text)
     results['summary'] = parse_summary(summary_text, full_text)
+    results['summary_trace'] = extract_summary_details(full_text)
     results['certs'] = parse_certifications(cert_text, full_text)
     results['projects'] = parse_projects(proj_text)
     results['languages'] = parse_languages(lang_text)
@@ -2025,15 +2140,48 @@ def parse_resume_from_sections(
 
     personal: PersonalInfo = results['personal']
     summary = results['summary'] or ''
+    if summary and not is_valid_summary(summary):
+        summary = ''
+    if not summary:
+        # Prefer validated section-aware extraction over preamble heuristics
+        traced = results.get('summary_trace') or extract_summary_details(full_text)
+        summary = (traced.get('value') or '') if isinstance(traced, dict) else ''
     if not summary and preamble:
-        # Unlabeled intro paragraph after contact (common in Indian resumes)
+        # Unlabeled intro paragraph after contact (common in Indian resumes).
+        # Never accept contact / phone / email blocks as summary.
+        from app.ai.parser.enrichment.resume_text_inference import _normalize_summary_body
+
         paras = [p.strip() for p in re.split(r'\n\s*\n', preamble) if p.strip()]
         for p in paras:
-            if len(p) > 80 and not re.search(r'@|linkedin|github|\+\d', p, re.I):
-                summary = ' '.join(p.split())[:2000]
+            candidate = _normalize_summary_body(p, max_len=2000)
+            # Require substantial unlabeled prose — not a name/contact crumb
+            if len(candidate) < 40:
+                continue
+            if is_valid_summary(candidate):
+                summary = candidate
                 break
-    if summary:
-        personal = personal.model_copy(update={'summary': summary or personal.summary})
+        if not summary:
+            # Single-block preamble (no blank lines) still may hold intro prose
+            candidate = _normalize_summary_body(preamble, max_len=2000)
+            if len(candidate) >= 40 and is_valid_summary(candidate):
+                summary = candidate
+    # Keep personal.summary only when validated; scrub contact bleed when possible
+    personal_summary = ''
+    if personal.summary:
+        if is_valid_summary(personal.summary):
+            personal_summary = personal.summary.strip()
+        else:
+            from app.ai.parser.enrichment.resume_text_inference import _normalize_summary_body
+
+            scrubbed = _normalize_summary_body(personal.summary, max_len=2000)
+            if is_valid_summary(scrubbed):
+                personal_summary = scrubbed
+    if summary and is_valid_summary(summary):
+        personal = personal.model_copy(update={'summary': summary})
+    elif personal_summary:
+        personal = personal.model_copy(update={'summary': personal_summary})
+    else:
+        personal = personal.model_copy(update={'summary': ''})
 
     return merge_resume_sections(
         personal=personal,

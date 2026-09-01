@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import shutil
+import threading
 from typing import Any
 
 import requests
@@ -23,13 +24,24 @@ logger = logging.getLogger(__name__)
 
 PARSING_API_URL = os.getenv('PARSING_API_URL', 'http://localhost:4000')
 PARSING_API_KEY = os.getenv('PARSING_API_KEY', 'your-api-key-here')
+PARSING_API_FALLBACK = os.getenv('PARSING_API_FALLBACK', 'true').lower() in (
+    '1',
+    'true',
+    'yes',
+)
+# Connect timeout kept short so a dead localhost:4000 fails fast in bulk.
+PARSING_API_CONNECT_TIMEOUT = float(os.getenv('PARSING_API_CONNECT_TIMEOUT', '1.5'))
+PARSING_API_READ_TIMEOUT = float(os.getenv('PARSING_API_READ_TIMEOUT', '30'))
 PDF_MAX_PAGES = max(0, int(os.getenv('PDF_MAX_PAGES', '0')))
 OCR_ENABLED = os.getenv('OCR_ENABLED', 'true').lower() in ('1', 'true', 'yes')
 OCR_LANG = os.getenv('OCR_LANG', 'eng')
 OCR_DPI = max(72, int(os.getenv('OCR_DPI', '250')))
 # Try a lower DPI first for speed; escalate when OCR text is thin.
-OCR_DPI_FAST = max(72, int(os.getenv('OCR_DPI_FAST', '180')))
+# HCIP_OCR_DPI_START is set by the CPU/GPU hardware profile when OCR_DPI_FAST is unset.
+OCR_DPI_FAST = max(72, int(os.getenv('OCR_DPI_FAST', os.getenv('HCIP_OCR_DPI_START', '180'))))
 MIN_TEXT_CHARS = 30
+# Last PDF/image extract max DPI (pipeline uses this to skip a second 300 DPI pass).
+_LAST_EXTRACT_MAX_DPI = 0
 # Per-page digital text below this triggers OCR.
 PAGE_OCR_TEXT_THRESHOLD = 80
 # If digital text is below this and page has images, prefer OCR.
@@ -58,6 +70,58 @@ _FIELD_LABEL_RE = __import__('re').compile(
     r'job\s*type|company|department|skills?|required\s*skills?|primary\s*skills?|'
     r'qualification|notice\s*period|reports?\s*to)\b'
 )
+
+
+def _ocr_dpi_fast() -> int:
+    """Runtime fast DPI so CPU hardware profile (HCIP_OCR_DPI_START) actually applies."""
+    return max(72, int(os.getenv('OCR_DPI_FAST', os.getenv('HCIP_OCR_DPI_START', '180'))))
+
+
+def last_extract_max_dpi() -> int:
+    """Max DPI used by the most recent extract_text() call (0 if none / digital-only)."""
+    return int(_LAST_EXTRACT_MAX_DPI or 0)
+
+
+def looks_like_garbage_extract(s: str, *, min_chars: int | None = None) -> bool:
+    """Narrow heuristic: enough chars but almost no signal (bad OCR / junk text layer)."""
+    floor = MIN_TEXT_CHARS if min_chars is None else min_chars
+    t = (s or '').strip()
+    if len(t) < floor:
+        return True
+    if len(t) > 400:
+        return False
+    alnum = sum(1 for c in t if c.isalnum())
+    ratio = alnum / max(len(t), 1)
+    has_token = bool(
+        re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', t)
+        or re.search(r'\b[6-9]\d{9}\b|\+\d[\d\s\-()]{8,}\d', t)
+        or re.search(r'(?i)\b(?:experience|education|skills|summary)\b', t)
+    )
+    return ratio < 0.35 and not has_token
+
+
+_SCAN_EXTS = frozenset({'pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp'})
+
+
+def should_retry_high_dpi_extract(
+    filename: str,
+    raw_text: str,
+    *,
+    extract_failed: bool = False,
+    max_dpi_used: int | None = None,
+) -> bool:
+    """True when a full-file 300 DPI extract is still worth running."""
+    ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+    if ext not in _SCAN_EXTS:
+        return False
+    dpi = last_extract_max_dpi() if max_dpi_used is None else int(max_dpi_used or 0)
+    if dpi >= 300:
+        return False
+    text_length = len((raw_text or '').strip())
+    garbage = looks_like_garbage_extract(raw_text)
+    if text_length >= MIN_TEXT_CHARS and not garbage:
+        return False
+    return bool(extract_failed or not raw_text or text_length < MIN_TEXT_CHARS or garbage)
 
 
 def _serialize_table_row(cells: list[str]) -> str:
@@ -123,21 +187,84 @@ def normalize_extracted_text(text: str) -> str:
 
 
 _rapidocr_engine: Any = None
+_rapidocr_lock = threading.Lock()
+# Cached probe: (available, engine_name_or_reason)
+_ocr_engine_status: tuple[bool, str] | None = None
 
 
 def _tesseract_available() -> bool:
     return bool(shutil.which('tesseract'))
 
 
+def reset_ocr_engine_status_cache() -> None:
+    """Test helper — clear the OCR availability probe cache."""
+    global _ocr_engine_status
+    _ocr_engine_status = None
+
+
+def get_ocr_engine_status() -> tuple[bool, str]:
+    """
+    Return (available, detail). Probes once per process.
+
+    available=True when RapidOCR import works or system Tesseract + pytesseract exist.
+    """
+    global _ocr_engine_status
+    if _ocr_engine_status is not None:
+        return _ocr_engine_status
+    if not OCR_ENABLED:
+        _ocr_engine_status = (False, 'OCR_ENABLED=false')
+        return _ocr_engine_status
+    try:
+        import rapidocr_onnxruntime  # noqa: F401  # type: ignore
+
+        _ocr_engine_status = (True, 'rapidocr')
+        return _ocr_engine_status
+    except ImportError:
+        pass
+    except Exception as exc:
+        logger.debug('RapidOCR probe failed: %s', exc)
+    if _tesseract_available():
+        try:
+            import pytesseract  # noqa: F401
+
+            _ocr_engine_status = (True, 'tesseract')
+            return _ocr_engine_status
+        except ImportError:
+            _ocr_engine_status = (
+                False,
+                'tesseract binary found but pytesseract is not installed',
+            )
+            return _ocr_engine_status
+    _ocr_engine_status = (
+        False,
+        'RapidOCR not installed and Tesseract unavailable '
+        '(pip install rapidocr-onnxruntime, or install system Tesseract)',
+    )
+    return _ocr_engine_status
+
+
+def ocr_engines_available() -> bool:
+    """True when at least one local OCR engine can run."""
+    ok, _ = get_ocr_engine_status()
+    return ok
+
+
+def ocr_unavailable_reason() -> str:
+    _, detail = get_ocr_engine_status()
+    return detail
+
+
 def _get_rapidocr_engine() -> Any:
-    """Lazy-load RapidOCR (bundled ONNX models via pip)."""
+    """Lazy-load RapidOCR once (shared by extract + layout detections)."""
     global _rapidocr_engine
     if _rapidocr_engine is not None:
         return _rapidocr_engine
-    from rapidocr_onnxruntime import RapidOCR
+    from rapidocr_onnxruntime import RapidOCR  # type: ignore
 
-    _rapidocr_engine = RapidOCR()
-    return _rapidocr_engine
+    with _rapidocr_lock:
+        if _rapidocr_engine is None:
+            _rapidocr_engine = RapidOCR()
+        return _rapidocr_engine
 
 
 def _ocr_with_rapidocr(image_bytes: bytes) -> str:
@@ -236,15 +363,54 @@ def _ocr_image_bytes_plain(image_bytes: bytes, *, lang: str | None = None) -> st
     )
 
 
+def _png_has_ink(image_bytes: bytes) -> bool:
+    """True when a rendered page has enough contrast to be worth OCR.
+
+    Blank / near-white pages still cost 10–15s of RapidOCR today. Detecting
+    them after the cheap render (~100ms) does not skip Extract / Layout stages.
+    """
+    if not image_bytes or len(image_bytes) < 64:
+        return False
+    try:
+        from PIL import Image
+
+        image = Image.open(io.BytesIO(image_bytes))
+        gray = image.convert('L')
+        gray.thumbnail((240, 240))
+        extrema = gray.getextrema()
+        if extrema is None:
+            return False
+        lo, hi = int(extrema[0]), int(extrema[1])
+        if hi - lo < 12:
+            return False
+        hist = gray.histogram()
+        pixels = gray.size[0] * gray.size[1]
+        if pixels <= 0:
+            return False
+        # Ink: darker than light-gray. Blank scans are almost all 240–255.
+        dark = sum(hist[:200])
+        return dark > pixels * 0.002
+    except Exception:
+        return True
+
+
 def _ocr_image_bytes(image_bytes: bytes, *, lang: str | None = None) -> str:
     """
     Run OCR on raw image bytes.
 
     Primary: RapidOCR (+ OpenCV preprocess, optional layout).
     Secondary: system Tesseract if available.
+    Fail-fast when no OCR engine is installed (avoids per-page layout retries).
     """
     if not OCR_ENABLED:
         raise ValueError('OCR is disabled (OCR_ENABLED=false)')
+
+    if not ocr_engines_available():
+        raise ValueError(
+            f'OCR engines unavailable: {ocr_unavailable_reason()}. '
+            'Install RapidOCR with Python 3.10–3.12 '
+            '(pip install rapidocr-onnxruntime), or install system Tesseract.'
+        )
 
     if RESUME_LAYOUT_ENABLED:
         try:
@@ -257,6 +423,15 @@ def _ocr_image_bytes(image_bytes: bytes, *, lang: str | None = None) -> str:
             if text and text.strip():
                 logger.debug('Layout OCR source=%s chars=%s', source, len(text))
                 return text.strip()
+            # Layout already ran RapidOCR. A second plain pass on the same
+            # image is what made blank pages take ~12s each.
+            raise ValueError(
+                'OCR failed (RapidOCR returned empty text). Install RapidOCR with '
+                'Python 3.10–3.12 (pip install rapidocr-onnxruntime), or install '
+                'system Tesseract as a fallback.'
+            )
+        except ValueError:
+            raise
         except Exception as exc:
             logger.warning('Layout OCR failed, falling back to plain OCR: %s', exc)
 
@@ -285,14 +460,17 @@ def _render_page_png(page, dpi: int = OCR_DPI) -> bytes:
     return pix.tobytes('png')
 
 
-def _page_needs_ocr(page, digital_text: str) -> bool:
-    """True when digital text is thin or the page is image-heavy with sparse text."""
-    text_len = len((digital_text or '').strip())
-    image_count = 0
+def _page_image_count(page) -> int:
     try:
-        image_count = len(page.get_images(full=True) or [])
+        return len(page.get_images(full=True) or [])
     except Exception:
-        image_count = 0
+        return 0
+
+
+def _page_needs_ocr(page, digital_text: str) -> bool:
+    """True when digital text is thin, garbage, or the page is image-heavy with sparse text."""
+    text_len = len((digital_text or '').strip())
+    image_count = _page_image_count(page)
 
     if text_len < PAGE_OCR_TEXT_THRESHOLD:
         return True
@@ -300,6 +478,8 @@ def _page_needs_ocr(page, digital_text: str) -> bool:
         return True
     # Large image count with modest text often means scanned page + junk text layer
     if image_count >= 3 and text_len < 400:
+        return True
+    if image_count > 0 and looks_like_garbage_extract(digital_text):
         return True
     return False
 
@@ -315,8 +495,11 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
 
     # Explicit dpi from caller wins; otherwise adaptive fast → full
     forced_dpi = max(72, int(dpi)) if dpi is not None else None
-    fast_dpi = forced_dpi or max(72, min(OCR_DPI_FAST, OCR_DPI))
+    fast_dpi = forced_dpi or max(72, min(_ocr_dpi_fast(), OCR_DPI))
     full_dpi = forced_dpi or OCR_DPI
+
+    global _LAST_EXTRACT_MAX_DPI
+    _LAST_EXTRACT_MAX_DPI = max(int(_LAST_EXTRACT_MAX_DPI or 0), fast_dpi)
 
     doc = fitz.open(stream=file_data, filetype='pdf')
     try:
@@ -327,6 +510,8 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
         text_parts: list[str] = []
         used_ocr = False
         max_dpi_used = fast_dpi
+        ocr_ok = OCR_ENABLED and ocr_engines_available()
+        ocr_skip_logged = False
 
         for page_num in range(page_count):
             page = doc[page_num]
@@ -334,19 +519,85 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
             table_text = _extract_pdf_page_tables(page)
 
             if _page_needs_ocr(page, digital):
-                if OCR_ENABLED:
+                if ocr_ok:
                     try:
                         png = _render_page_png(page, dpi=fast_dpi)
-                        ocr_text = _ocr_image_bytes(png)
-                        # Escalate DPI when fast pass is too thin
+                        image_count = _page_image_count(page)
+                        if not _png_has_ink(png):
+                            # Faint scans can fail the fast-DPI thumb; one full-DPI recheck.
+                            if (
+                                image_count > 0
+                                and len(digital) < PAGE_OCR_TEXT_THRESHOLD
+                                and forced_dpi is None
+                                and full_dpi > fast_dpi
+                            ):
+                                png = _render_page_png(page, dpi=full_dpi)
+                                if _png_has_ink(png):
+                                    max_dpi_used = max(max_dpi_used, full_dpi)
+                                else:
+                                    logger.warning(
+                                        'PDF page %s ink-skip but has %s images (digital=%s)',
+                                        page_num + 1,
+                                        image_count,
+                                        len(digital),
+                                    )
+                                    page_bits = []
+                                    if digital:
+                                        page_bits.append(digital)
+                                    if table_text:
+                                        _dedupe_append(page_bits, table_text)
+                                    if page_bits:
+                                        text_parts.append('\n\n'.join(page_bits))
+                                    continue
+                            else:
+                                if image_count > 0:
+                                    logger.warning(
+                                        'PDF page %s ink-skip but has %s images (digital=%s)',
+                                        page_num + 1,
+                                        image_count,
+                                        len(digital),
+                                    )
+                                else:
+                                    logger.info(
+                                        'PDF page %s has no ink; skipping OCR (digital=%s)',
+                                        page_num + 1,
+                                        len(digital),
+                                    )
+                                page_bits = []
+                                if digital:
+                                    page_bits.append(digital)
+                                if table_text:
+                                    _dedupe_append(page_bits, table_text)
+                                if page_bits:
+                                    text_parts.append('\n\n'.join(page_bits))
+                                continue
+                        ocr_text = ''
+                        try:
+                            ocr_text = _ocr_image_bytes(png)
+                        except ValueError as ocr_err:
+                            logger.warning(
+                                'OCR failed for PDF page %s: %s', page_num + 1, ocr_err
+                            )
+                        ocr_len = len((ocr_text or '').strip())
+                        # Escalate DPI when the fast pass was thin, or empty on a
+                        # page that still has ink (scanned page RapidOCR missed).
                         if (
                             forced_dpi is None
                             and full_dpi > fast_dpi
-                            and len((ocr_text or '').strip()) < PAGE_OCR_TEXT_THRESHOLD
+                            and ocr_len < PAGE_OCR_TEXT_THRESHOLD
                         ):
                             png = _render_page_png(page, dpi=full_dpi)
-                            ocr_text = _ocr_image_bytes(png)
-                            max_dpi_used = max(max_dpi_used, full_dpi)
+                            if _png_has_ink(png):
+                                try:
+                                    ocr_text = _ocr_image_bytes(png)
+                                    max_dpi_used = max(max_dpi_used, full_dpi)
+                                except ValueError as ocr_err:
+                                    logger.warning(
+                                        'OCR failed for PDF page %s at %sdpi: %s',
+                                        page_num + 1,
+                                        full_dpi,
+                                        ocr_err,
+                                    )
                         page_bits: list[str] = []
                         if ocr_text:
                             page_bits.append(ocr_text)
@@ -362,6 +613,9 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
                         logger.warning(
                             'OCR failed for PDF page %s: %s', page_num + 1, ocr_err
                         )
+                        # If engines disappeared mid-run, stop trying OCR on later pages
+                        if not ocr_engines_available():
+                            ocr_ok = False
                         page_bits = []
                         if digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
                             page_bits.append(digital)
@@ -371,8 +625,17 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
                             text_parts.append('\n\n'.join(page_bits))
                         continue
                 else:
+                    if OCR_ENABLED and not ocr_skip_logged:
+                        logger.warning(
+                            'OCR engines unavailable — skipping per-page OCR for this PDF (%s)',
+                            ocr_unavailable_reason(),
+                        )
+                        ocr_skip_logged = True
                     page_bits = []
                     if digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
+                        page_bits.append(digital)
+                    elif digital:
+                        # Keep whatever digital text exists; better than minutes of failed OCR
                         page_bits.append(digital)
                     if table_text:
                         _dedupe_append(page_bits, table_text)
@@ -413,6 +676,7 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
                 page_count,
                 max_dpi_used,
             )
+        _LAST_EXTRACT_MAX_DPI = max(int(_LAST_EXTRACT_MAX_DPI or 0), max_dpi_used)
         return extracted
     finally:
         doc.close()
@@ -451,7 +715,12 @@ def extract_text_from_pdf_via_api(file_data: bytes, filename: str) -> str:
             headers['X-API-Key'] = PARSING_API_KEY
 
         files = {'file': (filename, file_data, 'application/pdf')}
-        response = requests.post(endpoint, files=files, headers=headers, timeout=60)
+        response = requests.post(
+            endpoint,
+            files=files,
+            headers=headers,
+            timeout=(PARSING_API_CONNECT_TIMEOUT, PARSING_API_READ_TIMEOUT),
+        )
 
         if response.status_code == 200:
             data = response.json()
@@ -564,6 +833,10 @@ def extract_text_from_docx(file_data: bytes) -> str:
 
 def _force_pdf_ocr(file_data: bytes, *, dpi: int = 300) -> str:
     """Render every PDF page and OCR — last resort for scanned / empty digital layers."""
+    if not ocr_engines_available():
+        raise ValueError(
+            f'Cannot force PDF OCR: {ocr_unavailable_reason()}'
+        )
     try:
         import fitz
     except ImportError as exc:
@@ -592,16 +865,22 @@ def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> 
     Tries local extraction (with OCR) first, falls back to parsing API for PDFs.
     Optional dpi overrides PDF OCR render resolution (e.g. bulk retry at 300).
     """
+    global _LAST_EXTRACT_MAX_DPI
+    _LAST_EXTRACT_MAX_DPI = max(72, int(dpi)) if dpi is not None else 0
+
     ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
 
     if ext in IMAGE_EXTENSIONS:
         text = extract_text_from_image(file_data, filename)
+        _LAST_EXTRACT_MAX_DPI = max(int(_LAST_EXTRACT_MAX_DPI or 0), OCR_DPI)
     elif ext == 'pdf':
         try:
             text = extract_text_from_pdf(file_data, dpi=dpi)
         except ValueError as e:
             error_msg = str(e)
             if 'Insufficient text' in error_msg or 'Failed to extract' in error_msg or 'OCR' in error_msg:
+                if not PARSING_API_FALLBACK:
+                    raise
                 logger.info('Local PDF extraction failed, trying parsing API fallback...')
                 try:
                     text = extract_text_from_pdf_via_api(file_data, filename)
@@ -612,14 +891,21 @@ def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> 
                     ) from api_error
             else:
                 raise
-        # Empty digital layer / failed OCR → force full-page OCR
+        # Empty digital layer / failed OCR → force full-page OCR (only when engines exist)
         if len((text or '').strip()) < MIN_TEXT_CHARS:
-            try:
-                forced = _force_pdf_ocr(file_data, dpi=max(dpi or 0, 300))
-                if len(forced) >= MIN_TEXT_CHARS:
-                    text = forced
-            except Exception as force_err:
-                logger.warning('Force PDF OCR failed: %s', force_err)
+            if ocr_engines_available():
+                try:
+                    forced = _force_pdf_ocr(file_data, dpi=max(dpi or 0, 300))
+                    _LAST_EXTRACT_MAX_DPI = max(int(_LAST_EXTRACT_MAX_DPI or 0), max(dpi or 0, 300))
+                    if len(forced) >= MIN_TEXT_CHARS:
+                        text = forced
+                except Exception as force_err:
+                    logger.warning('Force PDF OCR failed: %s', force_err)
+            else:
+                logger.warning(
+                    'Skipping force PDF OCR — %s',
+                    ocr_unavailable_reason(),
+                )
     elif ext == 'doc':
         raise ValueError('Legacy .doc format is not supported. Please use DOCX or PDF.')
     elif ext == 'docx':

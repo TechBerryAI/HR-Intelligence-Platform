@@ -27,7 +27,7 @@ for p in (str(BACKEND), str(BACKEND / 'app')):
 
 LAKE = ROOT / 'ai' / 'dataset' / 'lake' / 'benchmark' / 'parsing' / 'v1'
 FIXTURE_RESUMES = ROOT / 'tests' / 'backend' / 'fixtures' / 'resume_gold'
-CAPABILITY_MAX_TOKENS = 8192
+CAPABILITY_MAX_TOKENS = 4096
 
 
 def _norm(s: Any) -> str:
@@ -215,7 +215,7 @@ def main() -> int:
         print(json.dumps(rows, indent=2))
         print(
             'Note: numbers are for THIS machine only. Do not treat them as universal SLAs. '
-            'max_tokens remains 8192 unless output_chars approaches the cap on --with-llm runs. '
+            'max_tokens remains 4096 unless output_chars approaches the cap on --with-llm runs. '
             'cache_status=runtime-reuse is process warmup, not get_cached_parsing_result. '
             'Force a profile with HCIP_HARDWARE_PROFILE=gpu_mid or HCIP_HARDWARE_PROFILE=cpu.'
         )

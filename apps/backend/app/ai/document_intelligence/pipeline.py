@@ -242,12 +242,29 @@ def _emit(
     detail: dict | None = None,
     on_stage: StageCallback | None = None,
 ) -> None:
+    from app.core.request_context import mark_pipeline_stage_start, take_pipeline_stage_elapsed_ms
+
+    status_l = (status or '').lower()
+    elapsed_ms: float | None = None
+    if stage:
+        if status_l == 'started':
+            mark_pipeline_stage_start(stage)
+        elif status_l in ('completed', 'failed', 'skipped'):
+            elapsed_ms = take_pipeline_stage_elapsed_ms(stage)
+            if elapsed_ms is None and status_l in ('skipped', 'failed'):
+                elapsed_ms = 0.0
+
+    det = dict(detail or {})
+    if elapsed_ms is not None:
+        det['duration_ms'] = round(max(0.0, float(elapsed_ms)), 2)
+
     event = StageEvent(
         stage=stage,
         status=status,
         message=message,
-        detail=detail or {},
+        detail=det,
         job_id=job_id,
+        duration_ms=elapsed_ms,
     )
     emit_stage(job_id, event)
     trace_stage(stage, message=f'{status}:{message}')
@@ -260,27 +277,21 @@ def _emit(
     # Developer Mode: record per-stage duration for the Performance Dashboard
     try:
         from app.core.developer_mode import is_developer_mode_enabled
-        from app.core.request_context import mark_pipeline_stage_start, take_pipeline_stage_elapsed_ms
         from app.core.timing_collector import make_timing_event, timing_collector
 
         if not is_developer_mode_enabled() or not stage:
             return
-        status_l = (status or '').lower()
-        if status_l == 'started':
-            mark_pipeline_stage_start(stage)
-            return
         if status_l not in ('completed', 'failed', 'skipped'):
             return
-        elapsed = take_pipeline_stage_elapsed_ms(stage)
-        # Missing start mark → unknown duration. Still record outcome for the checklist;
-        # the UI formats measured 0 / sub-ms as "<1 ms" (never a misleading "0 ms").
-        if elapsed is None:
-            elapsed = 0.0
+        if elapsed_ms is None:
+            # Missing start mark (thread context gap). Do not record 0 ms —
+            # @timing on extract_text / parse_via_runtime still has the real duration.
+            return
         timing_collector.record(
             make_timing_event(
                 function=stage,
                 module='app.ai.document_intelligence.pipeline',
-                duration_ms=max(0.0, float(elapsed)),
+                duration_ms=max(0.0, float(elapsed_ms)),
                 success=status_l != 'failed',
                 exception_name='StageFailed' if status_l == 'failed' else None,
                 depth=2,
@@ -427,6 +438,7 @@ def parse_resume_text_to_canonical(
     *,
     max_workers: int | None = None,
     allow_semantic: bool | None = None,
+    source_filename: str = '',
 ):
     """In-memory resume parse for tests / gold / bulk (no DB).
 
@@ -449,7 +461,9 @@ def parse_resume_text_to_canonical(
     )
 
     t0 = _time.perf_counter()
-    profile = parse_resume_from_sections(sections, text, max_workers=workers)
+    profile = parse_resume_from_sections(
+        sections, text, max_workers=workers, source_filename=source_filename or '',
+    )
     record_pipeline_stage(
         'deterministic',
         'completed',
@@ -673,7 +687,7 @@ def _run_resume(
     raw_file_id = raw_file_record['id']
     _emit(parse_job_id, 'persist_raw', 'completed', on_stage=on_stage)
 
-    from app.ai.parser.text_extraction import extract_text
+    from app.ai.parser.text_extraction import extract_text, should_retry_high_dpi_extract
 
     # Time text and layout separately (layout must not include extract_text wall time)
     _emit(parse_job_id, 'text', 'started', on_stage=on_stage)
@@ -691,29 +705,10 @@ def _run_resume(
 
     text_length = len(raw_text.strip()) if raw_text else 0
     _IMAGE_EXTS = ('pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp')
-
-    def _looks_like_garbage_extract(s: str) -> bool:
-        """Narrow heuristic: enough chars but almost no signal (bad OCR)."""
-        t = (s or '').strip()
-        if len(t) < 30:
-            return True
-        if len(t) > 400:
-            return False
-        alnum = sum(1 for c in t if c.isalnum())
-        ratio = alnum / max(len(t), 1)
-        has_token = bool(
-            re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', t)
-            or re.search(r'\b[6-9]\d{9}\b|\+\d[\d\s\-()]{8,}\d', t)
-            or re.search(r'(?i)\b(?:experience|education|skills|summary)\b', t)
-        )
-        return ratio < 0.35 and not has_token
-
-    # VALIDATION_FIX_ocr_dpi_retry — thin, failed, or garbage extract on scan-friendly formats
-    needs_dpi_retry = filename.lower().rsplit('.', 1)[-1] in _IMAGE_EXTS and (
-        extract_err is not None
-        or not raw_text
-        or text_length < 30
-        or _looks_like_garbage_extract(raw_text)
+    needs_dpi_retry = filename.lower().rsplit('.', 1)[-1] in _IMAGE_EXTS and should_retry_high_dpi_extract(
+        filename,
+        raw_text,
+        extract_failed=extract_err is not None,
     )
     if needs_dpi_retry:
         try:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -64,11 +65,12 @@ def test_infer_resume_fields_from_text_partial():
     text = """
 Jane Doe
 Skills: Python, SQL
-Professional Summary: Experienced engineer.
+Professional Summary: Experienced engineer with strong backend and data skills.
 """
     inferred = infer_resume_fields_from_text(text)
     assert "Python" in inferred["skills"]
     assert inferred["summary"]
+    assert "Experienced engineer" in inferred["summary"]
 
 
 def test_normalize_date_token_formats():
@@ -268,6 +270,46 @@ def test_biodata_lines_are_not_job_titles():
     assert is_plausible_job_title("Software Engineer")
 
 
+def test_name_not_taken_from_education_degree_line():
+    """Education tokens must never become the candidate name."""
+    from app.ai.document_intelligence.parsers.resume import parse_resume_from_sections
+    from app.ai.parser.engine.sections import detect_sections, unresolved_semantic_text
+    from app.ai.parser.enrichment.resume_text_inference import extract_name_from_text
+
+    text = """
+CONTACT
+9699028764
+a@b.com
+EXPERIENCE
+Developer at Co
+EDUCATION
+BTech CS
+SKILLS
+Python, SQL
+"""
+    assert extract_name_from_text(text) != "BTech CS"
+    assert "BTech" not in (extract_name_from_text(text) or "")
+    profile = parse_resume_from_sections(detect_sections(text), text)
+    assert profile.personal.full_name != "BTech CS"
+    # Prefer empty / email-derived over degree pollution
+    assert "Tech" not in (profile.personal.full_name or "")
+    assert "BTech" not in (profile.personal.full_name or "")
+
+    # LLM unresolved payload must not include Contact blocks
+    unresolved = unresolved_semantic_text(detect_sections(text), 'resume')
+    assert '9699028764' not in unresolved or 'EXPERIENCE' in unresolved
+    # Contact section body should be excluded when other sections exist
+    assert not re.search(r'(?im)^CONTACT\b', unresolved)
+
+
+def test_split_list_items_max_len_is_skill_oriented():
+    from app.ai.parser.enrichment.resume_text_inference import split_list_items
+
+    long_item = "A" * 200
+    assert split_list_items(long_item)[0] == "A" * 120
+    assert split_list_items(long_item, max_item_len=50)[0] == "A" * 50
+
+
 def test_city_and_labels_rejected_as_person_names():
     from app.ai.parser.enrichment.resume_text_inference import (
         is_plausible_person_name,
@@ -278,7 +320,33 @@ def test_city_and_labels_rejected_as_person_names():
     assert not is_plausible_person_name("Designation")
     assert not is_plausible_person_name("Certification")
     assert not is_plausible_person_name("Career Objective-")
+    assert not is_plausible_person_name("Lead Generation")
+    assert not is_plausible_person_name("Company")
+    assert not is_plausible_person_name("Social Link")
+    assert not is_plausible_person_name("Profile Summary")
+    assert not is_plausible_person_name("Middleware Admin")
+    assert not is_plausible_person_name("PowerPoint")
+    assert not is_plausible_person_name("Ashutosh Kosta Database Admin")
+    assert not is_plausible_person_name("BTech CS")
+    assert not is_plausible_person_name("B.Tech Computer Science")
+    assert not is_plausible_person_name("Bachelor of Engineering")
+    assert not is_plausible_person_name("MCA")
+    assert not is_plausible_person_name("Computer Science")
+    assert is_plausible_person_name("Ashutosh Kosta")
     assert name_from_resume_filename("ABHISHEK KUMAR.pdf") == "Abhishek Kumar"
+    assert name_from_resume_filename("Naukri_AnushkaGohil4y_0m.pdf") == "Anushka Gohil"
+    assert "Ashish" in name_from_resume_filename("Naukri_AshishAdityaTripathi.pdf")
+    assert name_from_resume_filename("Naukri_AshutoshKosta.pdf") == "Ashutosh Kosta"
+    assert name_from_resume_filename("Naukri_Aparnamishra.pdf") == "Aparna Mishra"
+    assert name_from_resume_filename("Naukri_AshokKumarRM.pdf") == "Ashok Kumar RM"
+
+
+def test_parse_personal_prefers_filename_over_role_label():
+    from app.ai.document_intelligence.parsers.resume import parse_personal
+
+    body = "Lead Generation\nSales professional\nemail@example.com\n"
+    pers = parse_personal(body, "", source_filename="Naukri_AnushkaGohil4y_0m.pdf")
+    assert pers.full_name == "Anushka Gohil"
 
 
 def test_labeled_biodata_name_and_filename_fallback():

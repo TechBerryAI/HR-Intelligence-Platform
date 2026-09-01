@@ -5,6 +5,7 @@ import io
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -457,14 +458,20 @@ def test_ocr_retry_on_extract_err_even_when_text_present():
     def never_garbage(_s):
         return False
 
-    assert _bulk_needs_ocr_retry('pdf', 'plenty of extracted text here ' * 20, 'boom', looks_like_garbage=never_garbage)
-    assert _bulk_needs_ocr_retry('pdf', '', None, looks_like_garbage=never_garbage)
-    assert not _bulk_needs_ocr_retry(
-        'docx', 'plenty of extracted text here ' * 20, 'boom', looks_like_garbage=never_garbage
-    )
-    assert not _bulk_needs_ocr_retry(
-        'pdf', 'plenty of extracted text here ' * 20, None, looks_like_garbage=never_garbage
-    )
+    with patch(
+        'app.ai.parser.text_extraction.ocr_engines_available',
+        return_value=True,
+    ):
+        assert _bulk_needs_ocr_retry(
+            'pdf', 'plenty of extracted text here ' * 20, 'boom', looks_like_garbage=never_garbage
+        )
+        assert _bulk_needs_ocr_retry('pdf', '', None, looks_like_garbage=never_garbage)
+        assert not _bulk_needs_ocr_retry(
+            'docx', 'plenty of extracted text here ' * 20, 'boom', looks_like_garbage=never_garbage
+        )
+        assert not _bulk_needs_ocr_retry(
+            'pdf', 'plenty of extracted text here ' * 20, None, looks_like_garbage=never_garbage
+        )
 
 
 def test_company_emdash_role_dates():

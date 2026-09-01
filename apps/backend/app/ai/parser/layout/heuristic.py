@@ -10,8 +10,19 @@ from app.ai.parser.enrichment.resume_text_inference import SECTION_HEADERS, is_s
 # VALIDATION_FIX_internship_section_aliases
 _EXP_HEADER_PREFIX = re.compile(
     r'(?i)^(internship|internships|internship\s+experience|industrial\s+trainings?|'
-    r'summer\s+internship|trainings?|apprenticeship|internship\s*/\s*training)'
+    r'summer\s+internship|trainings?|apprenticeship|internship\s*/\s*training|'
+    r'career\s+timeline|employment\s+details|employment\s+history|'
+    r'professional\s+history|organisational\s+experience|organizational\s+experience)'
 )
+
+
+def _header_lookup_key(line: str) -> str:
+    """Collapse OCR punctuation so 'Employment / History' still matches aliases."""
+    low = (line or '').lower().replace('&', ' and ')
+    low = re.sub(r'[/|]+', ' ', low)
+    low = re.sub(r'[^a-z0-9]+', ' ', low)
+    return ' '.join(low.split())
+
 
 _HEADER_ALIASES = {
     'work experience': 'Experience',
@@ -19,7 +30,15 @@ _HEADER_ALIASES = {
     'professional experience': 'Experience',
     'professionalexperience': 'Experience',
     'employment': 'Experience',
+    'employment details': 'Experience',
+    'employment history': 'Experience',
     'work history': 'Experience',
+    'work': 'Experience',
+    'career timeline': 'Experience',
+    'career history': 'Experience',
+    'professional history': 'Experience',
+    'organisational experience': 'Experience',
+    'organizational experience': 'Experience',
     'internship': 'Experience',
     'internships': 'Experience',
     'internship experience': 'Experience',
@@ -37,6 +56,7 @@ _HEADER_ALIASES = {
     'skills & abilities': 'Skills',
     'academic background': 'Education',
     'academic details': 'Education',
+    'academic qualifications': 'Education',
     'academics': 'Education',
     'scholastic record': 'Education',
     'scholastic details': 'Education',
@@ -45,12 +65,19 @@ _HEADER_ALIASES = {
     'educational qualifications': 'Education',
     'educational qualification': 'Education',
     'educational background': 'Education',
+    'educational details': 'Education',
     'qualification': 'Education',
     'qualifications': 'Education',
     'certificates': 'Certifications',
     'certifications and licenses': 'Certifications',
     'certifications & licenses': 'Certifications',
     'professional summary': 'Summary',
+    'professional profile': 'Summary',
+    'personal profile': 'Summary',
+    'profile summary': 'Summary',
+    'career objective': 'Summary',
+    'career profile': 'Summary',
+    'career summary': 'Summary',
     'objective': 'Summary',
     'profile': 'Summary',
     'about me': 'Summary',
@@ -77,17 +104,22 @@ def normalize_section_header(line: str) -> str | None:
     if re.fullmatch(r'[\s#*•·●○▪▫►▸‣\-–—\ufffd]+', stripped):
         return None
     low = stripped.lower()
+    key = _header_lookup_key(stripped)
     if low in _HEADER_ALIASES:
         return _HEADER_ALIASES[low]
+    if key in _HEADER_ALIASES:
+        return _HEADER_ALIASES[key]
     # "Internship / Training Programm", "Internship Experience", etc.
     if _EXP_HEADER_PREFIX.match(low) and len(low) <= 80:
+        return 'Experience'
+    if key and _EXP_HEADER_PREFIX.match(key) and len(key) <= 80:
         return 'Experience'
     if low in SECTION_HEADERS:
         return stripped.title() if low not in ('cv', 'resume') else None
     if is_section_header_line(stripped):
-        if _EXP_HEADER_PREFIX.match(low):
+        if _EXP_HEADER_PREFIX.match(low) or (key and _EXP_HEADER_PREFIX.match(key)):
             return 'Experience'
-        return _HEADER_ALIASES.get(low, stripped.title())
+        return _HEADER_ALIASES.get(low) or _HEADER_ALIASES.get(key) or stripped.title()
     return None
 
 

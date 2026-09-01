@@ -16,7 +16,7 @@ export function formatDuration(ms) {
     const rounded = sec >= 10 ? sec.toFixed(1) : sec.toFixed(2)
     return `${rounded} sec`
   }
-  return `${Math.round(n)} ms`
+  if (n < 1) return '<1 ms'
 }
 
 /** Duration chip: green &lt;500ms, yellow 500–2000, red &gt;2000. Shows ms or sec. */

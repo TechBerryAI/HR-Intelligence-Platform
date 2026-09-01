@@ -14,7 +14,8 @@ SKILL_SECTION_STOP = (
     r'experience|work\s+experience|professional\s+experience|employment|work\s+history|'
     r'projects?|certifications?|certificates?|licenses?|credentials?|'
     r'languages?|awards?|interests?|references?|'
-    r'professional\s+summary|summary|objective|profile|about\s+me'
+    r'career\s+objective|professional\s+summary|profile\s+summary|career\s+profile|'
+    r'career\s+summary|summary|objective|profile|about\s+me'
 )
 
 SKILL_SECTION_PATTERN = re.compile(
@@ -26,8 +27,45 @@ SKILL_SECTION_PATTERN = re.compile(
     r')(?:\*\*)?\s*:?\s*([\s\S]*?)(?=\n\s*(?:\*\*)?(?:' + SKILL_SECTION_STOP + r')\b|\Z)',
 )
 
+# Priority order for summary / objective section headings (highest first).
+SUMMARY_HEADING_PRIORITY: tuple[str, ...] = (
+    'career objective',
+    'professional summary',
+    'professional profile',
+    'personal profile',
+    'profile summary',
+    'summary',
+    'objective',
+    'profile',
+    'about me',
+    'career profile',
+    'career summary',
+)
+
+# Known headers that terminate a summary/objective body (line-anchored).
+_SUMMARY_BODY_STOP = (
+    r'education|academic\s+background|academics|academic\s+details|qualifications?|'
+    r'educational\s+(?:qualification|background)s?|'
+    r'course\s*/?\s*degree|college\s*/?\s*university|year\s+of\s+passing|aggregate|'
+    r'professional\s+snapshot|functional\s+skills?|core\s+competenc(?:y|ies)|'
+    r'areas?\s+of\s+expertise|technical\s+proficienc(?:y|ies)|'
+    r'experience|work\s+experience|professional\s+experience|employment|work\s+history|'
+    r'internship|internships|industrial\s+training|summer\s+internship|'
+    r'technical\s+skills?|core\s+skills?|key\s+skills?|skill\s*sets?|skills?|'
+    r'tools?|technologies?|tech\s+stack|competencies?|expertise|'
+    r'operating\s+systems?(?:\s+distros?)?|distros?|'
+    r'projects?|key\s+projects?|certifications?|certificates?|licenses?|'
+    r'languages?|awards?|achievements?|interests?|references?|'
+    r'personal\s+details|personal\s+information|biodata|bio\s+data|'
+    r'contact(?:\s+details)?|declaration|social\s+links?'
+)
+
+# Legacy pattern kept for any external imports; prefer extract_summary_from_text.
 SUMMARY_SECTION_PATTERN = re.compile(
-    r'(?i)(?:\*\*)?(?:professional\s+summary|summary|objective|profile|about\s+me)(?:\*\*)?\s*:?\s*([\s\S]*?)(?=\n\s*(?:\*\*)?[A-Z]|\Z)',
+    r'(?im)^(?:\*\*)?(?:career\s+objective|professional\s+summary|profile\s+summary|'
+    r'career\s+profile|career\s+summary|summary|objective|profile|about\s+me)'
+    r'(?:\*\*)?\s*:?\s*(?:\n+|\s+)([\s\S]*?)'
+    r'(?=^\s*(?:\*\*)?(?:' + _SUMMARY_BODY_STOP + r')(?:\*\*)?\s*:?\s*$|\Z)',
 )
 
 EDUCATION_SECTION_PATTERN = re.compile(
@@ -66,7 +104,61 @@ SECTION_HEADERS = frozenset({
     'personal details', 'personal information', 'biodata', 'bio data', 'contact details',
     'declaration', 'permanent address', 'present address', 'correspondence address',
     'current address', 'residential address',
+    'profile summary', 'professional summary', 'career objective', 'career summary',
+    'professional profile', 'personal profile',
+    'social link', 'social links', 'social media', 'key skills',
 })
+
+# Words that almost never appear in a real person name (role / UI / product).
+_NAME_FORBIDDEN_WORDS = frozenset({
+    'admin', 'administrator', 'engineer', 'developer', 'manager', 'analyst',
+    'consultant', 'generation', 'summary', 'profile', 'objective', 'company',
+    'link', 'links', 'social', 'database', 'middleware', 'powerpoint', 'excel',
+    'oracle', 'mongodb', 'postgresql', 'mysql', 'mssql', 'dba', 'lead',
+    'specialist', 'architect', 'officer', 'executive', 'intern', 'fresher',
+    'resume', 'curriculum', 'vitae', 'skills', 'experience', 'education',
+    'certification', 'certifications', 'designation', 'contact', 'address',
+    'location', 'technologies', 'technology', 'framework', 'frameworks',
+    'marketing', 'sales', 'recruiter', 'hr', 'internship', 'trainee',
+    'associate', 'director', 'founder', 'ceo', 'cto', 'devops', 'webmaster',
+    'wordpress', 'javascript', 'typescript', 'react', 'angular', 'python',
+    'java', 'linux', 'windows', 'android', 'ios',
+    # Degree / academic tokens
+    'btech', 'mtech', 'bsc', 'msc', 'bcom', 'mcom', 'bca', 'mca', 'bba', 'mba',
+    'bachelor', 'master', 'masters', 'doctorate', 'diploma', 'phd', 'honours',
+    'honors', 'science', 'commerce', 'arts', 'engineering', 'technology',
+    'computer', 'information', 'electronics', 'mechanical', 'civil', 'electrical',
+})
+
+# Degree / academic lines wrongly captured as person names ("BTech CS", "B.E. IT").
+_NAME_DEGREE_RE = re.compile(
+    r'(?i)\b(?:'
+    r'(?:bachelor|master|doctor)(?:\'?s)?(?:\s+of)?|'
+    r'diploma|doctorate|phd|ph\.?\s*d|'
+    r'b\.?\s*tech|m\.?\s*tech|btech|mtech|'
+    r'b\.?\s*e\.?(?![a-z])|m\.?\s*e\.?(?![a-z])|'
+    r'b\.?\s*sc|m\.?\s*sc|bsc|msc|'
+    r'b\.?\s*com|m\.?\s*com|bcom|mcom|'
+    r'b\.?\s*a\.?(?![a-z])|m\.?\s*a\.?(?![a-z])|'
+    r'b\.?\s*s\.?(?![a-z])|m\.?\s*s\.?(?![a-z])|'
+    r'mba|mca|bca|bba|ll\.?\s*b|ll\.?\s*m|'
+    r'hsc|ssc|cbse|icse|puc|'
+    r'(?:10|12)(?:th)?\s*(?:std|standard|grade)?'
+    r')\b'
+)
+_NAME_ACADEMIC_FIELD_RE = re.compile(
+    r'(?i)^(?:'
+    r'cs|it|ise|ece|eee|cse|mech|civil|comp(?:uter)?(?:\s+science)?|'
+    r'information\s+technology|electronics|mechanical|electrical|'
+    r'computer\s+science(?:\s+and\s+engineering)?'
+    r')$'
+)
+# Stop name search once body sections begin (avoid Education/Experience bleed).
+_NAME_SECTION_STOP_RE = re.compile(
+    r'(?i)^(education|experience|work\s+experience|professional\s+experience|'
+    r'employment|skills|technical\s+skills|projects?|certifications?|'
+    r'internship|internships|qualifications?|academic)\b'
+)
 
 # Career-objective / summary prose wrongly assigned as job titles by LLMs or line scrapers.
 _OBJECTIVE_LIKE_TITLE = re.compile(
@@ -135,6 +227,7 @@ _TECH_SINGLE_TOKEN = frozenset({
     'html', 'css', 'sql', 'java', 'python', 'javascript', 'typescript', 'react',
     'angular', 'nodejs', 'docker', 'kubernetes', 'aws', 'azure', 'linux', 'git',
     'c++', 'c#', '.net', 'mongodb', 'mysql', 'oracle', 'redis', 'kafka',
+    'powerpoint', 'excel', 'outlook', 'word', 'sharepoint', 'tableau', 'powerbi',
 })
 _SKILL_CRUMB_TOKENS = frozenset({
     'set', 'tools', 'technologies', 'technology', 'skills', 'skill', 'expertise',
@@ -221,10 +314,12 @@ _JOB_TITLE_NAME_BLOCKLIST = frozenset({
     'project manager', 'delivery manager', 'database administrator',
     'linux administrator', 'network engineer', 'devops engineer',
     'career objective', 'professional summary', 'professional', 'summary',
-    'middleware administrator', 'oracle dba', 'sql dba', 'mssql dba',
+    'middleware administrator', 'middleware admin', 'oracle dba', 'sql dba', 'mssql dba',
     'fresher', 'experienced', 'immediate joining',
     'designation', 'certification', 'certifications', 'skills',
     'it team lead', 'assistant professor', 'curriculum vitae',
+    'lead generation', 'social link', 'social links', 'profile summary',
+    'company', 'powerpoint', 'video editor', 'marketing lead', 'ai engineer',
 })
 
 # Cities / regions often appear alone on early resume lines and get mistaken for names.
@@ -256,12 +351,19 @@ def is_plausible_person_name(name: str | None) -> bool:
         'name', 'full name', 'your name', 'candidate name', 'student', 'resume',
         'curriculum vitae', 'cv', 'objective', 'career objective', 'profile',
         'address', 'contact', 'email', 'phone', 'mobile', 'unknown',
-        'designation', 'certification', 'skills', 'summary',
+        'designation', 'certification', 'skills', 'summary', 'company',
+        'powerpoint', 'profile summary', 'social link', 'social links',
+        'lead generation', 'middleware admin',
     }:
         return False
     if t.lower() in _JOB_TITLE_NAME_BLOCKLIST:
         return False
     if t.lower() in _PLACE_NAME_BLOCKLIST:
+        return False
+    # Degrees / academic programs are not person names
+    if _NAME_DEGREE_RE.search(t):
+        return False
+    if _NAME_ACADEMIC_FIELD_RE.match(t):
         return False
     # Reject sentence / duty fragments
     if t.endswith('.'):
@@ -285,10 +387,10 @@ def is_plausible_person_name(name: str | None) -> bool:
     words = t.split()
     if not (1 <= len(words) <= 5):
         return False
-    # Skill lists / tech stacks are not names
+    # Role / product / UI / tech tokens are not person-name tokens
     for w in words:
         cleaned = w.strip(".,'").lower()
-        if cleaned in _TECH_SINGLE_TOKEN:
+        if cleaned in _NAME_FORBIDDEN_WORDS or cleaned in _TECH_SINGLE_TOKEN:
             return False
     if len(words) == 1:
         token = words[0].strip('.,')
@@ -426,29 +528,97 @@ def name_from_email_local_part(email: str | None) -> str:
     return candidate if is_plausible_person_name(candidate) else ''
 
 
+# Common Indian surnames used to unglue all-lowercase portal filenames (Aparnamishra).
+_COMMON_SURNAME_SUFFIXES = tuple(sorted(
+    (
+        'choudhary', 'choudhury', 'agarwal', 'agrawal', 'mukherjee', 'banerjee',
+        'chatterjee', 'srivastava', 'tripathi', 'trivedi', 'sharma', 'shukla',
+        'mishra', 'misra', 'kumar', 'reddy', 'patel', 'singh', 'gupta', 'joshi',
+        'mehta', 'nair', 'iyer', 'iyengar', 'rao', 'das', 'ghosh', 'bose',
+        'verma', 'varma', 'yadav', 'pandey', 'tiwari', 'dubey', 'saxena',
+        'malhotra', 'kapoor', 'khanna', 'chopra', 'bhatia', 'arora', 'gohil',
+        'kosta', 'desai', 'shetty', 'pillai', 'menon', 'krishnan', 'ramanan',
+    ),
+    key=len,
+    reverse=True,
+))
+
+
+def _unglue_common_surname(token: str) -> str:
+    """Split Aparnamishra → Aparna Mishra when a known surname suffix matches."""
+    t = (token or '').strip()
+    if not t or ' ' in t or len(t) < 8:
+        return t
+    low = t.lower()
+    for suf in _COMMON_SURNAME_SUFFIXES:
+        if len(low) <= len(suf) + 2:
+            continue
+        if low.endswith(suf):
+            given = t[: len(t) - len(suf)]
+            if len(given) >= 3 and given.isalpha() and suf.isalpha():
+                return f'{given} {suf}'
+    return t
+
+
+def _title_case_name_tokens(base: str) -> str:
+    parts: list[str] = []
+    for w in base.split():
+        if not w.isalpha():
+            parts.append(w)
+            continue
+        # Keep 1–2 letter tokens as initials (RM, S)
+        if len(w) <= 2:
+            parts.append(w.upper())
+        else:
+            parts.append(w[:1].upper() + w[1:].lower())
+    return ' '.join(parts)
+
+
 def name_from_resume_filename(filename: str | None) -> str:
     """Derive a person name from resume filename when body has no header name.
 
-    Examples: 'ABHISHEK KUMAR.pdf', '01_Furqan_Khan_-_HR.pdf' → plausible names only.
+    Examples:
+      'ABHISHEK KUMAR.pdf' → Abhishek Kumar
+      'Naukri_AnushkaGohil4y_0m.pdf' → Anushka Gohil
+      '01_Furqan_Khan_-_HR.pdf' → Furqan Khan
     """
     if not filename:
         return ''
-    base = re.sub(r'\.[A-Za-z0-9]{1,5}$', '', str(filename)).strip()
+    base = str(filename).replace('\\', '/').split('/')[-1].strip()
+    base = re.sub(r'\.[A-Za-z0-9]{1,5}$', '', base).strip()
+    # Job-board / portal prefixes
+    base = re.sub(
+        r'(?i)^(?:naukri|indeed|linkedin|monster|foundit|shine|timesjobs)[_\-\s]*',
+        '',
+        base,
+    )
     # Drop leading indexes / hashes
     base = re.sub(r'^(?:#?\d+[_\-\s]+)+', '', base)
+    # Experience markers: 4y_0m, 4yrs, 2y3m
+    base = re.sub(r'(?i)\d+\s*y(?:ea)?r?s?\s*[_\-]?\s*\d*\s*m(?:onths?)?', ' ', base)
+    base = re.sub(r'(?i)[_\-]?\d+y\d*m?', ' ', base)
     base = re.sub(r'[_\-]+', ' ', base)
+    # CamelCase → words (AnushkaGohil, AshishAdityaTripathi)
+    base = re.sub(r'([a-z])([A-Z])', r'\1 \2', base)
+    base = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1 \2', base)
     base = re.sub(r'\s+', ' ', base).strip()
     # Cut at role/keyword separators
     base = re.split(
-        r'(?i)\s+(?:-|–|—)\s+|\s+(?:resume|cv|updated|dba|hr|network|fresher)\b',
+        r'(?i)\s+(?:-|–|—)\s+|\s+(?:resume|cv|updated|dba|hr|network|fresher|'
+        r'admin|administrator|engineer|developer|database|middleware)\b',
         base,
         maxsplit=1,
     )[0].strip()
     base = re.sub(r'\(\d+\)$', '', base).strip()
     if not base:
         return ''
-    # Title-case ALL CAPS tokens for plausibility
-    cand = base.title() if base.isupper() else base
+    # Single glued lowercase token: try common surname split
+    if ' ' not in base and base.isalpha():
+        base = _unglue_common_surname(base)
+    if base.isupper() or base.islower():
+        cand = _title_case_name_tokens(base)
+    else:
+        cand = _title_case_name_tokens(base)
     return cand[:80] if is_plausible_person_name(cand) else ''
 
 
@@ -479,8 +649,12 @@ MONTH_MAP = {
 }
 
 
-def split_list_items(text: str) -> list[str]:
-    """Split comma, pipe (ASCII/Unicode), or newline-separated prose into items."""
+def split_list_items(text: str, *, max_item_len: int = 120) -> list[str]:
+    """Split comma, pipe (ASCII/Unicode), or newline-separated prose into items.
+
+    ``max_item_len`` defaults to 120 for skill/token lists. Do not use this helper
+    for long-form summary/objective prose — use whitespace normalization instead.
+    """
     if not text or not str(text).strip():
         return []
     raw = str(text).strip()
@@ -517,13 +691,14 @@ def split_list_items(text: str) -> list[str]:
                 expanded.append(p)
         parts = expanded
     result: list[str] = []
+    limit = max(8, int(max_item_len or 120))
     for part in parts:
         cleaned = re.sub(r'^[\s•·\-\*]+', '', part).strip()
         cleaned = re.sub(r'^\d+[\.\)]\s*', '', cleaned).strip()
         if re.fullmatch(r'(?i)(?:and\s+)?abilities?', cleaned):
             continue
         if cleaned and len(cleaned) > 1:
-            result.append(cleaned[:120])
+            result.append(cleaned[:limit])
     return result
 
 
@@ -714,6 +889,14 @@ def heal_location_candidate(value: str) -> str:
         return ''
     if '\n' in s or '\r' in s:
         s = s.splitlines()[0].strip()
+    low = s.lower().strip('.,;:| ')
+    if low in _LOCATION_SECTION_NOISE or low in SECTION_HEADERS:
+        return ''
+    if re.search(
+        r'(?i)^(?:professional\s+profile|personal\s+profile|certificate|certifications?)\b',
+        s,
+    ):
+        return ''
     # phone ⋄ City / +91…·City
     s = re.sub(r'(?i)^\+?\d[\d\s\-().]{6,}\s*[⋄·•|]*\s*', '', s).strip()
     s = re.sub(r'(?i)[⋄·•]\s*', ' ', s).strip()
@@ -776,8 +959,19 @@ def extract_name_from_text(text: str) -> str:
     early_lines: list[str] = []
     for line in text.split('\n')[:25]:
         stripped = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff\u00ad]', '', line).replace('\xa0', ' ').strip()
-        if stripped:
-            early_lines.append(stripped)
+        if not stripped:
+            continue
+        # Do not scan Education / Experience / Skills bodies for names
+        if _NAME_SECTION_STOP_RE.match(stripped) or (
+            is_section_header_line(stripped)
+            and stripped.lower()
+            not in {
+                'summary', 'objective', 'profile', 'about me', 'career objective',
+                'professional summary', 'profile summary', 'contact', 'contact details',
+            }
+        ):
+            break
+        early_lines.append(stripped)
 
     # Collapse runs of single ALL-CAPS alpha tokens at the top into one name candidate
     caps_run: list[str] = []
@@ -802,6 +996,8 @@ def extract_name_from_text(text: str) -> str:
             continue
         if is_section_header_line(stripped):
             continue
+        if _NAME_DEGREE_RE.search(stripped):
+            continue
         # PDF spaced letters: "R O S H A N  P A N I C K E R" → "Roshan Panicker"
         if re.fullmatch(r'(?:[A-Za-z]\s+){2,}[A-Za-z](?:\s{2,}(?:[A-Za-z]\s+)*[A-Za-z])?', stripped):
             parts = re.split(r'\s{2,}', stripped)
@@ -810,7 +1006,7 @@ def extract_name_from_text(text: str) -> str:
                 chars = [c for c in part.split() if len(c) == 1 and c.isalpha()]
                 if chars and len(chars) == len(part.split()):
                     words.append(''.join(chars).title())
-            if 2 <= len(words) <= 5:
+            if 2 <= len(words) <= 5 and is_plausible_person_name(' '.join(words)):
                 return ' '.join(words)[:80]
         if re.search(r'\d', stripped):
             continue
@@ -905,15 +1101,775 @@ def extract_phone_from_text(text: str) -> str:
     return ''
 
 
-def extract_summary_from_text(text: str, max_len: int = 2000) -> str:
-    if not text:
+_SUMMARY_PHONE_RE = re.compile(
+    r'(?:\+?\d[\d\s\-().]{7,}\d)|\b\d{10}\b'
+)
+_SUMMARY_EMAIL_RE = re.compile(
+    r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}'
+)
+_SUMMARY_URL_RE = re.compile(
+    r'(?i)\b(?:https?://|www\.)\S+'
+    r'|(?:linkedin|github|gitlab|bitbucket|facebook|twitter|instagram|behance)\.com/\S*'
+)
+_SUMMARY_CONTACT_LABEL_RE = re.compile(
+    r'(?i)\b(?:contact|phone|mobile|e[\-\s]?mail|address|linkedin|github)\b'
+)
+_SUMMARY_ADDRESS_ONLY_RE = re.compile(
+    r'(?i)^(?:[\w.\-]+\s*){0,4}'
+    r'(?:road|rd\.?|street|st\.|nagar|colony|apartment|flat|floor|pin|pincode|'
+    r'district|state|india|mumbai|delhi|bangalore|bengaluru|pune|hyderabad)\b'
+    r'[\w\s,.\-/]*$'
+)
+# Inline bleed cutters inside a joined summary body (education tables, skills blocks).
+# Do NOT match mid-sentence "software" / "diploma in …" capability bullets.
+_SUMMARY_INLINE_BLEED_RE = re.compile(
+    r'(?i)\s+(?:'
+    r'course\s*/?\s*degree|college\s*/?\s*university|year\s+of\s+passing|aggregate|'
+    r'professional\s+snapshot|functional\s+skills?|core\s+competenc(?:y|ies)|'
+    r'areas?\s+of\s+expertise|technical\s+skills?|key\s+skills?|skill\s*sets?|'
+    r'work\s+experience|professional\s+experience|employment\s+history|'
+    r'operating\s+systems?(?:\s+distros?)?|distros?|'
+    r'certifications?|educational\s+qualifications?|'
+    r'softwares?\s*:|'
+    r'(?:bachelor\'?s?|master\'?s?)\s+of\s+(?:engineering|technology|science|arts|commerce)\b|'
+    r'diploma\s+in\s+(?:engineering|technology|computer)\b'
+    r')'
+)
+_SUMMARY_SOFT_STOP_LINE_RE = re.compile(
+    r'(?i)^(?:'
+    r'course\s*/?\s*degree|college\s*/?\s*university|year\s+of\s+passing|aggregate|'
+    r'professional\s+snapshot|functional\s+skills?|core\s+competenc(?:y|ies)|'
+    r'areas?\s+of\s+expertise|it\s+engineer|software\s+engineer|'
+    r'work\s+experience|professional\s+experience|'
+    r'operating\s+systems?(?:\s+distros?)?|distros?|'
+    r'erp\s+platforms?|tools\s*:|modules\s*:|'
+    r'date\s+of\s+birth|nationality|gender'
+    r')\b|^softwares?\s*:?\s*$'
+)
+_SUMMARY_SKILL_LIST_RE = re.compile(
+    r'(?i)^(?:expertise|technical\s+skills?|key\s+skills?|skills?\s*:|'
+    r'core\s+competenc(?:y|ies)|tools?\s*(?:known|used)?\s*:)'
+)
+_SUMMARY_EXPERIENCE_CRUMB_RE = re.compile(
+    r'(?i)^(?:work\s+experience|professional\s+experience|employment|experience)\b'
+    r'.{0,40}\b(?:years?|yrs?|months?)\b'
+)
+_SUMMARY_SPACED_HEADING_RE = re.compile(
+    r'(?i)^(?:(?:[A-Za-z]\s+){4,}[A-Za-z])(?:\s*[_\W]*)+'
+)
+_SUMMARY_PROSE_CUE_RE = re.compile(
+    r'(?i)\b(?:engineer|developer|architect|seeking|willing|motivated|experienced|'
+    r'professional|years?|aspiring|dedicated|passionate|results|objective|summary|'
+    r'specialist|analyst|manager|consultant|support|software|backend|frontend|'
+    r'full[\s\-]?stack|graduate|internship|career|proven|track\s+record|'
+    r'specializing|expertise\s+in|looking\s+(?:out\s+)?for|opportunity|'
+    r'proficient|successfully|contributed|leverage|implementing|designing|'
+    r'obtain\s+a\s+position|to\s+leverage|working\s+as|administrator|'
+    r'production\s+environment|database)\b'
+)
+
+
+def _is_real_phone_fragment(frag: str) -> bool:
+    """True for phone-like digit runs; false for dates / year+marks (2019 60.81, 15-04-2021)."""
+    raw = (frag or '').strip()
+    if not raw:
+        return False
+    # Explicit calendar dates
+    if re.fullmatch(
+        r'(?:0?[1-9]|[12]\d|3[01])[-/.](?:0?[1-9]|1[0-2])[-/.](?:19|20)\d{2}',
+        raw,
+    ):
+        return False
+    if re.fullmatch(
+        r'(?:0?[1-9]|1[0-2])[-/.](?:0?[1-9]|[12]\d|3[01])[-/.](?:19|20)\d{2}',
+        raw,
+    ):
+        return False
+    # Graduation year + percentage / marks
+    if re.fullmatch(r'(?:19|20)\d{2}\s+\d{1,3}(?:\.\d+)?%?', raw):
+        return False
+    digits = re.sub(r'\D', '', raw)
+    # Real phones are typically 10+ digits; dd-mm-yyyy is 8
+    return len(digits) >= 10
+
+
+def _summary_has_phone(text: str) -> bool:
+    for match in _SUMMARY_PHONE_RE.finditer(text or ''):
+        if _is_real_phone_fragment(match.group(0)):
+            return True
+    return False
+
+
+def _strip_contact_tokens(text: str) -> str:
+    """Remove email / URL / phone tokens from prose while keeping surrounding sentences."""
+    s = text or ''
+    s = _SUMMARY_EMAIL_RE.sub(' ', s)
+    s = _SUMMARY_URL_RE.sub(' ', s)
+    parts: list[str] = []
+    last = 0
+    for match in _SUMMARY_PHONE_RE.finditer(s):
+        if _is_real_phone_fragment(match.group(0)):
+            parts.append(s[last:match.start()])
+            last = match.end()
+    parts.append(s[last:])
+    s = ' '.join(''.join(parts).split())
+    return s.strip()
+
+
+def _is_contactish_summary_line(line: str) -> bool:
+    s = (line or '').strip()
+    if not s:
+        return True
+    # Never drop clear professional prose as "contact"
+    if _SUMMARY_PROSE_CUE_RE.search(s) and len(s) >= 28:
+        return False
+    if _SUMMARY_EMAIL_RE.search(s) or _SUMMARY_URL_RE.search(s):
+        return True
+    # Split LinkedIn / share URLs across lines (utm_ / linkedin.com fragments)
+    if re.search(r'(?i)(?:utm_source|utm_campaign|utm_medium|utm_content|linkedin\.com)', s):
+        return True
+    if _summary_has_phone(s):
+        return True
+    if re.match(r'(?i)^(?:contact|phone|mobile|e[\-\s]?mail|address|linkedin|github)\b', s):
+        return True
+    alpha_words = re.findall(r"[A-Za-z][A-Za-z\-']{1,}", s)
+    if _SUMMARY_CONTACT_LABEL_RE.search(s) and len(alpha_words) < 8:
+        return True
+    if _SUMMARY_ADDRESS_ONLY_RE.match(s) and len(alpha_words) < 12:
+        return True
+    return False
+
+
+def summary_rejection_reason(summary: str | None) -> str | None:
+    """Return a machine-readable reason if summary must be rejected, else None."""
+    s = ' '.join((summary or '').split()).strip()
+    if not s:
+        return 'empty'
+    low = s.lower().rstrip(':').strip()
+    if low in SUMMARY_HEADING_PRIORITY or is_section_header_line(s):
+        return 'section_heading_only'
+    if _SUMMARY_EXPERIENCE_CRUMB_RE.match(s):
+        return 'experience_header'
+    # Skill-section headings / dumps must never become the Summary cell
+    if _SUMMARY_SKILL_LIST_RE.match(s):
+        return 'skills_list'
+    # Skill / tool dumps: many commas or pipes, almost no verbs/prose cues.
+    # Real summaries often list a few tech tokens (C#, ASP.NET) — keep those.
+    comma_like = s.count(',') + s.count('|') + s.count(';')
+    has_sentence = bool(re.search(r'[.!?]\s+\S', s)) or len(s) >= 100
+    if (
+        comma_like >= 4
+        and not _SUMMARY_PROSE_CUE_RE.search(s)
+        and not has_sentence
+    ):
+        return 'skills_list'
+    # Event / schedule tables wrongly labeled as summary
+    if re.search(r'(?i)\bevents?\s*done\b|\bday\s+event\s+company\b', s):
+        return 'non_summary_content'
+    if _SUMMARY_EMAIL_RE.search(s):
+        return 'contains_email'
+    if _summary_has_phone(s):
+        return 'contains_phone_number'
+    if _SUMMARY_URL_RE.search(s):
+        return 'contains_social_or_url'
+    # Contact / phone / email labels as the dominant signal (not prose mentioning "contact")
+    if re.match(r'(?i)^(?:contact|phone|mobile|e[\-\s]?mail|address)\b', s):
+        return 'contact_information'
+    alpha_words = re.findall(r"[A-Za-z][A-Za-z\-']{1,}", s)
+    if _SUMMARY_CONTACT_LABEL_RE.search(s) and len(alpha_words) < 8:
+        return 'contact_information'
+    # Allow short professional blurbs; reject tiny crumbs / labels / bare names
+    if len(s) < 12 or len(alpha_words) < 2:
+        return 'too_short'
+    has_prose_cue = bool(_SUMMARY_PROSE_CUE_RE.search(s))
+    if len(alpha_words) < 4 and len(s) < 40 and not has_prose_cue:
+        return 'too_short'
+    if _SUMMARY_ADDRESS_ONLY_RE.match(s) and len(alpha_words) < 12:
+        return 'address_only'
+    digit_ratio = sum(ch.isdigit() for ch in s) / max(len(s), 1)
+    if digit_ratio > 0.25 and len(alpha_words) < 10:
+        return 'contact_information'
+    return None
+
+
+def is_valid_summary(summary: str | None) -> bool:
+    """True when summary is meaningful prose and not contact / heading noise."""
+    return summary_rejection_reason(summary) is None
+
+
+def _normalize_summary_body(body: str, max_len: int = 2000) -> str:
+    """Collapse whitespace for summary prose; scrub contact bleed and section tails."""
+    if not body:
         return ''
-    match = SUMMARY_SECTION_PATTERN.search(text)
-    if match and match.group(1):
-        summary = ' '.join(split_list_items(match.group(1)))
-        if summary:
-            return summary[:max_len]
+    lines: list[str] = []
+    for line in (body or '').splitlines():
+        cleaned = re.sub(r'^[\s•·\-\*]+', '', line.strip())
+        if not cleaned:
+            continue
+        # Drop OCR-spaced heading prefixes glued onto the first content line
+        cleaned = _SUMMARY_SPACED_HEADING_RE.sub('', cleaned).strip(' _-\t')
+        if not cleaned:
+            continue
+        if is_section_header_line(cleaned) or _SUMMARY_SOFT_STOP_LINE_RE.match(cleaned):
+            if lines:
+                break
+            continue
+        if _is_contactish_summary_line(cleaned):
+            # Contact block after prose → stop; contact-only lines before prose → skip
+            if lines:
+                break
+            continue
+        lines.append(cleaned)
+        # Once we have a solid sentence, stop at the next soft section cue
+        joined_so_far = ' '.join(lines)
+        if len(joined_so_far) >= 40 and _SUMMARY_INLINE_BLEED_RE.search(' ' + cleaned):
+            # Current line itself is a bleed header — drop it and stop
+            lines.pop()
+            break
+    text = ' '.join(lines) if lines else ''
+    if not text:
+        text = ' '.join((body or '').split())
+    text = _strip_contact_tokens(text)
+    # Drop leading icon / bullet glyphs only — keep digits ("3.6 Yrs of experience…")
+    text = re.sub(r'^[\u0080-\uFFFF•·▪▫►▸‣\*\#\|\-–—_]+', '', text).strip()
+    text = text.replace('**', '')
+    # Hard cut if education / skills headers still appear mid-string
+    bleed = _SUMMARY_INLINE_BLEED_RE.search(text)
+    if bleed and bleed.start() >= 40:
+        text = text[: bleed.start()].strip()
+    text = ' '.join(text.split()).strip()
+    return text[:max_len]
+
+
+def _heading_to_regex(heading: str) -> str:
+    return r'\s+'.join(re.escape(p) for p in heading.split())
+
+
+def _extract_body_for_summary_heading(text: str, heading: str) -> str:
+    """Extract body text for a whole-line (or Heading: body) summary heading."""
+    if not text or not heading:
+        return ''
+    h = _heading_to_regex(heading)
+    stop = _SUMMARY_BODY_STOP
+    other_headings = '|'.join(
+        _heading_to_regex(x) for x in SUMMARY_HEADING_PRIORITY if x != heading
+    )
+    # Multiline: heading on its own line, body until next known section header
+    block = re.search(
+        rf'(?im)^(?:\*\*)?{h}(?:\*\*)?\s*:?\s*$\n+'
+        rf'([\s\S]*?)'
+        rf'(?=^\s*(?:\*\*)?(?:{stop}|{other_headings})(?:\*\*)?\s*:?\s*$|\Z)',
+        text,
+    )
+    if block and block.group(1):
+        return _continue_past_false_section_stops(text, block.group(1).strip())
+    # Same-line: "Professional Summary: Experienced engineer..."
+    inline = re.search(
+        rf'(?im)^(?:\*\*)?{h}(?:\*\*)?\s*:\s+(.+?)\s*$',
+        text,
+    )
+    if inline and inline.group(1):
+        return inline.group(1).strip()
     return ''
+
+
+_INCOMPLETE_SUMMARY_TAIL_RE = re.compile(
+    r'(?i)\b(?:with|of|in|and|the|for|to|a|an|as|by)\s*$'
+)
+_FALSE_MID_SUMMARY_STOP_RE = re.compile(
+    r'(?i)^(?:experience|skills?|profile|summary|objective)\s*:?\s*$'
+)
+
+
+def _continue_past_false_section_stops(text: str, body: str) -> str:
+    """
+    Resume bodies sometimes put 'Experience' / 'Skills' mid-sentence (word-per-line PDFs).
+
+    If the captured body ends on an incomplete phrase, keep reading past those false stops.
+    """
+    if not body or not text:
+        return body
+    compact = ' '.join(body.split())
+    if not _INCOMPLETE_SUMMARY_TAIL_RE.search(compact):
+        return body
+    # Anchor at the body's own location (avoid matching short words like "of" earlier in the file)
+    anchor = body.strip()
+    idx = text.find(anchor)
+    if idx < 0:
+        # Fall back to last non-trivial line (>= 3 chars)
+        last_line = next(
+            (
+                ln.strip()
+                for ln in reversed(body.splitlines())
+                if len(ln.strip()) >= 3
+            ),
+            '',
+        )
+        if not last_line:
+            return body
+        idx = text.find(last_line)
+        if idx < 0:
+            return body
+        start_from = idx + len(last_line)
+    else:
+        start_from = idx + len(anchor)
+    extra: list[str] = []
+    for line in text[start_from:].splitlines():
+        cleaned = re.sub(r'^[\s•·\-\*]+', '', line.strip())
+        if not cleaned:
+            continue
+        if _FALSE_MID_SUMMARY_STOP_RE.match(cleaned):
+            continue
+        if _is_contactish_summary_line(cleaned):
+            break
+        if _SUMMARY_SOFT_STOP_LINE_RE.match(cleaned):
+            break
+        if is_section_header_line(cleaned) and not _FALSE_MID_SUMMARY_STOP_RE.match(cleaned):
+            if re.match(
+                r'(?i)^(?:education|certifications?|contact|projects?|languages?)\b',
+                cleaned,
+            ):
+                break
+            if extra and len(' '.join(extra)) > 40:
+                break
+            continue
+        extra.append(cleaned)
+        joined = compact + ' ' + ' '.join(extra)
+        if len(joined) >= 2000:
+            break
+        if len(joined) >= 100 and re.search(r'[.!?]\s*$', cleaned):
+            break
+        if len(joined) >= 220:
+            break
+    if not extra:
+        return body
+    return body + '\n' + '\n'.join(extra)
+
+
+def extract_summary_details(text: str, max_len: int = 2000) -> dict[str, str]:
+    """
+    Section-aware summary extraction with validation provenance.
+
+    Returns keys: value, source_section, raw_value, validation, reason, fallback_section.
+    """
+    empty = {
+        'value': '',
+        'source_section': '',
+        'raw_value': '',
+        'validation': 'failed',
+        'reason': 'empty',
+        'fallback_section': '',
+    }
+    if not (text or '').strip():
+        return empty
+
+    first_rejected: dict[str, str] | None = None
+    for heading in SUMMARY_HEADING_PRIORITY:
+        raw = _extract_body_for_summary_heading(text, heading)
+        if not raw.strip():
+            continue
+        normalized = _normalize_summary_body(raw, max_len=max_len)
+        reason = summary_rejection_reason(normalized)
+        if reason is None:
+            # Thin one-liner from a bullet list — prefer richer Experience lead-in if present
+            if len(normalized) < 80:
+                exp_lead = _extract_experience_lead_prose(text, max_len=max_len)
+                if exp_lead and len(exp_lead) >= max(len(normalized) + 40, 80):
+                    return {
+                        'value': exp_lead,
+                        'source_section': 'EXPERIENCE_LEAD',
+                        'raw_value': exp_lead,
+                        'validation': 'passed',
+                        'reason': f'thin_{heading.upper()};upgrade_EXPERIENCE_LEAD',
+                        'fallback_section': heading.upper(),
+                    }
+            details = {
+                'value': normalized,
+                'source_section': heading.upper(),
+                'raw_value': normalized,
+                'validation': 'passed',
+                'reason': 'ok',
+                'fallback_section': '',
+            }
+            if first_rejected is not None:
+                details['fallback_section'] = heading.upper()
+                details['reason'] = (
+                    f"rejected_{first_rejected['reason']};"
+                    f"fallback_{heading.upper()}"
+                )
+                # Preserve rejected candidate for debugging consumers
+                details['raw_value'] = normalized
+            return details
+        if first_rejected is None:
+            first_rejected = {
+                'value': '',
+                'source_section': heading.upper(),
+                'raw_value': normalized or raw[:max_len],
+                'validation': 'failed',
+                'reason': reason,
+                'fallback_section': '',
+            }
+
+    # Experience-section lead-in (prose parked under Experience before first job).
+    exp_lead = _extract_experience_lead_prose(text, max_len=max_len)
+    if exp_lead:
+        details = {
+            'value': exp_lead,
+            'source_section': 'EXPERIENCE_LEAD',
+            'raw_value': exp_lead,
+            'validation': 'passed',
+            'reason': 'ok',
+            'fallback_section': 'EXPERIENCE_LEAD',
+        }
+        if first_rejected is not None:
+            details['reason'] = (
+                f"rejected_{first_rejected['reason']};fallback_EXPERIENCE_LEAD"
+            )
+        return details
+
+    # Unlabeled intro paragraph (common when "Summary" heading is empty / split).
+    intro = _extract_unlabeled_intro_summary(text, max_len=max_len)
+    if intro:
+        details = {
+            'value': intro,
+            'source_section': 'PREAMBLE',
+            'raw_value': intro,
+            'validation': 'passed',
+            'reason': 'ok',
+            'fallback_section': 'PREAMBLE',
+        }
+        if first_rejected is not None:
+            details['reason'] = (
+                f"rejected_{first_rejected['reason']};fallback_PREAMBLE"
+            )
+        return details
+
+    # Mis-sectioned blurbs (e.g. objective prose parked under Education in 2-col PDFs)
+    blurb = _extract_objective_like_prose(text, max_len=max_len)
+    if blurb:
+        details = {
+            'value': blurb,
+            'source_section': 'PROSE',
+            'raw_value': blurb,
+            'validation': 'passed',
+            'reason': 'ok',
+            'fallback_section': 'PROSE',
+        }
+        if first_rejected is not None:
+            details['reason'] = (
+                f"rejected_{first_rejected['reason']};fallback_PROSE"
+            )
+        return details
+
+    # Last resort: first-job duty highlights when resume has no Summary/Objective at all
+    highlights = _extract_experience_highlights_summary(text, max_len=min(max_len, 900))
+    if highlights:
+        details = {
+            'value': highlights,
+            'source_section': 'EXPERIENCE_HIGHLIGHTS',
+            'raw_value': highlights,
+            'validation': 'passed',
+            'reason': 'ok',
+            'fallback_section': 'EXPERIENCE_HIGHLIGHTS',
+        }
+        if first_rejected is not None:
+            details['reason'] = (
+                f"rejected_{first_rejected['reason']};fallback_EXPERIENCE_HIGHLIGHTS"
+            )
+        return details
+
+    if first_rejected is not None:
+        return first_rejected
+    return empty
+
+
+_EXPERIENCE_LEAD_STOP_RE = re.compile(
+    r'(?i)^(?:'
+    r'company|employer|client|organization|organisation|firm|'
+    r'position|designation|role|title|job\s+title'
+    r')\s*[:\-–—]|'
+    r'^(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|'
+    r'jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|'
+    r'dec(?:ember)?)\s+\d{2,4}\b|'
+    r'^\d{1,2}[-/]\d{4}\b|'
+    r'^(?:19|20)\d{2}\s*[-–—]'
+)
+
+
+def _extract_experience_lead_prose(text: str, max_len: int = 2000) -> str:
+    """
+    Capture summary-like prose under Experience before the first job entry.
+
+    Some Naukri/PDF layouts put a career blurb under 'Experience' and only then
+    list companies — treat that lead-in as a summary candidate.
+    """
+    if not (text or '').strip():
+        return ''
+    heading = re.search(
+        r'(?im)^(?:\*\*)?(?:experience|work\s+experience|professional\s+experience|'
+        r'employment|work\s+history)(?:\*\*)?\s*:?\s*$',
+        text,
+    )
+    if not heading:
+        return ''
+    collected: list[str] = []
+    for line in text[heading.end():].splitlines()[:40]:
+        cleaned = re.sub(r'^[\s•·\-\*]+', '', line.strip())
+        if not cleaned:
+            if collected and len(' '.join(collected)) >= 60:
+                break
+            continue
+        if is_section_header_line(cleaned) or _SUMMARY_SOFT_STOP_LINE_RE.match(cleaned):
+            break
+        if _EXPERIENCE_LEAD_STOP_RE.match(cleaned):
+            break
+        if _is_contactish_summary_line(cleaned):
+            continue
+        # Skip bare bullets that are duty crumbs once we already have prose
+        alpha_words = re.findall(r"[A-Za-z][A-Za-z\-']{1,}", cleaned)
+        if (
+            collected
+            and len(alpha_words) <= 6
+            and not _SUMMARY_PROSE_CUE_RE.search(cleaned)
+            and not re.search(r'[.!?]$', cleaned)
+        ):
+            break
+        collected.append(cleaned)
+        if len(' '.join(collected)) >= max_len:
+            break
+    if not collected:
+        return ''
+    normalized = _normalize_summary_body('\n'.join(collected), max_len=max_len)
+    if len(normalized) < 60 or summary_rejection_reason(normalized) is not None:
+        return ''
+    # Require a professional / role cue so duty lists alone do not become Summary
+    if not re.search(
+        r'(?i)\b(?:working\s+as|administrator|engineer|developer|consultant|'
+        r'professional|responsible\s+for|experience\s+in|management|'
+        r'administration|production\s+environment|years?\s+of)\b',
+        normalized,
+    ):
+        return ''
+    return normalized
+
+
+def _extract_experience_highlights_summary(text: str, max_len: int = 900) -> str:
+    """
+    When a resume has no Summary/Objective, use the first role's duty bullets.
+
+    Common for TBI/Naukri templates that only list Personal info → Education → Experience.
+    """
+    if not (text or '').strip():
+        return ''
+    heading = re.search(
+        r'(?im)^(?:\*\*)?(?:experience|work\s+experience|professional\s+experience|'
+        r'employment|work\s+history)(?:\*\*)?\s*:?\s*$',
+        text,
+    )
+    if not heading:
+        return ''
+    body = text[heading.end():]
+    # Prefer content after the first Position/Designation line
+    pos = re.search(
+        r'(?im)^(?:\*\*)?(?:position|designation|role|title|job\s+title)'
+        r'(?:\*\*)?\s*[:\-–—]\s*(.+?)\s*$',
+        body,
+    )
+    start_at = pos.end() if pos else 0
+    role = (pos.group(1).strip() if pos else '').strip()
+    bullets: list[str] = []
+    for line in body[start_at:].splitlines()[:50]:
+        cleaned = re.sub(r'^[\s•·\-\*▪▫►▸‣]+', '', line.strip())
+        if not cleaned:
+            continue
+        if is_section_header_line(cleaned) or _SUMMARY_SOFT_STOP_LINE_RE.match(cleaned):
+            break
+        if _EXPERIENCE_LEAD_STOP_RE.match(cleaned):
+            # Next company / position → stop (keep what we have)
+            if bullets:
+                break
+            continue
+        if _is_contactish_summary_line(cleaned):
+            continue
+        if len(cleaned) < 18:
+            continue
+        bullets.append(cleaned)
+        if len(bullets) >= 8 or len('; '.join(bullets)) >= max_len:
+            break
+    if len(bullets) < 3:
+        return ''
+    joined = '; '.join(bullets)
+    if role and len(role) >= 4 and not re.search(re.escape(role), joined, re.I):
+        joined = f'{role}. {joined}'
+    normalized = _normalize_summary_body(joined, max_len=max_len)
+    # Soften validation: duty lists rarely look like prose objectives
+    if len(normalized) < 100:
+        return ''
+    if summary_rejection_reason(normalized) in {
+        'empty',
+        'contact_information',
+        'contains_email',
+        'contains_phone_number',
+        'contains_social_or_url',
+        'section_heading_only',
+        'experience_header',
+    }:
+        return ''
+    # Reject pure comma skill dumps
+    if _SUMMARY_SKILL_LIST_RE.match(normalized):
+        return ''
+    return normalized
+
+
+def _extract_unlabeled_intro_summary(text: str, max_len: int = 2000) -> str:
+    """
+    Capture intro prose before the first real section header.
+
+    Handles layouts where a Summary heading is empty / split (e.g. PROFESSIONAL\\nSummary)
+    but a solid blurb sits under the name/contact block.
+    """
+    if not (text or '').strip():
+        return ''
+    collected: list[str] = []
+    for line in text.splitlines()[:80]:
+        cleaned = re.sub(r'^[\s•·\-\*]+', '', line.strip())
+        if not cleaned:
+            if collected and len(' '.join(collected)) >= 80:
+                break
+            continue
+        low = cleaned.lower().rstrip(':').strip()
+        if low in SUMMARY_HEADING_PRIORITY:
+            if collected:
+                break
+            continue
+        if _SUMMARY_SOFT_STOP_LINE_RE.match(cleaned):
+            break
+        if is_section_header_line(cleaned):
+            # Skip early contact/personal headers; hard-stop on experience/education/skills
+            if re.match(r'(?i)^(?:contact|personal(?:\s+details|\s+information)?|declaration)\b', low):
+                continue
+            break
+        if _is_contactish_summary_line(cleaned):
+            continue
+        # Skip sidebar skill dumps before the real intro blurb
+        if re.match(
+            r'(?i)^(?:-\s*)?(?:erp\s+platforms?|tools\s*:|modules\s*:|skills?\b)',
+            cleaned,
+        ):
+            if collected:
+                break
+            continue
+        # Skip bare person-name / location crumbs at the very top
+        alpha_words = re.findall(r"[A-Za-z][A-Za-z\-']{1,}", cleaned)
+        if len(alpha_words) <= 4 and not _SUMMARY_PROSE_CUE_RE.search(cleaned):
+            if not collected:
+                continue
+        collected.append(cleaned)
+        if len(' '.join(collected)) >= max_len:
+            break
+    if not collected:
+        return ''
+    normalized = _normalize_summary_body('\n'.join(collected), max_len=max_len)
+    # Intro crumbs like "Developer at Co" / skill dumps must not become Summary
+    if len(normalized) < 40 or not _SUMMARY_PROSE_CUE_RE.search(normalized):
+        return ''
+    if summary_rejection_reason(normalized) is not None:
+        return ''
+    if _SUMMARY_SKILL_LIST_RE.match(normalized) or normalized.lstrip().startswith('-'):
+        return ''
+    if re.search(r'(?i)utm_source|erp\s+platforms?|\btools\s*:', normalized):
+        return ''
+    return normalized
+
+
+def _extract_objective_like_prose(text: str, max_len: int = 2000) -> str:
+    """Find the first early objective/summary-like paragraph when headings fail."""
+    if not (text or '').strip():
+        return ''
+    strong_cue = re.compile(
+        r'(?i)\b(?:seeking|looking\s+(?:out\s+)?for|willing|motivated|passionate|'
+        r'graduate|objective|proven\s+track|specializing|dedicated|aspiring|'
+        r'opportunity|professional\s+with|years?\s+of\s+experience|'
+        r'i\s+am\s+a\b|complete\s+solution|working\s+as|'
+        r'database\s+administrator|production\s+environment)\b'
+    )
+    # Prefer blank-line paragraphs, then sliding windows of consecutive lines
+    chunks: list[str] = []
+    for para in re.split(r'\n\s*\n', text[:4000]):
+        if para.strip():
+            chunks.append(para.strip())
+    window: list[str] = []
+    for line in text.splitlines()[:60]:
+        cleaned = re.sub(r'^[\s•·\-\*]+', '', line.strip())
+        if (
+            not cleaned
+            or is_section_header_line(cleaned)
+            or _is_contactish_summary_line(cleaned)
+            or _SUMMARY_SOFT_STOP_LINE_RE.match(cleaned)
+            or re.match(r'(?i)^(?:-\s*)?(?:erp\s+platforms?|tools\s*:|modules\s*:)', cleaned)
+        ):
+            if window:
+                chunks.append('\n'.join(window))
+                window = []
+            continue
+        window.append(cleaned)
+        if len(window) >= 6:
+            chunks.append('\n'.join(window))
+            window = window[-2:]
+    if window:
+        chunks.append('\n'.join(window))
+
+    best = ''
+    best_score = -1
+    for chunk in chunks:
+        cand = _normalize_summary_body(chunk, max_len=max_len)
+        if len(cand) < 60 or not is_valid_summary(cand):
+            continue
+        if not strong_cue.search(cand):
+            continue
+        # Skip job-entry crumbs ("Developer at Acme, Jan 2020")
+        if re.match(
+            r'(?i)^.{0,60}\bat\b.{0,40}\b(?:19|20)\d{2}\b',
+            cand,
+        ):
+            continue
+        # Education / marks blocks wrongly scored via a trailing "LOOKING FOR"
+        if re.search(r'(?i)\b(?:cgpa|score\s+\d|%\s*be\b|diploma\s+in)\b', cand):
+            if not strong_cue.search(cand[:120]):
+                continue
+        # Cut URL / skills-sidebar pollution that precedes the real blurb
+        if re.search(r'(?i)utm_source|erp\s+platforms?|\btools\s*:', cand):
+            role_blurb = re.search(
+                r'(?i)((?:oracle|java|\.net|python|aws|azure|devops|software|technical|senior|'
+                r'lead|principal)?\s*(?:fusion\s*&?\s*ebs\s+)?(?:technical\s+)?'
+                r'(?:consultant|engineer|developer|architect|specialist|professional)\b[\s\S]{60,})',
+                cand,
+            )
+            if not role_blurb:
+                continue
+            cand = _normalize_summary_body(role_blurb.group(1), max_len=max_len)
+            if len(cand) < 60 or not is_valid_summary(cand) or not strong_cue.search(cand):
+                continue
+        # Prefer cues near the start of the blurb
+        score = min(len(cand), 600)
+        if strong_cue.search(cand[:140]):
+            score += 300
+        elif strong_cue.search(cand):
+            score += 80
+        # Penalize leftover contact / skills debris
+        if re.search(r'(?i)utm_|linkedin\.com|@|erp\s+platforms?', cand):
+            score -= 250
+        if score > best_score:
+            best = cand
+            best_score = score
+            if score >= 360 and not re.search(r'(?i)utm_|erp\s+platforms?', cand):
+                break
+    return best
+
+
+def extract_summary_from_text(text: str, max_len: int = 2000) -> str:
+    """Extract a validated summary/objective section body, or '' if none is safe."""
+    return extract_summary_details(text, max_len=max_len).get('value') or ''
 
 
 _LOCATION_TECH_NOISE = re.compile(
@@ -926,8 +1882,20 @@ _LOCATION_TECH_NOISE = re.compile(
 _LOCATION_PROSE_NOISE = re.compile(
     r'(?i)\b(?:analyzed|building|practice|automation|dashboards?|binaries|'
     r'process|workflow|objective|summary|experience\s+in|hands[- ]on|'
-    r'communication|financial|curriculum|vitae|marketing|accounting)\b'
+    r'communication|financial|curriculum|vitae|marketing|accounting|'
+    r'certificate|certification|college|university|institute|school|'
+    r'professional\s+profile|personal\s+profile)\b'
 )
+# Resume section titles that must never appear in Current/Preferred Location
+_LOCATION_SECTION_NOISE = frozenset({
+    'professional profile', 'personal profile', 'certificate', 'certificates',
+    'certification', 'certifications', 'profile', 'summary', 'objective',
+    'experience', 'education', 'skills', 'projects', 'project', 'declaration',
+    'professional summary', 'career objective', 'about me', 'contact',
+    'personal details', 'personal information', 'career profile', 'career summary',
+    'profile summary', 'work experience', 'technical skills',
+})
+
 _KNOWN_LOCATION_CITIES = (
     'Mumbai', 'Delhi', 'New Delhi', 'Bangalore', 'Bengaluru', 'Hyderabad', 'Chennai',
     'Kolkata', 'Pune', 'Ahmedabad', 'Gurgaon', 'Gurugram', 'Noida', 'Nagpur',
@@ -1073,6 +2041,15 @@ def is_plausible_location_value(value: str) -> bool:
         return False
     if '|' in s or '⋄' in s or re.search(r'\+?\d[\d\s\-]{8,}\d', s):
         return False
+    # Never accept resume section headings as location (Professional Profile, Certificate, …)
+    if low in _LOCATION_SECTION_NOISE or low in SECTION_HEADERS:
+        return False
+    if re.search(
+        r'(?i)\b(?:professional\s+profile|personal\s+profile|certificate|certification|'
+        r'curriculum\s+vitae)\b',
+        s,
+    ):
+        return False
     if low in (
         'education', 'experience', 'skills', 'summary', 'objective', 'projects',
         'certifications', 'internship', 'profile', 'curriculum vitae', 'cv',
@@ -1122,9 +2099,15 @@ def is_plausible_location_value(value: str) -> bool:
             return True
         # Unknown Title-Case pairs (skill/soft-skill) are not cities
         return False
-    # Single short place token
+    # Single short place token — reject section-ish words
     if re.match(r'^[A-Z][a-zA-Z .]{1,40}$', s) and len(s.split()) <= 4:
         if _LOCATION_TECH_NOISE.search(s) or _LOCATION_PROSE_NOISE.search(s):
+            return False
+        if re.search(
+            r'(?i)\b(?:profile|certificate|summary|objective|experience|education|'
+            r'skills?|projects?|declaration|contact)\b',
+            s,
+        ):
             return False
         return True
     return False
@@ -1161,7 +2144,8 @@ def extract_location_from_text(text: str) -> str:
                 'technologies', 'skills', 'experience', 'summary', 'objective',
                 'linkedin', 'github', 'http', '@', 'vlan', 'configuration',
                 'switchover', 'switchback', 'university', 'college', 'institute',
-                'school', 'cgpi', 'sgpi',
+                'school', 'cgpi', 'sgpi', 'certificate', 'certification',
+                'professional profile', 'personal profile',
             )
         ):
             for city in _KNOWN_LOCATION_CITIES:

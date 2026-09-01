@@ -141,7 +141,7 @@ Copy from the matching `.env.example`, then fill secrets. Never commit `.env` fi
 
 ### Ollama host
 
-Default endpoint is the central LAN server `http://192.168.1.200:11434`. Set `OLLAMA_HOST` (legacy alias `OLLAMA_BASE_URL`) in `apps/backend/.env` to override. `start.js` health-checks that URL; it starts a local `ollama serve` / pull only when the host is loopback (`127.0.0.1` or `localhost`). Existing `.env` files are not rewritten if those keys are already set — update them yourself when moving off a local daemon.
+Default endpoint is the central LAN server `http://192.168.1.200:11434`. Set `OLLAMA_HOST` (legacy alias `OLLAMA_BASE_URL`) in `apps/backend/.env` to override. JD parse, resume parse, and bulk parse all use this host via the AI gateway. `start.js` health-checks that URL and pulls the selected model onto it (local `ollama serve` only when the host is loopback). Existing `.env` files are not rewritten if those keys are already set — update them yourself when moving off a local daemon.
 
 ### Ollama model selection
 

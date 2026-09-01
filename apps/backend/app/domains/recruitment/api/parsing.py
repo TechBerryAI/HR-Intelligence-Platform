@@ -31,7 +31,6 @@ _SSE_PAD = ':' + (' ' * 2048) + '\n\n'
 _SSE_HEADERS = {
     'Cache-Control': 'no-cache, no-transform',
     'X-Accel-Buffering': 'no',
-    'Connection': 'keep-alive',
 }
 
 
@@ -147,26 +146,28 @@ def _sse_pack(event_name: str, payload: dict) -> str:
     return f"event: {event_name}\ndata: {json.dumps(payload, default=str)}\n\n{_SSE_PAD}"
 
 
-def iter_parse_sse(run_with_on_stage, build_ok_payload):
+def iter_parse_sse(run_with_on_stage, build_ok_payload, timing_ctx=None):
     """Yield SSE chunks while a parse pipeline runs in a worker thread.
 
     Stage events are flushed as they happen so the upload overlay can track
     live progress through Vite / reverse-proxy buffers.
     """
+    import time as _time
     from concurrent.futures import ThreadPoolExecutor
     from queue import Empty, Queue
 
     from app.core.request_context import get_timing_context, run_in_timing_context
+    from app.core.timing_collector import record_pipeline_stage
 
     events_q: Queue = Queue()
-    timing_ctx = get_timing_context()
+    bound_ctx = timing_ctx if timing_ctx is not None else get_timing_context()
 
     def on_stage(event):
         events_q.put(event)
 
     def _run():
-        if timing_ctx is not None:
-            return run_in_timing_context(timing_ctx, run_with_on_stage, on_stage)
+        if bound_ctx is not None:
+            return run_in_timing_context(bound_ctx, run_with_on_stage, on_stage)
         return run_with_on_stage(on_stage)
 
     yield _SSE_PAD
@@ -186,24 +187,107 @@ def iter_parse_sse(run_with_on_stage, build_ok_payload):
                 yield _sse_pack('stage', ev.to_dict())
             except Empty:
                 break
+        t_deliver = _time.perf_counter()
         try:
             body, status = future.result()
         except Exception:
             logger.exception('Parse SSE worker failed')
+            record_pipeline_stage(
+                'deliver',
+                'failed',
+                duration_ms=(_time.perf_counter() - t_deliver) * 1000.0,
+            )
             yield _sse_pack('error', {'status': 'error', 'error': 'Internal server error'})
             return
         if status == 200:
-            yield _sse_pack('result', build_ok_payload(body))
+            payload = build_ok_payload(body)
+            record_pipeline_stage(
+                'deliver',
+                'completed',
+                duration_ms=(_time.perf_counter() - t_deliver) * 1000.0,
+            )
+            yield _sse_pack('result', payload)
         else:
+            record_pipeline_stage(
+                'deliver',
+                'failed',
+                duration_ms=(_time.perf_counter() - t_deliver) * 1000.0,
+            )
             yield _sse_pack('error', body)
 
 
+def _bind_sse_timing():
+    """Keep Developer Mode session open for the whole SSE stream (not view return)."""
+    import time as _time
+
+    from app.core.developer_mode import is_developer_mode_enabled
+    from app.core.request_context import get_timing_context
+    from app.core.timing_collector import record_pipeline_stage
+
+    ctx = get_timing_context()
+    rid = getattr(request, 'timing_request_id', None) or (ctx.request_id if ctx else None)
+    started = getattr(request, 'timing_started_at', None)
+    request.timing_keep_open = True
+    if is_developer_mode_enabled() and started is not None:
+        record_pipeline_stage(
+            'upload',
+            'completed',
+            duration_ms=(_time.perf_counter() - started) * 1000.0,
+        )
+    return ctx, rid, started
+
+
+def _end_sse_timing(rid, started):
+    import time as _time
+
+    from app.core.developer_mode import is_developer_mode_enabled
+    from app.core.timing_collector import timing_collector
+
+    if not rid or not is_developer_mode_enabled():
+        return
+    wall_ms = None
+    if started is not None:
+        wall_ms = (_time.perf_counter() - started) * 1000.0
+    timing_collector.end_session(rid, wall_duration_ms=wall_ms)
+
+
+def _sse_generate(run_with_on_stage, build_ok_payload):
+    """Bind timing context in the view, restore it in the generator, end after stream."""
+    from app.core.developer_mode import is_developer_mode_enabled
+    from app.core.request_context import reset_timing_context, set_timing_context
+
+    ctx, rid, started = _bind_sse_timing()
+
+    def _build(body):
+        payload = build_ok_payload(body)
+        if rid and is_developer_mode_enabled():
+            payload['timing_request_id'] = rid
+        return payload
+
+    def generate():
+        token = set_timing_context(ctx) if ctx is not None else None
+        try:
+            yield from iter_parse_sse(run_with_on_stage, _build, timing_ctx=ctx)
+        finally:
+            try:
+                _end_sse_timing(rid, started)
+            finally:
+                if token is not None:
+                    try:
+                        reset_timing_context(token)
+                    except Exception:
+                        set_timing_context(None)
+
+    return generate
+
+
 def _sse_response(generate):
+    # Do not set direct_passthrough: Werkzeug then skips stream_with_context and
+    # closes the socket after headers (browser: "Failed to fetch" / network error).
     resp = Response(
         stream_with_context(generate()),
         mimetype='text/event-stream; charset=utf-8',
         headers=_SSE_HEADERS,
-        direct_passthrough=True,
     )
     resp.implicit_sequence_conversion = False
     return resp
@@ -434,21 +518,18 @@ def parse_resume_public_stream():
     filename = secure_filename(file.filename)
     public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
 
-    def generate():
-        def _run(on_stage):
-            return run_resume_parse_pipeline(
-                file_data,
-                filename,
-                uploader_id=public_uploader_id,
-                uploader_role='public',
-                candidate_id=None,
-                enrichment_context=None,
-                on_stage=on_stage,
-            )
+    def _run(on_stage):
+        return run_resume_parse_pipeline(
+            file_data,
+            filename,
+            uploader_id=public_uploader_id,
+            uploader_role='public',
+            candidate_id=None,
+            enrichment_context=None,
+            on_stage=on_stage,
+        )
 
-        yield from iter_parse_sse(_run, build_resume_client_payload)
-
-    return _sse_response(generate)
+    return _sse_response(_sse_generate(_run, build_resume_client_payload))
 
 
 @parsing_bp.route('/parse/resume/stream', methods=['POST'])
@@ -483,21 +564,18 @@ def parse_resume_stream():
     uploader_role = 'recruiter' if jwt_role in STAFF_ROLES else 'recruiter'
     candidate_id = request.form.get('candidate_id') or None
 
-    def generate():
-        def _run(on_stage):
-            return run_resume_parse_pipeline(
-                file_data,
-                filename,
-                uploader_id=uploader_id,
-                uploader_role=uploader_role,
-                candidate_id=candidate_id,
-                enrichment_context=None,
-                on_stage=on_stage,
-            )
+    def _run(on_stage):
+        return run_resume_parse_pipeline(
+            file_data,
+            filename,
+            uploader_id=uploader_id,
+            uploader_role=uploader_role,
+            candidate_id=candidate_id,
+            enrichment_context=None,
+            on_stage=on_stage,
+        )
 
-        yield from iter_parse_sse(_run, build_resume_client_payload)
-
-    return _sse_response(generate)
+    return _sse_response(_sse_generate(_run, build_resume_client_payload))
 
 
 @parsing_bp.route('/parse/jd/stream', methods=['POST'])
@@ -533,20 +611,39 @@ def parse_jd_stream():
 
     job_id = request.form.get('job_id')
 
-    def generate():
-        def _run(on_stage):
-            return run_jd_parse_pipeline(
-                file_data,
-                filename,
-                uploader_id=uploader_id,
-                uploader_role=uploader_role,
-                job_id=job_id,
-                on_stage=on_stage,
-            )
+    def _run(on_stage):
+        return run_jd_parse_pipeline(
+            file_data,
+            filename,
+            uploader_id=uploader_id,
+            uploader_role=uploader_role,
+            job_id=job_id,
+            on_stage=on_stage,
+        )
 
-        yield from iter_parse_sse(_run, build_jd_client_payload)
+    return _sse_response(_sse_generate(_run, build_jd_client_payload))
 
-    return _sse_response(generate)
+
+@parsing_bp.route('/parse/timing-client', methods=['POST'])
+def parse_timing_client():
+    """
+    Browser timings from file-chosen until autofill is visible.
+
+    No auth: the parse request_id is unguessable and only attaches to an
+    in-memory Developer Mode session on this process.
+    """
+    from app.core.developer_mode import is_developer_mode_enabled
+    from app.core.timing_collector import attach_client_timings
+
+    if not is_developer_mode_enabled():
+        return jsonify({'ok': True, 'ignored': True}), 200
+    data = request.get_json(silent=True) or {}
+    rid = str(data.get('request_id') or data.get('timing_request_id') or '').strip()
+    if not rid or len(rid) > 64:
+        return jsonify({'ok': False, 'error': 'invalid request'}), 400
+    if not attach_client_timings(rid, data):
+        return jsonify({'ok': False, 'error': 'unknown request'}), 404
+    return jsonify({'ok': True}), 200
 
 
 @parsing_bp.route('/parsed/resume/<parsed_id>', methods=['GET'])
