@@ -29,9 +29,7 @@ _DELETED_PRE_SQUASH = frozenset(
 # Stamps from unmerged local work (never committed migration scripts).
 # Dev/debug may retarget to the canonical revision when schema already matches.
 # Production never rewrites alembic_version for these.
-_PHANTOM_STAMP_REPAIRS: dict[str, str] = {
-    '20260824_bulk_pause': '20260814_cid_pad3',
-}
+_PHANTOM_STAMP_REPAIRS: dict[str, str] = {}
 
 
 class AlembicOrphanStampError(RuntimeError):

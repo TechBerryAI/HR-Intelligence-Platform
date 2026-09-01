@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from app.ai.document_intelligence.models.candidate import (
     CandidateProfile,
     ContactInfo,
@@ -13,6 +15,12 @@ from app.ai.document_intelligence.models.candidate import (
 )
 from app.ai.document_intelligence.semantic import enrich_resume_semantic
 from app.ai.document_intelligence.semantic.experience import extract_and_merge_experience
+
+
+@pytest.fixture(autouse=True)
+def _enable_semantic_ai(monkeypatch):
+    """Other test modules disable semantic AI at import — pin it on for this file."""
+    monkeypatch.setenv('DOCUMENT_INTELLIGENCE_SEMANTIC_AI', 'true')
 
 
 INCOMPLETE_EXP_TEXT = """

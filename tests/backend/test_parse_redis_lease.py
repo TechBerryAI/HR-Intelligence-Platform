@@ -42,7 +42,9 @@ class FakeSharedStore:
         self.clock = time.time
 
     def _expired(self, exp: float | None) -> bool:
-        return exp is not None and self.clock() > exp
+        # Inclusive: a 1s TTL is reclaimable as soon as now >= expires_at.
+        # Using `>` left a 1-tick window where sleep(1.1) could still see a live lease.
+        return exp is not None and self.clock() >= exp
 
     def set_json_nx(self, key: str, value: dict, ttl_seconds: int) -> bool:
         expires_at = (self.clock() + ttl_seconds) if ttl_seconds else None
@@ -109,6 +111,15 @@ class FakeSharedStore:
             return True
 
 
+def _wait_until(predicate, *, timeout: float = 3.0, interval: float = 0.05, msg: str = 'condition not met'):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(interval)
+    raise AssertionError(msg)
+
+
 def setup_function():
     reset_parse_inflight_for_tests()
 
@@ -126,8 +137,11 @@ def test_set_json_nx_memory_reclaim():
     reset_memory_store_for_tests()
     assert set_json_nx('k', {'owner': 'a'}, ttl_seconds=1)
     assert not set_json_nx('k', {'owner': 'b'}, ttl_seconds=1)
-    time.sleep(1.1)
-    assert set_json_nx('k', {'owner': 'b'}, ttl_seconds=10)
+    _wait_until(
+        lambda: set_json_nx('k', {'owner': 'b'}, ttl_seconds=10),
+        timeout=3.0,
+        msg='memory SET NX did not reclaim after TTL',
+    )
     assert get_json('k')['owner'] == 'b'
     assert not delete_json_if_match('k', 'owner', 'a')
     assert delete_json_if_match('k', 'owner', 'b')
@@ -234,7 +248,11 @@ def test_heartbeat_stops_after_exception():
 def test_shared_expired_lease_reclaim():
     store = FakeSharedStore()
     assert store.set_json_nx('parse:lease:stale', {'owner': 'dead'}, ttl_seconds=1)
-    time.sleep(1.1)
+    _wait_until(
+        lambda: store.get_json('parse:lease:stale') is None,
+        timeout=3.0,
+        msg='stale parse lease did not expire',
+    )
     ran = {'n': 0}
 
     def work():
@@ -324,7 +342,11 @@ def test_stale_owner_recoverable_after_heartbeat_stop():
     assert hb.renew_count >= 1
     hb.stop()
     _assert_no_heartbeats()
-    time.sleep(2.2)
+    _wait_until(
+        lambda: store.get_json(lkey) is None,
+        timeout=4.0,
+        msg='stopped heartbeat lease did not expire',
+    )
     ran = {'n': 0}
 
     def work():
@@ -378,8 +400,11 @@ def test_live_redis_set_nx_optional():
         assert not ss.delete_json_if_match(key, 'owner', 'nope')
         assert ss.delete_json_if_match(key, 'owner', 't1')
         assert ss.set_json_nx(expire_key, {'owner': 'old'}, ttl_seconds=1)
-        time.sleep(1.2)
-        assert ss.set_json_nx(expire_key, {'owner': 'new'}, ttl_seconds=10)
+        _wait_until(
+            lambda: ss.set_json_nx(expire_key, {'owner': 'new'}, ttl_seconds=10),
+            timeout=4.0,
+            msg='live Redis SET NX did not reclaim after TTL',
+        )
         assert ss.get_json(expire_key)['owner'] == 'new'
         assert ss.delete_json_if_match(expire_key, 'owner', 'new')
     finally:

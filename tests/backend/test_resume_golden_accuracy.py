@@ -30,7 +30,6 @@ def _force_offline(monkeypatch):
         'app.ai.document_intelligence.semantic.semantic_ai_enabled',
         lambda: False,
     )
-    monkeypatch.setattr('app.ai.document_intelligence.semantic._ENABLED', False)
 
 
 def _parse(name: str):
