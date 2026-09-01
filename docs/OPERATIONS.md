@@ -1,11 +1,15 @@
-# Media storage
+# Operations
+
+Media storage, backups, and restore procedures for the HR Intelligence Platform.
+
+---
 
 Reference for durable file storage (resumes, JDs, hero video).
 **You do not need to manage paths day to day** — defaults keep data outside the project folder.
 
 Postgres backups are owned by the **database team** — this app does not dump or archive the DB.
 
-**Operator runbook:** concrete `pg_dump` + `MEDIA_ROOT` rsync and restore steps → [BACKUP_RUNBOOK.md](BACKUP_RUNBOOK.md).
+**Operator runbook:** concrete `pg_dump` + `MEDIA_ROOT` rsync and restore steps → [Backup & restore runbook](#backup--restore-runbook).
 
 ---
 
@@ -156,4 +160,96 @@ from the current disk/seed file.
 - [DEVELOPMENT.md](DEVELOPMENT.md) — full local setup  
 - [Backend README](../apps/backend/README.md)  
 - [Alembic README](../apps/backend/alembic/README.md) — schema migrations  
-- [Scripts README](../scripts/README.md)  
+- [Scripts README](../scripts/README.md)
+
+---
+
+# Backup & restore runbook
+
+<a id="backup--restore-runbook"></a>
+
+Defaults assume WSL/Linux and durable data at `/mnt/d/Projects/hcip-data` (override with `HCIP_DATA_HOME` / `MEDIA_ROOT`).
+
+---
+
+## Prerequisites
+
+- Load DB credentials from `apps/backend/.env` (`POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, or `PG*` equivalents).
+- Resolve media root: `$MEDIA_ROOT` or `$HCIP_DATA_HOME/media`.
+
+```bash
+# Example env for this session
+export PGHOST="${POSTGRES_HOST:-localhost}"
+export PGPORT="${POSTGRES_PORT:-5432}"
+export PGDATABASE="${POSTGRES_DB:-postgres}"
+export PGUSER="${POSTGRES_USER:-postgres}"
+# export PGPASSWORD=...   # or use .pgpass
+export MEDIA_ROOT="${MEDIA_ROOT:-/mnt/d/Projects/hcip-data/media}"
+export BACKUP_DIR="${BACKUP_DIR:-/mnt/d/Projects/hcip-backups/$(date +%Y%m%d)}"
+mkdir -p "$BACKUP_DIR"
+```
+
+---
+
+## 1) Postgres dump
+
+```bash
+pg_dump -Fc -f "$BACKUP_DIR/hcip.dump" "$PGDATABASE"
+# Plain SQL alternative:
+# pg_dump -f "$BACKUP_DIR/hcip.sql" "$PGDATABASE"
+```
+
+Verify:
+
+```bash
+pg_restore -l "$BACKUP_DIR/hcip.dump" | head
+```
+
+---
+
+## 2) MEDIA_ROOT rsync
+
+```bash
+rsync -aH --info=stats2 "$MEDIA_ROOT/" "$BACKUP_DIR/media/"
+```
+
+Optional dry-run first: `rsync -aHn …`.
+
+---
+
+## 3) Restore notes
+
+**Order:** restore Postgres, then media (or media first if the DB is still live and you only need files). Catalog rows (`storage_url`, hashes) must match files under `MEDIA_ROOT`.
+
+### Postgres
+
+```bash
+# Custom-format dump
+pg_restore --clean --if-exists -d "$PGDATABASE" "$BACKUP_DIR/hcip.dump"
+# Or for plain SQL:
+# psql -d "$PGDATABASE" -f "$BACKUP_DIR/hcip.sql"
+```
+
+Schema-only upgrades after restore: `cd apps/backend && alembic upgrade head`.
+
+### Media
+
+```bash
+# Stop writers (Flask) if possible, then:
+rsync -aH "$BACKUP_DIR/media/" "$MEDIA_ROOT/"
+```
+
+Spot-check:
+
+```bash
+curl -s http://localhost:<backend-port>/api/media/health
+# expect hero / disk flags healthy when applicable
+```
+
+### Consistency
+
+- Prefer dumps taken while uploads are quiet, or accept that in-flight uploads may be missing from either DB or disk.
+- After BYTEA offload (`offload_blobs`), DB size shrinks; **media backup becomes mandatory** for file recovery.
+- Losing `hcip-data` without this rsync copy = irreversible file loss even if Postgres is fine.
+
+---

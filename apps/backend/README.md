@@ -62,7 +62,7 @@ Or from repo root: `node start.js`
 
 Resumes/JDs are stored under durable `HCIP_DATA_HOME` (default: sibling folder `…/hcip-data/`), not inside the git tree. Postgres backups are owned by the DB team.
 
-**Command reference:** [docs/MEDIA_AND_BACKUPS.md](../../docs/MEDIA_AND_BACKUPS.md)
+**Command reference:** [docs/OPERATIONS.md](../../docs/OPERATIONS.md)
 
 ```bash
 # From repo root
@@ -75,7 +75,7 @@ python -m app.database.scripts.offload_blobs --verify-only --limit 200
 ## Related documentation
 
 - [Docs index](../../docs/README.md)
-- [Media storage](../../docs/MEDIA_AND_BACKUPS.md)
+- [Operations (media, backups)](../../docs/OPERATIONS.md)
 - [Development guide](../../docs/DEVELOPMENT.md)
 - [Alembic / schema](alembic/README.md)
 - [Database test script](../../scripts/database/test_db_connection.py)

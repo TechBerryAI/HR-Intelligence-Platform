@@ -27,7 +27,7 @@ ai/
 └── foundation.json       # Machine-readable foundation manifest (M2)
 ```
 
-Docs (centralized, flat): [`docs/AI_WORKFLOW.md`](../docs/AI_WORKFLOW.md), [`docs/AI_DATA_PIPELINE.md`](../docs/AI_DATA_PIPELINE.md), [`docs/ADRS.md`](../docs/ADRS.md).
+Docs: [`docs/AI.md`](../docs/AI.md) (engineering workflow, data pipeline, ADRs).
 
 ## HR Intelligence Foundation (M2)
 
@@ -63,10 +63,7 @@ Entry points:
 
 | Document | Purpose |
 |----------|---------|
-| [docs/AI_WORKFLOW.md](../docs/AI_WORKFLOW.md) | Engineering workflow loop |
-| [docs/AI_DATA_PIPELINE.md](../docs/AI_DATA_PIPELINE.md) | End-to-end dataset pipeline |
-| [docs/ADRS.md](../docs/ADRS.md) | Architecture Decision Records |
-| [docs/WORKFLOWS.md](../docs/WORKFLOWS.md) | App + AI unique workflows index |
+| [docs/AI.md](../docs/AI.md) | AI platform — features, workflow, pipeline, ADRs |
 | [toon/README.md](toon/README.md) | TOON ontology package |
 | Domain contracts / schemas | `contracts/`, `schemas/` (YAML is SoT) |
 
@@ -92,4 +89,4 @@ python -m runtime.cli.main --help
 | Capability packs (matching / chat / interview gen) | Library / runtime — **not** fully productized product services |
 | M9 broader HRMS integration | Ongoing for additional features |
 
-Milestone labels may lag implementation — verify against code, tests, and [docs/AI_WORKFLOW.md](../docs/AI_WORKFLOW.md).
+Milestone labels may lag implementation — verify against code, tests, and [docs/AI.md](../docs/AI.md).

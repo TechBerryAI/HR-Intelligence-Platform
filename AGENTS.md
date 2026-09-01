@@ -3,11 +3,10 @@
 ## Documentation
 
 - **Index:** `docs/README.md` — flat markdown under `docs/` (only subfolder: `user-manual/`).
-- **Workflows:** `docs/WORKFLOWS.md`
-- **Setup:** `docs/DEVELOPMENT.md`
-- **Media storage:** `docs/MEDIA_AND_BACKUPS.md` · **Backups:** `docs/BACKUP_RUNBOOK.md`
-- **Document intelligence:** `docs/DOCUMENT_INTELLIGENCE.md`
-- **AI:** `docs/AI_WORKFLOW.md`, `docs/AI_DATA_PIPELINE.md`, `docs/ADRS.md`
+- **App guide:** `docs/GUIDE.md` (architecture, flows, API, data model, integrations)
+- **Setup / workflows / production:** `docs/DEVELOPMENT.md`
+- **Media storage & backups:** `docs/OPERATIONS.md`
+- **AI / document intelligence:** `docs/AI.md`
 - **End-user manuals:** `docs/user-manual/`
 
 ## Code
