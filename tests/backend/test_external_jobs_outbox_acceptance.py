@@ -70,6 +70,55 @@ def _cleanup(job_id: str):
     db_run('DELETE FROM external_jobs WHERE job_id = ?', (job_id,))
 
 
+def _force_expire_lease(external_row_id: int) -> None:
+    from app.database.connection.db import db_run
+
+    db_run(
+        "UPDATE external_jobs SET leased_until = NOW() - INTERVAL '1 second' WHERE id = ?",
+        (external_row_id,),
+    )
+
+
+def _reclaim_expired_row(
+    *,
+    external_row_id: int,
+    job_id: str,
+    worker_id: str,
+    timeout: float = 5.0,
+) -> dict:
+    import time
+
+    from app.database.connection.db import db_get
+
+    deadline = time.monotonic() + timeout
+    last_diag = None
+    while time.monotonic() < deadline:
+        last_diag = db_get(
+            """
+            SELECT id, sync_status, leased_by, leased_until,
+                   (leased_until IS NULL OR leased_until < NOW()) AS reclaimable,
+                   COALESCE(next_attempt_at, TIMESTAMPTZ '-infinity') <= NOW() AS due
+            FROM external_jobs
+            WHERE id = ?
+            """,
+            (external_row_id,),
+        )
+        if not last_diag:
+            raise AssertionError(f'external_jobs row {external_row_id} missing')
+        if last_diag.get('sync_status') != 'pending':
+            raise AssertionError(
+                f'row {external_row_id} no longer pending before reclaim: {last_diag!r}'
+            )
+        if last_diag.get('reclaimable') and last_diag.get('due'):
+            for row in repo.claim_pending_external_jobs(worker_id, limit=10, job_id=job_id):
+                if row['id'] == external_row_id and row.get('leased_by') == worker_id:
+                    return row
+        time.sleep(0.02)
+    raise AssertionError(
+        f'{worker_id!r} could not reclaim row {external_row_id}; last_state={last_diag!r}'
+    )
+
+
 def test_acc1_publish_durable_survives_memory_skip_and_drain(pg, monkeypatch):
     """Request publish → durable row → no memory enqueue → restart drain → executes."""
     job_id = _unique_job()
@@ -189,7 +238,6 @@ def test_acc3_parallel_claim_only_one_wins(pg):
 def test_acc4_lease_expire_then_other_worker_completes(pg, monkeypatch):
     job_id = _unique_job()
     company = f'co-{uuid.uuid4().hex[:6]}'
-    from app.database.connection.db import db_run
 
     class OkResult:
         success = True
@@ -235,11 +283,16 @@ def test_acc4_lease_expire_then_other_worker_completes(pg, monkeypatch):
             clear_lease=True,
         )
         a = repo.claim_pending_external_jobs('acc4-A', limit=20, job_id=job_id)
-        row = next(r for r in a if r['job_id'] == job_id)
-        past = datetime.now(timezone.utc) - timedelta(seconds=90)
-        db_run('UPDATE external_jobs SET leased_until = ? WHERE id = ?', (past, row['id']))
-        b = repo.claim_pending_external_jobs('acc4-B', limit=20, job_id=job_id)
-        claimed = next(r for r in b if r['id'] == row['id'])
+        matches = [r for r in a if r['job_id'] == job_id]
+        assert len(matches) == 1, f'acc4-A expected one row, got {a!r}'
+        row = matches[0]
+        assert row.get('leased_by') == 'acc4-A'
+        _force_expire_lease(row['id'])
+        claimed = _reclaim_expired_row(
+            external_row_id=row['id'],
+            job_id=job_id,
+            worker_id='acc4-B',
+        )
         assert claimed.get('leased_by') == 'acc4-B'
         outbox_mod.process_external_job_row(claimed)
         after = repo.get_external_job(job_id, 'linkedin')
