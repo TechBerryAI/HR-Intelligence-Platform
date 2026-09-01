@@ -29,10 +29,6 @@ def _force_skip_llm(monkeypatch):
         'app.ai.document_intelligence.semantic.semantic_ai_enabled',
         lambda: False,
     )
-    monkeypatch.setattr(
-        'app.ai.document_intelligence.semantic._ENABLED',
-        False,
-    )
 
 
 def test_internship_training_program_header_maps_to_experience():

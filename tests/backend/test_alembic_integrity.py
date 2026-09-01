@@ -21,11 +21,22 @@ KNOWN = {
     '20260812_bulk_leases',
     '20260812_ext_outbox',
     '20260814_cid_pad3',
+    '20260824_bulk_pause',
 }
+
+
+def _app_head() -> str:
+    from app.database.alembic_runner import head_revision_ids
+
+    heads = head_revision_ids()
+    assert len(heads) == 1, heads
+    return heads[0]
 
 
 def test_known_revision_is_ok(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'false')
+    head = _app_head()
+    assert orphan_stamp_action(head, KNOWN) == 'ok'
     assert orphan_stamp_action('20260814_cid_pad3', KNOWN) == 'ok'
     assert orphan_stamp_action('20260812_ext_outbox', KNOWN) == 'ok'
     assert orphan_stamp_action('20260811_email', KNOWN) == 'ok'
@@ -55,13 +66,15 @@ def test_debug_repairs_allowlisted_deleted_revision(monkeypatch):
 
 def test_debug_repairs_phantom_unmerged_stamp(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'true')
-    assert orphan_stamp_action('20260824_bulk_pause', KNOWN) == 'repair'
+    # No phantom repairs configured — unknown stamps still fail in debug.
+    with pytest.raises(AlembicOrphanStampError):
+        orphan_stamp_action('20260901_local_phantom', KNOWN)
 
 
 def test_production_refuses_phantom_unmerged_stamp(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'false')
     with pytest.raises(AlembicOrphanStampError):
-        orphan_stamp_action('20260824_bulk_pause', KNOWN)
+        orphan_stamp_action('20260901_local_phantom', KNOWN)
 
 
 def test_debug_refuses_unknown_non_allowlisted_revision(monkeypatch):
@@ -71,23 +84,24 @@ def test_debug_refuses_unknown_non_allowlisted_revision(monkeypatch):
 
 
 def test_schema_at_head_status_ok():
-    assert schema_at_head_status('20260814_cid_pad3', ['20260814_cid_pad3']) == (
-        '20260814_cid_pad3'
-    )
+    head = _app_head()
+    assert schema_at_head_status(head, [head]) == head
 
 
 def test_schema_at_head_status_rejects_mismatch():
+    head = _app_head()
     with pytest.raises(SchemaNotAtHeadError) as exc:
-        schema_at_head_status('20260810_s001', ['20260814_cid_pad3'])
+        schema_at_head_status('20260810_s001', [head])
     assert '20260810_s001' in str(exc.value)
-    assert '20260814_cid_pad3' in str(exc.value)
+    assert head in str(exc.value)
 
 
 def test_schema_at_head_status_rejects_empty_and_multiple_heads():
+    head = _app_head()
     with pytest.raises(SchemaNotAtHeadError):
-        schema_at_head_status(None, ['20260814_cid_pad3'])
+        schema_at_head_status(None, [head])
     with pytest.raises(SchemaNotAtHeadError):
-        schema_at_head_status('20260814_cid_pad3', ['a', 'b'])
+        schema_at_head_status(head, ['a', 'b'])
 
 
 def test_production_web_requires_migrations_already_applied(monkeypatch):
@@ -114,8 +128,9 @@ def test_production_web_verifies_and_does_not_upgrade(monkeypatch):
         raise AssertionError('upgrade_head must not run in production web')
 
     monkeypatch.setattr(runner, 'upgrade_head', _fail_upgrade)
-    monkeypatch.setattr(runner, 'verify_at_head', lambda: '20260814_cid_pad3')
-    assert runner.prepare_schema_for_web_process() == '20260814_cid_pad3'
+    head = _app_head()
+    monkeypatch.setattr(runner, 'verify_at_head', lambda: head)
+    assert runner.prepare_schema_for_web_process() == head
 
 
 def test_dev_web_upgrades_when_flag_unset(monkeypatch):
@@ -130,7 +145,8 @@ def test_dev_web_upgrades_when_flag_unset(monkeypatch):
         calls['upgrade'] += 1
 
     monkeypatch.setattr(runner, 'upgrade_head', _upgrade)
-    monkeypatch.setattr(runner, 'verify_at_head', lambda: '20260814_cid_pad3')
+    head = _app_head()
+    monkeypatch.setattr(runner, 'verify_at_head', lambda: head)
     runner.prepare_schema_for_web_process()
     assert calls['upgrade'] == 1
 
@@ -177,8 +193,9 @@ def test_live_alembic_current_matches_head():
 
     ver = db_get('SELECT version_num FROM alembic_version LIMIT 1')
     current = (ver or {}).get('version_num')
-    assert current == '20260814_cid_pad3', (
-        f'alembic_version={current!r}; expected 20260814_cid_pad3. '
+    head = _app_head()
+    assert current == head, (
+        f'alembic_version={current!r}; expected {head!r}. '
         'Run: cd apps/backend && alembic upgrade head'
     )
     markers = db_get(

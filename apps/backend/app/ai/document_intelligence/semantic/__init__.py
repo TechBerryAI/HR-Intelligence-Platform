@@ -17,11 +17,14 @@ from app.core.timing import timing
 
 logger = logging.getLogger(__name__)
 
-_ENABLED = os.getenv('DOCUMENT_INTELLIGENCE_SEMANTIC_AI', 'true').lower() in ('1', 'true', 'yes')
-
 
 def semantic_ai_enabled() -> bool:
-    return _ENABLED
+    """Read env each call so test modules can toggle DOCUMENT_INTELLIGENCE_SEMANTIC_AI."""
+    return os.getenv('DOCUMENT_INTELLIGENCE_SEMANTIC_AI', 'true').lower() in (
+        '1',
+        'true',
+        'yes',
+    )
 
 
 def _needs_resume_semantic(profile_dict: dict[str, Any], raw_text: str = '') -> bool:
@@ -298,16 +301,6 @@ def enrich_resume_semantic(
         allow_experience_fill=allow_experience_fill,
     )
     logger.info('[semantic] started reason=%s', reason)
-
-    from app.ai.document_intelligence.experience_quality import experience_is_incomplete
-
-    if allow_experience_fill and experience_is_incomplete(profile.experience, unresolved_text):
-        from app.ai.document_intelligence.semantic.experience import extract_and_merge_experience
-
-        profile = extract_and_merge_experience(profile, unresolved_text)
-        data = profile.model_dump()
-        if not force and not _needs_resume_semantic(data, unresolved_text):
-            return sanitize_candidate_profile(profile, source_text=unresolved_text)
 
     # Same resume_parser_v1 prompt + resume_milestone_v1 schema as parse_via_runtime.
     # Do not send a competing fragment-JSON instruction.

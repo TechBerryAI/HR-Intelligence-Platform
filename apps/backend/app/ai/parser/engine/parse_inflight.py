@@ -86,7 +86,10 @@ def reset_parse_inflight_for_tests() -> None:
         _INFLIGHT.clear()
         _RECENT.clear()
     with _HEARTBEAT_LOCK:
+        leftover = list(_HEARTBEATS)
         _HEARTBEATS.clear()
+    for thread in leftover:
+        thread.join(timeout=_HEARTBEAT_JOIN_SEC)
 
 
 def _prune_locked(now: float) -> None:

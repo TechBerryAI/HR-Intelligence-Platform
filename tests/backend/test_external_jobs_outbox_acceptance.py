@@ -7,6 +7,7 @@ before final local success commit.
 from __future__ import annotations
 
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -50,6 +51,18 @@ def _unique_job() -> str:
     return f'ACC{uuid.uuid4().hex[:8].upper()}'
 
 
+def _drain_for_job(job_id: str, *, worker_id: str, timeout: float = 3.0) -> int:
+    """Retry claim+drain: SKIP LOCKED can miss a just-inserted row under load."""
+    deadline = time.monotonic() + timeout
+    last = 0
+    while time.monotonic() < deadline:
+        last = outbox_mod.drain_outbox(limit=20, worker_id=worker_id, job_id=job_id)
+        if last:
+            return last
+        time.sleep(0.05)
+    return last
+
+
 def _cleanup(job_id: str):
     from app.database.connection.db import db_run
 
@@ -87,7 +100,7 @@ def test_acc1_publish_durable_survives_memory_skip_and_drain(pg, monkeypatch):
         assert result['durable'] is True
         row = repo.get_external_job(job_id, 'linkedin')
         assert row['sync_status'] == 'pending'
-        n = outbox_mod.drain_outbox(limit=20, worker_id='acc1-restart', job_id=job_id)
+        n = _drain_for_job(job_id, worker_id='acc1-restart')
         assert n == 1
         assert executed['n'] == 1
         after = repo.get_external_job(job_id, 'linkedin')
@@ -130,7 +143,7 @@ def test_acc2_close_durable_survives_crash_before_drain(pg, monkeypatch):
         pending = repo.get_external_job(job_id, 'naukri')
         assert pending['sync_status'] == 'pending'
         assert pending['pending_operation'] == 'close'
-        n = outbox_mod.drain_outbox(limit=20, worker_id='acc2-restart', job_id=job_id)
+        n = _drain_for_job(job_id, worker_id='acc2-restart')
         assert n == 1
         assert executed['n'] == 1
         assert repo.get_external_job(job_id, 'naukri')['sync_status'] == 'closed'
