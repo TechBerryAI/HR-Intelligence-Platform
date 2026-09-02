@@ -32,7 +32,7 @@ _DEGREE_CUE_RE = re.compile(
     r'b\.?\s*sc|m\.?\s*sc|bsc|msc|'
     r'b\.?\s*com|m\.?\s*com|bcom|mcom|'
     r'b\.?\s*s\.?(?![a-z])|m\.?\s*s\.?(?![a-z])|'
-    r'mba|mca|bca|bba|'
+    r'mba|mca|bca|bba|mms|pgdm|pgp|'
     r'ph\.?\s*d|'
     r'b\.?\s*pharm|d\.?\s*pharm|ll\.?\s*b|ll\.?\s*m|'
     r'hsc|ssc|cbse|icse|puc|'
@@ -79,6 +79,11 @@ _SECTION_HEADERS = frozenset({
     'resume', 'curriculum vitae', 'cv', 'profile', 'summary', 'objective',
     'experience', 'education', 'skills', 'projects', 'certifications',
     'professional summary', 'work experience', 'contact',
+    'core competencies', 'technical proficiency', 'technical expertise',
+    'academic background', 'academic qualifications', 'achievements',
+    'accomplishments', 'awards', 'honors', 'activities', 'languages',
+    'internships', 'internship', 'references',
+    'responsibilities', 'duties', 'learnings', 'conclusion',
 })
 _PROJECT_LIKE_EXP = re.compile(
     r'(?i)\b(?:assignment|coursera|internship\s+project|academic\s+project|'
@@ -323,6 +328,15 @@ def validate_company(value: str) -> Tuple[bool, str]:
         return False, 'company_is_edu_table'
     if _is_geo_only_token(s):
         return False, 'company_is_geo'
+    from app.ai.parser.enrichment.resume_text_inference import (
+        looks_like_email_or_url,
+        looks_like_phone_token,
+    )
+
+    if looks_like_phone_token(s):
+        return False, 'company_is_phone'
+    if looks_like_email_or_url(s):
+        return False, 'company_is_contact'
     if _INSTITUTION_AS_JOB_RE.search(s) and not _JOB_TITLE_CUE_RE.search(s):
         return False, 'company_is_institution'
     if len(s) > 120:
@@ -377,6 +391,12 @@ def validate_skill_item(value: str) -> Tuple[bool, str]:
         return False, 'skill_too_long'
     if _SENTENCE_SKILL.search(s) and len(s.split()) >= 4:
         return False, 'skill_is_experience_text'
+    if re.search(r'(?i)@|https?://|www\.|linkedin\.com|github\.com', s):
+        return False, 'skill_is_contact'
+    if re.fullmatch(r'\+?[\d\s\-().]{7,20}', s):
+        return False, 'skill_is_phone'
+    if re.match(r'(?i)^(email|phone|mobile|linkedin|github|contact)\b', s):
+        return False, 'skill_is_contact'
     if _MONTH_YEAR_RE.match(s) or _MONTH_ONLY_RE.match(s):
         return False, 'skill_is_date'
     low = s.lower()
@@ -387,8 +407,16 @@ def validate_skill_item(value: str) -> Tuple[bool, str]:
 
 def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
     """Reject company/role swaps, date contamination, edu-table and project-like rows."""
-    company = exp.company.strip()
-    role = exp.role.strip()
+    company = re.sub(
+        r'(?i)^(company|employer|organization|organisation)(?:\s+name)?\s*:\s*',
+        '',
+        (exp.company or '').strip(),
+    )
+    role = re.sub(
+        r'(?i)^(role|title|designation|position|job\s+title)\s*:\s*',
+        '',
+        (exp.role or '').strip(),
+    )
     desc = (exp.description or '').strip()
     loc = (exp.location or '').strip()
     # Em/en/hyphen title — Company  (SDE Intern — Edviron / Role - Company)
@@ -418,6 +446,12 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
 
     # Drop assignment / Coursera / project narratives mistaken for jobs
     if _PROJECT_LIKE_EXP.search(f'{role} {company} {desc}'):
+        return ExperienceEntry(company='', role='', start='', end='', is_current=False)
+    from app.ai.parser.enrichment.resume_text_inference import is_non_job_experience_record
+
+    if is_non_job_experience_record(
+        {'role': role, 'company': company, 'start': exp.start, 'end': exp.end}
+    ):
         return ExperienceEntry(company='', role='', start='', end='', is_current=False)
     # Drop duty-sentence fragments mistaken for role/company
     # VALIDATION_FIX_duty_verbs_align — keep in sync with parser _DUTY_VERB_START
@@ -497,6 +531,10 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
     if cleaned.company and cleaned.start:
         return cleaned
     if cleaned.company and cleaned.location:
+        return cleaned
+    if cleaned.company and cleaned.role:
+        return cleaned
+    if cleaned.company and (cleaned.description or '').strip():
         return cleaned
     # Dated location stub (date-first | Remote) kept for merge/years
     if cleaned.start and cleaned.location and (cleaned.end or cleaned.is_current):
@@ -587,6 +625,7 @@ def sanitize_candidate_profile(
         if e.role
         or (e.company and e.start)
         or (e.company and e.location)
+        or (e.company and (e.description or '').strip())
         or (e.start and e.location)
     ]
     education = [sanitize_education_row(e) for e in profile.education]

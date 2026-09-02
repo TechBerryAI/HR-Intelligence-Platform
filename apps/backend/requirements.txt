@@ -16,6 +16,8 @@ cryptography>=42.0.0
 requests==2.31.0
 PyPDF2==3.0.1
 pymupdf>=1.24.0
+# Secondary/fallback PDF extractor (PyMuPDF remains primary). Safe if unused.
+pdfplumber>=0.11.0
 pytesseract>=0.3.10
 Pillow>=10.0.0
 # RapidOCR has no Python 3.13+ wheels; install only when supported

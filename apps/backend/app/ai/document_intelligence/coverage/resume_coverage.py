@@ -21,8 +21,10 @@ from app.ai.document_intelligence.validation.engine import is_grounded_education
 # VALIDATION_FIX_experience_section_evidence
 _EXP_SECTION_RE = re.compile(
     r'(?im)^(?:\*\*)?(?:work\s*experience|professional\s*experience|experience|'
-    r'employment|work\s+history|internships?|internship\s+experience|'
+    r'employment|work\s+history|career\s+history|internships?|internship\s+experience|'
     r'industrial\s+trainings?|summer\s+internship|internship\s*/\s*training|'
+    r'management\s+internship|research\s+internship|graduate\s+internship|'
+    r'training\s+experience|'
     r'trainings?|apprenticeships?)\b'
 )
 
@@ -81,7 +83,8 @@ def _experience_section_text(text: str) -> str:
         r'industrial\s+trainings?|summer\s+internship|internship\s*/\s*training[^\n]*|'
         r'trainings?|apprenticeships?)\b[^\n]*\n'
         r'(.*?)(?=\n\s*(?:\*\*)?(?:education|academic|skills|skill\s*sets?|'
-        r'technical\s+skills?|projects?|certifications?|personal\s+details|'
+        r'technical\s+skills?|technical\s+proficiency|technical\s+expertise|'
+        r'technical\s+knowledge|projects?|certifications?|personal\s+details|'
         r'personal\s+information|biodata|declaration)(?:\*\*)?\s*:?\s*$|\Z)',
         text or '',
     )
@@ -298,9 +301,14 @@ def recover_resume_profile_gaps(
     if exp_ev:
         section_body = _experience_section_text(text)
         parsed_exp = parse_experience(section_body, text) if section_body else []
+        if parsed_exp:
+            from app.ai.parser.enrichment.resume_text_inference import is_non_job_experience_record
+
+            parsed_exp = [e for e in parsed_exp if not is_non_job_experience_record(e)]
         if not parsed_exp:
             from app.ai.parser.enrichment.resume_text_inference import (
                 extract_experience_from_text,
+                is_non_job_experience_record,
             )
 
             loose = extract_experience_from_text(text)
@@ -318,6 +326,7 @@ def recover_resume_profile_gaps(
                     str(e.get('title') or e.get('role') or '').strip()
                     or str(e.get('company') or '').strip()
                 )
+                and not is_non_job_experience_record(e)
             ]
         parsed_complete = _complete_exp_count(parsed_exp)
         existing_complete = _complete_exp_count(exp_list)

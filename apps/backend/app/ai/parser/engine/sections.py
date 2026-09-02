@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from app.ai.parser.engine.types import SectionSpan
 from app.ai.parser.layout.heuristic import normalize_section_header
+from app.ai.parser.enrichment.resume_text_inference import is_in_job_contact_header
 
 
 # JD-oriented header aliases mapped to canonical labels
@@ -69,6 +70,9 @@ def detect_sections(text: str, doc_type: str = 'resume') -> list[SectionSpan]:
             if not label and low.endswith(':'):
                 label = _JD_ALIASES.get(low[:-1].strip())
         if label:
+            # In-job Contact/References must not split Experience
+            if headers and is_in_job_contact_header(label, headers[-1][2]):
+                continue
             headers.append((start, start + len(line), label))
 
     if not headers:

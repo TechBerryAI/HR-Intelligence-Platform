@@ -1,0 +1,102 @@
+Vishal Waghmode
+Software Developer
+Experienced Full Stack Software Developer with a passion for games and creating connected experiences.
+Skilled in c# , .NET core , sql queries and source control. Knowledgeable in Agile software development.
+Strong communication skills and a team player. Excited to work with Rockstar Games on bleeding edge
+technology.
+vishalwaghmode247@gmail.com
+8104350466
+Navi Mumbai, India
+linkedin.com/in/vishal-waghmode-25708020b
+github.com/vish390/-D0T-net_projects-
+
+Experience
+Assistant System Engineer
+Tata Consultancy Services (TCS)
+07/2022 - Present,
+Thane , Navi Mumbai
+Professional Development: Undertaking professional development
+activities such as certifications, training programs, or continuing
+education courses that enhanced your skills and expertise, leading to
+increased responsibilities or promotions within the company.
+Leadership and Teamwork: Demonstrating leadership skills by
+effectively leading a team or project, fostering collaboration, and
+inspiring team members to achieve their goals.
+
+Contact
+-
+Ayush Saxsena (Project Head)
+9575342145
+Assistant System Analyst
+National Stock Exchange (NSEIT)
+06/2024 - Present,
+Mumbai
+Project Development & Execution Developed and optimized high-
+performance applications using C# and .NET Framework, improving
+functionality and user experience for VGT TOOL.
+Implemented multithreading techniques in C# to enhance the
+performance of data-intensive applications, reducing processing time
+by 40% and improving overall system efficiency.
+
+Contact
+-
+Nipul Gothal
+9326579987
+
+Education
+B.E DEGREE
+Datta Meghe College Of Enginerring, Airoli , Navi
+Mumbai.
+06/2018 - 07/2022,
+Airoli , Navi Mumbai.
+AGGREGATE- 8.00(CGPA)
+Bachelor of Engineering
+(Information Technology)
+HSC
+St . Mayer's High School & Junior College
+07/2016 - 07/2018,
+Navi Mumbai
+AGGREGATE- 60%
+TECHNICAL PROFICIENCY:
+CORE LANG : C #
+.NET CORE
+SQL (Structured Query Language)
+HTML5
+CSS3
+JavaScript
+Multi-Threading
+Data Structure
+AGILE
+
+Projects
+TATA GROUP & AMERICAN INTERNATIONAL
+GROUP (TATA AIG) Client: American
+International Group (AIG) (07/2022 - Present)
+Designing and developing web applications using java ,
+plsql agile methodology and HTML/CSS
+Developed user interfaces to interact with databases using
+ASP.NET MVC, Web Forms, and Web Services.
+Developed an enterprise-level Asp.Net web application for
+a client
+Created and maintained SQL Server databases and wrote
+complex stored procedures, functions, triggers and views.
+VOLUME GENERATION TOOL (NSE MARKET)
+(06/2024 - Present)
+Implemented multithreading in a real-time data
+processing system , leveraging C# Task Parallel Library
+(TPL) to reduce execution time by 50% and handle large
+datasets efficiently.
+Refactored legacy code in a customer service
+management platform, improving maintainability and
+reducing code complexity by 40%, while incorporating
+modern SOLID principles in the process.
+STRENGTHS
+Proficient in C#, .net Core , sql
+Strong knowledge of object-oriented
+programming
+Knowledge of HTML, CSS, JavaScript, and XML
+Experience with web applications.
+Achievements/Tasks
+Achievements/Tasks
+Information Technology
+SCIENCE - (PCMBI)
