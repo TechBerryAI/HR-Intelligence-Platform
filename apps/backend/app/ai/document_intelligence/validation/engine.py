@@ -91,7 +91,8 @@ _PROJECT_LIKE_EXP = re.compile(
 )
 _SENTENCE_SKILL = re.compile(
     r'(?i)\b(?:developed|built|improved|responsible|worked|managed|led|created|'
-    r'implemented|designed|collaborated|delivered)\b'
+    r'implemented|designed|collaborated|delivered|performed|administered|'
+    r'handling|configured|installed)\b'
 )
 
 
@@ -331,12 +332,15 @@ def validate_company(value: str) -> Tuple[bool, str]:
     from app.ai.parser.enrichment.resume_text_inference import (
         looks_like_email_or_url,
         looks_like_phone_token,
+        looks_like_skill_or_duration_company,
     )
 
     if looks_like_phone_token(s):
         return False, 'company_is_phone'
     if looks_like_email_or_url(s):
         return False, 'company_is_contact'
+    if looks_like_skill_or_duration_company(s):
+        return False, 'company_is_skill_or_duration'
     if _INSTITUTION_AS_JOB_RE.search(s) and not _JOB_TITLE_CUE_RE.search(s):
         return False, 'company_is_institution'
     if len(s) > 120:
@@ -391,6 +395,106 @@ def validate_skill_item(value: str) -> Tuple[bool, str]:
         return False, 'skill_too_long'
     if _SENTENCE_SKILL.search(s) and len(s.split()) >= 4:
         return False, 'skill_is_experience_text'
+    if re.match(r'(?i)^(?:experience|education|summary|mumbai|pune|thane|nagpur|navi\s+mumbai)\b', s):
+        return False, 'skill_is_section_or_location'
+    if re.match(
+        r'(?i)^(?:ensuring|managing|performing|maintaining|creating|configured|'
+        r'and\s+troubleshoot|troubleshoot|configure|install|unwanted)\b',
+        s,
+    ):
+        return False, 'skill_is_gerund_fragment'
+    if s.lower() in {
+        'certification', 'certifications', 'certified', 'fundamentals',
+        'platforms', '& platforms', 'and platforms',
+    }:
+        return False, 'skill_is_header_crumb'
+    if re.match(r'(?i)^(?:&|and)\s+(?:platforms?|tools?|abilities|technologies?)\b', s):
+        return False, 'skill_is_header_crumb'
+    if re.search(r'(?i)university\s*/\s*board|%\s*of\s*marks', s) and len(s.split()) <= 6:
+        return False, 'skill_is_edu_table'
+    if re.match(r'(?i)^(?:district|taluka|tehsil|pincode|pin\s*code)\b', s):
+        return False, 'skill_is_address'
+    if re.fullmatch(r'(?:[A-Za-z]\s+){2,}[A-Za-z]', s):
+        return False, 'skill_is_spaced_letters'
+    if re.search(r'(?i)skills?\s*:\s*(?:professional\s+)?summary', s):
+        return False, 'skill_is_header'
+    if s.endswith('.') and len(s.split()) >= 3:
+        return False, 'skill_is_duty_fragment'
+    if re.match(
+        r'(?i)^(?:project(?:s)?(?:\s+name)?(?:\s*[-:]?\s*\d+)?|'
+        r'organization|organisation|duration|role|designation|company)\s*[:\-–—]',
+        s,
+    ):
+        return False, 'skill_is_labeled_prose'
+    if re.match(r'(?i)^\d+\s+years?\s+of\s+experience\b', s):
+        return False, 'skill_is_tenure'
+    if re.search(
+        r'(?i)\b(?:hsc|ssc|cbse|icse|u\.?p\.?\s*board)\b', s
+    ) and len(s.split()) <= 6:
+        return False, 'skill_is_edu_table'
+    if re.search(r'(?i)\b(?:users across|endpoints|ensuring|maintaining)\b', s) and len(s.split()) >= 4:
+        return False, 'skill_is_duty_fragment'
+    if re.match(
+        r'(?i)^(?:hobbies?|hobby|linguistic\s+proficiency|languages?\s+known|'
+        r'father(?:[\'’‘]?s)?\s*name|mother(?:[\'’‘]?s)?\s*name|declaration)\b',
+        s,
+    ):
+        return False, 'skill_is_biodata_label'
+    if re.search(
+        r'(?i)(?:knowledge\s+and\s+belief|hereby\s+declare|true\s+to\s+the\s+best|'
+        r'certificate of participation|committee of)',
+        s,
+    ):
+        return False, 'skill_is_declaration'
+    if re.search(r'(?i)work\s+experience\s*=', s):
+        return False, 'skill_is_fresher_line'
+    if s.endswith('.') and len(s.split()) >= 6:
+        return False, 'skill_is_duty_fragment'
+    if re.fullmatch(
+        r'(?i)(?:installation|configuration|troubleshooting|implement|management|'
+        r'addition|basic|upgradation)',
+        s.rstrip('.'),
+    ):
+        return False, 'skill_is_ops_crumb'
+    if re.match(
+        r'(?i)^(?:participated|organised|organized|national\s+cadet)\b',
+        s,
+    ):
+        return False, 'skill_is_activity'
+    from app.ai.parser.enrichment.resume_text_inference import (
+        is_biodata_or_address_line,
+        is_plausible_person_name,
+        known_location_cities,
+    )
+
+    if is_biodata_or_address_line(s):
+        return False, 'skill_is_address'
+    words = [w.strip(".,#") for w in s.split() if w.strip(".,#")]
+    if (
+        2 <= len(words) <= 4
+        and is_plausible_person_name(s)
+        and all(w.replace("'", '').replace('’', '').replace('‘', '').isalpha() and 2 <= len(w) <= 16 for w in words)
+        and not any(
+            re.match(
+                r'(?i)^(net|core|google|analytics|office|visual|studio|power|bi|'
+                r'ms|sql|python|java|linux|aws|azure|hive|excel|word|react|node|'
+                r'data|structure|selenium|jira|figma|canva)$',
+                w,
+            )
+            for w in words
+        )
+    ):
+        return False, 'skill_is_person_name'
+    if re.fullmatch(
+        r'(?i)(?:english|hindi|marathi|tamil|telugu|kannada|gujarati|malayalam|'
+        r'punjabi|urdu|bengali|french|german|spanish|arabic)'
+        r'(?:\s*(?:[,&/]|and)\s*(?:english|hindi|marathi|tamil|telugu|kannada|'
+        r'gujarati|malayalam|punjabi|urdu|bengali|french|german|spanish|arabic))+',
+        s,
+    ):
+        return False, 'skill_is_language_list'
+    if s.lower() in {c.lower() for c in known_location_cities()}:
+        return False, 'skill_is_city'
     if re.search(r'(?i)@|https?://|www\.|linkedin\.com|github\.com', s):
         return False, 'skill_is_contact'
     if re.fullmatch(r'\+?[\d\s\-().]{7,20}', s):
@@ -571,17 +675,17 @@ def sanitize_skills(skills: list[SkillEntry], *, companies: set[str] | None = No
     out: list[SkillEntry] = []
     seen: set[str] = set()
     for sk in skills:
-        name = (sk.canonical or sk.name or '').strip()
-        ok, _ = validate_skill_item(name)
+        display = (sk.name or sk.canonical or '').strip()
+        ok, _ = validate_skill_item(display)
         if not ok:
             continue
-        if name.lower() in companies:
+        if display.lower() in companies:
             continue
-        key = name.lower()
+        key = display.lower()
         if key in seen:
             continue
         seen.add(key)
-        out.append(SkillEntry(name=name, canonical=name, category=sk.category))
+        out.append(SkillEntry(name=display, canonical=sk.canonical or display, category=sk.category))
     return out
 
 
@@ -619,14 +723,15 @@ def sanitize_candidate_profile(
     port_ok, _ = validate_url(port, allow_empty=True) if port else (True, '')
 
     experience = [sanitize_experience_row(e) for e in profile.experience]
+    from app.ai.parser.enrichment.resume_text_inference import has_credible_employment_evidence
+
     experience = [
         e
         for e in experience
-        if e.role
+        if has_credible_employment_evidence(e)
+        or (e.role and e.company)
+        or (e.role and e.start)
         or (e.company and e.start)
-        or (e.company and e.location)
-        or (e.company and (e.description or '').strip())
-        or (e.start and e.location)
     ]
     education = [sanitize_education_row(e) for e in profile.education]
     education = [e for e in education if e.degree or e.institution]

@@ -172,14 +172,37 @@ def _apply_resume_repair(profile, raw_text: str):
             or (repaired.personal.summary or '').strip(),
         }
     )
-    from app.ai.document_intelligence.experience_quality import merge_experience_rows
-
-    experience = merge_experience_rows(
-        list(original.experience or []),
-        list(repaired.experience or []),
+    from app.ai.document_intelligence.coverage.resume_coverage import (
+        has_experience_section_evidence,
     )
-    if not experience:
-        experience = list(original.experience or repaired.experience or [])
+    from app.ai.document_intelligence.experience_quality import merge_experience_rows
+    from app.ai.parser.enrichment.resume_text_inference import (
+        is_non_job_experience_record,
+        looks_like_skill_or_duration_company,
+    )
+
+    def _keepable_exp(rows):
+        kept = []
+        for e in rows or []:
+            if is_non_job_experience_record(e):
+                continue
+            if looks_like_skill_or_duration_company(getattr(e, 'company', '') or ''):
+                continue
+            kept.append(e)
+        return kept
+
+    if original.experience:
+        experience = merge_experience_rows(
+            list(original.experience or []),
+            _keepable_exp(repaired.experience),
+        )
+        if not experience:
+            experience = list(original.experience)
+    elif has_experience_section_evidence(raw_text or ''):
+        experience = _keepable_exp(repaired.experience)
+    else:
+        # Fresher / no job section: repair must not invent employers from skills.
+        experience = []
     education = list(original.education) if original.education else list(repaired.education)
     skills = list(original.skills) if original.skills else list(repaired.skills)
     # Ignore repair-invented junk links (e.g. https://B.Tech)
@@ -212,6 +235,24 @@ def _apply_resume_repair(profile, raw_text: str):
         total_experience_years=years,
         field_meta=dict(original.field_meta or {}),
     )
+    prov = dict(merged.field_meta.get('_field_provenance') or {})
+    if not original.education and merged.education:
+        from app.ai.parser.engine.confidence import provenance_outranks
+
+        if provenance_outranks('repair', prov.get('education', '')):
+            prov['education'] = 'repair'
+    if not original.experience and merged.experience:
+        from app.ai.parser.engine.confidence import provenance_outranks
+
+        if provenance_outranks('repair', prov.get('experience', '')):
+            prov['experience'] = 'repair'
+    if not original.skills and merged.skills:
+        from app.ai.parser.engine.confidence import provenance_outranks
+
+        if provenance_outranks('repair', prov.get('skills', '')):
+            prov['skills'] = 'repair'
+    if prov:
+        merged.field_meta['_field_provenance'] = prov
     return merged, candidate_to_toon(merged)
 
 def _resume_core_missing(coverage) -> list[str]:
@@ -454,8 +495,21 @@ def parse_resume_text_to_canonical(
     t0 = _time.perf_counter()
     from app.ai.document_intelligence.bullets import split_inline_bullets, restore_inferred_list_markers
 
+    from app.ai.document_intelligence.trace import debug_enabled, record_snapshot, reset_snapshot
+
+    if debug_enabled():
+        reset_snapshot()
+        record_snapshot('extraction', {'chars': len(text or ''), 'preview': (text or '')[:400]})
+
     working = restore_inferred_list_markers(split_inline_bullets(text or ''))
+    if debug_enabled():
+        record_snapshot('normalized', {'chars': len(working), 'preview': working[:400]})
     sections = detect_sections(working, 'resume')
+    if debug_enabled():
+        record_snapshot(
+            'sections',
+            {'labels': [s.label for s in sections], 'sizes': {s.label: len(s.text or '') for s in sections}},
+        )
     record_pipeline_stage(
         'sections',
         'completed',
@@ -543,6 +597,17 @@ def parse_resume_text_to_canonical(
 
     form = map_candidate_to_form(profile, coverage=coverage.as_dicts())
     toon = candidate_to_toon(profile)
+    if debug_enabled():
+        record_snapshot(
+            'form_dto',
+            {
+                'fullName': form.fullName,
+                'email': form.email,
+                'experience_rows': len(form.experiences or []),
+                'education_rows': len(form.education or []),
+                'skills': form.skills[:200] if form.skills else '',
+            },
+        )
     return profile, form, toon
 
 

@@ -40,7 +40,10 @@ from app.ai.parser.enrichment.resume_text_inference import (
     is_contact_or_reference_line,
     is_contact_section_label,
     is_institution_like,
+    is_biodata_or_address_line,
     is_non_job_experience_record,
+    has_credible_employment_evidence,
+    is_fresher_or_years_only_experience_line,
     is_plausible_job_title,
     is_plausible_person_name,
     is_section_header_line,
@@ -48,6 +51,7 @@ from app.ai.parser.enrichment.resume_text_inference import (
     looks_like_contact_person_line,
     looks_like_email_or_url,
     looks_like_phone_token,
+    looks_like_skill_or_duration_company,
     split_list_items,
 )
 
@@ -493,7 +497,11 @@ def split_education_oneliner(line: str) -> tuple[str, str, str, str]:
             _looks_like_degree_line(parts[1]) or _DEGREE_PAT.search(parts[1])
         ) and not _comma_part_is_institution(parts[1]):
             return parts[1].strip(), parts[0].strip(), gpa, year
-    if re.search(r'[-–—]', core) and _DEGREE_PAT.search(core):
+    if (
+        re.search(r'[-–—]', core)
+        and _DEGREE_PAT.search(core)
+        and not _hyphen_is_inside_parens(core)
+    ):
         parts = re.split(r'\s*[-–—]\s*', core, maxsplit=1)
         if len(parts) == 2 and _looks_like_degree_line(parts[0]) and (
             _INSTITUTION_CUE.search(parts[1]) or is_institution_like(parts[1])
@@ -515,6 +523,70 @@ def _looks_like_institution_line(line: str) -> bool:
     return False
 
 
+def _education_field_is_junk(value: str) -> bool:
+    s = (value or '').strip().lstrip(':').strip()
+    if not s:
+        return True
+    if is_biodata_or_address_line(value) or is_biodata_or_address_line(s):
+        return True
+    if looks_like_email_or_url(s) or looks_like_phone_token(s):
+        return True
+    if '@' in s:
+        return True
+    return False
+
+
+def _sanitize_education_row(row: EducationEntry) -> EducationEntry | None:
+    """Drop biodata/contact crumbs; keep rows with a degree or institution cue."""
+    deg = (row.degree or '').strip()
+    inst = (row.institution or '').strip()
+    if _education_field_is_junk(deg):
+        deg = ''
+    if _education_field_is_junk(inst):
+        inst = ''
+    if not deg and not inst:
+        return None
+    if deg and not _looks_like_degree_line(deg) and not (
+        inst and (_looks_like_institution_line(inst) or _INSTITUTION_CUE.search(inst))
+    ):
+        return None
+    if inst and not deg and not (
+        _looks_like_institution_line(inst) or _INSTITUTION_CUE.search(inst)
+    ):
+        return None
+    if deg == (row.degree or '').strip() and inst == (row.institution or '').strip():
+        return row
+    return row.model_copy(update={'degree': deg[:200], 'institution': inst[:200]})
+
+
+def _filter_education_rows(rows: list[EducationEntry]) -> list[EducationEntry]:
+    out: list[EducationEntry] = []
+    for row in rows:
+        cleaned = _sanitize_education_row(row)
+        if cleaned is not None:
+            out.append(cleaned)
+    return out
+
+
+def _unbalanced_open_paren(text: str) -> bool:
+    s = text or ''
+    return s.count('(') > s.count(')')
+
+
+def _hyphen_is_inside_parens(text: str) -> bool:
+    """True when every hyphen sits inside a parenthetical (not a degree–school sep)."""
+    depth = 0
+    outside = False
+    for ch in text or '':
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth = max(0, depth - 1)
+        elif ch in '-–—' and depth == 0:
+            outside = True
+    return (not outside) and ('-' in (text or '') or '–' in (text or '') or '—' in (text or ''))
+
+
 def _is_education_continuation(prev: str, nxt: str) -> bool:
     """True when nxt is a PDF wrap continuation of the previous institution line."""
     n = (nxt or '').strip()
@@ -531,6 +603,9 @@ def _is_education_continuation(prev: str, nxt: str) -> bool:
         return False
     if _has_job_title_cue(n) and not _looks_like_degree_line(n):
         return False
+    # Wrapped degree: "Ph.D. (Pursuing" + "I.T.)"
+    if _unbalanced_open_paren(p) and n.count(')') >= n.count('('):
+        return True
     if _looks_like_degree_line(n) or _looks_like_degree_line(p):
         return False
     # Strong new-institution cue: full line with college/university and no wrap feel
@@ -653,6 +728,23 @@ def coalesce_education(rows: list[EducationEntry]) -> list[EducationEntry]:
                 continue
             # degree-only + institution-only
             if cur_deg and not cur_inst and n_inst and not n_deg:
+                # Wrapped parenthetical field, not a school: "Ph.D. (Pursuing" + "I.T.)"
+                if _unbalanced_open_paren(cur_deg) and (
+                    ')' in n_inst or n_inst[:1].islower()
+                ):
+                    combined = f'{cur_deg} {n_inst}'.strip()
+                    merged.append(
+                        EducationEntry(
+                            degree=combined[:200],
+                            field=cur.field or nxt.field,
+                            institution='',
+                            gpa=cur.gpa or nxt.gpa,
+                            start=cur.start or nxt.start,
+                            end=cur.end or nxt.end,
+                        )
+                    )
+                    i += 2
+                    continue
                 merged.append(
                     EducationEntry(
                         degree=cur_deg[:200],
@@ -756,7 +848,7 @@ def coalesce_education(rows: list[EducationEntry]) -> list[EducationEntry]:
         if cur_inst or cur_deg:
             merged.append(cur)
         i += 1
-    return _merge_equivalent_degree_rows(merged)
+    return _filter_education_rows(_merge_equivalent_degree_rows(merged))
 
 
 def _merge_equivalent_degree_rows(rows: list[EducationEntry]) -> list[EducationEntry]:
@@ -820,6 +912,7 @@ def _unlabeled_education_window(full_text: str) -> str:
             s
             and _looks_like_degree_line(s)
             and not is_section_header_line(s)
+            and not is_biodata_or_address_line(s)
             and s.count('|') < 2
             and '@' not in s
             and 'http' not in s.lower()
@@ -935,6 +1028,10 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
     for line in raw.splitlines():
         stripped = _clean_edu_line(line)
         if not stripped or is_section_header_line(stripped):
+            continue
+        if is_biodata_or_address_line(stripped) or looks_like_email_or_url(stripped):
+            continue
+        if looks_like_phone_token(stripped):
             continue
         # Experience bullets leak into education when section bounds are weak
         if _EDU_DUTY_LINE.match(stripped) or _DUTY_VERB_START.match(stripped):
@@ -1113,12 +1210,16 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
             and not degree
             and re.search(r'[-–—]', line_wo_dates)
             and _DEGREE_PAT.search(line_wo_dates)
+            and not _hyphen_is_inside_parens(line_wo_dates)
         ):
             parts = re.split(r'\s*[-–—]\s*', line_wo_dates, maxsplit=1)
             if len(parts) == 2 and _looks_like_degree_line(parts[0]) and (
                 _INSTITUTION_CUE.search(parts[1])
                 or is_institution_like(parts[1])
-                or len(parts[1].strip()) >= 4
+                or (
+                    len(parts[1].strip()) >= 4
+                    and not re.match(r'(?i)^[A-Z]\.?[A-Z]\.?\)?$', parts[1].strip())
+                )
             ):
                 degree, institution = parts[0].strip(), parts[1].strip()
                 i += 1
@@ -1175,14 +1276,24 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
                     end = y2
 
         # Compact "B.com – SV University, Tirupathi" one-liners (fallback)
-        if degree and not institution and re.search(r'[-–—]', degree):
+        if (
+            degree
+            and not institution
+            and re.search(r'[-–—]', degree)
+            and not _hyphen_is_inside_parens(degree)
+        ):
             parts = re.split(r'\s*[-–—]\s*', degree, maxsplit=1)
             if len(parts) == 2 and _looks_like_degree_line(parts[0]) and (
                 _INSTITUTION_CUE.search(parts[1])
                 or is_institution_like(parts[1])
-                or len(parts[1].strip()) >= 4
+                or (
+                    len(parts[1].strip()) >= 4
+                    and not re.match(r'(?i)^[A-Z]\.?[A-Z]\.?\)?$', parts[1].strip())
+                )
             ):
                 degree, institution = parts[0].strip(), parts[1].strip()
+        degree = re.sub(r'^[:\-–—\s]+', '', degree or '').strip()
+        institution = re.sub(r'^[:\-–—\s]+', '', institution or '').strip()
         if degree or institution:
             # Drop duty / project lines that slipped through
             blob = f'{degree} {institution}'.strip()
@@ -1210,6 +1321,13 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
                 if _INSTITUTION_CUE.search(right) or is_institution_like(right.strip()):
                     degree = left.strip()
                     institution = right.strip()
+            if re.match(
+                r'(?i)^(?:ms\s*-?\s*word|ms\s*-?\s*excel|ms\s*-?\s*office|seo|powerpoint)\b',
+                degree,
+            ) and not _INSTITUTION_CUE.search(institution):
+                continue
+            if re.match(r'(?i)^(?:soft\s+skills?|technical\s+skills?|skills?)\s*:?\s*$', institution):
+                institution = ''
             education.append(
                 EducationEntry(
                     degree=degree[:200],
@@ -1220,7 +1338,7 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
                     end=end,
                 )
             )
-    education = coalesce_education(education)
+    education = _filter_education_rows(coalesce_education(education))
     complete = sum(
         1
         for e in education
@@ -1237,11 +1355,18 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
             ]
             if extra_ok:
                 return extra
+        # Short/header-only Education must not discard document evidence
+        if (section_text or '').strip():
+            recovered = parse_education('', full_text)
+            if any((e.degree or '').strip() and (e.institution or '').strip() for e in recovered):
+                return recovered
     return education
 
 
 def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
-    raw = section_text.strip()
+    from app.ai.document_intelligence.bullets import split_inline_bullets
+
+    raw = split_inline_bullets(section_text or '').strip()
     raw = re.sub(
         r'(?i)^(?:technical\s+)?skills?(?!\w)(?:\s*,?\s*(?:tools?|platforms?|abilities|technologies?))*(?:\s+and\s+(?:tools?|platforms?|abilities|technologies?))*\s*:?\s*',
         '',
@@ -1249,6 +1374,7 @@ def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
     ).strip()
     raw = re.sub(
         r'(?i)^(?:technical\s+proficiency|technical\s+expertise|technical\s+knowledge|'
+        r'technicalskill|soft\s+skills?|'
         r'core\s+competencies|areas\s+of\s+expertise|computer\s+skills|it\s+skills|'
         r'software\s+skills)\s*:?\s*',
         '',
@@ -1260,16 +1386,52 @@ def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
         '',
         raw,
     ).strip()
+
+    def _accepted(name: str) -> SkillEntry | None:
+        s = (name or '').strip()
+        if not s:
+            return None
+        ok, _ = validate_skill_item(s)
+        if not ok:
+            return None
+        return SkillEntry(name=s, canonical=s)
+
     if not raw and full_text:
         from app.ai.parser.enrichment.resume_text_inference import extract_skills_from_text
 
-        return [SkillEntry(name=s, canonical=s) for s in extract_skills_from_text(full_text)]
+        recovered = [
+            entry
+            for s in extract_skills_from_text(full_text, allow_unlabeled_lists=False)
+            if (entry := _accepted(s))
+        ]
+        return recovered
     items = filter_skill_items(split_list_items(raw), max_items=40)
     out: list[SkillEntry] = []
+    seen: set[str] = set()
     for s in items:
-        ok, _ = validate_skill_item(s)
-        if ok:
-            out.append(SkillEntry(name=s, canonical=s))
+        entry = _accepted(s)
+        if not entry:
+            continue
+        key = entry.name.strip().lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(entry)
+    # Short/weak Skills sections: recover only from labeled skill windows, not duties
+    if full_text and (len(raw) < 40 or len(out) < 3):
+        from app.ai.parser.enrichment.resume_text_inference import extract_skills_from_text
+
+        for s in extract_skills_from_text(full_text, allow_unlabeled_lists=False):
+            entry = _accepted(s)
+            if not entry:
+                continue
+            key = entry.name.strip().lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(entry)
+            if len(out) >= 40:
+                break
     return out
 
 
@@ -1302,17 +1464,14 @@ def parse_personal(text: str, preamble: str, *, source_filename: str = '') -> Pe
                 name = cand.title() if cand.isupper() else cand
                 break
     file_name = name_from_resume_filename(source_filename) if source_filename else ''
-    # Prefer filename when body name is missing, single-token, or fails plausibility
-    if file_name:
-        if not name or not is_plausible_person_name(name):
-            name = file_name
-        elif len(name.split()) == 1 and len(file_name.split()) >= 2:
-            name = file_name
-        elif len(file_name.split()) >= 2 and len(name.split()) > len(file_name.split()) + 1:
-            # Body glued a title onto the name ("Ashutosh Kosta Database Admin")
-            name = file_name
+    name_source = 'deterministic' if name else ''
+    # Filename is lowest-confidence evidence. Never override document text.
+    if file_name and not name:
+        name = file_name
+        name_source = 'filename'
     if name and not is_plausible_person_name(name):
-        name = file_name or ''
+        name = ''
+        name_source = ''
     if name:
         name = re.sub(r'(?i)^(mr|mrs|ms|miss|dr|prof)\.?\s+', '', name).strip()
         if name.isupper() and len(name.split()) >= 2:
@@ -1322,7 +1481,10 @@ def parse_personal(text: str, preamble: str, *, source_filename: str = '') -> Pe
     if name and not ok and is_plausible_person_name(name):
         ok = True
     summary = extract_summary_from_text(text)
-    return PersonalInfo(full_name=name if ok else '', summary=summary)
+    info = PersonalInfo(full_name=name if ok else '', summary=summary)
+    # Stash source for merge_resume_sections without changing the PersonalInfo schema
+    info._name_source = name_source if ok else ''  # type: ignore[attr-defined]
+    return info
 
 
 def parse_contact(text: str, preamble: str) -> ContactInfo:
@@ -1410,6 +1572,10 @@ def _looks_like_company_line(text: str) -> bool:
         return False
     if _is_bullet_or_duty_line(s) or is_section_header_line(s):
         return False
+    from app.ai.parser.enrichment.resume_text_inference import looks_like_skill_or_duration_company
+
+    if looks_like_skill_or_duration_company(s):
+        return False
     # Duty wrap / prose — companies are capitalized
     if s[0].islower():
         return False
@@ -1477,7 +1643,7 @@ def _is_bullet_or_duty_line(line: str) -> bool:
     raw = (line or '').strip()
     if not raw:
         return False
-    if raw[:1] in '•·*-●▪▸►' or raw.startswith(('●', '•')):
+    if raw[:1] in '•·*-●▪▸►' or raw.startswith(('●', '•', '')):
         return True
     stripped = re.sub(r'^[\s•·\-\*●▪▸►]+', '', raw).strip()
     if _EXP_META_LINE.match(stripped) or _BARE_DUTY_HEADER.match(stripped):
@@ -1573,6 +1739,8 @@ def _join_wrapped_date_lines(lines: list[str]) -> list[str]:
 
 def _join_wrapped_experience_lines(lines: list[str]) -> list[str]:
     """Join PDF-wrapped duty lines onto the previous bullet/header."""
+    from app.ai.document_intelligence.bullets import is_wrap_continuation, strip_bullet_prefix
+
     if not lines:
         return []
     out: list[str] = [lines[0]]
@@ -1599,8 +1767,6 @@ def _join_wrapped_experience_lines(lines: list[str]) -> list[str]:
         if (
             _looks_like_job_header_line(n)
             or _is_role_comma_company_header(n)
-            or n[:1] in '•·*●▪▸►'
-            or n.startswith('●')
             or _looks_like_company_line(n)
         ):
             out.append(n)
@@ -1622,18 +1788,25 @@ def _join_wrapped_experience_lines(lines: list[str]) -> list[str]:
         if _looks_like_job_header_line(p) or _looks_like_role_only_line(p) or _looks_like_company_line(p):
             out.append(n)
             continue
-        # Continuation of previous bullet / soft-wrapped sentence only
+        # Continuation of previous bullet / soft-wrapped sentence only.
+        # Do not glue duration or skill-token lines in the job preamble.
+        nxt_had_bullet = n[:1] in '•·*●▪▸►' or n.startswith(('●', '•', ''))
+        prev_is_duty = (
+            p[:1] in '•·*●▪▸►'
+            or p.startswith(('●', '•', ''))
+            or _DUTY_VERB_START.match(re.sub(r'^[\s•·\-\*●]+', '', p))
+        )
         if (
-            (
-                p[:1] in '•·*●▪▸►'
-                or n[:1].islower()
-                or p.rstrip().endswith((',', '-', '–', '—'))
-            )
+            prev_is_duty
+            and is_wrap_continuation(p, n, nxt_had_bullet=nxt_had_bullet)
             and not _looks_like_job_header_line(n)
+            and not _looks_like_job_header_line(p)
+            and not _looks_like_role_only_line(p)
+            and not _looks_like_company_line(p)
             and not _DUTY_VERB_START.match(re.sub(r'^[\s•·\-\*●]+', '', n))
             and not re.match(r'(?i)^[A-Z][A-Za-z /&]{1,40}:\s+\S', n)
         ):
-            out[-1] = f'{p.rstrip()} {n.lstrip()}'.strip()
+            out[-1] = f'{p.rstrip()} {strip_bullet_prefix(n)}'.strip()
         else:
             out.append(n)
     return out
@@ -1657,6 +1830,8 @@ def _parse_experience_line(line: str) -> ExperienceEntry | None:
 
     stripped = re.sub(r'^[\s•·\-\*●]+', '', raw_line).strip()
     if _is_project_like_experience(stripped):
+        return None
+    if looks_like_skill_or_duration_company(stripped):
         return None
     if re.match(r'(?i)^client\s*name', stripped):
         return None
@@ -2178,6 +2353,23 @@ def _attach_prefix_tenures(
     return out
 
 
+def _description_is_job_header_echo(job: ExperienceEntry, desc: str) -> bool:
+    """True when description is only a restated role/company/dates header."""
+    d = (desc or '').strip()
+    if not d or '\n' in d:
+        return False
+    if _looks_like_job_header_line(d) and extract_date_range(d)[0]:
+        return True
+    company = (job.company or '').strip().lower()
+    role = (job.role or '').strip().lower()
+    blob = d.lower()
+    if company and company in blob and extract_date_range(d)[0]:
+        return True
+    if role and company and role in blob and company in blob:
+        return True
+    return False
+
+
 def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceEntry]:
     """
     Parse experience ONLY from the Experience section span.
@@ -2186,9 +2378,14 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
     Responsibilities block each become their own row and share that description.
     Two-column sidebar dates (extracted above the name) are zipped onto undated jobs.
     """
-    from app.ai.document_intelligence.bullets import restore_inferred_list_markers
+    from app.ai.document_intelligence.bullets import (
+        is_glyph_crumb,
+        join_duty_lines,
+        restore_inferred_list_markers,
+        split_inline_bullets,
+    )
 
-    raw = restore_inferred_list_markers(section_text or '').strip()
+    raw = restore_inferred_list_markers(split_inline_bullets(section_text or '')).strip()
     if not raw:
         return []
 
@@ -2226,7 +2423,7 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
                         start=start,
                         end=end,
                         is_current=is_current,
-                        description='\n'.join(desc_bits)[:2000],
+                        description=join_duty_lines(desc_bits)[:2000],
                     )
                 )
         if table_jobs:
@@ -2235,9 +2432,13 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
                 full_text,
             )
 
-    from app.ai.document_intelligence.bullets import is_bullet_line, join_duty_lines
+    from app.ai.document_intelligence.bullets import is_bullet_line
 
-    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    lines = [
+        ln.strip()
+        for ln in raw.splitlines()
+        if ln.strip() and not is_glyph_crumb(ln)
+    ]
     lines = _join_wrapped_date_lines(lines)
     lines = _join_wrapped_experience_lines(lines)
 
@@ -2259,6 +2460,8 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
                 continue
             if is_non_job_experience_record(job):
                 continue
+            if desc and _description_is_job_header_echo(job, desc):
+                desc = ''
             if desc:
                 job = job.model_copy(update={'description': desc})
             entries.append(job)
@@ -2440,7 +2643,7 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
             continue
         if e.start or (role and company and not _is_bullet_or_duty_line(role)):
             cleaned.append(e)
-        elif role and (
+        elif role and e.start and (
             _has_job_title_cue(role)
             or is_plausible_job_title(role)
             or re.search(r'(?i)\bintern\b', role)
@@ -2625,15 +2828,19 @@ def _coalesce_exploded_projects(rows: list[ProjectEntry]) -> list[ProjectEntry]:
 def parse_projects(section_text: str) -> list[ProjectEntry]:
     from app.ai.document_intelligence.bullets import (
         is_bullet_line,
+        is_glyph_crumb,
         join_duty_lines,
         restore_inferred_list_markers,
+        split_inline_bullets,
         strip_bullet_prefix,
     )
 
     lines = [
         ln.strip()
-        for ln in restore_inferred_list_markers(section_text or '').splitlines()
-        if ln.strip()
+        for ln in restore_inferred_list_markers(
+            split_inline_bullets(section_text or '')
+        ).splitlines()
+        if ln.strip() and not is_glyph_crumb(ln)
     ]
     out: list[ProjectEntry] = []
     current_name = ''
@@ -2814,6 +3021,124 @@ def _merge_internships_listed_under_education(
     return out
 
 
+_CONTACT_TENURE_TAIL = re.compile(
+    r'(?i)(?:[-–—]\s*)?(?:from\s+)?('
+    r'(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|'
+    r'jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|'
+    r'dec(?:ember)?)\s+(?:19|20)\d{2}\s*(?:[-–—]|to)\s*'
+    r'(?:still(?:\s+date)?|present|current|now|till\s*date|ongoing|(?:19|20)\d{2})'
+    r')\s*[-–—]*$'
+)
+
+
+def _split_glued_contact_tenure_lines(text: str) -> str:
+    """Peel 'email  -FROM SEP 2020 TO STILL DATE-' into contact + tenure lines."""
+    out: list[str] = []
+    for line in (text or '').splitlines():
+        s = (line or '').rstrip()
+        m = _CONTACT_TENURE_TAIL.search(s)
+        if m and ('@' in s or looks_like_phone_token(s[: m.start()])):
+            head = s[: m.start()].strip(' \t-–—')
+            if head:
+                out.append(head)
+            out.append(m.group(0).strip(' \t-–—'))
+            continue
+        out.append(line)
+    return '\n'.join(out)
+
+
+def _recover_jobs_from_unlabeled_preamble(
+    experience: list[ExperienceEntry],
+    sections: list[SectionSpan],
+    preamble: str,
+) -> list[ExperienceEntry]:
+    """When Experience is missing, recover only credible jobs from unlabeled lead-in.
+
+    Never scrapes Skills/Education/Projects or the full document. Duration-only
+    prose and contact lines are rejected.
+    """
+    if experience:
+        return experience
+    parts: list[str] = []
+    if (preamble or '').strip():
+        parts.append(preamble)
+    for span in sections or []:
+        if getattr(span, 'label', '') == 'Unclassified' and getattr(span, 'source', '') == (
+            'unclassified-preamble'
+        ):
+            blob = (span.text or '').strip()
+            if blob and blob not in parts:
+                parts.append(blob)
+    window = _split_glued_contact_tenure_lines('\n'.join(parts).strip())
+    if not window:
+        return experience
+    kept: list[ExperienceEntry] = []
+    for job in parse_experience(window, ''):
+        role = (job.role or '').strip()
+        start, end = extract_date_range(role)
+        if start:
+            updates = {'role': ''}
+            if not (job.start or '').strip():
+                updates['start'] = start
+                updates['end'] = end or job.end
+                updates['is_current'] = (end or '').lower() == 'present' or job.is_current
+            job = job.model_copy(update=updates)
+        blob = f'{job.company or ""} {job.role or ""} {job.description or ""}'
+        if is_fresher_or_years_only_experience_line(blob):
+            continue
+        if is_non_job_experience_record(job):
+            continue
+        if not has_credible_employment_evidence(job):
+            continue
+        kept.append(job)
+    return kept
+
+
+_SKILL_LABEL_LINE = re.compile(
+    r'(?i)^(?:(?:technical|key|core|soft)\s+)?skills?\s*:|'
+    r'^technical\s+(?:skills?|proficiency|expertise|knowledge)\s*:|'
+    r'^technicalskill\s*:|'
+    r'^(?:tools?|technologies?|tech\s+stack|competencies?)\s*(?:used)?\s*:'
+)
+
+
+def _skillish_unclassified_lines(blob: str) -> str:
+    """Keep labeled skill lines and short tool tokens from sidebar Unclassified."""
+    from app.ai.document_intelligence.bullets import strip_bullet_prefix
+    from app.ai.parser.enrichment.resume_text_inference import (
+        is_biodata_or_address_line,
+        is_plausible_skill_item,
+        split_list_items,
+    )
+
+    kept: list[str] = []
+    for line in (blob or '').splitlines():
+        s = strip_bullet_prefix(line)
+        if not s:
+            continue
+        if is_biodata_or_address_line(s):
+            continue
+        if _SKILL_LABEL_LINE.match(s):
+            kept.append(s)
+            continue
+        if ',' in s or '|' in s:
+            parts = split_list_items(s)
+            if (
+                2 <= len(parts) <= 12
+                and all(len(p.split()) <= 4 and is_plausible_skill_item(p) for p in parts)
+            ):
+                kept.extend(parts)
+            continue
+        if len(s) > 80 or len(s.split()) > 8:
+            continue
+        if not is_plausible_skill_item(s):
+            continue
+        ok, _ = validate_skill_item(s)
+        if ok:
+            kept.append(s)
+    return '\n'.join(kept)
+
+
 def parse_resume_from_sections(
     sections: list[SectionSpan],
     full_text: str,
@@ -2881,6 +3206,9 @@ def parse_resume_from_sections(
         'Computer Skills',
         'IT Skills',
         'Software Skills',
+        'Skill Set',
+        'Skillset',
+        'Other Technical Skills',
     )
     # Prefer explicit summary/objective labels (aliases also map to Summary).
     summary_text = pick_section(
@@ -2941,6 +3269,25 @@ def parse_resume_from_sections(
         'Leadership Activities',
         'Co-curricular Activities',
     )
+    unclassified = '\n'.join(
+        (s.text or '')
+        for s in sections
+        if s.label == 'Unclassified' and s.source != 'unclassified-preamble'
+    ).strip()
+    unclassified_all = '\n'.join(
+        (s.text or '')
+        for s in sections
+        if s.label == 'Unclassified'
+    ).strip()
+    # Weak section boundaries must not drop lines. Sidebar/preamble Unclassified
+    # can recover short skill tokens only — never Experience, never preamble dumps
+    # into Education.
+    if unclassified_all and len((skills_text or '').strip()) < 40:
+        skillish = _skillish_unclassified_lines(unclassified_all)
+        if skillish:
+            skills_text = f'{skills_text}\n{skillish}'.strip()
+    if unclassified and len((edu_text or '').strip()) < 40:
+        edu_text = f'{edu_text}\n{unclassified}'.strip()
 
     results: dict[str, Any] = {}
     # Sequential section parsing — avoids import/thread deadlocks under Flask workers
@@ -2951,6 +3298,11 @@ def parse_resume_from_sections(
     results['experience'] = _merge_internships_listed_under_education(
         results['experience'],
         edu_text,
+    )
+    results['experience'] = _recover_jobs_from_unlabeled_preamble(
+        results['experience'],
+        sections,
+        preamble,
     )
     results['skills'] = parse_skills(skills_text, full_text)
     results['summary'] = parse_summary(summary_text, full_text)
@@ -3016,6 +3368,16 @@ def parse_resume_from_sections(
         personal = personal.model_copy(update={'summary': ''})
 
     extra_meta: dict[str, Any] = {}
+    name_source = getattr(personal, '_name_source', '') or (
+        'deterministic' if (personal.full_name or '').strip() else ''
+    )
+    extra_meta['_field_provenance'] = {
+        'personal.full_name': name_source,
+        'experience': 'deterministic',
+        'education': 'deterministic',
+        'skills': 'deterministic',
+        'contact': 'deterministic',
+    }
     from app.ai.document_intelligence.bullets import split_bullet_items
 
     if ach_text:

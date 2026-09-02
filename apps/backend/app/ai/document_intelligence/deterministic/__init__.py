@@ -36,12 +36,12 @@ _DATE_ATOM = (
     r'|(?:19|20)\d{2}(?:[/\-](?:0?[1-9]|1[0-2]))?'
     r')'
 )
-_PRESENT_ATOM = r'(?:Present|Current|Now|Till\s*Date|Tilldate|Ongoing|Pursuing)'
+_PRESENT_ATOM = r'(?:Present|Current|Now|Till\s*Date|Tilldate|Ongoing|Pursuing|Still(?:\s+Date)?)'
 _DATE_RANGE_RE = re.compile(
     rf'(?i)\b({_DATE_ATOM})\s*(?:[-–—]|to)\s*({_DATE_ATOM}|{_PRESENT_ATOM})\b'
 )
 _PRESENT_TOKEN_RE = re.compile(
-    r'(?i)^(present|current|now|till\s*date|tilldate|ongoing|pursuing)$'
+    r'(?i)^(present|current|now|till\s*date|tilldate|ongoing|pursuing|still(?:\s+date)?)$'
 )
 
 

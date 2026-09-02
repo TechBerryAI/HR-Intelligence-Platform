@@ -904,3 +904,37 @@ def test_column_mix_gate_catches_skills_and_projects_inside_experience():
     )
     assert pe.looks_like_column_mix(mixed) is True
     assert pe.pdfplumber_result_is_preferable(GOOD_RESUME, mixed) is False
+
+
+def test_address_first_missing_name_triggers_pdfplumber_compare():
+    """Sidebar/two-column extracts that start with phone/address should be compared."""
+    address_first = (
+        '8217276434\n'
+        'x96@example.com\n'
+        '#244, 1st Main Road, 2nd Cross\n'
+        'Maruthi Nagar\n'
+        'Bapuji Nagar, Bangalore\n'
+        'Contact\n'
+        'Summary\n'
+        'MongoDB Linux NoSQL\n'
+        'Education\n'
+        'bachelor of engineering\n'
+        'Experience\n'
+        '2.7 years of experience in Mongo DB administration and cluster setup.\n'
+    )
+    plumber_with_name = (
+        'JANE CANDIDATE\n'
+        'ASSOCIATE DATABASE ENGINEER\n'
+        'CONTACT:\n'
+        '8217276434\n'
+        'jane.candidate@example.com\n'
+        'Summary\n'
+        'Employment background reflects well over 2 years in Mongo DB.\n'
+        'Education\n'
+        'Bachelor of Engineering\n'
+    )
+    assert pe.fallback_reason(address_first, None) == 'address_first_missing_name'
+    assert pe.pdfplumber_result_is_preferable(address_first, plumber_with_name) is True
+    # A named digital extract must still keep PyMuPDF
+    named = 'Anita Rao\nSoftware Engineer\nanita@example.com\n9876543210\nMumbai\nExperience\nAcme | Engineer | 2020-2024\n'
+    assert pe.fallback_reason(named, None) is None

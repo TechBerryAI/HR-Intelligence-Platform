@@ -62,6 +62,9 @@ _HEADER_ALIASES = {
     'technical expertise': 'Skills',
     'technical knowledge': 'Skills',
     'technical skill': 'Skills',
+    'technicalskill': 'Skills',
+    'soft skills': 'Skills',
+    'softskills': 'Skills',
     'core skills': 'Skills',
     'core competencies': 'Skills',
     'areas of expertise': 'Skills',
@@ -114,6 +117,10 @@ _HEADER_ALIASES = {
     'project details': 'Projects',
     'strengths': 'Strengths',
     'key strengths': 'Strengths',
+    'areas of strength': 'Strengths',
+    'area of strength': 'Strengths',
+    'hobbies': 'Hobbies',
+    'hobby': 'Hobbies',
     'achievements': 'Achievements',
     'accomplishments': 'Achievements',
     'awards': 'Achievements',
@@ -139,7 +146,37 @@ _HEADER_ALIASES = {
     'research internship': 'Experience',
     'graduate internship': 'Experience',
     'training experience': 'Experience',
+    'work summary': 'Summary',
+    'worksummary': 'Summary',
+    'personal summary': 'Summary',
+    'personalsummary': 'Summary',
+    'experience summary': 'Summary',
+    'experiencesummary': 'Summary',
+    'personal information': 'Personal Information',
+    'personalinformation': 'Personal Information',
+    'personal details': 'Personal Details',
+    'personaldetails': 'Personal Details',
+    'other technical skills': 'Skills',
+    'othertechnicalskills': 'Skills',
+    'skillset': 'Skills',
+    'skill set': 'Skills',
+    'skills set': 'Skills',
 }
+
+# OCR often glues heading words ("Personalinformation", "EXPERIENCESUMMARY").
+_HEADER_ALIASES_COMPACT = {
+    re.sub(r'[^a-z0-9]', '', key): value for key, value in _HEADER_ALIASES.items()
+}
+
+# Document titles are not content-section boundaries.
+_DOCUMENT_TITLE_KEYS = frozenset({
+    'cv',
+    'resume',
+    'curriculum vitae',
+    'curriculumvitae',
+    'confidential resume',
+    'confidentialresume',
+})
 
 
 @dataclass
@@ -177,21 +214,35 @@ def normalize_section_header(line: str) -> str | None:
         return None
     low = stripped.lower()
     key = _header_lookup_key(stripped)
+    compact = re.sub(r'[^a-z0-9]', '', key)
+    if (
+        low in _DOCUMENT_TITLE_KEYS
+        or key in _DOCUMENT_TITLE_KEYS
+        or compact in _DOCUMENT_TITLE_KEYS
+    ):
+        return None
     if low in _HEADER_ALIASES:
         return _HEADER_ALIASES[low]
     if key in _HEADER_ALIASES:
         return _HEADER_ALIASES[key]
+    if compact and compact in _HEADER_ALIASES_COMPACT:
+        return _HEADER_ALIASES_COMPACT[compact]
     # "Internship / Training Programm", "Internship Experience", etc.
     if _EXP_HEADER_PREFIX.match(low) and len(low) <= 80:
         return 'Experience'
     if key and _EXP_HEADER_PREFIX.match(key) and len(key) <= 80:
         return 'Experience'
     if low in SECTION_HEADERS:
-        return stripped.title() if low not in ('cv', 'resume') else None
+        return stripped.title()
     if is_section_header_line(stripped):
         if _EXP_HEADER_PREFIX.match(low) or (key and _EXP_HEADER_PREFIX.match(key)):
             return 'Experience'
-        return _HEADER_ALIASES.get(low) or _HEADER_ALIASES.get(key) or stripped.title()
+        return (
+            _HEADER_ALIASES.get(low)
+            or _HEADER_ALIASES.get(key)
+            or _HEADER_ALIASES_COMPACT.get(compact)
+            or stripped.title()
+        )
     return None
 
 

@@ -375,3 +375,87 @@ def test_indented_duty_without_glyph_is_list_item():
     assert restored.count('•') >= 2
     assert 'Handled cash operations' in restored
     assert not restored.split('Handled')[1].strip().startswith('•')
+
+
+def test_skill_or_duration_line_not_promoted_to_experience_company():
+    jobs = parse_experience(
+        '5 Years 6 Months\n'
+        'Linux\n'
+        'Shell Scripting\n'
+        'Performance Tuning\n'
+        'Backup\n'
+        'Allianz Technology\n'
+        'Senior PostgreSQL Analyst\n'
+        'Oct 2021 - Present\n'
+        '• Migrated Azure postgres single server to flexible server\n'
+    )
+    companies = [(j.company or '').lower() for j in jobs]
+    assert 'linux' not in companies
+    assert 'shell scripting' not in companies
+    assert 'performance tuning' not in companies
+    assert 'backup' not in companies
+    assert not any('year' in (c or '') and 'month' in (c or '') for c in companies)
+    assert any('allianz' in (c or '') for c in companies)
+    jobs2 = parse_experience(
+        'English\n'
+        'Successfully configured pg_backrest backup strategy\n'
+        'Appscore Solutions | PostgreSQL DBA | Jan 2018 - Dec 2020\n'
+        '• Administered production clusters\n'
+    )
+    companies2 = [(j.company or '').lower() for j in jobs2]
+    assert 'english' not in companies2
+    assert not any(c.startswith('successfully') for c in companies2)
+
+
+def test_fresher_experience_equals_line_does_not_invent_job():
+    from app.ai.document_intelligence.pipeline import parse_resume_text_to_canonical
+
+    text = """
+Dana Parthe
+dparthe45@example.com
+8408897040
+Mumbai
+
+Career Objective
+To work in a challenging IT position.
+
+Skills
+WebLogic Server, Oracle HTTP Server, Linux, SSH, HTTP
+
+Education
+B.Sc IT, Mumbai University, 2022
+
+Work experience = fresher
+Completed weblogic class from Hyderabad team.
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text, allow_semantic=False)
+    companies = ' '.join((e.company or '').lower() for e in profile.experience)
+    roles = ' '.join((e.role or '').lower() for e in profile.experience)
+    assert 'weblogic' not in companies
+    assert 'deployer' not in companies
+    assert 'applying utilities' not in roles
+    assert all((e.company or '').strip() and (e.role or '').strip() for e in profile.experience) or not profile.experience
+
+
+def test_biodata_label_not_used_as_location():
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_location_value
+
+    assert is_plausible_location_value('Name') is False
+    assert is_plausible_location_value('Designation') is False
+    assert is_plausible_location_value('Mumbai') is True
+
+
+def test_locality_suffix_not_used_as_person_name():
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_person_name
+
+    assert is_plausible_person_name('Maruthi Nagar') is False
+    assert is_plausible_person_name('Bapuji Nagar') is False
+    assert is_plausible_person_name('Anita Rao') is True
+
+
+def test_duty_fragment_not_kept_as_skill():
+    from app.ai.document_intelligence.validation.engine import validate_skill_item
+
+    assert validate_skill_item('Experience Senior Technology Manager')[0] is False
+    assert validate_skill_item('000+ users across 5 countries')[0] is False
+    assert validate_skill_item('Python')[0] is True

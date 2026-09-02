@@ -30,8 +30,22 @@ _EXP_SECTION_RE = re.compile(
 
 
 def has_experience_section_evidence(text: str) -> bool:
-    """True when a Work/Internship/Experience section header exists in source."""
-    return bool(_EXP_SECTION_RE.search(text or ''))
+    """True when a Work/Internship/Experience section header exists in source.
+
+    'Work experience = fresher' and 'Total Experience: 4.7 Years' are not job sections.
+    """
+    from app.ai.parser.enrichment.resume_text_inference import (
+        is_fresher_or_years_only_experience_line,
+    )
+
+    for m in _EXP_SECTION_RE.finditer(text or ''):
+        line_start = (text or '').rfind('\n', 0, m.start()) + 1
+        line_end = (text or '').find('\n', m.start())
+        line = (text or '')[line_start: line_end if line_end != -1 else None]
+        if is_fresher_or_years_only_experience_line(line):
+            continue
+        return True
+    return False
 
 
 def _has_email_evidence(text: str) -> bool:
@@ -85,7 +99,8 @@ def _experience_section_text(text: str) -> str:
         r'(.*?)(?=\n\s*(?:\*\*)?(?:education|academic|skills|skill\s*sets?|'
         r'technical\s+skills?|technical\s+proficiency|technical\s+expertise|'
         r'technical\s+knowledge|projects?|certifications?|personal\s+details|'
-        r'personal\s+information|biodata|declaration)(?:\*\*)?\s*:?\s*$|\Z)',
+        r'personal\s+information|personalinformation|biodata|declaration|'
+        r'hobbies|areas?\s+of\s+strength)(?:\*\*)?\s*:?\s*$|\Z)',
         text or '',
     )
     return (m.group(1) if m else '').strip()
@@ -302,38 +317,56 @@ def recover_resume_profile_gaps(
         section_body = _experience_section_text(text)
         parsed_exp = parse_experience(section_body, text) if section_body else []
         if parsed_exp:
-            from app.ai.parser.enrichment.resume_text_inference import is_non_job_experience_record
-
-            parsed_exp = [e for e in parsed_exp if not is_non_job_experience_record(e)]
-        if not parsed_exp:
             from app.ai.parser.enrichment.resume_text_inference import (
-                extract_experience_from_text,
+                has_credible_employment_evidence,
                 is_non_job_experience_record,
             )
 
-            loose = extract_experience_from_text(text)
             parsed_exp = [
-                ExperienceEntry(
-                    company=str(e.get('company') or '')[:200],
-                    role=str(e.get('title') or e.get('role') or '')[:200],
-                    start=str(e.get('from') or e.get('start') or ''),
-                    end=str(e.get('to') or e.get('end') or ''),
-                    description=str(e.get('description') or '')[:2000],
-                )
-                for e in loose
-                if isinstance(e, dict)
-                and (
-                    str(e.get('title') or e.get('role') or '').strip()
-                    or str(e.get('company') or '').strip()
-                )
-                and not is_non_job_experience_record(e)
+                e
+                for e in parsed_exp
+                if not is_non_job_experience_record(e) and has_credible_employment_evidence(e)
             ]
+        if not parsed_exp:
+            from app.ai.parser.enrichment.resume_text_inference import (
+                extract_experience_from_text,
+                has_credible_employment_evidence,
+                is_fresher_or_years_only_experience_line,
+                is_non_job_experience_record,
+                looks_like_skill_or_duration_company,
+            )
+
+            # Never scrape Skills/summary prose. Only the Experience section body.
+            loose_src = section_body or ''
+            if loose_src and not is_fresher_or_years_only_experience_line(loose_src.splitlines()[0] if loose_src.splitlines() else ''):
+                loose = extract_experience_from_text(loose_src)
+                parsed_exp = [
+                    ExperienceEntry(
+                        company=str(e.get('company') or '')[:200],
+                        role=str(e.get('title') or e.get('role') or '')[:200],
+                        start=str(e.get('from') or e.get('start') or ''),
+                        end=str(e.get('to') or e.get('end') or ''),
+                        description=str(e.get('description') or '')[:2000],
+                    )
+                    for e in loose
+                    if isinstance(e, dict)
+                    and (
+                        str(e.get('title') or e.get('role') or '').strip()
+                        or str(e.get('company') or '').strip()
+                    )
+                    and not is_non_job_experience_record(e)
+                    and not looks_like_skill_or_duration_company(
+                        str(e.get('company') or '')
+                    )
+                    and has_credible_employment_evidence(e)
+                ]
         parsed_complete = _complete_exp_count(parsed_exp)
         existing_complete = _complete_exp_count(exp_list)
+        # Never invent extra jobs just because a re-parse produced more rows.
+        # Empty deterministic experience stays empty unless recovered rows are credible.
         better = parsed_exp and (
-            not exp_list
-            or parsed_complete > existing_complete
-            or (parsed_complete >= existing_complete and len(parsed_exp) > len(exp_list))
+            (not exp_list and parsed_complete > 0)
+            or (exp_list and parsed_complete > existing_complete)
         )
         if better:
             data['experience'] = [e.model_dump() for e in parsed_exp]
@@ -368,6 +401,56 @@ def recover_resume_profile_gaps(
             fields.append(FieldCoverage('experience', 'filled', True))
     else:
         fields.append(FieldCoverage('experience', 'missing_no_evidence', False))
+
+    # Skills: recover into Skills only when the section was weak/missing
+    skills = list(data.get('skills') or [])
+    if len(skills) < 3:
+        from app.ai.document_intelligence.validation.engine import validate_skill_item
+        from app.ai.parser.enrichment.resume_text_inference import extract_skills_from_text
+
+        seen = {
+            str(s.get('name') or '').strip().lower()
+            for s in skills
+            if isinstance(s, dict)
+        }
+        added = []
+        for item in extract_skills_from_text(text):
+            key = item.strip().lower()
+            if not key or key in seen:
+                continue
+            if not validate_skill_item(item)[0]:
+                continue
+            added.append({'name': item, 'canonical': item, 'category': ''})
+            seen.add(key)
+            if len(skills) + len(added) >= 40:
+                break
+        if added:
+            data['skills'] = skills + added
+            recovered.append('skills')
+            fields.append(FieldCoverage('skills', 'recovered', True, f'{len(added)} items'))
+
+    meta = dict(data.get('field_meta') or {})
+    prov = dict(meta.get('_field_provenance') or {})
+    try:
+        from app.ai.parser.engine.confidence import provenance_outranks
+    except Exception:
+        provenance_outranks = None  # type: ignore[assignment]
+    _RECOVER_PATH = {
+        'fullName': 'personal.full_name',
+        'education': 'education',
+        'experience': 'experience',
+        'skills': 'skills',
+    }
+    for key in recovered:
+        path = _RECOVER_PATH.get(key)
+        if not path:
+            continue
+        src = 'document_wide_recovery'
+        existing = prov.get(path, '')
+        if provenance_outranks is None or provenance_outranks(src, existing):
+            prov[path] = src
+    meta['_field_provenance'] = prov
+    data['field_meta'] = meta
 
     report = CoverageReport(fields=fields)
     try:

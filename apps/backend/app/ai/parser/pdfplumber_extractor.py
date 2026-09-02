@@ -472,6 +472,39 @@ def _has_identity_tokens(text: str) -> bool:
     )
 
 
+def _looks_like_address_first_missing_name(text: str) -> bool:
+    """
+    Two-column / sidebar PDFs often emit phone, email, or street first and
+    drop the candidate name from the early reading order.
+
+    Triggers a pdfplumber compare only — never replaces PyMuPDF by itself.
+    """
+    head = (text or '')[:900]
+    if len(head.strip()) < 40:
+        return False
+    try:
+        from app.ai.parser.enrichment.resume_text_inference import (
+            extract_name_from_text,
+            is_biodata_or_address_line,
+            is_plausible_person_name,
+            looks_like_email_or_url,
+            looks_like_phone_token,
+        )
+    except Exception:
+        return False
+    found = extract_name_from_text(head)
+    if found and is_plausible_person_name(found) and not is_biodata_or_address_line(found):
+        return False
+    first = next((ln.strip() for ln in head.splitlines() if ln.strip()), '')
+    if not first:
+        return False
+    if looks_like_phone_token(first) or looks_like_email_or_url(first):
+        return True
+    if re.match(r'^[#\d]', first) or is_biodata_or_address_line(first):
+        return True
+    return False
+
+
 def fallback_reason(
     pymupdf_text: str | None,
     pymupdf_error: BaseException | None,
@@ -496,6 +529,8 @@ def fallback_reason(
         return 'broken_layout'
     if looks_like_unextracted_tables(text):
         return 'table_layout'
+    if _looks_like_address_first_missing_name(text):
+        return 'address_first_missing_name'
     return None
 
 
@@ -547,6 +582,36 @@ def pdfplumber_result_is_preferable(pymupdf_text: str | None, plumber_text: str)
     if fallback_reason(pymu, None) is None:
         return False
     if _plumber_is_degraded(plumber, pymu):
+        return False
+
+    reason = fallback_reason(pymu, None)
+    if reason == 'address_first_missing_name':
+        try:
+            from app.ai.parser.enrichment.resume_text_inference import (
+                extract_name_from_text,
+                is_plausible_person_name,
+                join_spaced_letter_name,
+            )
+
+            def _head_identity(text: str) -> str:
+                head = text[:1200]
+                found = extract_name_from_text(head)
+                if found and is_plausible_person_name(found):
+                    return found
+                for ln in head.splitlines()[:25]:
+                    joined = join_spaced_letter_name(ln)
+                    if joined:
+                        return joined
+                return ''
+
+            pl_name = _head_identity(plumber)
+            pymu_name = _head_identity(pymu)
+            if pl_name and is_plausible_person_name(pl_name) and not (
+                pymu_name and is_plausible_person_name(pymu_name)
+            ):
+                return True
+        except Exception:
+            return False
         return False
 
     pymu_garbage = looks_like_garbage_extract(pymu)
