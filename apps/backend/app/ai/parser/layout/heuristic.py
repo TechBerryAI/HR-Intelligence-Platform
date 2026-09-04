@@ -16,7 +16,8 @@ _EXP_HEADER_PREFIX = re.compile(
     r'(?i)^(internship|internships|internship\s+experience|industrial\s+trainings?|'
     r'summer\s+internship|trainings?|apprenticeship|internship\s*/\s*training|'
     r'career\s+timeline|employment\s+details|employment\s+history|'
-    r'professional\s+history|organisational\s+experience|organizational\s+experience)'
+    r'professional\s+history|organisational\s+experience|organizational\s+experience|'
+    r'details\s+of\s+experience|experience\s+and\s+projects?)'
 )
 
 
@@ -43,6 +44,11 @@ _HEADER_ALIASES = {
     'professional history': 'Experience',
     'organisational experience': 'Experience',
     'organizational experience': 'Experience',
+    'details of experience': 'Experience',
+    'details of experience and project': 'Experience',
+    'details of experience and projects': 'Experience',
+    'experience and project': 'Experience',
+    'experience and projects': 'Experience',
     'internship': 'Experience',
     'internships': 'Experience',
     'internship experience': 'Experience',
@@ -96,6 +102,7 @@ _HEADER_ALIASES = {
     'professional certifications': 'Certifications',
     'courses': 'Certifications',
     'professional summary': 'Summary',
+    'professional objective': 'Summary',
     'professional profile': 'Summary',
     'personal profile': 'Summary',
     'profile summary': 'Summary',
@@ -115,6 +122,12 @@ _HEADER_ALIASES = {
     'major project': 'Projects',
     'project experience': 'Projects',
     'project details': 'Projects',
+    'project description': 'Projects',
+    'project descriptions': 'Projects',
+    'project summary': 'Projects',
+    'performance achievements': 'Achievements',
+    'key achievements': 'Achievements',
+    'major achievements': 'Achievements',
     'strengths': 'Strengths',
     'key strengths': 'Strengths',
     'areas of strength': 'Strengths',
@@ -146,6 +159,7 @@ _HEADER_ALIASES = {
     'research internship': 'Experience',
     'graduate internship': 'Experience',
     'training experience': 'Experience',
+    'technical experience': 'Experience',
     'work summary': 'Summary',
     'worksummary': 'Summary',
     'personal summary': 'Summary',
@@ -156,6 +170,11 @@ _HEADER_ALIASES = {
     'personalinformation': 'Personal Information',
     'personal details': 'Personal Details',
     'personaldetails': 'Personal Details',
+    'overview': 'Summary',
+    'role overview': 'Summary',
+    'professional synopsis': 'Summary',
+    'educational credentials': 'Education',
+    'educational credential': 'Education',
     'other technical skills': 'Skills',
     'othertechnicalskills': 'Skills',
     'skillset': 'Skills',
@@ -211,8 +230,26 @@ def _strip_header_decoration(line: str) -> str:
     return s
 
 
+_CHECKMARK_PREFIX = re.compile(r'^[\s✓✔☑☒☐◆▪▫►▸\uf0fc\uf0a7√]+')
+_INLINE_OK_HEADINGS = frozenset({
+    'skills', 'technical skills', 'education', 'experience',
+    'work experience', 'professional experience', 'summary',
+    'professional summary', 'objective', 'career objective',
+    'projects', 'certifications', 'declaration',
+})
+
+
 def normalize_section_header(line: str) -> str | None:
     """Return canonical section title if line is a resume section header."""
+    raw = (line or '').strip()
+    # Check/ballot-prefixed lines are skill/education items, not section titles.
+    if raw and _CHECKMARK_PREFIX.match(raw):
+        return None
+    # "Languages: Oracle SQL" is a labeled field, not a Languages section.
+    if ':' in raw:
+        left, right = raw.split(':', 1)
+        if right.strip() and _header_lookup_key(left) not in _INLINE_OK_HEADINGS:
+            return None
     stripped = _strip_header_decoration(line or '')
     if not stripped or len(stripped) > 80:
         return None
@@ -264,6 +301,130 @@ def normalize_section_header(line: str) -> str | None:
     return None
 
 
+def _glued_heading_phrases() -> list[tuple[str, str]]:
+    """Longest-first (phrase, canonical) pairs for glued-heading splits."""
+    phrases: dict[str, str] = {}
+    for key, canon in _HEADER_ALIASES.items():
+        compact = re.sub(r'[^a-z0-9]', '', key)
+        if len(compact) < 5 and key not in {'skills'}:
+            continue
+        phrases[key] = canon
+        if compact != key:
+            phrases[compact] = canon
+    for raw in (
+        'experience', 'education', 'skills', 'summary', 'projects',
+        'certifications', 'declaration', 'objective', 'overview',
+    ):
+        phrases.setdefault(raw, normalize_section_header(raw) or raw.title())
+    return sorted(phrases.items(), key=lambda kv: (-len(kv[0]), kv[0]))
+
+
+_GLUED_HEADING_PHRASES: list[tuple[str, str]] | None = None
+
+
+def split_glued_heading_line(line: str) -> tuple[str | None, str]:
+    """Split ``SkillsPython`` / ``EducationBachelor`` at a heading boundary.
+
+    Requires a letter-case or punctuation boundary so ``Developer`` stays intact.
+    """
+    raw = (line or '').rstrip()
+    if not raw.strip():
+        return None, raw
+    lead = raw[: len(raw) - len(raw.lstrip())]
+    stripped = raw.strip()
+    body = re.sub(r'^[\s•·\-\*●▪▸►]+', '', stripped)
+    bullet = stripped[: max(0, len(stripped) - len(body))].rstrip()
+    global _GLUED_HEADING_PHRASES
+    if _GLUED_HEADING_PHRASES is None:
+        _GLUED_HEADING_PHRASES = _glued_heading_phrases()
+    def _prefix_end(phrase: str) -> int | None:
+        if body.lower().startswith(phrase) and len(body) > len(phrase):
+            return len(phrase)
+        want = re.sub(r'[^a-z0-9]', '', phrase)
+        if not want:
+            return None
+        compact = ''
+        i = 0
+        while i < len(body) and len(compact) < len(want):
+            if body[i].isalnum():
+                compact += body[i].lower()
+            i += 1
+        if compact == want and i < len(body):
+            return i
+        return None
+
+    for phrase, canon in _GLUED_HEADING_PHRASES:
+        idx = _prefix_end(phrase)
+        if idx is None:
+            continue
+        nxt = body[idx]
+        if nxt.isalpha() and nxt.islower():
+            continue
+        if nxt.isalpha() and nxt.isupper():
+            rest = body[idx:]
+        elif nxt.isdigit() or nxt in '•·●:：-–—':
+            rest = body[idx:].lstrip(' :：-–—')
+        else:
+            continue
+        if not rest:
+            continue
+        prefix = f'{lead}{bullet} '.rstrip()
+        return canon, f'{prefix} {rest}'.strip() if prefix else rest
+    return None, raw
+
+
+def _maybe_compact_letter_spaced_heading(line: str) -> str:
+    """Turn letter-spaced OCR headings into canonical section titles."""
+    from app.ai.parser.enrichment.resume_text_inference import (
+        letter_spaced_alpha_compact,
+        is_section_header_line,
+    )
+
+    raw = line or ''
+    compact = letter_spaced_alpha_compact(raw)
+    if not compact:
+        return raw
+    key = _header_lookup_key(compact)
+    glued = re.sub(r'[^a-z0-9]', '', key)
+    if key in _HEADER_ALIASES:
+        return _HEADER_ALIASES[key]
+    if glued and glued in _HEADER_ALIASES_COMPACT:
+        return _HEADER_ALIASES_COMPACT[glued]
+    if compact.lower() in SECTION_HEADERS or glued in SECTION_HEADERS:
+        header = normalize_section_header(compact) or normalize_section_header(compact.title())
+        return header or compact.title()
+    if is_section_header_line(compact) or is_section_header_line(raw):
+        header = normalize_section_header(compact) or normalize_section_header(raw)
+        return header or compact.title()
+    return raw
+
+
+def compact_letter_spaced_section_headings(text: str) -> str:
+    """Rewrite letter-spaced section headings; leave identity lines unchanged."""
+    if not (text or '').strip():
+        return text or ''
+    out: list[str] = []
+    for ln in text.splitlines():
+        out.append(_maybe_compact_letter_spaced_heading(ln))
+    return '\n'.join(out)
+
+
+def separate_glued_resume_headings(text: str) -> str:
+    """Put identifiable glued headings on their own line. One pass."""
+    if not (text or '').strip():
+        return text or ''
+    out: list[str] = []
+    for ln in text.splitlines():
+        ln = _maybe_compact_letter_spaced_heading(ln)
+        heading, rest = split_glued_heading_line(ln)
+        if heading and rest:
+            out.append(heading)
+            out.append(rest)
+        else:
+            out.append(ln)
+    return '\n'.join(out)
+
+
 def structure_text_by_headers(text: str) -> str:
     """
     Re-emit resume text with clear section headers on their own lines.
@@ -289,10 +450,19 @@ def structure_text_by_headers(text: str) -> str:
         body = []
 
     for line in lines:
-        stripped = line.strip()
+        stripped = _maybe_compact_letter_spaced_heading(line).strip()
         if not stripped:
             if body and body[-1] != '':
                 body.append('')
+            continue
+        glued_header, glued_rest = split_glued_heading_line(stripped)
+        if glued_header and glued_rest:
+            if is_in_job_contact_header(glued_header, current):
+                body.append(stripped)
+                continue
+            flush()
+            current = glued_header
+            body.append(glued_rest)
             continue
         header = normalize_section_header(stripped)
         if header:

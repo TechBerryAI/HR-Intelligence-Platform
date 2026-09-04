@@ -195,6 +195,135 @@ def from_pdf_bytes(file_data: bytes, *, max_pages: int = 40) -> LayoutDocument |
     )
 
 
+_SIDEBAR_CUE = re.compile(
+    r'(?i)\b(?:skills?|languages?|tools?|databases?|contact|phone|email|'
+    r'mobile|linkedin|hobbies|strengths|personal\s+details)\b'
+)
+_MAIN_CUE = re.compile(
+    r'(?i)\b(?:experience|education|company|employer|organization|duration|'
+    r'responsibilities|currently\s+working|worked\s+with|bachelor|university)\b'
+)
+
+
+def _line_width(ln: LayoutLine) -> float:
+    if not ln.bbox:
+        return 0.0
+    return max(0.0, ln.bbox[2] - ln.bbox[0])
+
+
+def _column_score(lines: list[LayoutLine], cue: re.Pattern[str]) -> float:
+    if not lines:
+        return 0.0
+    hits = sum(1 for ln in lines if cue.search(ln.text or ''))
+    return hits / max(len(lines), 1)
+
+
+def _reconstruct_page_regions(rows: list[LayoutLine]) -> list[str]:
+    """HEADER → MAIN → SIDEBAR when geometry supports it; else reading order."""
+    boxed = [ln for ln in rows if ln.bbox]
+    if len(boxed) < 8:
+        return [ln.text for ln in rows]
+    min_x = min(ln.bbox[0] for ln in boxed)
+    max_x = max(ln.bbox[2] for ln in boxed)
+    min_y = min(ln.bbox[1] for ln in boxed)
+    max_y = max(ln.bbox[3] for ln in boxed)
+    width = max_x - min_x
+    height = max_y - min_y
+    if width < 200 or height < 80:
+        return [ln.text for ln in rows]
+
+    header_cut = min_y + height * 0.18
+    sizes = [ln.font_size or 0.0 for ln in boxed if ln.font_size]
+    median_size = sorted(sizes)[len(sizes) // 2] if sizes else 0.0
+    header: list[LayoutLine] = []
+    body: list[LayoutLine] = []
+    for ln in boxed:
+        y0 = ln.bbox[1]
+        span_w = _line_width(ln)
+        large = bool(ln.font_size and median_size and ln.font_size >= median_size * 1.25)
+        fullish = span_w >= width * 0.55
+        if y0 <= header_cut and (fullish or large or span_w >= width * 0.35):
+            header.append(ln)
+        else:
+            body.append(ln)
+    if len(header) < 2:
+        body = boxed
+        header = []
+
+    work = body or boxed
+    xs = sorted((ln.bbox[0] + ln.bbox[2]) / 2.0 for ln in work)
+    if len(xs) < 6:
+        ordered = sorted(boxed, key=lambda ln: (ln.bbox[1], ln.bbox[0]))
+        return [ln.text for ln in ordered]
+    gaps = [(xs[i + 1] - xs[i], (xs[i] + xs[i + 1]) / 2.0) for i in range(len(xs) - 1)]
+    gap, gutter = max(gaps, key=lambda g: g[0])
+    if gap < max(36.0, width * 0.10):
+        ordered = sorted(boxed, key=lambda ln: (ln.bbox[1], ln.bbox[0]))
+        return [ln.text for ln in ordered]
+
+    left = [ln for ln in work if (ln.bbox[0] + ln.bbox[2]) / 2.0 < gutter]
+    right = [ln for ln in work if (ln.bbox[0] + ln.bbox[2]) / 2.0 >= gutter]
+    if len(left) < 3 or len(right) < 3:
+        ordered = sorted(boxed, key=lambda ln: (ln.bbox[1], ln.bbox[0]))
+        return [ln.text for ln in ordered]
+
+    def _col_width(col: list[LayoutLine]) -> float:
+        return max(ln.bbox[2] for ln in col) - min(ln.bbox[0] for ln in col)
+
+    left_w, right_w = _col_width(left), _col_width(right)
+    left_sidebar = left_w < right_w * 0.62
+    right_sidebar = right_w < left_w * 0.62
+    if left_sidebar and not right_sidebar:
+        sidebar, main = left, right
+    elif right_sidebar and not left_sidebar:
+        sidebar, main = right, left
+    else:
+        left_side = _column_score(left, _SIDEBAR_CUE) - _column_score(left, _MAIN_CUE)
+        right_side = _column_score(right, _SIDEBAR_CUE) - _column_score(right, _MAIN_CUE)
+        if left_side >= right_side:
+            sidebar, main = left, right
+        else:
+            sidebar, main = right, left
+
+    def _sort_col(col: list[LayoutLine]) -> list[LayoutLine]:
+        return sorted(col, key=lambda ln: (ln.bbox[1], ln.bbox[0]))
+
+    out: list[str] = []
+    out.extend(ln.text for ln in _sort_col(header))
+    if header:
+        out.append('')
+    out.extend(ln.text for ln in _sort_col(main))
+    out.append('')
+    out.extend(ln.text for ln in _sort_col(sidebar))
+    return out
+
+
+def maybe_reorder_two_column(extracted_text: str, file_data: bytes | None) -> str | None:
+    """HEADER / MAIN / SIDEBAR reading order when PDF boxes show regions.
+
+    Uses gutter + column width + content cues. Does not bisect at page midpoint.
+    """
+    if not file_data:
+        return None
+    doc = from_pdf_bytes(file_data)
+    if not doc or not doc.lines:
+        return None
+    boxed = [ln for ln in doc.lines if ln.bbox and (ln.text or '').strip()]
+    if len(boxed) < 8:
+        return None
+    page_groups: dict[int, list[LayoutLine]] = {}
+    for ln in boxed:
+        page_groups.setdefault(ln.page, []).append(ln)
+    out: list[str] = []
+    for page in sorted(page_groups):
+        out.extend(_reconstruct_page_regions(page_groups[page]))
+        out.append('')
+    text = '\n'.join(out).strip()
+    if len(text) < max(30, int(len(extracted_text or '') * 0.45)):
+        return None
+    return text
+
+
 def normalize_extracted_resume_text(
     text: str,
     *,

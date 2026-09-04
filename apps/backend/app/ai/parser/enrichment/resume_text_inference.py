@@ -11,10 +11,12 @@ from typing import Any
 
 SKILL_SECTION_STOP = (
     r'education|academic\s+background|academics|qualifications|'
-    r'experience|work\s+experience|professional\s+experience|employment|work\s+history|'
+    r'experience|work\s+experience|professional\s+experience|technical\s+experience|'
+    r'employment|work\s+history|'
     r'projects?|certifications?|certificates?|licenses?|credentials?|'
     r'languages?|awards?|interests?|references?|'
-    r'career\s+objective|professional\s+summary|profile\s+summary|career\s+profile|'
+    r'career\s+objective|professional\s+objective|professional\s+summary|'
+    r'profile\s+summary|career\s+profile|'
     r'career\s+summary|summary|objective|profile|about\s+me'
 )
 
@@ -31,6 +33,7 @@ SKILL_SECTION_PATTERN = re.compile(
 
 # Priority order for summary / objective section headings (highest first).
 SUMMARY_HEADING_PRIORITY: tuple[str, ...] = (
+    'professional objective',
     'career objective',
     'professional summary',
     'professional profile',
@@ -42,6 +45,7 @@ SUMMARY_HEADING_PRIORITY: tuple[str, ...] = (
     'about me',
     'career profile',
     'career summary',
+    'overview',
 )
 
 # Known headers that terminate a summary/objective body (line-anchored).
@@ -64,8 +68,9 @@ _SUMMARY_BODY_STOP = (
 
 # Legacy pattern kept for any external imports; prefer extract_summary_from_text.
 SUMMARY_SECTION_PATTERN = re.compile(
-    r'(?im)^(?:\*\*)?(?:career\s+objective|professional\s+summary|profile\s+summary|'
-    r'career\s+profile|career\s+summary|summary|objective|profile|about\s+me)'
+    r'(?im)^(?:\*\*)?(?:career\s+objective|professional\s+objective|'
+    r'professional\s+summary|profile\s+summary|'
+    r'career\s+profile|career\s+summary|summary|objective|profile|about\s+me|overview)'
     r'(?:\*\*)?\s*:?\s*(?:\n+|\s+)([\s\S]*?)'
     r'(?=^\s*(?:\*\*)?(?:' + _SUMMARY_BODY_STOP + r')(?:\*\*)?\s*:?\s*$|\Z)',
 )
@@ -95,6 +100,7 @@ SECTION_HEADERS = frozenset({
     'core skills', 'core skill', 'key skills', 'key skill',
     'skill set', 'skills set', 'skills and abilities', 'abilities',
     'technical proficiency', 'technical expertise', 'technical knowledge',
+    'technical experience',
     'core competencies', 'areas of expertise', 'computer skills', 'it skills',
     'software skills',
     'tools', 'technologies', 'tech stack', 'project', 'projects',
@@ -132,9 +138,12 @@ SECTION_HEADERS = frozenset({
     'other technical skills', 'skillset',
     'declaration', 'permanent address', 'present address', 'correspondence address',
     'current address', 'residential address',
-    'profile summary', 'professional summary', 'career objective', 'career summary',
+    'profile summary', 'professional summary', 'professional objective',
+    'career objective', 'career summary',
     'professional profile', 'personal profile',
     'organisational experience', 'organizational experience',
+    'overview', 'role overview',
+    'professional synopsis', 'educational credentials',
     'social link', 'social links', 'social media', 'key skills',
 })
 
@@ -145,13 +154,14 @@ _NAME_FORBIDDEN_WORDS = frozenset({
     'link', 'links', 'social', 'database', 'middleware', 'powerpoint', 'excel',
     'oracle', 'mongodb', 'postgresql', 'mysql', 'mssql', 'dba', 'lead',
     'specialist', 'architect', 'officer', 'executive', 'intern', 'fresher',
-    'resume', 'curriculum', 'vitae', 'skills', 'experience', 'education',
+    'resume', 'curriculum', 'vitae', 'overview', 'skills', 'experience', 'education',
     'certification', 'certifications', 'designation', 'contact', 'address',
     'location', 'technologies', 'technology', 'framework', 'frameworks',
     'marketing', 'sales', 'recruiter', 'hr', 'internship', 'trainee',
     'associate', 'director', 'founder', 'ceo', 'cto', 'devops', 'webmaster',
     'wordpress', 'javascript', 'typescript', 'react', 'angular', 'python',
     'java', 'linux', 'windows', 'android', 'ios',
+    'project', 'projects',
     # Degree / academic tokens
     'btech', 'mtech', 'bsc', 'msc', 'bcom', 'mcom', 'bca', 'mca', 'bba', 'mba',
     'bachelor', 'master', 'masters', 'doctorate', 'diploma', 'phd', 'honours',
@@ -266,6 +276,7 @@ _SKILL_CRUMB_TOKENS = frozenset({
     'skills tools and platforms', 'and platforms', 'and tools',
     'certification', 'certifications', 'certified', 'fundamentals',
     'university/board', '% of marks', 'configure', 'configuration',
+    'databases', 'database', 'frameworks', 'operating systems', 'operating system',
 })
 # Role / product tokens that contaminate names derived from filenames.
 _FILENAME_NAME_NOISE = frozenset({
@@ -355,7 +366,8 @@ _JOB_TITLE_NAME_BLOCKLIST = frozenset({
     'data engineer', 'software engineer', 'software developer', 'team lead',
     'project manager', 'delivery manager', 'database administrator',
     'linux administrator', 'network engineer', 'devops engineer',
-    'career objective', 'professional summary', 'professional', 'summary',
+    'career objective', 'professional objective', 'professional summary',
+    'professional', 'summary', 'overview', 'role overview',
     'middleware administrator', 'middleware admin', 'oracle dba', 'sql dba', 'mssql dba',
     'fresher', 'experienced', 'immediate joining',
     'designation', 'certification', 'certifications', 'skills',
@@ -376,6 +388,33 @@ _PLACE_NAME_BLOCKLIST = frozenset({
     'singapore', 'dubai', 'berlin',
 })
 
+# Document / section titles that must never become a person's full_name.
+_DOCUMENT_TITLE_NAMES = frozenset({
+    'overview', 'role overview', 'resume', 'curriculum vitae', 'cv',
+    'profile', 'summary', 'professional summary', 'professional objective',
+    'career objective', 'objective', 'experience', 'education', 'skills',
+    'projects', 'project', 'certifications', 'certification',
+    'work experience', 'professional experience', 'employment',
+    'personal profile', 'professional profile', 'profile summary',
+    'career summary', 'career profile', 'about me', 'contact',
+    'contact details', 'personal details', 'personal information',
+})
+# Header-like lines that should not stop the name scan (skip and keep looking).
+_NAME_SKIP_BUT_CONTINUE = frozenset({
+    'summary', 'objective', 'profile', 'about me', 'career objective',
+    'professional summary', 'professional objective', 'profile summary',
+    'contact', 'contact details', 'overview', 'role overview',
+    'resume', 'curriculum vitae', 'cv',
+})
+
+
+def is_document_title_line(line: str | None) -> bool:
+    """True for resume/section titles such as Overview — never a person name."""
+    t = re.sub(r'^[\s#*•\-]+|[\s#:]+$', '', (line or '').strip()).strip()
+    if not t:
+        return False
+    return t.lower() in _DOCUMENT_TITLE_NAMES
+
 
 def is_plausible_person_name(name: str | None) -> bool:
     """Reject metrics, labels, headers, and tech tokens misread as person names."""
@@ -392,6 +431,7 @@ def is_plausible_person_name(name: str | None) -> bool:
     if t.lower() in {
         'name', 'full name', 'your name', 'candidate name', 'student', 'resume',
         'curriculum vitae', 'cv', 'objective', 'career objective', 'profile',
+        'professional objective', 'overview', 'role overview',
         'address', 'contact', 'email', 'phone', 'mobile', 'unknown',
         'designation', 'certification', 'skills', 'summary', 'company',
         'powerpoint', 'profile summary', 'social link', 'social links',
@@ -400,6 +440,8 @@ def is_plausible_person_name(name: str | None) -> bool:
         'bengali', 'urdu', 'punjabi', 'malayalam', 'odia', 'french', 'german',
         'spanish', 'japanese', 'korean', 'chinese',
     }:
+        return False
+    if is_document_title_line(t):
         return False
     if t.lower() in _JOB_TITLE_NAME_BLOCKLIST:
         return False
@@ -451,6 +493,13 @@ def is_plausible_person_name(name: str | None) -> bool:
         return True
     # Multi-word names: allow ALL-CAPS resume headers (RAHUL SURESH SURVASE).
     # Only reject short ALL-CAPS tokens when they look like tech acronyms (<=3 chars).
+    # DOCX extracts often leave later tokens uncapitalized ("First last").
+    _NAME_STOP = {
+        'a', 'an', 'the', 'of', 'in', 'for', 'with', 'and', 'or', 'to', 'as',
+        'from', 'by', 'on', 'at',
+    }
+    if any(w.strip(".,'").lower() in _NAME_STOP for w in words):
+        return False
     alpha_words = 0
     for w in words:
         cleaned = w.strip(".,'")
@@ -462,7 +511,9 @@ def is_plausible_person_name(name: str | None) -> bool:
             return False
         if cleaned[0].isupper():
             alpha_words += 1
-    return alpha_words >= 2
+    if alpha_words >= 2:
+        return True
+    return bool(words and words[0][0].isupper() and 2 <= len(words) <= 4)
 
 
 def is_date_range_only_line(line: str) -> bool:
@@ -476,10 +527,110 @@ def is_date_range_only_line(line: str) -> bool:
     return bool(m)
 
 
+_SKILLS_PROSE_TRANSITION = re.compile(
+    r'(?i)^(?:'
+    r'project(?:s|ive)?(?:\s+(?:description|details|experience|name|title|summary))?'
+    r'|achievements?|accomplishments?|awards?|performance\s+achievements?'
+    r'|responsibilit(?:y|ies)|roles?\s*(?:and|&)\s*responsibilit(?:y|ies)'
+    r'|major\s+activit(?:y|ies)(?:\s+performed)?'
+    r'|activit(?:y|ies)\s+performed'
+    r'|professional\s+(?:experience|certifications?|summary)'
+    r'|work\s+experience|employment(?:\s+(?:history|details))?'
+    r'|experience|work\s+history'
+    r'|certifications?'
+    r')\b'
+)
+_SKILL_CATEGORY_PREFIX = re.compile(
+    r'(?i)^(?:os|operating\s+systems?|databases?|languages?|tools?|'
+    r'frameworks?|technologies?|special\s+software|software|'
+    r'(?:technical|key|core|soft)\s+skills?)\s*:\s*(.*)$'
+)
+_SKILL_REGION_HEADING = re.compile(
+    r'(?i)^(?:(?:technical|key|core|soft)\s+)?skills?'
+    r'(?:\s*(?:,|&|and)\s*(?:tools?|platforms?))?\s*:?\s*$'
+)
+
+
+def skill_item_looks_like_prose(item: str | None) -> bool:
+    """True when a skill candidate is a sentence / project / duty paragraph."""
+    text = (item or '').strip()
+    if not text:
+        return False
+    words = text.split()
+    n = len(words)
+    if n >= 10:
+        return True
+    if re.search(r'[.!?]\s+\w', text):
+        return True
+    if text.endswith(('.', '!', '?')) and n >= 6:
+        return True
+    if re.match(r'(?i)^(?:i|we|my|our)\b', text) and n >= 5:
+        return True
+    if n >= 7 and re.search(r'(?i)\b(?:\w+ed|\w+ing)\b', text) and re.search(
+        r'(?i)\b(?:the|a|an|for|with|to|of|by|from|into)\b', text
+    ):
+        return True
+    if n >= 8 and re.search(r'(?i)\b(?:19|20)\d{2}\b', text):
+        return True
+    if n >= 5 and _SKILLS_PROSE_TRANSITION.search(text):
+        return True
+    return False
+
+
+def _is_skill_token_or_category_line(line: str) -> bool:
+    s = re.sub(r'^[\s•·\-\*●]+', '', (line or '').strip())
+    if not s:
+        return False
+    if _SKILL_CATEGORY_PREFIX.match(s):
+        return True
+    parts = [p.strip() for p in re.split(r'[,|/]', s) if p.strip()]
+    if 2 <= len(parts) <= 16 and all(1 <= len(p.split()) <= 5 for p in parts):
+        if not any(skill_item_looks_like_prose(p) for p in parts):
+            return True
+    words = s.split()
+    if 1 <= len(words) <= 4 and not s.endswith('.') and not skill_item_looks_like_prose(s):
+        if not re.match(r'(?i)^(?:i|we|responsible|developed|worked|successfully)\b', s):
+            return True
+    return False
+
+
+def clip_skills_section_at_prose(text: str) -> tuple[str, str]:
+    """Split a Skills body when token lists give way to project/duty prose.
+
+    Returns (kept_skills_text, peeled_prose). Peeled text must be preserved
+    by the caller as Unclassified — never discarded.
+    """
+    lines = (text or '').splitlines()
+    skill_seen = False
+    cut: int | None = None
+    for i, ln in enumerate(lines):
+        s = ln.strip()
+        if not s:
+            continue
+        if _SKILL_REGION_HEADING.match(s):
+            continue
+        if _is_skill_token_or_category_line(s):
+            skill_seen = True
+            continue
+        if skill_seen and (
+            _SKILLS_PROSE_TRANSITION.match(s) or skill_item_looks_like_prose(s)
+        ):
+            cut = i
+            break
+    if cut is None:
+        return (text or '').strip(), ''
+    return '\n'.join(lines[:cut]).strip(), '\n'.join(lines[cut:]).strip()
+
+
 def is_plausible_skill_item(item: str | None) -> bool:
     """Reject section headers and bare date ranges from skills lists."""
     s = (item or '').strip()
     if not s or len(s) < 2 or len(s) > 80:
+        return False
+    s = s.lstrip(':').strip()
+    if not s or len(s) < 2:
+        return False
+    if skill_item_looks_like_prose(s):
         return False
     if is_section_header_line(s):
         return False
@@ -489,10 +640,38 @@ def is_plausible_skill_item(item: str | None) -> bool:
         return False
     if looks_like_phone_token(s) or looks_like_email_or_url(s):
         return False
-    if re.match(r'(?i)^(email|phone|mobile|linkedin|github|contact|references?)\b', s):
+    if is_labeled_contact_metadata(s):
+        return False
+    if re.match(r'(?i)^(email|phone|mobile|linkedin|github|contact|references?|place|location|address)\b', s):
         return False
     if s.lower() in _PLACE_NAME_BLOCKLIST:
         return False
+    if re.fullmatch(
+        r'(?i)(?:indian|american|british|canadian|australian|nationality)',
+        s,
+    ):
+        return False
+    if re.search(r'(?i)\b\d+\s+of\s+\d+\b', s) or re.match(r'(?i)^page\s+\d+', s):
+        return False
+    if re.search(
+        r'(?i)(?:year of passing|board/university|school/college|degree\s*:|'
+        r'university\s*,\s*[A-Za-z]|%\s*of\s*marks)',
+        s,
+    ):
+        return False
+    if re.match(
+        r'(?i)^(?:build|built|develop|developed|implement|implemented|manage|'
+        r'managed|create|created|ensure|ensuring)\b',
+        s,
+    ) and len(s.split()) >= 4:
+        return False
+    if re.search(
+        r'(?i)\b(?:maharashtra|karnataka|tamil\s+nadu|telangana|gujarat|'
+        r'kerala|rajasthan|west\s+bengal|andhra\s+pradesh|uttar\s+pradesh)\b',
+        s,
+    ) and (',' in s or len(s.split()) <= 4):
+        if not re.search(r'(?i)(?:python|java|sql|aws|azure|react|\.net)', s):
+            return False
     if re.match(
         r'(?i)^(?:ensuring|managing|performing|maintaining|creating|configured|'
         r'working\s+knowledge|good\s+knowledge)\b',
@@ -568,6 +747,94 @@ def is_plausible_skill_item(item: str | None) -> bool:
     return True
 
 
+_SKILL_GLUE_WORDS = frozenset({
+    'and', 'or', 'of', 'the', 'for', 'with', 'in', 'to', 'on', 'at', 'by', 'from',
+    'as', 'into', 'over', 'under', 'via', 'using',
+    'skills', 'skill', 'management', 'communication', 'research', 'content',
+    'strategy', 'engagement', 'making', 'team', 'time', 'organizational',
+    'organisation', 'development', 'analysis',
+    # Common English nouns that appear in product phrases — blocking these
+    # prevents false splits such as "MS server studio". Not a product vocabulary.
+    'server', 'studio', 'office', 'services', 'system', 'systems',
+    'application', 'applications', 'software', 'database', 'databases',
+})
+
+
+def _token_has_tech_morphology(tok: str) -> bool:
+    """Structural tech-token shape — not a vocabulary of product names."""
+    t = (tok or '').strip()
+    if not t or len(t) > 14:
+        return False
+    if t.lower() in _SKILL_GLUE_WORDS:
+        return False
+    if not re.fullmatch(r'[A-Za-z][A-Za-z0-9+#./]{1,13}', t):
+        return False
+    if t.isupper() and 2 <= len(t) <= 10:
+        return True
+    if re.search(r'[0-9/#+.]', t):
+        return True
+    if re.search(r'[a-z][A-Z]', t):
+        return True
+    return 2 <= len(t) <= 7
+
+
+_TRAILING_SKILL_CATEGORY = re.compile(
+    r'(?i)\s+(?:languages?|databases?|frameworks?|operating\s+systems?|'
+    r'special\s+software)\s*$'
+)
+
+
+def _peel_trailing_category_before_glue_split(s: str) -> str:
+    """Drop a trailing category word only when leftover is a glued tech blob."""
+    m = re.match(
+        r'(?i)^(.+?)\s+(?:skills?|tools?|languages?|databases?|frameworks?)$',
+        (s or '').strip(),
+    )
+    if not m:
+        return (s or '').strip()
+    left = m.group(1).strip()
+    words = left.split()
+    if 3 <= len(words) <= 6 and all(_token_has_tech_morphology(w) for w in words):
+        return left
+    return (s or '').strip()
+
+
+def maybe_split_glued_skill_tokens(raw: str) -> list[str]:
+    """Split space-glued short tech tokens when morphology is consistent.
+
+    Conservative: 2-word phrases, versioned products, and English noun phrases
+    stay intact. False splits are worse than leaving a glued item.
+    """
+    s = _peel_trailing_category_before_glue_split(raw)
+    if not s or re.search(r'[,|/]', s):
+        return [s] if s else []
+    words = s.split()
+    if not (3 <= len(words) <= 6):
+        return [s]
+    if any(w.lower() in _SKILL_GLUE_WORDS for w in words):
+        return [s]
+    if not all(_token_has_tech_morphology(w) for w in words):
+        return [s]
+    casings = set()
+    for w in words:
+        if w.isupper():
+            casings.add('upper')
+        elif re.search(r'[a-z][A-Z]', w):
+            casings.add('camel')
+        elif w[:1].islower():
+            casings.add('lower')
+        else:
+            casings.add('title')
+    has_strong = any(
+        w.isupper() or re.search(r'[0-9/#+.]', w) or re.search(r'[a-z][A-Z]', w)
+        for w in words
+    )
+    # Mixed extract casings or an ALLCAPS/camel/version token among 3+ shorts.
+    if len(casings) >= 2 or has_strong:
+        return words
+    return [s]
+
+
 def filter_skill_items(skills: list[str], max_items: int = 40) -> list[str]:
     """Dedupe and drop header/date junk from skill lists."""
     expanded: list[str] = []
@@ -582,19 +849,19 @@ def filter_skill_items(skills: list[str], max_items: int = 40) -> list[str]:
             r'(?i)^(core\s+lang(?:uage)?s?|languages?|frameworks?|databases?|'
             r'tools?(?:\s+used)?|technologies?(?:\s+used)?|programming|programmes?|os|'
             r'operating\s+systems?|soft\s+skills?|technical(?:\s+skills?)?|'
-            r'tech(?:nolog(?:y|ies))?\s+used)\s*:\s*(.+)$',
+            r'tech(?:nolog(?:y|ies))?\s+used|special\s+software|software)\s*:\s*(.*)$',
             raw,
         )
         if cat:
             raw = (cat.group(2) or '').strip()
+            if not raw:
+                continue
+        raw = _TRAILING_SKILL_CATEGORY.sub('', raw).strip()
         raw = re.sub(r'(?i)\bc\s+#', 'C#', raw)
         if not raw:
             continue
-        # Expand leftover comma/pipe groups from section captures
-        if (',' in raw or '|' in raw) and '\n' not in raw:
-            expanded.extend(split_list_items(raw))
-        else:
-            expanded.append(raw)
+        for piece in split_list_items(raw):
+            expanded.extend(maybe_split_glued_skill_tokens(piece))
     cleaned = [s for s in expanded if is_plausible_skill_item(s)]
     return dedupe_skills(cleaned, max_items)
 
@@ -763,7 +1030,7 @@ DATE_RANGE_PATTERN = re.compile(
     r'|\d{4}[/\-]\d{1,2}'
     r'|\d{4}-\d{2}'
     r'|\d{4}'
-    r'|present|current|now'
+    r'|present|current|now|till\s*date|tilldate|ongoing|pursuing|still(?:\s+date)?'
     r')',
 )
 
@@ -792,11 +1059,31 @@ def split_list_items(text: str, *, max_item_len: int = 120) -> list[str]:
             re.search(r'(?i)\b(?:university|college|school|institute|commerce)\b', s)
         )
 
-    if '|' in raw:
-        # Flatten newlines inside pipe lists (PDF wrap mid-skill)
-        flat = re.sub(r'\s*\n\s*', ' ', raw)
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+    multi = len(lines) > 1
+    pipe_wrap_only = bool(
+        multi
+        and any('|' in ln for ln in lines)
+        and all(
+            '|' in ln or ln.endswith('|') or (i > 0 and lines[i - 1].endswith('|'))
+            for i, ln in enumerate(lines)
+        )
+    )
+    if '|' in raw and (not multi or pipe_wrap_only):
+        # Single-line pipes, or a wrapped pipe list — not a mixed Skills body.
+        flat = ' '.join(lines) if pipe_wrap_only else raw
         parts = [p.strip() for p in flat.split('|')]
-    elif ',' in raw and '\n' not in raw:
+        expanded: list[str] = []
+        for p in parts:
+            if ',' in p and not _is_institutionish(p):
+                from app.ai.parser.enrichment.jd_text_inference import (
+                    _split_skill_list_preserving_parens,
+                )
+                expanded.extend(x.strip() for x in _split_skill_list_preserving_parens(p) if x.strip())
+            else:
+                expanded.append(p)
+        parts = expanded
+    elif ',' in raw and not multi:
         parts = [p.strip() for p in raw.split(',')]
     else:
         parts = [p.strip() for p in re.split(r'\n+', raw)]
@@ -804,7 +1091,18 @@ def split_list_items(text: str, *, max_item_len: int = 120) -> list[str]:
         for p in parts:
             p2 = re.sub(r'[│︱｜¦]', '|', p)
             if '|' in p2:
-                expanded.extend(x.strip() for x in p2.split('|'))
+                for x in (t.strip() for t in p2.split('|')):
+                    if not x:
+                        continue
+                    if ',' in x and not _is_institutionish(x):
+                        from app.ai.parser.enrichment.jd_text_inference import (
+                            _split_skill_list_preserving_parens,
+                        )
+                        expanded.extend(
+                            y.strip() for y in _split_skill_list_preserving_parens(x) if y.strip()
+                        )
+                    else:
+                        expanded.append(x)
             elif ',' in p2 and not _is_institutionish(p2):
                 from app.ai.parser.enrichment.jd_text_inference import (
                     _split_skill_list_preserving_parens,
@@ -921,13 +1219,10 @@ def normalize_date_token(token: str) -> str:
 
 
 def extract_date_range_from_line(line: str) -> tuple[str, str]:
-    """Return (from, to) date strings from a line when a range is present."""
-    if not line:
-        return '', ''
-    m = DATE_RANGE_PATTERN.search(line)
-    if not m:
-        return '', ''
-    return normalize_date_token(m.group(1)), normalize_date_token(m.group(2))
+    """Return (from, to) using the shared deterministic date extractor."""
+    from app.ai.document_intelligence.deterministic import extract_date_range
+
+    return extract_date_range(line or '')
 
 
 def _parse_year_month(token: str) -> tuple[int, int] | None:
@@ -1084,6 +1379,75 @@ def heal_location_candidate(value: str) -> str:
     return canonicalize_location_city(s)
 
 
+_HEADING_CONNECTORS = frozenset({'and', 'of', 'the', '&', '/', 'in', 'for', 'to', 'or'})
+_HEADING_CORE_WORDS = frozenset({
+    'summary', 'objective', 'profile', 'experience', 'education', 'skills', 'skill',
+    'employment', 'projects', 'project', 'certifications', 'certificates', 'awards',
+    'achievements', 'accomplishments', 'honors', 'honours', 'interests', 'hobbies',
+    'references', 'contact', 'declaration', 'languages', 'qualification', 'qualifications',
+    'internship', 'internships', 'training', 'trainings', 'apprenticeship',
+    'biodata', 'overview', 'strengths', 'activities', 'licenses', 'courses',
+    'academics', 'expertise', 'competencies', 'abilities', 'knowledge',
+    'resume', 'cv', 'vitae',
+})
+_HEADING_CRUMB_WORDS = frozenset({
+    'info', 'information', 'details', 'detail', 'section', 'known', 'set', 'sets',
+    'background', 'history', 'record', 'handled', 'synopsis', 'credentials',
+    'personal', 'professional', 'technical', 'academic', 'educational', 'work',
+    'career', 'key', 'core', 'other', 'extra', 'curricular', 'co', 'about',
+    'me', 'link', 'links', 'media', 'soft', 'computer', 'tools',
+    'technologies', 'stack', 'areas', 'highlights', 'misc', 'additional',
+})
+
+
+def letter_spaced_alpha_compact(line: str) -> str:
+    """Compact OCR letter-spaced lines: ``W O R K E X P`` → ``WORKEXP`` / ``WORK EXPERIENCE``."""
+    raw = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff\u00ad]', '', (line or '')).replace('\xa0', ' ')
+    stripped = raw.strip()
+    if not stripped:
+        return ''
+    core = re.sub(r'\([^)]*\)', ' ', stripped)
+    core = re.sub(r'^[\s#*•\-_=]+|[\s#:_\-=]+$', '', core).strip()
+    tokens = core.split()
+    if len(tokens) >= 4 and all(len(t) == 1 and t.isalpha() for t in tokens):
+        return ''.join(tokens)
+    if re.search(r'\s{2,}|\t', core):
+        parts = re.split(r'(?:\s{2,}|\t)+', core)
+        words: list[str] = []
+        for part in parts:
+            toks = [t for t in part.split() if t]
+            if not toks or not all(len(t) == 1 and t.isalpha() for t in toks):
+                return ''
+            if len(toks) < 2:
+                return ''
+            words.append(''.join(toks))
+        if 1 <= len(words) <= 6:
+            return ' '.join(words)
+    return ''
+
+
+def _is_structural_section_heading(cleaned: str, words: list[str]) -> bool:
+    """True for unseen heading-like labels (not employers): PROFILE INFO, AWARDS AND ACHIEVEMENTS."""
+    if not cleaned or not words:
+        return False
+    if re.search(r'(?:19|20)\d{2}', cleaned):
+        return False
+    if '#' in cleaned or re.search(r'\d', cleaned):
+        return False
+    if _ORG_EMPLOYMENT_CUE_RE.search(cleaned) and not re.search(
+        r'(?i)\b(?:university|college|school|institute)\b',
+        cleaned,
+    ):
+        return False
+    words_low = [re.sub(r'[^a-z]', '', w.lower()) for w in words]
+    content = [w for w in words_low if w and w not in _HEADING_CONNECTORS]
+    if not content or len(content) > 6:
+        return False
+    if not any(w in _HEADING_CORE_WORDS for w in content):
+        return False
+    return all(w in _HEADING_CORE_WORDS or w in _HEADING_CRUMB_WORDS for w in content)
+
+
 def is_section_header_line(line: str) -> bool:
     cleaned = re.sub(r'^[\s#*•\-_=]+|[\s#:_\-=]+$', '', (line or '').strip()).strip()
     if not cleaned:
@@ -1098,7 +1462,18 @@ def is_section_header_line(line: str) -> bool:
         return False
     if cleaned.endswith('.') and len(words) > 2:
         return False
-    return cleaned.lower() in SECTION_HEADERS
+    if cleaned.lower() in SECTION_HEADERS:
+        return True
+    compact = letter_spaced_alpha_compact(cleaned)
+    if compact:
+        low = compact.lower()
+        glued = re.sub(r'[^a-z0-9]', '', low)
+        if low in SECTION_HEADERS or glued in SECTION_HEADERS:
+            return True
+        compact_words = compact.split() if ' ' in compact else [compact]
+        if _is_structural_section_heading(compact, compact_words):
+            return True
+    return _is_structural_section_heading(cleaned, words)
 
 
 # Contact / reference lines that must never be parsed as employment.
@@ -1119,7 +1494,8 @@ _CONTACT_PERSON_LINE_RE = re.compile(
     r')s?\s*\)\s*(?:[-–—]\s*.*)?$'
 )
 _ORG_EMPLOYMENT_CUE_RE = re.compile(
-    r'(?i)\b(?:pvt|ltd|llc|inc|corp|llp|limited|technologies|technology|solutions|labs|'
+    r'(?i)\b(?:pvt|ltd|llc|inc|corp|llp|limited|private|bank|corporation|'
+    r'technologies|technology|solutions|labs|'
     r'systems|consultancy|consulting|services|exchange|university|college)\b'
 )
 _IN_JOB_CONTACT_LABELS = frozenset({'contact', 'reference', 'references'})
@@ -1217,6 +1593,71 @@ def is_contact_or_reference_line(line: str | None) -> bool:
     )
 
 
+# Structural contact labels — never Role/Company/Skill/Degree content.
+_CONTACT_FIELD_LABEL = (
+    r'(?:e[\-\s]?mail|email|mail|phone|mobile|mob\.?|tel(?:ephone)?|contact|'
+    r'place|location|address|linkedin|website|github|url)'
+)
+_LABELED_CONTACT_LINE_RE = re.compile(
+    rf'(?i)^{_CONTACT_FIELD_LABEL}\s*[:\-–—]'
+)
+_INLINE_CONTACT_LABEL_RE = re.compile(
+    rf'(?i)\s+{_CONTACT_FIELD_LABEL}\s*[:\-–—]'
+)
+# PDF two-column glue: "AdministratorE-mail:" / "NamePlace:" — capital starts a new label.
+# Must not split "Workplace:" (lowercase "place" inside a word).
+_GLUED_CONTACT_LABEL_RE = re.compile(
+    r'(?<=[a-z0-9])(?='
+    r'(?:E[\-\s]?mail|Email|EMAIL|Phone|PHONE|Mobile|MOBILE|Mob\.?|MOB\.?|'
+    r'Contact|CONTACT|Place|PLACE|Location|LOCATION|Address|ADDRESS|'
+    r'LinkedIn|LINKEDIN|Website|WEBSITE|GitHub|GITHUB)'
+    r'(?:\s*[:\-–—]|\s*\+?\d)'
+    r')'
+)
+_TRAILING_EMAIL_OR_PHONE_RE = re.compile(
+    r'(?i)\s+(?:'
+    r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}'
+    r'|\+?\d[\d\s\-().]{7,}'
+    r')\s*$'
+)
+
+
+def is_labeled_contact_metadata(line: str | None) -> bool:
+    """True when the line is a labeled contact/header field (Place:, E-mail:, …)."""
+    s = re.sub(r'^[\s•·\-\*●]+', '', (line or '').strip())
+    if not s:
+        return False
+    if _LABELED_CONTACT_LINE_RE.match(s):
+        return True
+    return is_contact_or_reference_line(s)
+
+
+def peel_inline_contact(text: str | None) -> str:
+    """Keep the non-contact remainder of a mixed title/contact line.
+
+    ``Middleware Administrator E-mail: a@b.com`` → ``Middleware Administrator``
+    """
+    s = (text or '').strip()
+    if not s:
+        return ''
+    m = _INLINE_CONTACT_LABEL_RE.search(s)
+    if m and m.start() > 0:
+        s = s[: m.start()].strip()
+    else:
+        glued = _GLUED_CONTACT_LABEL_RE.search(s)
+        if glued and glued.start() > 0:
+            s = s[: glued.start()].strip()
+        m2 = _TRAILING_EMAIL_OR_PHONE_RE.search(s)
+        if m2 and m2.start() > 0:
+            tail = m2.group(0)
+            # Year tokens are employment/education dates, not phone numbers.
+            if not re.search(r'(?:19|20)\d{2}', tail):
+                head = s[: m2.start()].strip()
+                if head and not _LABELED_CONTACT_LINE_RE.match(head):
+                    s = head
+    return s.strip(' |,;:-–—')
+
+
 def is_in_job_contact_header(header: str | None, current_section: str | None) -> bool:
     """Contact/References inside an Experience section is not a top-level header."""
     if (current_section or '').strip().lower() != 'experience':
@@ -1297,6 +1738,37 @@ _PROJECT_TITLE_AS_COMPANY = re.compile(
 _LABELED_DUTY_CRUMB = re.compile(
     r'(?i)^[A-Za-z][A-Za-z /&]{1,32}:\s*[A-Za-z].{0,40}$'
 )
+# Project headings and employment-metadata labels — never Company or Role.
+# Organisation/Duration with a payload are labeled employment fields, not bare labels.
+_PROJECT_OR_META_LABEL_RE = re.compile(
+    r'(?i)^(?:'
+    r'projects?\s*(?:#|no\.?\s*|number\s+)?\s*\d+'
+    r'|projects?\s*[:\-–—]'
+    r'|clients?(?:\s*name)?(?:\s*/\s*projects?)?\s*[:\-–—]'
+    r'|duration\s*[:\-–—]\s*$'
+    r'|environment\s*[:\-–—]'
+    r'|technologies?\s+used\s*[:\-–—]'
+    r'|(?:organization|organisation)\s*[:\-–—]\s*$'
+    r'|project\s+(?:title|name|code|id)\s*[:\-–—]?'
+    r'|(?:clients?|duration|environment|organization|organisation)\s*$'
+    r')'
+)
+
+
+def is_project_or_employment_meta_label(value: str | None) -> bool:
+    """True for Project #N / Client: / Duration: / Environment: style labels."""
+    raw = (value or '').strip()
+    if not raw:
+        return False
+    if _PROJECT_OR_META_LABEL_RE.match(raw):
+        return True
+    low = raw.lower().rstrip(':').strip()
+    if low in {
+        'client', 'clients', 'duration', 'environment', 'organization',
+        'organisation', 'project', 'projects',
+    }:
+        return True
+    return False
 
 
 def looks_like_skill_or_duration_company(value: str) -> bool:
@@ -1304,6 +1776,11 @@ def looks_like_skill_or_duration_company(value: str) -> bool:
     raw = (value or '').strip()
     if not raw:
         return False
+    if is_project_or_employment_meta_label(raw):
+        return True
+    if is_section_header_line(raw) and not _ORG_EMPLOYMENT_CUE_RE.search(raw):
+        if not _is_employment_header_role(raw):
+            return True
     if raw in {'|', '-', '–', '—', '/', '\\'} or set(raw) <= {'|', '-', '–', '—', '/', '\\', '.', ' '}:
         return True
     if re.match(r'(?i)^(?:total\s+)?experience$', raw):
@@ -1357,6 +1834,51 @@ def is_fresher_or_years_only_experience_line(line: str) -> bool:
     return bool(_FRESHER_OR_YEARS_ONLY_EXP.search((line or '').strip()))
 
 
+_EDU_AS_JOB_INST_CUE = re.compile(
+    r'(?i)\b(?:university|college|school|institute|academy|vidyalaya|'
+    r'polytechnic|board)\b'
+)
+_EDU_AS_JOB_DEGREE_CUE = re.compile(
+    r'(?i)\b(?:'
+    r'(?:bachelor|master|doctor)(?:\'?s)?(?:\s+of)?|'
+    r'b\.?\s?tech|m\.?\s?tech|b\.?\s?e\.?\b|m\.?\s?e\.?\b|'
+    r'b\.?\s?sc|m\.?\s?sc|b\.?\s?com|m\.?\s?com|'
+    r'b\.?\s?ca|m\.?\s?ca|bca|mca|bba|mba|pgdm|phd|diploma|'
+    r'hsc|ssc|matric|intermediate|higher\s+secondary'
+    r')\b'
+)
+_EDU_AS_JOB_EMPLOYER = re.compile(
+    r'(?i)\b(?:pvt\.?|ltd\.?|llc|llp|inc\.?|limited|private)\b'
+)
+
+
+def looks_like_education_as_experience_row(company: str | None, role: str | None) -> bool:
+    """True when Company/Role is a degree or institution block, not employment."""
+    company = (company or '').strip()
+    role = (role or '').strip()
+    blob = f'{company} {role}'.strip()
+    if not blob:
+        return False
+    if _EDU_AS_JOB_EMPLOYER.search(blob):
+        return False
+    degree = bool(_EDU_AS_JOB_DEGREE_CUE.search(blob))
+    institution = bool(_EDU_AS_JOB_INST_CUE.search(blob))
+    if degree and institution:
+        return True
+    if degree and not _is_employment_header_role(role) and not _is_employment_header_role(company):
+        return True
+    if institution and not (
+        _is_employment_header_role(role)
+        or re.search(
+            r'(?i)\b(?:intern|engineer|analyst|manager|developer|consultant|'
+            r'administrator|officer|associate|lead)\b',
+            role,
+        )
+    ):
+        return True
+    return False
+
+
 def is_non_job_experience_record(row: Any) -> bool:
     """
     True when a candidate experience row is a contact/reference, not a job.
@@ -1375,9 +1897,17 @@ def is_non_job_experience_record(row: Any) -> bool:
         start = (getattr(row, 'start', '') or '').strip()
         end = (getattr(row, 'end', '') or '').strip()
 
-    if looks_like_skill_or_duration_company(company):
+    company_meta = is_project_or_employment_meta_label(company)
+    role_meta = is_project_or_employment_meta_label(role)
+    if company_meta and role_meta:
         return True
-    if looks_like_skill_or_duration_company(role):
+    if company_meta and not role and not start and not end:
+        return True
+    if role_meta and not start and not (company and not company_meta):
+        return True
+    if looks_like_skill_or_duration_company(company) and not company_meta:
+        return True
+    if looks_like_skill_or_duration_company(role) and not role_meta:
         return True
     if looks_like_phone_token(company) or looks_like_email_or_url(company):
         return True
@@ -1388,6 +1918,8 @@ def is_non_job_experience_record(row: Any) -> bool:
     if company and is_section_header_line(company) and not _is_employment_header_role(company):
         return True
     if role and is_section_header_line(role) and not _is_employment_header_role(role):
+        return True
+    if looks_like_education_as_experience_row(company, role):
         return True
     # Person-name token as employer with no org cue (sidebar identity bleed)
     if (
@@ -1422,12 +1954,18 @@ def has_credible_employment_evidence(row: Any) -> bool:
         company = (getattr(row, 'company', '') or '').strip()
         start = (getattr(row, 'start', '') or '').strip()
         end = (getattr(row, 'end', '') or '').strip()
+    if is_project_or_employment_meta_label(company):
+        company = ''
+    if is_project_or_employment_meta_label(role):
+        role = ''
     if looks_like_skill_or_duration_company(company):
         return False
     if company and (role or start or end):
         return True
     if role and (start or end) and (
-        _is_employment_header_role(role) or re.search(r'(?i)\bintern\b', role)
+        _is_employment_header_role(role)
+        or re.search(r'(?i)\bintern\b', role)
+        or is_plausible_job_title(role)
     ):
         return True
     return False
@@ -1462,12 +2000,17 @@ def join_spaced_letter_name(line: str) -> str:
         return ''
     if not (4 <= len(tokens) <= 16):
         return ''
+    compact = ''.join(tokens)
+    if compact.lower() in SECTION_HEADERS or is_section_header_line(compact):
+        return ''
+    if is_section_header_line(stripped):
+        return ''
     # Last letter is often a surname initial when the rest forms a given name
-    if len(tokens) >= 5:
+    if 5 <= len(tokens) <= 8:
         given = ''.join(tokens[:-1]).title()
         initial = tokens[-1].upper()
         cand = f'{given} {initial}'
-        if is_plausible_person_name(cand):
+        if is_plausible_person_name(cand) and not is_section_header_line(cand):
             return cand[:80]
     joined = ''.join(tokens).title()
     return joined[:80] if is_plausible_person_name(joined) else ''
@@ -1477,18 +2020,19 @@ def extract_name_from_text(text: str) -> str:
     """Pick a plausible person name from early resume lines, skipping section headers."""
     if not text:
         return ''
-    # Labeled biodata: "Name: Ms. Saloni V. Dhuru" / "Name\n: Ms. Saloni V. Dhuru"
+    # Labeled biodata may sit in a trailing personal-details table.
     labeled = re.search(
-        r'(?im)^(?:\*\*)?(?:full\s*)?name(?:\*\*)?\s*[:\-–—]\s*(.+?)\s*$',
-        text[:2500],
+        r'(?im)^(?:\*\*)?(?:full\s*)?name(?:\*\*)?\s*[:\-–—|]+\s*(?:[:\-–—|]\s*)*(.+?)\s*$',
+        text,
     )
     if not labeled:
         labeled = re.search(
             r'(?is)(?:^|\n)\s*(?:\*\*)?(?:full\s*)?name(?:\*\*)?\s*\n\s*[:\-–—]\s*(.+?)(?:\n|$)',
-            text[:2500],
+            text,
         )
     if labeled:
         cand = re.sub(r'(?i)^(mr|mrs|ms|miss|dr|prof)\.?\s+', '', labeled.group(1).strip())
+        cand = cand.strip(':–—| ').strip()
         cand = cand.rstrip('-:–—|').strip()
         # Stop at next biodata label glued on same line
         cand = re.split(
@@ -1497,29 +2041,42 @@ def extract_name_from_text(text: str) -> str:
             maxsplit=1,
         )[0].strip()
         if is_plausible_person_name(cand):
-            return (cand.title() if cand.isupper() else cand)[:80]
+            try:
+                from app.ai.parser.layout.heuristic import normalize_section_header
+
+                if normalize_section_header(cand):
+                    cand = ''
+            except Exception:
+                pass
+        if cand and is_plausible_person_name(cand):
+            if cand.isupper() or any(w[:1].islower() for w in cand.split() if w):
+                cand = cand.title()
+            return cand[:80]
 
     # Join consecutive ALL-CAPS single-token name lines (PyPDF2 word-per-line layouts)
     early_lines: list[str] = []
-    for line in text.split('\n')[:25]:
+    for line in text.split('\n')[:30]:
         stripped = re.sub(r'[\u200b\u200c\u200d\u2060\ufeff\u00ad]', '', line).replace('\xa0', ' ').strip()
         if not stripped:
             continue
         # Do not scan Education / Experience / Skills bodies for names
-        if _NAME_SECTION_STOP_RE.match(stripped) or (
-            is_section_header_line(stripped)
-            and stripped.lower()
-            not in {
-                'summary', 'objective', 'profile', 'about me', 'career objective',
-                'professional summary', 'profile summary', 'contact', 'contact details',
-            }
-        ):
+        if _NAME_SECTION_STOP_RE.match(stripped):
+            break
+        title_key = stripped.lower().rstrip(':').strip()
+        if is_document_title_line(stripped) or title_key in _NAME_SKIP_BUT_CONTINUE:
+            early_lines.append(stripped)
+            continue
+        if is_section_header_line(stripped) and title_key not in _NAME_SKIP_BUT_CONTINUE:
             break
         early_lines.append(stripped)
 
     # Collapse runs of single ALL-CAPS alpha tokens at the top into one name candidate
     caps_run: list[str] = []
     for stripped in early_lines[:8]:
+        if is_document_title_line(stripped) or is_section_header_line(stripped):
+            if caps_run:
+                break
+            continue
         if re.fullmatch(r"[A-Z][A-Z\-']{1,24}", stripped) and stripped not in {
             'SEO', 'API', 'AWS', 'HTML', 'CSS', 'SQL', 'USA', 'UAE', 'CV',
         }:
@@ -1531,37 +2088,159 @@ def extract_name_from_text(text: str) -> str:
             continue
         break
 
-    for stripped in early_lines[:20]:
+    contact_idxs = [
+        i
+        for i, ln in enumerate(early_lines)
+        if '@' in ln
+        or re.search(r'(?i)\b(?:email|phone|mobile|tel)\b', ln)
+        or (
+            re.search(r'\+?\d[\d\s\-().]{8,}', ln)
+            and not re.search(r'(?:19|20)\d{2}', ln)
+        )
+    ]
+
+    def _name_candidate_score(idx: int, cand: str) -> int:
+        words = cand.split()
+        score = 4 if len(words) >= 2 else 0
+        if contact_idxs:
+            dist = min(abs(idx - c) for c in contact_idxs)
+            if dist <= 8:
+                score += 12 - dist
+        elif idx <= 6 and len(words) >= 2:
+            score += 3
+        return score
+
+    scored: list[tuple[int, int, str]] = []
+    for idx, stripped in enumerate(early_lines[:20]):
         if stripped.startswith(('#', '*', '-', '•')):
             continue
-        if '@' in stripped or 'http' in stripped.lower() or 'www.' in stripped.lower():
-            continue
-        if re.match(r'^\+?\d[\d\s\-().]{7,}$', stripped):
-            continue
-        if is_section_header_line(stripped):
+        if is_document_title_line(stripped) or is_section_header_line(stripped):
             continue
         if _NAME_DEGREE_RE.search(stripped):
             continue
-        # PDF spaced letters: "R O S H A N  P A N I C K E R" / "P A D M I N I P"
-        joined = join_spaced_letter_name(stripped)
-        if joined:
-            return joined
-        if re.search(r'\d', stripped):
+        if re.match(r'^\+?\d[\d\s\-().]{7,}$', stripped):
             continue
-        words = stripped.split()
-        # Prefer 2–4 Title-Case alphabetic name tokens
-        if 1 <= len(words) <= 5 and 2 <= len(stripped) <= 80:
-            if is_plausible_person_name(stripped):
-                # Title-case ALL-CAPS full names for form display
-                if stripped.isupper() and len(words) >= 2:
-                    return stripped.title()[:80]
-                return stripped[:80]
+        joined = join_spaced_letter_name(stripped)
+        nxt = early_lines[idx + 1] if idx + 1 < len(early_lines) else ''
+        nxt_joined = join_spaced_letter_name(nxt) if nxt else ''
+        if joined and nxt_joined:
+            combined = f'{joined} {nxt_joined}'.strip()
+            if is_plausible_person_name(combined) and not is_section_header_line(combined):
+                scored.append((_name_candidate_score(idx, combined) + 3, -idx, combined[:80]))
+        if joined:
+            scored.append((_name_candidate_score(idx, joined), -idx, joined[:80]))
+            continue
+        probe = stripped
+        if '@' in stripped or 'http' in stripped.lower() or 'www.' in stripped.lower():
+            probe = re.sub(r'[A-Za-z0-9._%+\-]+@.*$', '', stripped).strip(' |,;:-–—')
+        if not probe or re.search(r'\d', probe):
+            continue
+        words = probe.split()
+        if 1 <= len(words) <= 5 and 2 <= len(probe) <= 80 and is_plausible_person_name(probe):
+            display = probe[:80]
+            if len(words) >= 2 and (probe.isupper() or any(w[:1].islower() for w in words)):
+                display = probe.title()[:80]
+            scored.append((_name_candidate_score(idx, display), -idx, display))
+
+    if scored:
+        scored.sort(reverse=True)
+        best_score, _, best = scored[0]
+        # Require a 2+ word name, or a 1-word name sitting next to contact
+        if best_score >= 4:
+            return best
+
     # Separated email locals only (anjali.bansode) — never glued locals
     email = extract_email_from_text(text)
     derived = name_from_email_local_part(email)
     if derived:
         return derived
     return ''
+
+
+def document_identity_names(text: str | None) -> set[str]:
+    """Person-name strings strongly identified from header/contact context.
+
+    Used as a cross-field penalty: the same string must not later become
+    Company, Role, Skill, or Institution merely because it is title-case.
+    """
+    names: set[str] = set()
+    blob = text or ''
+    extracted = (extract_name_from_text(blob) or '').strip()
+    if extracted:
+        names.add(extracted.lower())
+        compact = identity_compact_key(extracted)
+        if compact:
+            names.add(compact)
+    early: list[str] = []
+    for line in blob.splitlines()[:24]:
+        s = re.sub(r'^[\s•·\-\*●]+', '', (line or '').strip())
+        if not s:
+            continue
+        if re.match(
+            r'(?i)^(experience|work\s+experience|professional\s+experience|'
+            r'education|skills?|projects?|summary|objective|certifications?)\b',
+            s,
+        ):
+            break
+        early.append(s)
+    contact_idxs = [
+        i
+        for i, ln in enumerate(early)
+        if is_labeled_contact_metadata(ln)
+        or '@' in ln
+        or looks_like_phone_token(ln)
+        or re.search(r'(?i)\b(?:e[\-\s]?mail|email|phone|mobile|place|location|address)\b', ln)
+    ]
+    if not contact_idxs:
+        return names
+    for i, ln in enumerate(early):
+        if is_labeled_contact_metadata(ln):
+            continue
+        cand = peel_inline_contact(ln)
+        if not is_plausible_person_name(cand):
+            continue
+        dist = min(abs(i - c) for c in contact_idxs)
+        if dist <= 6:
+            names.add(cand.strip().lower())
+            compact = identity_compact_key(cand)
+            if compact:
+                names.add(compact)
+    return names
+
+
+def identity_compact_key(value: str | None) -> str:
+    """Compare names despite PDF spacing/punctuation differences."""
+    return re.sub(r'[^a-z0-9]', '', (value or '').lower())
+
+
+def identity_matches_person(value: str | None, identity_names: set[str] | None) -> bool:
+    """True when value is the same person as a collected identity string."""
+    s = (value or '').strip()
+    if not s or not identity_names:
+        return False
+    if s.lower() in identity_names:
+        return True
+    compact = identity_compact_key(s)
+    if compact and compact in identity_names:
+        return True
+    return any(identity_compact_key(n) == compact for n in identity_names if n)
+
+
+def identity_is_employer_value(value: str | None, identity_names: set[str] | None) -> bool:
+    """True when ``value`` is the document person-name, not an employer.
+
+    Org suffixes (Ltd/Inc/…) are treated as explicit employer evidence.
+    """
+    s = (value or '').strip()
+    if not identity_matches_person(s, identity_names):
+        return False
+    if re.search(
+        r'(?i)\b(?:pvt\.?|ltd\.?|llc|inc\.?|corp\.?|limited|technologies|'
+        r'solutions|labs|systems|bank|university|college)\b',
+        s,
+    ):
+        return False
+    return True
 
 
 def extract_skills_from_text(
@@ -1614,6 +2293,8 @@ def extract_skills_from_text(
                     break
                 item = re.sub(r'^[\s•·\-\*]+', '', stripped).strip()
                 item = re.sub(r'^\d+[\.\)]\s*', '', item).strip()
+                if is_labeled_contact_metadata(item):
+                    continue
                 if item and is_plausible_skill_item(item):
                     skills.append(item)
                 if len(skills) >= max_items:
@@ -2862,84 +3543,29 @@ def extract_location_from_text(text: str) -> str:
 
 
 def extract_experience_from_text(text: str, max_items: int = 10) -> list[dict[str, Any]]:
-    """Lightweight experience lines when structured experience is missing."""
+    """Reuse the deterministic experience parser — no second comma-split path."""
     if not text:
         return []
-    experiences: list[dict[str, Any]] = []
-    # Require section header at line start so mid-sentence "experience" (e.g. objective) is ignored.
-    block_match = re.search(
-        r'(?im)(?:^|\n)\s*(?:\*\*)?(?:work\s+experience|professional\s+experience|experience|'
-        r'employment|work\s+history|internships?|industrial\s+training|summer\s+internship)'
-        r'(?:\*\*)?\s*:?\s*'
-        r'([\s\S]*?)(?=\n\s*(?:\*\*)?(?:education|academic\s+background|skills|skill\s*sets?|'
-        r'technical\s+skills?|technical\s+proficiency|technical\s+expertise|'
-        r'technical\s+knowledge|projects?|certifications?|'
-        r'personal\s+details|personal\s+information|biodata|declaration)(?:\*\*)?\s*:?\s*$|\Z)',
-        text,
-    )
-    if not block_match:
+    from app.ai.document_intelligence.coverage.resume_coverage import _experience_section_text
+    from app.ai.document_intelligence.parsers.resume import parse_experience
+
+    body = _experience_section_text(text) or ''
+    if not body.strip():
         return []
-    raw = block_match.group(1) or ''
-    _title_cue = re.compile(
-        r'(?i)\b(?:intern|engineer|developer|analyst|trainee|manager|officer|'
-        r'associate|consultant|lead|executive|specialist|administrator|admin|'
-        r'dba|architect|designer|scientist|director)\b'
-    )
-    for line in raw.split('\n'):
-        stripped = re.sub(r'^[\s•·\-\*]+', '', line.strip())
-        stripped = re.sub(r'^\d+[\.\)]\s*', '', stripped).strip()
-        if not stripped or len(stripped) < 5 or is_section_header_line(stripped):
-            continue
-        if is_contact_or_reference_line(stripped) or looks_like_contact_person_line(stripped):
-            continue
-        if looks_like_phone_token(stripped) or looks_like_email_or_url(stripped):
-            continue
-        if is_biodata_or_address_line(stripped):
-            continue
-        from_d, to_d = extract_date_range_from_line(stripped)
-        leftover = DATE_RANGE_PATTERN.sub('', stripped).strip(' |-–—,')
-        has_cue = bool(_title_cue.search(leftover) or re.search(r'(?i)\bintern\b', leftover))
-        if from_d and leftover and not has_cue:
-            if experiences and not str(experiences[-1].get('company') or '').strip():
-                experiences[-1]['company'] = leftover[:200]
-                if not experiences[-1].get('from'):
-                    experiences[-1]['from'] = from_d
-                    experiences[-1]['to'] = to_d
-            else:
-                experiences.append({
-                    'title': '',
-                    'company': leftover[:200],
-                    'from': from_d,
-                    'to': to_d,
-                    'years': None,
-                    'description': '',
-                })
-            if len(experiences) >= max_items:
-                break
-            continue
-        if not has_cue:
-            if leftover and experiences and not str(experiences[-1].get('company') or '').strip() and len(leftover.split()) <= 6:
-                experiences[-1]['company'] = leftover[:200]
-            continue
-        parts = re.split(r'\s+at\s+|\s+@\s+|,\s+', leftover, maxsplit=1)
-        title = parts[0].strip() if parts else leftover
-        company = parts[1].strip() if len(parts) > 1 else ''
-        if company and is_biodata_or_address_line(company):
-            company = ''
-        if not is_plausible_job_title(title) and not re.search(r'(?i)\bintern\b', title):
-            continue
-        if title:
-            experiences.append({
-                'title': title[:200],
-                'company': company[:200],
-                'from': from_d,
-                'to': to_d,
-                'years': None,
-                'description': '',
-            })
-        if len(experiences) >= max_items:
-            break
-    return experiences
+    out: list[dict[str, Any]] = []
+    for job in parse_experience(body, text)[:max_items]:
+        end = (job.end or '').strip()
+        if not end and job.is_current:
+            end = 'Present'
+        out.append({
+            'title': (job.role or '')[:200],
+            'company': (job.company or '')[:200],
+            'from': job.start or '',
+            'to': end,
+            'years': None,
+            'description': (job.description or '')[:2000],
+        })
+    return out
 
 
 def extract_education_from_text(text: str, max_items: int = 8) -> list[dict[str, Any]]:

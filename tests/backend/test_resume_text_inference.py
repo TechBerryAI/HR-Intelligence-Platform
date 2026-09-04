@@ -176,7 +176,7 @@ AWS Solutions Architect - Amazon
     assert "AWS" in name
 
 
-def test_extract_experience_with_dates():
+def test_extract_experience_role_at_company_date_range():
     text = """
 Experience
 Software Engineer at Acme, Jan 2020 - Present
@@ -186,8 +186,28 @@ Education
 """
     exps = extract_experience_from_text(text)
     assert exps
-    assert exps[0]["from"]
+    assert exps[0]["title"] == "Software Engineer"
+    assert "Acme" in exps[0]["company"]
+    assert exps[0]["from"].startswith("2020")
     assert exps[0]["to"] == "Present"
+    assert "mumbai" not in (exps[0]["company"] or "").lower()
+
+
+def test_extract_experience_from_to_current_and_empty_company_ok():
+    text = """
+Experience
+Middleware Administrator
+July 2022 to till date
+Managed environments.
+
+Education
+"""
+    exps = extract_experience_from_text(text)
+    assert exps
+    assert "administrator" in (exps[0]["title"] or "").lower()
+    assert exps[0]["from"]
+    assert (exps[0]["to"] or "").lower() in ("present", "till date") or exps[0]["to"] == "Present"
+
 
 
 def test_extract_experience_skips_objective_prose_as_title():

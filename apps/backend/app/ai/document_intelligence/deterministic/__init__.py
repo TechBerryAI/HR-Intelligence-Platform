@@ -29,8 +29,8 @@ _MONTH_MAP = {
 }
 _DATE_ATOM = (
     r'(?:'
-    r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\s+)?'
-    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+    r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?[\s\-]+)?'
+    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?[\s\-]+(?:19|20)\d{2}'
     r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:19|20)\d{2}(?:[/\-](?:0?[1-9]|1[0-2]))?'
@@ -229,8 +229,8 @@ def normalize_month_token(token: str) -> str:
     if m_dmy:
         return f'{m_dmy.group(3)}-{int(m_dmy.group(2)):02d}'
     m_ord = re.match(
-        r'(?i)^(0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\s+'
-        r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+'
+        r'(?i)^(0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?[\s\-]+'
+        r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?[\s\-]+'
         r'((?:19|20)\d{2})$',
         t,
     )
@@ -255,11 +255,72 @@ def normalize_month_token(token: str) -> str:
     return t
 
 
+_DATE_ATOM_RE = re.compile(rf'(?i)\b({_DATE_ATOM})\b')
+
+_EDU_MONTH = (
+    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
+)
+_EDU_YEAR_PHRASE_RE = re.compile(
+    r'(?i)(?:^|[,;|\s]+)'
+    r'(?:'
+    r'(?:in\s+the\s+year|in\s+year|year\s+of\s+passing|graduation\s+year|'
+    r'passed(?:\s+out)?(?:\s+in)?)\s*:?\s*'
+    r'|in\s+'
+    r')'
+    r'((?:' + _EDU_MONTH + r'\s+)?(?:19|20)\d{2})'
+    r'\.?\s*$'
+)
+_EDU_TRAILING_MONTH_YEAR_RE = re.compile(
+    r'(?i)(?:[,;|\s]+|(?<=\s))(?:in\s+)?'
+    r'(' + _EDU_MONTH + r'\s+(?:19|20)\d{2})\b\.?\s*$'
+)
+_EDU_TRAILING_YEAR_RE = re.compile(
+    r'(?i)\s*[|/\-–—,]*\s*((?:19|20)\d{2})\s*\.?\s*$'
+)
+
+
+def peel_education_date_phrase(text: str) -> Tuple[str, str]:
+    """Strip a trailing education date phrase; keep the institution/degree core.
+
+    Handles: May 2016, 2016, in 2016, in the year 2016, year of passing 2016,
+    passed in 2016, graduation year: 2016.
+
+    Does not treat "University of Example" as a date boundary — a year is required.
+    """
+    s = (text or '').strip()
+    if not s:
+        return '', ''
+    year = ''
+    m = _EDU_TRAILING_MONTH_YEAR_RE.search(s)
+    if m:
+        year = normalize_month_token(m.group(1))
+        s = s[: m.start()].strip(' \t|-–—,')
+    else:
+        m = _EDU_YEAR_PHRASE_RE.search(s)
+        if m:
+            token = m.group(1)
+            year = normalize_month_token(token) if re.search(r'[A-Za-z]', token) else token
+            s = s[: m.start()].strip(' \t|-–—,')
+        else:
+            m = _EDU_TRAILING_YEAR_RE.search(s)
+            if m:
+                year = m.group(1)
+                s = s[: m.start()].strip(' \t|-–—,')
+    s = re.sub(r'(?i)\s+\bin\b\s*$', '', s).strip(' \t|-–—,.')
+    return s, year
+
+
 def extract_date_range(line: str) -> Tuple[str, str]:
     m = _DATE_RANGE_RE.search(line or '')
-    if not m:
-        return '', ''
-    return normalize_month_token(m.group(1)), normalize_month_token(m.group(2))
+    if m:
+        return normalize_month_token(m.group(1)), normalize_month_token(m.group(2))
+    s = (line or '').strip()
+    if _PRESENT_TOKEN_RE.match(s):
+        return '', 'Present'
+    m1 = _DATE_ATOM_RE.search(s)
+    if m1 and not re.search(r'(?i)\b(?:server|sql|windows|oracle|version)\b', s):
+        return normalize_month_token(m1.group(1)), ''
+    return '', ''
 
 
 def extract_simple_location(text: str) -> str:

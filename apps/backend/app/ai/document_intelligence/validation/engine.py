@@ -36,7 +36,8 @@ _DEGREE_CUE_RE = re.compile(
     r'ph\.?\s*d|'
     r'b\.?\s*pharm|d\.?\s*pharm|ll\.?\s*b|ll\.?\s*m|'
     r'hsc|ssc|cbse|icse|puc|'
-    r'(?:10|12)(?:th)?|'
+    r's\.?\s*s\.?\s*c\.?|h\.?\s*s\.?\s*c\.?|'
+    r'10th|12th|'
     r'higher\s+secondary|senior\s+secondary|pre[\s\-]?university|'
     r'high\s+school|secondary\s+school|'
     r'associate(?:\'?s)?'
@@ -77,8 +78,10 @@ _MONTH_ONLY_RE = re.compile(
 )
 _SECTION_HEADERS = frozenset({
     'resume', 'curriculum vitae', 'cv', 'profile', 'summary', 'objective',
+    'overview', 'role overview',
     'experience', 'education', 'skills', 'projects', 'certifications',
-    'professional summary', 'work experience', 'contact',
+    'professional summary', 'professional objective', 'career objective',
+    'work experience', 'contact',
     'core competencies', 'technical proficiency', 'technical expertise',
     'academic background', 'academic qualifications', 'achievements',
     'accomplishments', 'awards', 'honors', 'activities', 'languages',
@@ -172,6 +175,13 @@ def validate_person_name(value: str) -> Tuple[bool, str]:
     low = s.lower()
     if low in _SECTION_HEADERS or low.endswith(' resume') or low.endswith(' cv'):
         return False, 'name_is_title'
+    try:
+        from app.ai.parser.enrichment.resume_text_inference import is_document_title_line
+
+        if is_document_title_line(s):
+            return False, 'name_is_title'
+    except Exception:
+        pass
     if '@' in s or 'http' in low:
         return False, 'name_not_person'
     if re.search(r'\d', s):
@@ -238,6 +248,8 @@ def validate_degree(value: str) -> Tuple[bool, str]:
         return False, 'degree_is_date'
     if _EDU_DUTY_START_RE.match(s):
         return False, 'degree_is_duty'
+    if re.match(r'^\d{1,2}\.\s+\S', s) and not re.match(r'(?i)^\d{1,2}th\b', s):
+        return False, 'degree_is_numbered_duty'
     if s[:1].islower():
         return False, 'degree_is_prose'
     if len(s) > 80 and not _DEGREE_CUE_RE.search(s):
@@ -330,6 +342,7 @@ def validate_company(value: str) -> Tuple[bool, str]:
     if _is_geo_only_token(s):
         return False, 'company_is_geo'
     from app.ai.parser.enrichment.resume_text_inference import (
+        is_project_or_employment_meta_label,
         looks_like_email_or_url,
         looks_like_phone_token,
         looks_like_skill_or_duration_company,
@@ -341,6 +354,12 @@ def validate_company(value: str) -> Tuple[bool, str]:
         return False, 'company_is_contact'
     if looks_like_skill_or_duration_company(s):
         return False, 'company_is_skill_or_duration'
+    if is_project_or_employment_meta_label(s):
+        return False, 'company_is_project_meta'
+    if s[:1].islower():
+        return False, 'company_is_fragment'
+    if re.match(r'(?i)^(?:and|or|the|for|with|based)\b', s):
+        return False, 'company_is_fragment'
     if _INSTITUTION_AS_JOB_RE.search(s) and not _JOB_TITLE_CUE_RE.search(s):
         return False, 'company_is_institution'
     if len(s) > 120:
@@ -359,6 +378,23 @@ def validate_role(value: str) -> Tuple[bool, str]:
     low = s.lower()
     if low in _SECTION_HEADERS:
         return False, 'role_is_header'
+    try:
+        from app.ai.parser.enrichment.resume_text_inference import (
+            is_project_or_employment_meta_label,
+        )
+
+        if is_project_or_employment_meta_label(s):
+            return False, 'role_is_project_meta'
+    except Exception:
+        pass
+    if s[:1].islower():
+        return False, 'role_is_fragment'
+    if re.match(
+        r'(?i)^(?:and|or|the|for|with|based|implement|develop|build|create|'
+        r'manage|monitor|configure|install)\b',
+        s,
+    ) and not _JOB_TITLE_CUE_RE.search(s):
+        return False, 'role_is_duty_fragment'
     if re.search(
         r'(?i)degree/certificate|year of passing|board/university|school/college|'
         r'percentage/?\s*cgpa',
@@ -389,10 +425,46 @@ def validate_role(value: str) -> Tuple[bool, str]:
 
 def validate_skill_item(value: str) -> Tuple[bool, str]:
     s = (value or '').strip()
+    s = re.sub(r'^[\s:•·\-\*●▪▸►]+', '', s).strip()
+    s = re.sub(r'[\s:•·\-\*●]+$', '', s).strip()
     if not s or len(s) < 2:
         return False, 'skill_empty'
+    try:
+        from app.ai.parser.enrichment.resume_text_inference import skill_item_looks_like_prose
+
+        if skill_item_looks_like_prose(s):
+            return False, 'skill_is_prose'
+    except Exception:
+        pass
+    if re.fullmatch(
+        r'(?i)(?:(?:technical\s+)?skills?|skill\s*sets?|'
+        r'databases?|languages?|operating\s*systems?|tools?|os|'
+        r'frameworks?|technologies?|software|special\s+software)',
+        s,
+    ):
+        return False, 'skill_is_header'
     if len(s) > 80:
         return False, 'skill_too_long'
+    if re.fullmatch(r'(?i)(?:indian|american|british|canadian|australian|nationality)', s):
+        return False, 'skill_is_nationality'
+    if re.search(r'(?i)\b\d+\s+of\s+\d+\b', s) or re.match(r'(?i)^page\s+\d+', s):
+        return False, 'skill_is_page_crumb'
+    if re.search(
+        r'(?i)(?:year of passing|board/university|school/college|degree\s*:|'
+        r'university\s*,\s*[A-Za-z])',
+        s,
+    ):
+        return False, 'skill_is_edu_table'
+    if re.search(
+        r'(?i)\b(?:maharashtra|karnataka|tamil\s+nadu|telangana|gujarat)\b',
+        s,
+    ) and (',' in s or len(s.split()) <= 4):
+        return False, 'skill_is_address'
+    if re.match(
+        r'(?i)^(?:build|built|develop|developed|implement|implemented)\b',
+        s,
+    ) and len(s.split()) >= 4:
+        return False, 'skill_is_duty_sentence'
     if _SENTENCE_SKILL.search(s) and len(s.split()) >= 4:
         return False, 'skill_is_experience_text'
     if re.match(r'(?i)^(?:experience|education|summary|mumbai|pune|thane|nagpur|navi\s+mumbai)\b', s):
@@ -471,7 +543,7 @@ def validate_skill_item(value: str) -> Tuple[bool, str]:
         return False, 'skill_is_address'
     words = [w.strip(".,#") for w in s.split() if w.strip(".,#")]
     if (
-        2 <= len(words) <= 4
+        3 <= len(words) <= 4
         and is_plausible_person_name(s)
         and all(w.replace("'", '').replace('’', '').replace('‘', '').isalpha() and 2 <= len(w) <= 16 for w in words)
         and not any(
@@ -499,10 +571,46 @@ def validate_skill_item(value: str) -> Tuple[bool, str]:
         return False, 'skill_is_contact'
     if re.fullmatch(r'\+?[\d\s\-().]{7,20}', s):
         return False, 'skill_is_phone'
+    from app.ai.parser.enrichment.resume_text_inference import is_labeled_contact_metadata
+
+    if is_labeled_contact_metadata(s):
+        return False, 'skill_is_contact'
     if re.match(r'(?i)^(email|phone|mobile|linkedin|github|contact)\b', s):
         return False, 'skill_is_contact'
     if _MONTH_YEAR_RE.match(s) or _MONTH_ONLY_RE.match(s):
         return False, 'skill_is_date'
+    if re.search(
+        r"(?i)\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*"
+        r"[\'’]?\d{2,4}\s*[-–—to]+\s*"
+        r"(?:present|current|now|(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))",
+        s,
+    ):
+        return False, 'skill_is_employment_date'
+    if re.search(
+        r'(?i)\((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)',
+        s,
+    ) and re.search(r'(?i)present|[-–—]', s):
+        return False, 'skill_is_employment_date'
+    if re.search(
+        r'(?i)\b(?:19|20)\d{2}\s*[-–—to]+\s*(?:(?:19|20)\d{2}|present|current)\b',
+        s,
+    ):
+        return False, 'skill_is_employment_date'
+    if (
+        re.search(r'(?i)\b(?:pvt\.?|ltd\.?|llc|llp|inc\.?)\b', s)
+        and len(s.split()) >= 2
+        and not re.search(
+            r'(?i)\b(?:sql|python|java|linux|oracle|aws|azure|react|node)\b',
+            s,
+        )
+    ):
+        return False, 'skill_is_employer'
+    if re.match(
+        r'(?i)^(?:worked|working|responsible|ensuring|managing|performing|'
+        r'maintaining|implemented|developed|executed|coordinated)\b',
+        s,
+    ) and len(s.split()) >= 5:
+        return False, 'skill_is_duty_sentence'
     low = s.lower()
     if low in _SECTION_HEADERS:
         return False, 'skill_is_header'
@@ -511,18 +619,34 @@ def validate_skill_item(value: str) -> Tuple[bool, str]:
 
 def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
     """Reject company/role swaps, date contamination, edu-table and project-like rows."""
-    company = re.sub(
-        r'(?i)^(company|employer|organization|organisation)(?:\s+name)?\s*:\s*',
-        '',
-        (exp.company or '').strip(),
+    from app.ai.parser.enrichment.resume_text_inference import peel_inline_contact
+
+    company = peel_inline_contact(
+        re.sub(
+            r'(?i)^(company|employer|organization|organisation)(?:\s+name)?\s*:\s*',
+            '',
+            (exp.company or '').strip(),
+        )
     )
-    role = re.sub(
-        r'(?i)^(role|title|designation|position|job\s+title)\s*:\s*',
-        '',
-        (exp.role or '').strip(),
+    role = peel_inline_contact(
+        re.sub(
+            r'(?i)^(role|title|designation|position|job\s+title)\s*:\s*',
+            '',
+            (exp.role or '').strip(),
+        )
     )
     desc = (exp.description or '').strip()
     loc = (exp.location or '').strip()
+    from app.ai.parser.enrichment.resume_text_inference import (
+        is_non_job_experience_record,
+        is_project_or_employment_meta_label,
+    )
+
+    company_was_meta = is_project_or_employment_meta_label(company)
+    if company_was_meta:
+        company = ''
+    if is_project_or_employment_meta_label(role):
+        role = ''
     # Em/en/hyphen title — Company  (SDE Intern — Edviron / Role - Company)
     for dash in ('—', '–', '-'):
         if dash in role and not company:
@@ -551,31 +675,36 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
     # Drop assignment / Coursera / project narratives mistaken for jobs
     if _PROJECT_LIKE_EXP.search(f'{role} {company} {desc}'):
         return ExperienceEntry(company='', role='', start='', end='', is_current=False)
-    from app.ai.parser.enrichment.resume_text_inference import is_non_job_experience_record
 
     if is_non_job_experience_record(
         {'role': role, 'company': company, 'start': exp.start, 'end': exp.end}
     ):
         return ExperienceEntry(company='', role='', start='', end='', is_current=False)
-    # Drop duty-sentence fragments mistaken for role/company
+    # Duty-sentence fragments must not occupy role/company; keep the rest of the row
     # VALIDATION_FIX_duty_verbs_align — keep in sync with parser _DUTY_VERB_START
-    if re.match(
+    _DUTY_ROLE_RE = re.compile(
         r'(?i)^(?:managed|executed|coordinated|collaborated|utilized|maintained|'
         r'facilitated|developed|designed|created|built|led|drove|implemented|'
+        r'implement|develop|build|create|manage|monitor|configure|install|'
         r'optimized|improved|increased|worked|assisted|supported|handled|'
         r'performed|conducted|analyzed|monitored|delivered|owned|spearheaded|'
         r'identifying|enabling|engineered|gained|helped|wrote|responsible\s+for|'
         r'administer(?:ed|ing)?|completed|pursued|strengthened|scheduled|'
         r'diagnosing|configuring|installing|creating|executing|participating|'
-        r'using|implementing|monitoring|maintaining|query|role:|result:|'
-        r'[•·\*●])',
-        role,
-    ) or re.match(
-        r'(?i)^(resulting|ensuring|improving|including|across|reports?|captions|'
-        r'brand voice|traffic|and efficiency|identifying|integrating)\b',
-        company,
+        r'using|implementing|monitoring|maintaining|query|role:|result:)\b|'
+        r'^[•·\*●]'
+    )
+    if role and _DUTY_ROLE_RE.match(role):
+        role = ''
+    if company and (
+        _DUTY_ROLE_RE.match(company)
+        or re.match(
+            r'(?i)^(resulting|ensuring|improving|including|across|reports?|captions|'
+            r'brand voice|traffic|and efficiency|identifying|integrating|and)\b',
+            company,
+        )
     ):
-        return ExperienceEntry(company='', role='', start='', end='', is_current=False)
+        company = ''
     if company and len(company.split()) >= 10:
         company = ''
     # City stuffed into company → location
@@ -587,7 +716,7 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
     role_ok, _ = validate_role(role) if role else (False, '')
 
     # Detect swap: role looks like org, company looks like title
-    if company and role:
+    if company and role and not company_was_meta:
         company_looks_role = bool(_JOB_TITLE_CUE_RE.search(company))
         role_looks_company = bool(
             re.search(
@@ -604,7 +733,8 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
         company_ok = False
 
     # Role is actually a company name (no title cue): "Infosenseglobal", "Acme Pvt Ltd"
-    if role and not company and not _JOB_TITLE_CUE_RE.search(role):
+    # Never promote an org-looking Role when Company was a project/metadata label.
+    if role and not company and not company_was_meta and not _JOB_TITLE_CUE_RE.search(role):
         org_like = bool(
             re.search(
                 r'(?i)\b(?:pvt|ltd|llc|inc|corp|limited|technologies|solutions|labs|systems)\b',
@@ -615,6 +745,14 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
         if org_like or single_token:
             company, role = role, ''
             company_ok, role_ok = validate_company(company)[0], False
+
+    if company_was_meta and role and not _JOB_TITLE_CUE_RE.search(role):
+        if re.search(
+            r'(?i)\b(?:ltd|limited|pvt|private|bank|corporation|inc|llc)\b',
+            role,
+        ):
+            role = ''
+            role_ok = False
 
     start_ok, _ = validate_month_year(exp.start)
     end_ok, _ = validate_month_year(exp.end)
@@ -646,13 +784,101 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
     return ExperienceEntry(company='', role='', start='', end='', is_current=False)
 
 
+_EDU_TRAILING_MONTH_YEAR = re.compile(
+    r'(?i)[,;|\s]*\b('
+    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+    r')\b\s*([A-Za-z][A-Za-z .]{0,40})?\s*$'
+)
+_DEGREE_FROM_INST_RE = re.compile(
+    r'(?i)^(.+?)(?<![A-Za-z])from\s+(.+)$'
+)
+_GENERIC_INSTITUTION_RE = re.compile(
+    r'(?i)^(?:the\s+)?(?:university|institute|college|school)(?:\s+of)?$'
+)
+_GENERIC_GEO_INSTITUTION_RE = re.compile(
+    r'(?i)^(?:university|institute|college|school)\s*,\s*[A-Za-z]'
+)
+_NUMBERED_DUTY_LINE_RE = re.compile(r'^\d{1,2}\.\s+\S')
+
+
+def _is_generic_institution_value(value: str) -> bool:
+    s = (value or '').strip().lstrip(':').strip(' .')
+    if not s:
+        return True
+    if _GENERIC_INSTITUTION_RE.match(s):
+        return True
+    if _GENERIC_GEO_INSTITUTION_RE.match(s):
+        return True
+    return False
+
+
+def _peel_degree_date_and_place(degree: str, end: str) -> tuple[str, str]:
+    """Move trailing Month Year out of Degree; drop a following city when present."""
+    from app.ai.document_intelligence.deterministic import normalize_month_token
+
+    s = (degree or '').strip()
+    if not s:
+        return s, end
+    m = _EDU_TRAILING_MONTH_YEAR.search(s)
+    if not m:
+        return s, end
+    peeled = normalize_month_token(m.group(1))
+    place = (m.group(2) or '').strip(' ,')
+    core = s[: m.start()].strip(' \t|-–—,')
+    if place and _SCHOOL_CUE_RE.search(place):
+        core = f'{core} {place}'.strip() if core else place
+    return core, end or peeled
+
+
 def sanitize_education_row(edu: EducationEntry) -> EducationEntry:
-    inst_ok, _ = validate_institution(edu.institution) if edu.institution else (False, '')
-    deg_ok, _ = validate_degree(edu.degree) if edu.degree else (False, '')
+    degree = re.sub(r'^[:\-–—\s]+', '', (edu.degree or '').strip())
+    institution = re.sub(r'^[:\-–—\s]+', '', (edu.institution or '').strip())
+    if _NUMBERED_DUTY_LINE_RE.match(degree) and not re.match(r'(?i)^\d{1,2}th\b', degree):
+        degree = ''
+    if _NUMBERED_DUTY_LINE_RE.match(institution) and not re.match(r'(?i)^\d{1,2}th\b', institution):
+        institution = ''
+    from_blob = degree if _DEGREE_FROM_INST_RE.match(degree or '') else (
+        institution if not degree else degree
+    )
+    from_m = _DEGREE_FROM_INST_RE.match(from_blob or '')
+    if from_m and (not institution or from_blob == institution):
+        left, right = from_m.group(1).strip(), from_m.group(2).strip()
+        words = right.split()
+        conservative_inst = (
+            1 <= len(words) <= 4
+            and bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9 .'\-]{1,60}", right))
+            and not (right.endswith('.') and len(words) >= 3)
+        )
+        if _DEGREE_CUE_RE.search(left) and (
+            _SCHOOL_CUE_RE.search(right) or conservative_inst
+        ):
+            degree, institution = left, right
+        elif _DEGREE_CUE_RE.search(left):
+            degree = left
+    if ':' in degree and not institution:
+        left, _, right = degree.partition(':')
+        left, right = left.strip(), right.strip()
+        if left and right and _DEGREE_CUE_RE.search(left) and _SCHOOL_CUE_RE.search(right):
+            degree, institution = left, right
+    degree, end = _peel_degree_date_and_place(degree, edu.end)
+    from app.ai.document_intelligence.deterministic import peel_education_date_phrase
+
+    inst_core, inst_year = peel_education_date_phrase(institution)
+    if inst_year:
+        institution = inst_core
+        end = end or inst_year
+    deg_core, deg_year = peel_education_date_phrase(degree)
+    if deg_year:
+        degree = deg_core
+        end = end or deg_year
+    if _is_generic_institution_value(institution):
+        institution = ''
+    inst_ok, _ = validate_institution(institution) if institution else (False, '')
+    deg_ok, _ = validate_degree(degree) if degree else (False, '')
     start_ok, _ = validate_month_year(edu.start)
-    end_ok, _ = validate_month_year(edu.end)
-    degree = edu.degree if deg_ok else ''
-    institution = edu.institution if inst_ok else ''
+    end_ok, _ = validate_month_year(end)
+    degree = degree if deg_ok else ''
+    institution = institution if inst_ok else ''
     # Drop education table header pollution
     if re.search(
         r'(?i)degree/certificate|year of passing|board/university|school/college|'
@@ -660,13 +886,15 @@ def sanitize_education_row(edu: EducationEntry) -> EducationEntry:
         f'{degree} {institution}',
     ):
         return EducationEntry()
+    if not degree and not institution:
+        return EducationEntry()
     return EducationEntry(
         degree=degree,
         field=edu.field.strip(),
         institution=institution,
         gpa=edu.gpa.strip(),
         start=edu.start if start_ok else '',
-        end=edu.end if end_ok else '',
+        end=end if end_ok else '',
     )
 
 
@@ -674,18 +902,21 @@ def sanitize_skills(skills: list[SkillEntry], *, companies: set[str] | None = No
     companies = {c.lower() for c in (companies or set()) if c}
     out: list[SkillEntry] = []
     seen: set[str] = set()
+    from app.ai.parser.enrichment.resume_text_inference import maybe_split_glued_skill_tokens
+
     for sk in skills:
         display = (sk.name or sk.canonical or '').strip()
-        ok, _ = validate_skill_item(display)
-        if not ok:
-            continue
-        if display.lower() in companies:
-            continue
-        key = display.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(SkillEntry(name=display, canonical=sk.canonical or display, category=sk.category))
+        for piece in maybe_split_glued_skill_tokens(display):
+            ok, _ = validate_skill_item(piece)
+            if not ok:
+                continue
+            if piece.lower() in companies:
+                continue
+            key = piece.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(SkillEntry(name=piece, canonical=piece, category=sk.category))
     return out
 
 
@@ -722,7 +953,29 @@ def sanitize_candidate_profile(
     port = profile.contact.portfolio
     port_ok, _ = validate_url(port, allow_empty=True) if port else (True, '')
 
+    from app.ai.parser.enrichment.resume_text_inference import (
+        document_identity_names,
+        identity_is_employer_value,
+        identity_matches_person,
+    )
+
+    identity_names = document_identity_names(source_text)
+    if name_ok and raw_name:
+        identity_names.add(raw_name.strip().lower())
+
     experience = [sanitize_experience_row(e) for e in profile.experience]
+    cleaned_exp: list[ExperienceEntry] = []
+    for e in experience:
+        company = e.company or ''
+        role = e.role or ''
+        if identity_is_employer_value(company, identity_names):
+            company = ''
+        if identity_is_employer_value(role, identity_names) and not _JOB_TITLE_CUE_RE.search(role):
+            role = ''
+        if company != (e.company or '') or role != (e.role or ''):
+            e = e.model_copy(update={'company': company, 'role': role})
+        cleaned_exp.append(e)
+    experience = cleaned_exp
     from app.ai.parser.enrichment.resume_text_inference import has_credible_employment_evidence
 
     experience = [
@@ -734,10 +987,25 @@ def sanitize_candidate_profile(
         or (e.company and e.start)
     ]
     education = [sanitize_education_row(e) for e in profile.education]
-    education = [e for e in education if e.degree or e.institution]
+    education = [
+        e
+        for e in education
+        if (e.degree or e.institution)
+        and not (
+            identity_names
+            and identity_matches_person(e.institution, identity_names)
+            and not _SCHOOL_CUE_RE.search(e.institution or '')
+        )
+    ]
 
     companies = {e.company for e in experience if e.company}
     skills = sanitize_skills(profile.skills, companies=companies)
+    if identity_names:
+        skills = [
+            s
+            for s in skills
+            if not identity_matches_person(s.name or s.canonical, identity_names)
+        ]
 
     # Recompute years after experience sanitization (VALIDATION_FIX_years_after_sanitize)
     from app.ai.parser.enrichment.resume_text_inference import (

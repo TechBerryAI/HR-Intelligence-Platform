@@ -140,17 +140,46 @@ def should_retry_high_dpi_extract(
     return bool(extract_failed or not raw_text or text_length < MIN_TEXT_CHARS or garbage)
 
 
-def _serialize_table_row(cells: list[str]) -> str:
-    """Turn table cells into Label: Value lines for field extractors."""
+_TABULAR_HEADER_HINT = __import__('re').compile(
+    r'(?i)\b(?:organization|organisation|designation|company|employer|'
+    r'degree|university|college|board|from|to|year|percentage|cgpa)\b'
+)
+_TABULAR_DATE_HINT = __import__('re').compile(
+    r'(?i)\b(?:(?:19|20)\d{2}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|'
+    r'till\s*date|present|current)\b'
+)
+
+
+def _row_is_tabular_record(cells: list[str]) -> bool:
+    """True when a row should keep cell relationships (not Label: Value)."""
+    if len(cells) >= 3:
+        blob = ' '.join(cells)
+        if _TABULAR_HEADER_HINT.search(blob) or _TABULAR_DATE_HINT.search(blob):
+            return True
+        return True
+    return False
+
+
+def _serialize_table_row(cells: list[str], *, force_pipes: bool = False) -> str:
+    """Turn table cells into structured lines.
+
+    Two-cell Label/Value rows stay ``Label: Value``. Employment/education
+    tables keep ``cell | cell | cell`` so parsers can map columns.
+    """
     cleaned = [(__import__('re').sub(r'\s+', ' ', (c or '').strip())) for c in cells]
     cleaned = [c for c in cleaned if c]
     if not cleaned:
         return ''
     if len(cleaned) == 1:
         return cleaned[0]
+    if force_pipes or _row_is_tabular_record(cleaned):
+        return ' | '.join(cleaned)
     label, *rest = cleaned
     value = ' | '.join(rest)
-    if _FIELD_LABEL_RE.match(label) or label.endswith(':') or len(label.split()) <= 4:
+    if _FIELD_LABEL_RE.match(label) or label.endswith(':'):
+        label = label.rstrip(':').strip()
+        return f'{label}: {value}'
+    if len(cleaned) == 2 and len(label.split()) <= 4:
         label = label.rstrip(':').strip()
         return f'{label}: {value}'
     return ' | '.join(cleaned)
@@ -849,31 +878,79 @@ def extract_text_from_pdf(file_data: bytes, *, dpi: int | None = None) -> str:
     raise pymupdf_error
 
 
+def _iter_docx_blocks(doc):
+    """Yield paragraphs and tables in document order (not paragraphs-then-tables)."""
+    from docx.oxml.ns import qn
+    from docx.table import Table
+    from docx.text.paragraph import Paragraph
+
+    body = doc.element.body
+    for child in body:
+        if child.tag == qn('w:p'):
+            yield Paragraph(child, doc)
+        elif child.tag == qn('w:tbl'):
+            yield Table(child, doc)
+
+
+def _serialize_docx_table(table) -> list[str]:
+    lines: list[str] = []
+    force_pipes = False
+    for row in table.rows:
+        cells = [(cell.text or '').strip() for cell in row.cells]
+        deduped: list[str] = []
+        for c in cells:
+            if not c:
+                continue
+            if deduped and deduped[-1] == c:
+                continue
+            deduped.append(c)
+        if not force_pipes and len(deduped) >= 3 and _TABULAR_HEADER_HINT.search(' '.join(deduped)):
+            force_pipes = True
+        serialized = _serialize_table_row(deduped, force_pipes=force_pipes)
+        if serialized:
+            lines.append(serialized)
+    return lines
+
+
 def extract_text_from_docx(file_data: bytes) -> str:
-    """Extract text from DOCX (paragraphs + Label: Value tables + XML fallback)."""
+    """Extract text from DOCX (document-order blocks + headers/footers + XML fallback)."""
     text_parts: list[str] = []
     try:
         docx_file = io.BytesIO(file_data)
         doc = Document(docx_file)
 
-        for paragraph in doc.paragraphs:
-            if paragraph.text.strip():
-                text_parts.append(paragraph.text)
+        try:
+            for block in _iter_docx_blocks(doc):
+                from docx.table import Table
+                from docx.text.paragraph import Paragraph
 
-        for table in doc.tables:
-            for row in table.rows:
-                cells = [(cell.text or '').strip() for cell in row.cells]
-                # Deduplicate merged-cell repeats common in python-docx
-                deduped: list[str] = []
-                for c in cells:
-                    if not c:
+                if isinstance(block, Paragraph):
+                    if block.text.strip():
+                        _dedupe_append(text_parts, block.text)
+                elif isinstance(block, Table):
+                    for serialized in _serialize_docx_table(block):
+                        _dedupe_append(text_parts, serialized)
+        except Exception:
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():
+                    _dedupe_append(text_parts, paragraph.text)
+            for table in doc.tables:
+                for serialized in _serialize_docx_table(table):
+                    _dedupe_append(text_parts, serialized)
+
+        try:
+            for section in doc.sections:
+                for hf in (section.header, section.footer):
+                    if hf is None:
                         continue
-                    if deduped and deduped[-1] == c:
-                        continue
-                    deduped.append(c)
-                serialized = _serialize_table_row(deduped)
-                if serialized:
-                    text_parts.append(serialized)
+                    for paragraph in hf.paragraphs:
+                        if paragraph.text.strip():
+                            _dedupe_append(text_parts, paragraph.text)
+                    for table in getattr(hf, 'tables', []) or []:
+                        for serialized in _serialize_docx_table(table):
+                            _dedupe_append(text_parts, serialized)
+        except Exception:
+            pass
     except Exception as e:
         logger.warning('python-docx extraction failed, trying XML fallback: %s', e)
 

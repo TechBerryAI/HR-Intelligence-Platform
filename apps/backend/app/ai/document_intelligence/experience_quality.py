@@ -34,9 +34,34 @@ def _parts(row: Any) -> tuple[str, str, str, str]:
     )
 
 
+def _company_looks_fragment(company: str) -> bool:
+    """True when company is leftover prose, not an employer name."""
+    s = (company or '').strip()
+    if not s:
+        return False
+    if re.search(r'(?i)\b(?:as|from|currently|working with|worked with)\b', s):
+        return True
+    if len(s.split()) >= 6 and not _ORG_CUE.search(s):
+        return True
+    return False
+
+
 def row_is_complete(row: Any) -> bool:
-    role, company, _start, _desc = _parts(row)
-    return bool(role and company)
+    """Role+dates (or role+plausible company) — not merely two non-empty strings."""
+    role, company, start, _desc = _parts(row)
+    if role and start:
+        return True
+    if role and company and not _company_looks_fragment(company):
+        return True
+    return False
+
+
+def row_is_anchored(row: Any) -> bool:
+    """Role+company, or either field with employment dates — keep conservative rows."""
+    role, company, start, _desc = _parts(row)
+    if _company_looks_fragment(company):
+        company = ''
+    return bool((role and company) or ((role or company) and start))
 
 
 def complete_experience_count(rows: Iterable[Any] | None) -> int:
@@ -44,12 +69,19 @@ def complete_experience_count(rows: Iterable[Any] | None) -> int:
 
 
 def score_experience_row(row: Any) -> int:
+    """Structural evidence score — Role+dates beats Role+garbage company."""
     role, company, start, desc = _parts(row)
+    if _company_looks_fragment(company):
+        company = ''
     score = 0
-    if role and company:
-        score += 3
+    if role and start:
+        score += 4
     elif role or company:
         score += 1
+    if company and role:
+        score += 2
+    elif company and start:
+        score += 2
     if start:
         score += 1
     if len(desc) >= 40:
@@ -94,19 +126,23 @@ def experience_is_incomplete(rows: Iterable[Any] | None, source_text: str = '') 
     if has_experience_section_evidence(source_text) and not rows:
         return True
     complete = complete_experience_count(rows)
-    if rows and complete == 0:
+    anchored = sum(1 for r in rows if row_is_anchored(r))
+    if rows and anchored == 0:
         return True
     if any(row_looks_swapped(row) for row in rows):
         return True
-    xor = any(
-        (bool(_parts(r)[0]) ^ bool(_parts(r)[1])) for r in rows
+    undated_xor = any(
+        (bool(_parts(r)[0]) ^ bool(_parts(r)[1])) and not _parts(r)[2]
+        for r in rows
     )
-    if xor and complete < max(1, len(rows)):
+    if undated_xor and complete == 0 and anchored == 0:
         return True
+    if anchored > 0:
+        return False
     body = _experience_section_text(source_text) or source_text
     dates = experience_date_signal_count(body)
     # Allow one extra dated line (training / professional development)
-    if dates >= 2 and complete < dates and (complete <= dates - 2 or xor):
+    if dates >= 2 and anchored < dates and (anchored <= dates - 2 or undated_xor):
         return True
     return False
 
@@ -144,23 +180,91 @@ def ground_experience_rows(
     return out
 
 
+def _same_job(left: Any, right: Any) -> bool:
+    lr, lc, ls, _ = _parts(left)
+    rr, rc, rs, _ = _parts(right)
+    if ls and rs and ls == rs:
+        return True
+    if lr and rr and lr.lower() == rr.lower():
+        return True
+    if lc and rc and lc.lower() == rc.lower() and (lr.lower() == rr.lower() or not (lr and rr)):
+        return True
+    return False
+
+
+def _incoming_role_is_stronger(cur: Any, other: Any) -> bool:
+    other_role = (_parts(other)[0] or '').strip()
+    if not other_role:
+        return False
+    if not (_parts(cur)[0] or '').strip():
+        return True
+    if row_looks_swapped(cur) and (
+        _TITLE_CUE.search(other_role) or not row_looks_swapped(other)
+    ):
+        return True
+    return False
+
+
+def merge_experience_field_level(
+    existing: list[ExperienceEntry],
+    incoming: list[ExperienceEntry],
+) -> list[ExperienceEntry]:
+    """Fill empty / low-confidence slots only. Never replace a valid field."""
+    if not incoming:
+        return list(existing or [])
+    if not existing:
+        return [r for r in incoming if row_is_anchored(r) and not row_looks_swapped(r)]
+    out: list[ExperienceEntry] = []
+    for cur in existing:
+        nxt = cur
+        for other in incoming:
+            if not _same_job(cur, other):
+                continue
+            updates: dict[str, Any] = {}
+            other_company = (other.company or '').strip()
+            if other_company and not _company_looks_fragment(other_company):
+                if not (cur.company or '').strip() or _company_looks_fragment(cur.company or ''):
+                    updates['company'] = other_company[:200]
+            if _incoming_role_is_stronger(cur, other):
+                other_role = (other.role or '').strip()
+                if other_role and not (
+                    not _TITLE_CUE.search(other_role) and len(other_role.split()) > 8
+                ):
+                    updates['role'] = other_role[:200]
+            if not (cur.start or '').strip() and (other.start or '').strip():
+                updates['start'] = other.start
+                updates['end'] = cur.end or other.end
+                updates['is_current'] = cur.is_current or other.is_current
+            if updates:
+                nxt = nxt.model_copy(update=updates)
+            break
+        out.append(nxt)
+    for other in incoming:
+        if not row_is_anchored(other) or row_looks_swapped(other):
+            continue
+        if _company_looks_fragment(other.company or ''):
+            continue
+        if any(_same_job(cur, other) for cur in out):
+            continue
+        out.append(other)
+    return out
+
+
 def merge_experience_rows(
     deterministic: list[ExperienceEntry],
     ai_rows: list[ExperienceEntry],
 ) -> list[ExperienceEntry]:
-    """Prefer the set with more complete (role+company) jobs; else higher score."""
+    """Keep deterministic rows; fill missing fields from incoming when stronger."""
     det = list(deterministic or [])
     ai = list(ai_rows or [])
     if not ai:
         return det
     if not det:
+        return [r for r in ai if row_is_anchored(r) and not row_looks_swapped(r)]
+    if sum(1 for r in det if row_is_anchored(r)) > 0:
+        return merge_experience_field_level(det, ai)
+    incoming_score = sum(score_experience_row(r) for r in ai)
+    det_score = sum(score_experience_row(r) for r in det)
+    if incoming_score > det_score and all(row_is_anchored(r) for r in ai):
         return ai
-    det_c, ai_c = complete_experience_count(det), complete_experience_count(ai)
-    if ai_c > det_c:
-        return ai
-    if ai_c == det_c and ai_c > 0:
-        if sum(score_experience_row(r) for r in ai) > sum(score_experience_row(r) for r in det):
-            return ai
-        if len(ai) > len(det):
-            return ai
     return det

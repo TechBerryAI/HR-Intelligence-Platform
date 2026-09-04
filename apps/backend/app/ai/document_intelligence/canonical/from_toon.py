@@ -105,6 +105,10 @@ def _normalize_month(value: Any, *, year_only_month: str = '06') -> str:
     s = _str(value)
     if not s or _is_present(s):
         return ''
+    # YYYY-MM must win before range peeling: "2022-01" would otherwise be read as
+    # year 2022 + a dash separator, then filled with the year-only default month.
+    if re.fullmatch(r'\d{4}-\d{2}', s):
+        return s
     range_m = re.match(
         r'^((?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{4}|'
         r'\d{1,2}[/\-]\d{4}|\d{4}[/\-]\d{1,2}|\d{4}-\d{2}|\d{4})\s*(?:[-–—]|to)\s*',
