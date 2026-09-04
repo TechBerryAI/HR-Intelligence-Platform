@@ -78,14 +78,16 @@ cd apps/backend && source venv/bin/activate
 pip install -r requirements.txt   # OCR is pip-only (rapidocr-onnxruntime); no apt tesseract required
 
 # Unit tests (no Ollama required)
-pytest tests/test_resume_parsing_unit.py tests/test_jd_parsing_unit.py \
-  tests/test_resume_text_inference.py tests/test_text_extraction_ocr.py -v
+pytest tests/backend/test_resume_parsing_unit.py tests/backend/test_jd_parsing_unit.py \
+  tests/backend/test_resume_text_inference.py tests/backend/test_text_extraction_ocr.py \
+  tests/backend/test_pdfplumber_fallback.py -v
 
 # Integration smoke (requires Ollama)
 pytest tests/test_resume_ollama_smoke.py -v -m integration
 ```
 
 OCR env knobs (optional): `OCR_ENABLED=true`, `OCR_DPI=250`, `PDF_MAX_PAGES=0`.
+PDF extraction: PyMuPDF is primary; pdfplumber is an automatic fallback for poor/table/layout extracts (no env switch).
 System Tesseract is optional; RapidOCR from requirements is the primary OCR engine.
 
 ## Related documentation

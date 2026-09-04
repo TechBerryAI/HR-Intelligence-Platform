@@ -308,3 +308,20 @@ def test_form_drops_ungrounded_education_placeholders():
     form = map_candidate_to_form(profile)
     kept = [(e.degree, e.institution) for e in form.education if e.degree or e.institution]
     assert kept == []
+
+
+def test_form_does_not_emit_empty_experience_or_education_placeholders():
+    from app.ai.document_intelligence.models.candidate import (
+        CandidateProfile,
+        ContactInfo,
+        PersonalInfo,
+    )
+
+    profile = CandidateProfile(
+        personal=PersonalInfo(full_name='Jane Doe'),
+        contact=ContactInfo(email='jane@example.com', phone='9876543210'),
+    )
+    form = map_candidate_to_form(profile)
+    assert form.education == []
+    assert form.experiences == []
+    assert form.certifications == []

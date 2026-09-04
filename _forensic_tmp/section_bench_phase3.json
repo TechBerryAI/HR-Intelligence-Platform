@@ -1,0 +1,1523 @@
+[
+  {
+    "file": "#1_Vishal_Waghmode_Resume.pdf",
+    "labels": [
+      "Preamble",
+      "Experience",
+      "Education",
+      "Skills",
+      "Projects",
+      "Strengths",
+      "Achievements",
+      "Achievements"
+    ],
+    "unclassified_chars": 0,
+    "name": "Vishal Waghmode",
+    "n_edu": 2,
+    "n_exp": 2,
+    "n_skills": 9,
+    "desc_lines": 4,
+    "desc_flat": 1,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "Tata Consultancy Services (TCS)",
+        "r": "Assistant System Engineer"
+      },
+      {
+        "c": "National Stock Exchange (NSEIT)",
+        "r": "Assistant System Analyst"
+      }
+    ],
+    "edu": [
+      {
+        "d": "Bachelor of Engineering",
+        "i": "Datta Meghe College Of Enginerring, Airoli , Navi Mumbai."
+      },
+      {
+        "d": "HSC",
+        "i": "St . Mayer's High School & Junior College, Navi Mumbai"
+      }
+    ],
+    "skills_head": [
+      "C#",
+      ".NET CORE",
+      "SQL (Structured Query Language)",
+      "HTML5",
+      "CSS3",
+      "JavaScript",
+      "Multi-Threading",
+      "Data Structure",
+      "AGILE"
+    ],
+    "degree_hints_lost": [
+      "b.e"
+    ],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "b.e",
+      "bachelor",
+      "hsc"
+    ],
+    "src_sk": [
+      ".net",
+      "java",
+      "javascript",
+      "sql"
+    ]
+  },
+  {
+    "file": "01 Furqan Khan - HR - 9 Years Experience.pdf",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Skills",
+      "Experience",
+      "Summary"
+    ],
+    "unclassified_chars": 0,
+    "name": "Furqan Khan",
+    "n_edu": 1,
+    "n_exp": 2,
+    "n_skills": 8,
+    "desc_lines": 2,
+    "desc_flat": 2,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "ImmersionX Technologies LLP – HR Generalist",
+        "r": "Klasy Innovations Pvt Ltd – Human Resource"
+      },
+      {
+        "c": "Wohlig Transformation Pvt Ltd",
+        "r": "Senior HR Executive"
+      }
+    ],
+    "edu": [
+      {
+        "d": "B. Com",
+        "i": ""
+      }
+    ],
+    "skills_head": [
+      "Recruitments",
+      "Onboarding",
+      "HR Policy & Process",
+      "Payroll",
+      "Induction",
+      "Retentions",
+      "HR Branding",
+      "Exit"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [],
+    "src_deg": [],
+    "src_sk": []
+  },
+  {
+    "file": "1 Senthil_Chandrasekaran_Resume.pdf",
+    "labels": [
+      "Preamble",
+      "Experience",
+      "Languages",
+      "Summary",
+      "Skills",
+      "Skills",
+      "Education",
+      "Certifications"
+    ],
+    "unclassified_chars": 0,
+    "name": "Senthil Chandrasekaran",
+    "n_edu": 3,
+    "n_exp": 1,
+    "n_skills": 31,
+    "desc_lines": 0,
+    "desc_flat": 0,
+    "sum_lines": 23,
+    "sum_flat": false,
+    "jobs": [
+      {
+        "c": "Reliance Jio infocomm, Mumbai",
+        "r": "Database Administrator"
+      }
+    ],
+    "edu": [
+      {
+        "d": "Master of Computer Applications:",
+        "i": ""
+      },
+      {
+        "d": "Bachelor of Science: Computer Science",
+        "i": "Anna University - Chennai 2003-08 - 2006-06"
+      },
+      {
+        "d": "",
+        "i": "Bharathiyar University - Coimbatore 1999-08 - 2002-12 Oracle 9i OCA 2010-03 IBM DB2 9 2009-07 ITIL Certification 2016-07"
+      }
+    ],
+    "skills_head": [
+      "unwanted user process.",
+      "Cluster",
+      "Cassandra Multi data center Setup",
+      "Node",
+      "Addition & Node remove.",
+      "Grafana & Prometheus",
+      "configure",
+      "and troubleshoot",
+      "database instances",
+      "replication",
+      "backup",
+      "partitions tables"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [
+      "azure",
+      "linux"
+    ],
+    "src_deg": [
+      "bachelor",
+      "be",
+      "master"
+    ],
+    "src_sk": [
+      "azure",
+      "linux",
+      "mysql",
+      "oracle",
+      "postgresql",
+      "sql"
+    ]
+  },
+  {
+    "file": "1-Ashish_Chandel.docx",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Skills",
+      "Experience",
+      "Unclassified",
+      "Certifications",
+      "Education",
+      "Languages"
+    ],
+    "unclassified_chars": 8,
+    "name": "Ashish R. Chandel",
+    "n_edu": 3,
+    "n_exp": 6,
+    "n_skills": 5,
+    "desc_lines": 31,
+    "desc_flat": 0,
+    "sum_lines": 8,
+    "sum_flat": false,
+    "jobs": [
+      {
+        "c": "Alexander Mann Solutions",
+        "r": "Senior Technology Manager"
+      },
+      {
+        "c": "Sify Technologies",
+        "r": "Service Desk Manager"
+      },
+      {
+        "c": "Teleperformance",
+        "r": "NOC Team Lead"
+      },
+      {
+        "c": "Reliance Jio",
+        "r": "Senior Executive — Network Operations"
+      },
+      {
+        "c": "CMS Info Systems Ltd",
+        "r": "Network Administrator"
+      },
+      {
+        "c": "Reliance Communications",
+        "r": "Network Engineer"
+      }
+    ],
+    "edu": [
+      {
+        "d": "Master of Business Administration (MBA)",
+        "i": ""
+      },
+      {
+        "d": "Bachelor of Science (B.Sc.) — Computer Science",
+        "i": "Institute of Technology and Management, Navi Mumbai"
+      },
+      {
+        "d": "",
+        "i": "University of Mumbai, Mumbai"
+      }
+    ],
+    "skills_head": [
+      "ITIL V4",
+      "ISO/IEC 27001",
+      "CAB",
+      "Incident / Problem / Change Management",
+      "Leadership: IT Budget Management"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [
+      "aws",
+      "azure"
+    ],
+    "src_deg": [
+      "b.sc",
+      "bachelor",
+      "master",
+      "mba"
+    ],
+    "src_sk": [
+      "aws",
+      "azure"
+    ]
+  },
+  {
+    "file": "1.docx",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Personal Information",
+      "Skills",
+      "Education",
+      "Activities",
+      "Declaration",
+      "Unclassified",
+      "Unclassified"
+    ],
+    "unclassified_chars": 705,
+    "name": "",
+    "n_edu": 0,
+    "n_exp": 0,
+    "n_skills": 24,
+    "desc_lines": 0,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [],
+    "edu": [],
+    "skills_head": [
+      "ApplicationServers\t: WebLogic Server  14c.",
+      "Web Server                           : Oracle",
+      "HTTP Server",
+      "Apache web server",
+      "ApplicationProtocol\t: SSH",
+      "HTTP",
+      "HTTPS",
+      "TELNET",
+      "FTP.",
+      "WebLogic Administration with expertise in Installation",
+      "Troubleshootingand",
+      "Oracle HTTP Server"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [],
+    "src_deg": [],
+    "src_sk": [
+      "linux",
+      "oracle"
+    ]
+  },
+  {
+    "file": "11zon_Mrunalbhaisare Resume.pdf",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Education",
+      "Skills",
+      "Projects",
+      "Experience",
+      "Achievements"
+    ],
+    "unclassified_chars": 0,
+    "name": "Mrunal Bhaisare",
+    "n_edu": 3,
+    "n_exp": 1,
+    "n_skills": 17,
+    "desc_lines": 3,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "Maayodiya Academy New Delhi",
+        "r": "Digital Marketing intern"
+      }
+    ],
+    "edu": [
+      {
+        "d": "Bachelor of Business Administration (BBA)",
+        "i": ""
+      },
+      {
+        "d": "",
+        "i": "Nagpur University Graduation year:"
+      },
+      {
+        "d": "",
+        "i": "Maayodiya Academy, New Delhi"
+      }
+    ],
+    "skills_head": [
+      "SEO: Keyword research",
+      "on-page & off-page optimization",
+      "and website auditing",
+      "Social Media Marketing: Content planning",
+      "campaign management",
+      "and audience",
+      "Content creation: Writing blogs",
+      "and designing basic graphic",
+      "(canva)",
+      "PPC: Google Ads campaign setup and management",
+      "Analytics: Google Analytics and Social media insights",
+      "SEMrush"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "bachelor"
+    ],
+    "src_sk": []
+  },
+  {
+    "file": "13_Ms.-Saloni-Dhuru.pdf",
+    "labels": [
+      "Preamble",
+      "Education",
+      "Experience"
+    ],
+    "unclassified_chars": 0,
+    "name": "Saloni V. Dhuru",
+    "n_edu": 2,
+    "n_exp": 0,
+    "n_skills": 0,
+    "desc_lines": 0,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [],
+    "edu": [
+      {
+        "d": "Ph.D. (Pursuing-I.T.)",
+        "i": ""
+      },
+      {
+        "d": "B. E (I.T.)",
+        "i": ""
+      }
+    ],
+    "skills_head": [],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [],
+    "src_deg": [],
+    "src_sk": []
+  },
+  {
+    "file": "1658748886885_RAHUL SURESH SURVASE Updated (1).docx",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Education",
+      "Skills",
+      "Skills",
+      "Summary",
+      "Personal Information",
+      "Declaration",
+      "Unclassified"
+    ],
+    "unclassified_chars": 73,
+    "name": "Rahul Suresh Survase",
+    "n_edu": 7,
+    "n_exp": 0,
+    "n_skills": 5,
+    "desc_lines": 0,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [],
+    "edu": [
+      {
+        "d": "BACHELOR OF ENGINEERING IN COMPUTER SCIENCE",
+        "i": ""
+      },
+      {
+        "d": "",
+        "i": "BHARAT COLLEGE OF ENGINEERING CGPI :6.28 SGPI:7.48"
+      },
+      {
+        "d": "DIPLOMA",
+        "i": "COMPUTER ENGINEERING"
+      },
+      {
+        "d": "",
+        "i": "KALA VIDYA MANDIR POLYTECHNIC"
+      },
+      {
+        "d": "HSC",
+        "i": ""
+      },
+      {
+        "d": "",
+        "i": "MATRUCHHYA JUNIOR COLLEGE"
+      }
+    ],
+    "skills_head": [
+      "Programming Languages: Core Java.",
+      "SQL  Server.",
+      "Windows.",
+      "M & R Consultants Corporation",
+      "Role: manual Tester with Database controller"
+    ],
+    "degree_hints_lost": [
+      "be"
+    ],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "bachelor",
+      "be",
+      "diploma",
+      "hsc",
+      "ssc"
+    ],
+    "src_sk": [
+      "java",
+      "sql"
+    ]
+  },
+  {
+    "file": "1vinay(2)Ea3JB.pdf",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Education",
+      "Skills",
+      "Experience",
+      "Strengths",
+      "Hobbies",
+      "Summary",
+      "Education",
+      "Languages",
+      "Skills",
+      "Personal Details"
+    ],
+    "unclassified_chars": 0,
+    "name": "Vinay Kumar Oli",
+    "n_edu": 4,
+    "n_exp": 2,
+    "n_skills": 22,
+    "desc_lines": 0,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "TEGanalytics.",
+        "r": "System Admin and Web Admin"
+      },
+      {
+        "c": "BhoomiMitra.",
+        "r": "System Admin & Web Admin"
+      }
+    ],
+    "edu": [
+      {
+        "d": "SECONDARY SCHOOL",
+        "i": "Karnataka State Board"
+      },
+      {
+        "d": "Pre University Education Board - 2016  -84%",
+        "i": "PRE UNIVERSITY"
+      },
+      {
+        "d": "BACHELOR OF ENGINEERING - VTU",
+        "i": ""
+      },
+      {
+        "d": "B.E (Electronics & communication)",
+        "i": ""
+      }
+    ],
+    "skills_head": [
+      "HTML",
+      "Windows",
+      "Linux",
+      "PostgreSQL",
+      "EDB",
+      "Wordpress",
+      "English structured writing",
+      "presentation",
+      "interpersonal and",
+      "teaming",
+      "people management",
+      "Academics: B.E (Electronics & communication)"
+    ],
+    "degree_hints_lost": [
+      "master"
+    ],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "b.e",
+      "bachelor",
+      "master",
+      "me"
+    ],
+    "src_sk": [
+      "linux",
+      "postgresql"
+    ]
+  },
+  {
+    "file": "2024 Miloni Shah Resume (1).pdf",
+    "labels": [
+      "Preamble",
+      "Experience",
+      "Skills",
+      "Education"
+    ],
+    "unclassified_chars": 0,
+    "name": "Miloni Shah",
+    "n_edu": 4,
+    "n_exp": 1,
+    "n_skills": 9,
+    "desc_lines": 1,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "After Effects, InDesign )",
+        "r": "Illustrator"
+      }
+    ],
+    "edu": [
+      {
+        "d": "Masters in Advertising and Media",
+        "i": ""
+      },
+      {
+        "d": "Bachelors in Mass Media",
+        "i": "Arts - Junior College Welingkars Management of Institute"
+      },
+      {
+        "d": "",
+        "i": "Nagindas Khandwala College - Mumbai"
+      },
+      {
+        "d": "",
+        "i": "Nagindas Khandwala College - Mumbai Product Design"
+      }
+    ],
+    "skills_head": [
+      "Ul/interaction Design",
+      "Wireframing",
+      "Prototyping",
+      "Data Analysis",
+      "Motion",
+      "Data Visualization",
+      "Print",
+      "Campaigns",
+      "Advertising"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "me"
+    ],
+    "src_sk": []
+  },
+  {
+    "file": "2025_UMAR_SHARIEF_RESUME postgresql dba.pdf",
+    "labels": [
+      "Skills",
+      "Languages",
+      "Experience",
+      "Summary",
+      "Experience",
+      "Activities",
+      "Education",
+      "Projects"
+    ],
+    "unclassified_chars": 0,
+    "name": "Mohammed Umar",
+    "n_edu": 2,
+    "n_exp": 6,
+    "n_skills": 4,
+    "desc_lines": 6,
+    "desc_flat": 3,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "EDB",
+        "r": "I'm proficient experience in PostgreSQL DBA with 5.6+"
+      },
+      {
+        "c": "PostgreSQL Lead",
+        "r": "Senior Software Analyst"
+      },
+      {
+        "c": "Allianz Technology",
+        "r": "Postgresql Database Administrator"
+      },
+      {
+        "c": "InKnowTech Private Limited",
+        "r": "Postgresql Database Administrator"
+      },
+      {
+        "c": "Appscore Solutions",
+        "r": "Junior Software Engineer"
+      },
+      {
+        "c": "& L 2.",
+        "r": "Qualitative Postgresql DBA having to support both L1"
+      }
+    ],
+    "edu": [
+      {
+        "d": "B.Sc",
+        "i": "Computers"
+      },
+      {
+        "d": "",
+        "i": "The New College, Chennai"
+      }
+    ],
+    "skills_head": [
+      "Certification",
+      "Microsoft Certified: Azure Data",
+      "Fundamentals",
+      "Microsoft Certified Azure"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [
+      "aws",
+      "linux",
+      "oracle"
+    ],
+    "src_deg": [
+      "b.sc",
+      "me"
+    ],
+    "src_sk": [
+      "aws",
+      "azure",
+      "linux",
+      "oracle",
+      "postgresql"
+    ]
+  },
+  {
+    "file": "26160_1726557418Abhi-Resume.docx",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Skills",
+      "Summary",
+      "Education",
+      "Certifications",
+      "Summary",
+      "Unclassified"
+    ],
+    "unclassified_chars": 90,
+    "name": "Abhishek Rajesh Nikalji",
+    "n_edu": 2,
+    "n_exp": 0,
+    "n_skills": 8,
+    "desc_lines": 0,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [],
+    "edu": [
+      {
+        "d": "HSC from Maharashtra State Board",
+        "i": "BCOM from Mumbai University"
+      },
+      {
+        "d": "SSC from Maharashtra State Board",
+        "i": ""
+      }
+    ],
+    "skills_head": [
+      "Red hat& CentOS Linux (6.x",
+      "x)",
+      "CLOUD:- AWS",
+      "NFS",
+      "HTTPD",
+      "LVM.",
+      "Patching",
+      "Ansible"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [
+      "mysql"
+    ],
+    "src_deg": [
+      "bcom",
+      "hsc",
+      "ssc"
+    ],
+    "src_sk": [
+      "ansible",
+      "aws",
+      "linux",
+      "mysql"
+    ]
+  },
+  {
+    "file": "3 Years of Exp MySQL Database Administrator.docx",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Summary",
+      "Education",
+      "Experience",
+      "Skills",
+      "Personal Details",
+      "Declaration"
+    ],
+    "unclassified_chars": 0,
+    "name": "Jeevan kumar reddy C",
+    "n_edu": 1,
+    "n_exp": 0,
+    "n_skills": 26,
+    "desc_lines": 0,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [],
+    "edu": [
+      {
+        "d": "B.com",
+        "i": "SV University, Tirupathi"
+      }
+    ],
+    "skills_head": [
+      "Project Name\t\t            :  Xerox",
+      "SQL",
+      "MYSQL",
+      "UNIX",
+      "PHP",
+      "Red hat Enterprise Linux",
+      "Handling Scheduled and planned production changes",
+      "Setup master slave replication.",
+      "Performance Tuning on a daily basis for preventing issues and providing capacity",
+      "planning using MySQL Enterprise Monitor.",
+      "groups and set up restrictive permissions",
+      "Performed MySQL Replication setup and administration on Master-Slave"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "b.com",
+      "master"
+    ],
+    "src_sk": [
+      "linux",
+      "mysql",
+      "sql"
+    ]
+  },
+  {
+    "file": "3.1_YRS_PUNE_VIPUL  PATIL (1).pdf",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Summary",
+      "Education",
+      "Project",
+      "Declaration",
+      "Unclassified",
+      "Unclassified"
+    ],
+    "unclassified_chars": 339,
+    "name": "Vipul Arvind Patil",
+    "n_edu": 3,
+    "n_exp": 1,
+    "n_skills": 1,
+    "desc_lines": 0,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "Mind Spark Technology, Pune",
+        "r": ""
+      }
+    ],
+    "edu": [
+      {
+        "d": "",
+        "i": "Bachelor Degree in BE MECHANICAL in college PVPIT Budgaon"
+      },
+      {
+        "d": "First Class in Higher Secondary, June 2014 at 64.77%",
+        "i": ""
+      },
+      {
+        "d": "First Class in SSC June 2012, at",
+        "i": ""
+      }
+    ],
+    "skills_head": [
+      "DATA ENGINEER"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [
+      "azure",
+      "mysql",
+      "oracle",
+      "python",
+      "sql"
+    ],
+    "src_deg": [
+      "bachelor",
+      "be",
+      "ssc"
+    ],
+    "src_sk": [
+      "azure",
+      "mysql",
+      "oracle",
+      "python",
+      "sql"
+    ]
+  },
+  {
+    "file": "3.5ATS-Resume-Aquib-2026.pdf",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Skills",
+      "Experience",
+      "Certifications",
+      "Education",
+      "Languages",
+      "Strengths"
+    ],
+    "unclassified_chars": 0,
+    "name": "Aquib Khan",
+    "n_edu": 3,
+    "n_exp": 2,
+    "n_skills": 16,
+    "desc_lines": 8,
+    "desc_flat": 1,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "ICEICO Pvt. Ltd",
+        "r": "Linux System Administrator"
+      },
+      {
+        "c": "HCL Technologies Pvt. Ltd",
+        "r": "Linux System Administrator"
+      }
+    ],
+    "edu": [
+      {
+        "d": "B.Sc. Computer Science",
+        "i": "ISBM University, Chhattisgarh (2024)"
+      },
+      {
+        "d": "HSC (Science)",
+        "i": "Maharashtra State Board, Nagpur (2021)"
+      },
+      {
+        "d": "SSC",
+        "i": "Maharashtra State Board, Nagpur (2016)"
+      }
+    ],
+    "skills_head": [
+      "RHEL 7/8",
+      "CentOS",
+      "Windows Server 2019/2022",
+      "Linux Administration: User & Group Management",
+      "LVM",
+      "Swap",
+      "Services & Servers: Apache",
+      "Tomcat",
+      "MySQL",
+      "FTP",
+      "NFS",
+      "Monitoring & Logs: Log Analysis"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "b.sc",
+      "hsc",
+      "ssc"
+    ],
+    "src_sk": [
+      "linux",
+      "mysql"
+    ]
+  },
+  {
+    "file": "45_MMS_Marketing_Akshay     Pujari -1.jpg (1) (1) (1).docx",
+    "labels": [
+      "Preamble",
+      "Personal Details",
+      "Education",
+      "Achievements",
+      "Skills",
+      "Unclassified",
+      "Unclassified"
+    ],
+    "unclassified_chars": 1303,
+    "name": "Akshay Pujari",
+    "n_edu": 4,
+    "n_exp": 1,
+    "n_skills": 6,
+    "desc_lines": 3,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "Amul India Ltd",
+        "r": "Summer Internship"
+      }
+    ],
+    "edu": [
+      {
+        "d": "2023-2025: MMS",
+        "i": "Kohinoor Business School Kurla, Mumbai"
+      },
+      {
+        "d": "2022: BSc",
+        "i": "Yashwantrao Chavan Mahavidyalaya Warananagar"
+      },
+      {
+        "d": "2019: Class 12th",
+        "i": "Shri Shamrao Patil Prathamik Madhyamik Vidyalaya"
+      },
+      {
+        "d": "2017: Class 10th",
+        "i": "Satara Sainik School"
+      }
+    ],
+    "skills_head": [
+      "MS-Office",
+      "Cricket & Football.",
+      "“B” and “C” Certificate.",
+      "District – Kolhapur 416114.",
+      "Temporary Address: 504/C",
+      "Badlapur East – 421503."
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "bsc",
+      "mms"
+    ],
+    "src_sk": [
+      "ms-office"
+    ]
+  },
+  {
+    "file": "_ Abhinandan jha c.v .pdf",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Experience",
+      "Education",
+      "Skills",
+      "Certifications",
+      "Projects",
+      "Activities",
+      "Languages",
+      "Projects"
+    ],
+    "unclassified_chars": 0,
+    "name": "Abhinandan Kumar Jha",
+    "n_edu": 2,
+    "n_exp": 1,
+    "n_skills": 4,
+    "desc_lines": 9,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "MUFG Intime India Pvt Ltd",
+        "r": "Associate client relation"
+      }
+    ],
+    "edu": [
+      {
+        "d": "Bachelor of Management studies",
+        "i": "University of Mumbai"
+      },
+      {
+        "d": "",
+        "i": "Bihar school Examination Board Patna Intermidate of commerce 351/500"
+      }
+    ],
+    "skills_head": [
+      "Communication",
+      "Critical thinking & Problem solving",
+      "Leadership",
+      "Team work and collaboration"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [
+      "ms office"
+    ],
+    "src_deg": [
+      "bachelor"
+    ],
+    "src_sk": [
+      "ms office"
+    ]
+  },
+  {
+    "file": "_Trupti Kokate Resume will inform by 14 feb if comfortable for vikhroli location.docx",
+    "labels": [
+      "Preamble",
+      "Experience",
+      "Education",
+      "Certifications"
+    ],
+    "unclassified_chars": 0,
+    "name": "Trupti Kokate",
+    "n_edu": 1,
+    "n_exp": 2,
+    "n_skills": 6,
+    "desc_lines": 11,
+    "desc_flat": 0,
+    "sum_lines": 8,
+    "sum_flat": false,
+    "jobs": [
+      {
+        "c": "",
+        "r": "Social Media Executive / Intern"
+      },
+      {
+        "c": "Real Estate Industry,Mumbai",
+        "r": "Digital Marketing Intern, Radhika Realty"
+      }
+    ],
+    "edu": [
+      {
+        "d": "",
+        "i": "Additional Website & SEO Experience – SAP Course Pages (Laqshya Institute)"
+      }
+    ],
+    "skills_head": [
+      "& PLATFORMS",
+      "Canva",
+      "Google Analytics (Basics)",
+      "Google Search Console (Basics)",
+      "MS Word",
+      "Advanced Excel"
+    ],
+    "degree_hints_lost": [
+      "b.com"
+    ],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "b.com"
+    ],
+    "src_sk": [
+      "excel"
+    ]
+  },
+  {
+    "file": "Ajeet Networking CV_Updated (1).pdf",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Skills",
+      "Personal Information",
+      "Unclassified",
+      "Unclassified"
+    ],
+    "unclassified_chars": 888,
+    "name": "Ajeet Ramnaval Yadav",
+    "n_edu": 3,
+    "n_exp": 3,
+    "n_skills": 11,
+    "desc_lines": 7,
+    "desc_flat": 1,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "Cheers Interactive Pvt Ltd.",
+        "r": "Network Support Engineer ( 16 Oct 2022 to Till Date)"
+      },
+      {
+        "c": "eClerx Services Ltd.",
+        "r": "Desktop Engineer  (15 May 2018 to 12 October2022)"
+      },
+      {
+        "c": "IT Source Technologies Limited",
+        "r": "Desktop Analyst (16 July 2016 to 14 May 2018)"
+      }
+    ],
+    "edu": [
+      {
+        "d": "HSC",
+        "i": ""
+      },
+      {
+        "d": "SSC",
+        "i": ""
+      },
+      {
+        "d": "1.: BCA",
+        "i": "MDU Rohtak"
+      }
+    ],
+    "skills_head": [
+      "Good understanding of OSI Model",
+      "TCP/IP protocol suite (IPv4 Addressing",
+      "ARP",
+      "ICMP",
+      "TCP",
+      "UDP ).  Basic Configurat",
+      "University/Board",
+      "% Of Marks 1.: BCA",
+      "55 2.: HSC",
+      "U.P. Board",
+      "50 3.: SSC"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "bca",
+      "hsc",
+      "ssc"
+    ],
+    "src_sk": []
+  },
+  {
+    "file": "Ajeet Networking CV_Updated.pdf",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Skills",
+      "Personal Information",
+      "Unclassified",
+      "Unclassified"
+    ],
+    "unclassified_chars": 888,
+    "name": "Ajeet Ramnaval Yadav",
+    "n_edu": 3,
+    "n_exp": 3,
+    "n_skills": 11,
+    "desc_lines": 7,
+    "desc_flat": 1,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "Cheers Interactive Pvt Ltd.",
+        "r": "Network Support Engineer ( 16 Oct 2022 to Till Date)"
+      },
+      {
+        "c": "eClerx Services Ltd.",
+        "r": "Desktop Engineer  (15 May 2018 to 12 October2022)"
+      },
+      {
+        "c": "IT Source Technologies Limited",
+        "r": "Desktop Analyst (16 July 2016 to 14 May 2018)"
+      }
+    ],
+    "edu": [
+      {
+        "d": "HSC",
+        "i": ""
+      },
+      {
+        "d": "SSC",
+        "i": ""
+      },
+      {
+        "d": "1.: BCA",
+        "i": "MDU Rohtak"
+      }
+    ],
+    "skills_head": [
+      "Good understanding of OSI Model",
+      "TCP/IP protocol suite (IPv4 Addressing",
+      "ARP",
+      "ICMP",
+      "TCP",
+      "UDP ).  Basic Configurat",
+      "University/Board",
+      "% Of Marks 1.: BCA",
+      "55 2.: HSC",
+      "U.P. Board",
+      "50 3.: SSC"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "bca",
+      "hsc",
+      "ssc"
+    ],
+    "src_sk": []
+  },
+  {
+    "file": "Ajinkya K MYSQL DBA.pdf",
+    "labels": [
+      "Contact",
+      "Education",
+      "Skills",
+      "Skills",
+      "Skills",
+      "Summary",
+      "Experience",
+      "Achievements",
+      "Personal Details",
+      "Contact",
+      "Unclassified",
+      "Achievements",
+      "Personal Details",
+      "Unclassified",
+      "Skills",
+      "Unclassified",
+      "Skills"
+    ],
+    "unclassified_chars": 1538,
+    "name": "Ajinkya K",
+    "n_edu": 1,
+    "n_exp": 1,
+    "n_skills": 8,
+    "desc_lines": 0,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "Reliance Jio Platforms, Navi Mumbai",
+        "r": "MySQL and PostgreSQL Database Administrator"
+      }
+    ],
+    "edu": [
+      {
+        "d": "Bachelor In Technology (B.Tech.)",
+        "i": "Veermata Jijabai Technological Institute"
+      }
+    ],
+    "skills_head": [
+      "Analytical",
+      "Collaborator",
+      "Leader",
+      "Adaptable Skills o RDBMS: MySQL",
+      "PostgreSQL o Scripting: Shell Script",
+      "Python o Backup-Tools: Xtrabackup",
+      "mysqldump",
+      "pg_"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "b.tech",
+      "bachelor"
+    ],
+    "src_sk": [
+      "mysql",
+      "postgresql",
+      "python",
+      "sql"
+    ]
+  },
+  {
+    "file": "Ajinkya Mahale PGSQL resume - Ajinkya Mahale.pdf",
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Experience",
+      "Education",
+      "Skills"
+    ],
+    "unclassified_chars": 0,
+    "name": "Ajinkya Mahale",
+    "n_edu": 3,
+    "n_exp": 2,
+    "n_skills": 35,
+    "desc_lines": 12,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "Vendor- Hewlett Packard Enterprise (HPE)",
+        "r": "Database Administrator"
+      },
+      {
+        "c": "Bombay Stock Exchange (BSE)",
+        "r": "Client Site"
+      }
+    ],
+    "edu": [
+      {
+        "d": "Master of Computer Applications",
+        "i": ""
+      },
+      {
+        "d": "B.Sc Computer Science",
+        "i": "Sinhagad Institute of Management, Pune"
+      },
+      {
+        "d": "",
+        "i": "K.K.Wagh ASC and CS College, Nashik"
+      }
+    ],
+    "skills_head": [
+      "initialization",
+      "cluster &",
+      "standalone management",
+      "database maintenance",
+      "backup & recovery",
+      "WAL management",
+      "High Availability (HA) setup",
+      "Foreign Data Wrappers (FDW)",
+      "Security & Auditing: Role & user management",
+      "authorization",
+      "SSL certificate",
+      "database hardening"
+    ],
+    "degree_hints_lost": [],
+    "skill_hints_lost": [],
+    "src_deg": [
+      "b.sc",
+      "master"
+    ],
+    "src_sk": [
+      "postgresql"
+    ]
+  },
+  {
+    "file": "Padmini Mongo dba Expertia AI.pdf",
+    "labels": [
+      "Preamble",
+      "Languages",
+      "Unclassified"
+    ],
+    "unclassified_chars": 2253,
+    "name": "Padmini P",
+    "n_edu": 0,
+    "n_exp": 0,
+    "n_skills": 27,
+    "desc_lines": 0,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [],
+    "edu": [],
+    "skills_head": [
+      "P A D M I N I P",
+      "ASSOCIATE DATABASE ENGINEER",
+      "Maruthi Nagar field of DBA service",
+      "SKILLS: PROFESSIONAL SUMMARY:",
+      "MongoDB",
+      "MongoBD",
+      "NoSQL",
+      "configuration and Administration.",
+      "Backup & Restore",
+      "Sharding Creating replicaset (Arbiter",
+      "Priority",
+      "Hidden"
+    ],
+    "degree_hints_lost": [
+      "mms"
+    ],
+    "skill_hints_lost": [
+      "aws",
+      "linux"
+    ],
+    "src_deg": [
+      "bachelor",
+      "mms"
+    ],
+    "src_sk": [
+      "aws",
+      "linux",
+      "mongodb"
+    ]
+  },
+  {
+    "file": "Ranju Gupta AI_engineer.pdf",
+    "labels": [
+      "Preamble",
+      "Experience",
+      "Summary",
+      "Education",
+      "Skills",
+      "Certifications",
+      "Certifications",
+      "Languages",
+      "Languages"
+    ],
+    "unclassified_chars": 0,
+    "name": "Ranju Gupta",
+    "n_edu": 3,
+    "n_exp": 2,
+    "n_skills": 8,
+    "desc_lines": 7,
+    "desc_flat": 0,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "jobs": [
+      {
+        "c": "Magic Bus India Foundation",
+        "r": "AI Trainer"
+      },
+      {
+        "c": "ONLie Technology",
+        "r": "Data Science Intern"
+      }
+    ],
+    "edu": [
+      {
+        "d": "B.Sc. in Information Technology (BSc.IT)",
+        "i": "Gurunanak Khalsa College, Mumbai"
+      },
+      {
+        "d": "Higher Secondary Certificate (HSC) - Science",
+        "i": "Jai Hind College, Mumbai"
+      },
+      {
+        "d": "Secondary School Certificate (SSC)",
+        "i": "Shree Sarvajanik Balmandir High School, Mumbai"
+      }
+    ],
+    "skills_head": [
+      "Programming & Scripting: Python",
+      "SQL • Databases: SQL Server",
+      "MySQL",
+      "RDBMS",
+      "Normalization • Tools & Platforms: Power BI",
+      "SQL",
+      "Python for transformation",
+      "Power BI for visualization."
+    ],
+    "degree_hints_lost": [
+      "be"
+    ],
+    "skill_hints_lost": [
+      "linux"
+    ],
+    "src_deg": [
+      "b.sc",
+      "be",
+      "bsc",
+      "hsc",
+      "ssc"
+    ],
+    "src_sk": [
+      "linux",
+      "mysql",
+      "python",
+      "sql"
+    ]
+  }
+]

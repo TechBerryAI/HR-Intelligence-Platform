@@ -111,6 +111,26 @@ def calculate_confidence(toon: dict, doc_type: str) -> float:
     return min(base, 1.0)
 
 
+# Higher number wins. Filename / LLM / repair must not overwrite deterministic text.
+PROVENANCE_RANK = {
+    'direct_extraction': 90,
+    'deterministic': 80,
+    'document_wide_recovery': 60,
+    'repair': 40,
+    'llm': 30,
+    'filename': 10,
+    'knowledge': 50,
+    'unknown': 0,
+}
+
+
+def provenance_outranks(new_source: str, existing_source: str) -> bool:
+    """True when new_source may replace existing_source."""
+    return PROVENANCE_RANK.get(new_source or 'unknown', 0) >= PROVENANCE_RANK.get(
+        existing_source or 'unknown', 0
+    )
+
+
 def attach_field_provenance(
     toon: dict[str, Any],
     *,
@@ -121,12 +141,14 @@ def attach_field_provenance(
     """Attach non-breaking _provenance map for observability."""
     if not isinstance(toon, dict):
         return toon
-    provenance: dict[str, str] = {}
+    existing = toon.get('_provenance') if isinstance(toon.get('_provenance'), dict) else {}
+    provenance: dict[str, str] = dict(existing)
     for key in deterministic_keys or []:
-        provenance[key] = 'deterministic'
-    if llm_used:
+        if provenance_outranks('deterministic', provenance.get(key, '')):
+            provenance[key] = 'deterministic'
+    if llm_used and provenance_outranks('llm', provenance.get('_semantic', '')):
         provenance['_semantic'] = 'llm'
-    if knowledge_applied:
+    if knowledge_applied and provenance_outranks('knowledge', provenance.get('_knowledge', '')):
         provenance['_knowledge'] = 'knowledge'
     toon['_provenance'] = provenance
     return toon

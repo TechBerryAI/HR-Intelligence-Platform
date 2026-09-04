@@ -5,7 +5,11 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-from app.ai.parser.enrichment.resume_text_inference import SECTION_HEADERS, is_section_header_line
+from app.ai.parser.enrichment.resume_text_inference import (
+    SECTION_HEADERS,
+    is_in_job_contact_header,
+    is_section_header_line,
+)
 
 # VALIDATION_FIX_internship_section_aliases
 _EXP_HEADER_PREFIX = re.compile(
@@ -54,9 +58,27 @@ _HEADER_ALIASES = {
     'key skills': 'Skills',
     'skills and abilities': 'Skills',
     'skills & abilities': 'Skills',
+    'technical proficiency': 'Skills',
+    'technical expertise': 'Skills',
+    'technical knowledge': 'Skills',
+    'technical skill': 'Skills',
+    'technicalskill': 'Skills',
+    'soft skills': 'Skills',
+    'softskills': 'Skills',
+    'core skills': 'Skills',
+    'core competencies': 'Skills',
+    'areas of expertise': 'Skills',
+    'computer skills': 'Skills',
+    'it skills': 'Skills',
+    'it skill': 'Skills',
+    'software skills': 'Skills',
+    'technologies': 'Skills',
+    'tech stack': 'Skills',
+    'tools': 'Skills',
     'academic background': 'Education',
     'academic details': 'Education',
     'academic qualifications': 'Education',
+    'academic qualification': 'Education',
     'academics': 'Education',
     'scholastic record': 'Education',
     'scholastic details': 'Education',
@@ -71,6 +93,8 @@ _HEADER_ALIASES = {
     'certificates': 'Certifications',
     'certifications and licenses': 'Certifications',
     'certifications & licenses': 'Certifications',
+    'professional certifications': 'Certifications',
+    'courses': 'Certifications',
     'professional summary': 'Summary',
     'professional profile': 'Summary',
     'personal profile': 'Summary',
@@ -83,7 +107,76 @@ _HEADER_ALIASES = {
     'about me': 'Summary',
     'key project': 'Projects',
     'key projects': 'Projects',
+    'academic projects': 'Projects',
+    'academic project': 'Projects',
+    'personal projects': 'Projects',
+    'personal project': 'Projects',
+    'major projects': 'Projects',
+    'major project': 'Projects',
+    'project experience': 'Projects',
+    'project details': 'Projects',
+    'strengths': 'Strengths',
+    'key strengths': 'Strengths',
+    'areas of strength': 'Strengths',
+    'area of strength': 'Strengths',
+    'hobbies': 'Hobbies',
+    'hobby': 'Hobbies',
+    'achievements': 'Achievements',
+    'accomplishments': 'Achievements',
+    'awards': 'Achievements',
+    'honors': 'Achievements',
+    'honours': 'Achievements',
+    'awards and honors': 'Achievements',
+    'extracurricular achievements': 'Achievements',
+    'extra curricular achievements': 'Achievements',
+    'co curricular achievements': 'Achievements',
+    'achievements tasks': 'Achievements',
+    'extracurricular activities': 'Activities',
+    'extra curricular': 'Activities',
+    'extra curricular activities': 'Activities',
+    'co curricular activities': 'Activities',
+    'co-curricular activities': 'Activities',
+    'leadership activities': 'Activities',
+    'activities': 'Activities',
+    'languages': 'Languages',
+    'linguistic proficiency': 'Languages',
+    'language skills': 'Languages',
+    'languages known': 'Languages',
+    'management internship': 'Experience',
+    'research internship': 'Experience',
+    'graduate internship': 'Experience',
+    'training experience': 'Experience',
+    'work summary': 'Summary',
+    'worksummary': 'Summary',
+    'personal summary': 'Summary',
+    'personalsummary': 'Summary',
+    'experience summary': 'Summary',
+    'experiencesummary': 'Summary',
+    'personal information': 'Personal Information',
+    'personalinformation': 'Personal Information',
+    'personal details': 'Personal Details',
+    'personaldetails': 'Personal Details',
+    'other technical skills': 'Skills',
+    'othertechnicalskills': 'Skills',
+    'skillset': 'Skills',
+    'skill set': 'Skills',
+    'skills set': 'Skills',
 }
+
+# OCR often glues heading words ("Personalinformation", "EXPERIENCESUMMARY").
+_HEADER_ALIASES_COMPACT = {
+    re.sub(r'[^a-z0-9]', '', key): value for key, value in _HEADER_ALIASES.items()
+}
+
+# Document titles are not content-section boundaries.
+_DOCUMENT_TITLE_KEYS = frozenset({
+    'cv',
+    'resume',
+    'curriculum vitae',
+    'curriculumvitae',
+    'confidential resume',
+    'confidentialresume',
+})
 
 
 @dataclass
@@ -92,6 +185,12 @@ class LayoutRegion:
     bbox: tuple[float, float, float, float]  # x0,y0,x1,y1
     text: str = ''
     score: float = 0.0
+
+
+_HEADER_SENTENCE_START = re.compile(
+    r'(?i)^(developed|designed|built|worked|responsible|managed|implemented|'
+    r'i\s+am|i\s+have|this\s+is|the\s+following)\b'
+)
 
 
 def _strip_header_decoration(line: str) -> str:
@@ -121,23 +220,47 @@ def normalize_section_header(line: str) -> str | None:
     # put "•" on its own line). Treating them as headers splits Experience/Skills.
     if re.fullmatch(r'[\s#*•·●○▪▫►▸‣\-–—\ufffd]+', stripped):
         return None
+    words = stripped.split()
+    # Duty sentences and long prose must not become section headings.
+    if len(words) > 8:
+        return None
+    if stripped.endswith('.') and len(words) > 3:
+        return None
+    if _HEADER_SENTENCE_START.match(stripped):
+        return None
+    if '@' in stripped or re.search(r'\d{6,}', stripped):
+        return None
     low = stripped.lower()
     key = _header_lookup_key(stripped)
+    compact = re.sub(r'[^a-z0-9]', '', key)
+    if (
+        low in _DOCUMENT_TITLE_KEYS
+        or key in _DOCUMENT_TITLE_KEYS
+        or compact in _DOCUMENT_TITLE_KEYS
+    ):
+        return None
     if low in _HEADER_ALIASES:
         return _HEADER_ALIASES[low]
     if key in _HEADER_ALIASES:
         return _HEADER_ALIASES[key]
+    if compact and compact in _HEADER_ALIASES_COMPACT:
+        return _HEADER_ALIASES_COMPACT[compact]
     # "Internship / Training Programm", "Internship Experience", etc.
     if _EXP_HEADER_PREFIX.match(low) and len(low) <= 80:
         return 'Experience'
     if key and _EXP_HEADER_PREFIX.match(key) and len(key) <= 80:
         return 'Experience'
     if low in SECTION_HEADERS:
-        return stripped.title() if low not in ('cv', 'resume') else None
+        return stripped.title()
     if is_section_header_line(stripped):
         if _EXP_HEADER_PREFIX.match(low) or (key and _EXP_HEADER_PREFIX.match(key)):
             return 'Experience'
-        return _HEADER_ALIASES.get(low) or _HEADER_ALIASES.get(key) or stripped.title()
+        return (
+            _HEADER_ALIASES.get(low)
+            or _HEADER_ALIASES.get(key)
+            or _HEADER_ALIASES_COMPACT.get(compact)
+            or stripped.title()
+        )
     return None
 
 
@@ -173,6 +296,9 @@ def structure_text_by_headers(text: str) -> str:
             continue
         header = normalize_section_header(stripped)
         if header:
+            if is_in_job_contact_header(header, current):
+                body.append(stripped)
+                continue
             flush()
             current = header
             continue
@@ -229,6 +355,16 @@ def regions_from_ocr_detections(detections: list) -> list[LayoutRegion]:
     for x0, y0, x1, y1, text, score in rows:
         header = normalize_section_header(text)
         if header:
+            if is_in_job_contact_header(header, current_label if current_label != 'unknown' else None):
+                buf.append(text)
+                if bbox is None:
+                    bbox = [x0, y0, x1, y1]
+                else:
+                    bbox[0] = min(bbox[0], x0)
+                    bbox[1] = min(bbox[1], y0)
+                    bbox[2] = max(bbox[2], x1)
+                    bbox[3] = max(bbox[3], y1)
+                continue
             flush()
             current_label = header
             regions.append(

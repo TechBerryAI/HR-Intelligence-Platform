@@ -1,0 +1,1148 @@
+[
+  {
+    "file": "#1_Vishal_Waghmode_Resume.pdf",
+    "src_exp_bullets": 1,
+    "n_exp": 2,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 4,
+    "jobs": [
+      {
+        "c": "Tata Consultancy Services (TCS)",
+        "r": "Assistant System Engineer",
+        "desc_chars": 439,
+        "desc_lines": 2,
+        "desc_has_bullet": true,
+        "desc_head": "• Professional Development: Undertaking professional development activities such as certiﬁcations, training programs, or continuing education courses that enhan"
+      },
+      {
+        "c": "National Stock Exchange (NSEIT)",
+        "r": "Assistant System Analyst",
+        "desc_chars": 351,
+        "desc_lines": 2,
+        "desc_has_bullet": true,
+        "desc_head": "• Project Development & Execution Developed and optimized high- performance applications using C# and .NET Framework, improving functionality and user experienc"
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 338,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "Software Developer Experienced Full Stack Software Developer with a passion for games and creating connected experiences. Skilled in c# , .NET core , sql queries and source control",
+    "n_skills": 9,
+    "skills": [
+      "C#",
+      ".NET CORE",
+      "SQL (Structured Query Language)",
+      "HTML5",
+      "CSS3",
+      "JavaScript",
+      "Multi-Threading",
+      "Data Structure",
+      "AGILE"
+    ],
+    "extra_or_ungrounded": [
+      "C#"
+    ],
+    "duty_like_skills": [],
+    "skills_src_chars": 116,
+    "skills_src_head": "CORE LANG : C # | .NET CORE | SQL (Structured Query Language) | HTML5 | CSS3 | JavaScript | Multi-Threading | Data Structure | AGILE"
+  },
+  {
+    "file": "01 Furqan Khan - HR - 9 Years Experience.pdf",
+    "src_exp_bullets": 0,
+    "n_exp": 2,
+    "jobs_desc_flat": 2,
+    "jobs_desc_lines": 2,
+    "jobs": [
+      {
+        "c": "ImmersionX Technologies LLP – HR Generalist",
+        "r": "Klasy Innovations Pvt Ltd – Human Resource",
+        "desc_chars": 91,
+        "desc_lines": 1,
+        "desc_has_bullet": false,
+        "desc_head": "Jt Management (overseas recruitment firm) – HR Recruiter – 01st Jan 2015 to 31st Aug – 2018"
+      },
+      {
+        "c": "Wohlig Transformation Pvt Ltd",
+        "r": "Senior HR Executive",
+        "desc_chars": 91,
+        "desc_lines": 1,
+        "desc_has_bullet": false,
+        "desc_head": "Jt Management (overseas recruitment firm) – HR Recruiter – 01st Jan 2015 to 31st Aug – 2018"
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 475,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "A dynamic HR Professional with over 9 years of experience in Recruitment, Resourcing & Development, Performance Management, Compensation & Benefits, and Employee Engagement Activit",
+    "n_skills": 8,
+    "skills": [
+      "Recruitments",
+      "Onboarding",
+      "HR Policy & Process",
+      "Payroll",
+      "Induction",
+      "Retentions",
+      "HR Branding",
+      "Exit"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 162,
+    "skills_src_head": "Recruitments | Onboarding | HR Policy & Process | Payroll | Employee Engagement | Grievance Redressal | Employee Life Cycle | Inductio"
+  },
+  {
+    "file": "1 Senthil_Chandrasekaran_Resume.pdf",
+    "src_exp_bullets": 0,
+    "n_exp": 1,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 0,
+    "jobs": [
+      {
+        "c": "Reliance Jio infocomm, Mumbai",
+        "r": "Database Administrator",
+        "desc_chars": 0,
+        "desc_lines": 0,
+        "desc_has_bullet": false,
+        "desc_head": ""
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 1352,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "To seek a challenging career as a Senior Database Administrator and to be a part of a team which works dynamically for the growth of the organization and to cope up with existing, ",
+    "n_skills": 36,
+    "skills": [
+      "unwanted user process.",
+      "Installation",
+      "Configuration",
+      "Troubleshooting",
+      "Cluster",
+      "management.",
+      "Cassandra Multi data center Setup",
+      "Node.js",
+      "Addition & Node remove.",
+      "Grafana & Prometheus",
+      "Implement",
+      "configure",
+      "and troubleshoot",
+      "database instances",
+      "replication",
+      "backup",
+      "partitions tables",
+      "storage",
+      "and access. Set user",
+      "privileges within and outside the database"
+    ],
+    "extra_or_ungrounded": [
+      "Node.js"
+    ],
+    "duty_like_skills": [
+      "Conducted tests to identify issues and make"
+    ],
+    "skills_src_chars": 3149,
+    "skills_src_head": "unwanted user process. | Cassandra DB | Installation,Configuration,Troubleshooting, Cluster | management. | Cassandra Multi data"
+  },
+  {
+    "file": "1-Ashish_Chandel.docx",
+    "src_exp_bullets": 17,
+    "n_exp": 6,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 31,
+    "jobs": [
+      {
+        "c": "Alexander Mann Solutions",
+        "r": "Senior Technology Manager",
+        "desc_chars": 1581,
+        "desc_lines": 8,
+        "desc_has_bullet": true,
+        "desc_head": "• Led enterprise IT infrastructure operations supporting 1,000+ users across 5 countries, managing data centres, cloud platforms (Azure/AWS), networks, security"
+      },
+      {
+        "c": "Sify Technologies",
+        "r": "Service Desk Manager",
+        "desc_chars": 709,
+        "desc_lines": 5,
+        "desc_has_bullet": true,
+        "desc_head": "• Managed 24/7 NOC operations supporting 3,000+ endpoints, ensuring 99.5% network uptime through proactive monitoring, rapid incident response, and timely escal"
+      },
+      {
+        "c": "Teleperformance",
+        "r": "NOC Team Lead",
+        "desc_chars": 785,
+        "desc_lines": 5,
+        "desc_has_bullet": true,
+        "desc_head": "• Directed global NOC operations team of 12 professionals ensuring 24/7 infrastructure availability across 8 international locations with 99.8% uptime achieveme"
+      },
+      {
+        "c": "Reliance Jio",
+        "r": "Senior Executive — Network Operations",
+        "desc_chars": 724,
+        "desc_lines": 5,
+        "desc_has_bullet": true,
+        "desc_head": "• Oversaw large-scale network operations supporting 50M+ subscribers, maintaining 99.7% network availability across critical telecommunications infrastructure. \\n "
+      },
+      {
+        "c": "CMS Info Systems Ltd",
+        "r": "Network Administrator",
+        "desc_chars": 553,
+        "desc_lines": 4,
+        "desc_has_bullet": true,
+        "desc_head": "• Managed LAN/WAN infrastructure supporting 500+ users across 25 branch locations, performing proactive maintenance with 99% system reliability. \\n • Improved netw"
+      },
+      {
+        "c": "Reliance Communications",
+        "r": "Network Engineer",
+        "desc_chars": 571,
+        "desc_lines": 4,
+        "desc_has_bullet": true,
+        "desc_head": "• Designed and maintained MPLS VPN and leased line connectivity for 150+ enterprise clients, ensuring 99.5% service availability. \\n • Managed advanced routing pro"
+      }
+    ],
+    "src_sum_bullets": 2,
+    "sum_chars": 1516,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "sum_head": "Results-driven IT Operations leader with 14+ years of progressive experience directing enterprise infrastructure, digital transformation, and service delivery across global organis",
+    "n_skills": 5,
+    "skills": [
+      "ITIL V4",
+      "ISO/IEC 27001",
+      "CAB",
+      "Incident / Problem / Change Management",
+      "Leadership: IT Budget Management"
+    ],
+    "extra_or_ungrounded": [
+      "ITIL V4",
+      "ISO/IEC 27001",
+      "CAB",
+      "Incident / Problem / Change Management",
+      "Leadership: IT Budget Management"
+    ],
+    "duty_like_skills": [],
+    "skills_src_chars": 0,
+    "skills_src_head": ""
+  },
+  {
+    "file": "1.docx",
+    "src_exp_bullets": 0,
+    "n_exp": 0,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 0,
+    "jobs": [],
+    "src_sum_bullets": 0,
+    "sum_chars": 302,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "To work in challenging position in field of Information Technology & IT Sector to gain experience and enhance my skills. My greatest attributes are hardworking and good learning. M",
+    "n_skills": 35,
+    "skills": [
+      "ApplicationServers\t: WebLogic Server  14c.",
+      "Web Server                           : Oracle",
+      "HTTP Server",
+      "Apache web server",
+      "ApplicationProtocol\t: SSH",
+      "HTTP",
+      "HTTPS",
+      "TELNET",
+      "FTP.",
+      "Work experience = fresher",
+      "Completed weblogic and OHS class from Hydrabad team.",
+      "WebLogic Administration with expertise in Installation",
+      "Configuration",
+      "Troubleshootingand",
+      "Oracle HTTP Server",
+      "basic",
+      "Cluster setup creation on different Linux and windows environment.",
+      "JDK upgradation in WebLogic and OHS on different Linux .",
+      "WebLogic upgradation on different Linux .",
+      "Upgradation of WebLogic servers in development"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [
+      "ApplicationServers\t: WebLogic Server  14c.",
+      "Completed weblogic and OHS class from Hydrabad team.",
+      "Cluster setup creation on different Linux and windows environment.",
+      "JDK upgradation in WebLogic and OHS on different Linux .",
+      "WebLogic upgradation on different Linux .",
+      "applying patches Middleware tools and technology in productionenvironment.",
+      "Applied the patches to the WebLogic Servers.",
+      "Configuration of JDBC Connections with Data sources and Multi Data source."
+    ],
+    "skills_src_chars": 1360,
+    "skills_src_head": "ApplicationServers\t: WebLogic Server  14c. |  | Web Server                           : Oracle, HTTP Server, Apache web serve"
+  },
+  {
+    "file": "11zon_Mrunalbhaisare Resume.pdf",
+    "src_exp_bullets": 2,
+    "n_exp": 2,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 11,
+    "jobs": [
+      {
+        "c": "Maayodiya Academy New Delhi",
+        "r": "Digital Marketing intern",
+        "desc_chars": 196,
+        "desc_lines": 7,
+        "desc_has_bullet": true,
+        "desc_head": "•  \\n • Conduct keyword research and competitor analysis \\n •  \\n • Managed the institute’s social media profiles are increased engagement by 20% \\n •  \\n • Assisted in cre"
+      },
+      {
+        "c": "Maayodiya Academy for outstanding contribution.",
+        "r": "Awarded “Best Intern”",
+        "desc_chars": 159,
+        "desc_lines": 4,
+        "desc_has_bullet": true,
+        "desc_head": "•  \\n • Successfully completed an advanced digital marketing certification with distinction. \\n •  \\n • Published a blog post featured on a popular marketing website."
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 249,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "Aspiring digital Marketing professional with a passion for driving online engagement and building brand presence. Seeking to leverage skills, in SEO, Social Media Marketing, and Co",
+    "n_skills": 17,
+    "skills": [
+      "SEO: Keyword research",
+      "on-page & off-page optimization",
+      "and website auditing",
+      "Social Media Marketing: Content planning",
+      "campaign management",
+      "and audience",
+      "Content creation: Writing blogs",
+      "and designing basic graphic",
+      "(canva)",
+      "PPC: Google Ads campaign setup and management",
+      "Analytics: Google Analytics and Social media insights",
+      "SEMrush",
+      "Ahrefs",
+      "Hootsuite",
+      "Canva",
+      "Google Ads",
+      "and Microsoft Office"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 497,
+    "skills_src_head": " | SEO: Keyword research, on-page & off-page optimization, and website auditing |  | Social Media Marketing: Content plannin"
+  },
+  {
+    "file": "13_Ms.-Saloni-Dhuru.pdf",
+    "src_exp_bullets": 0,
+    "n_exp": 0,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 0,
+    "jobs": [],
+    "src_sum_bullets": 0,
+    "sum_chars": 60,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "Name : Ms. Saloni V. Dhuru Designation : Assistant Professor",
+    "n_skills": 0,
+    "skills": [],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 0,
+    "skills_src_head": ""
+  },
+  {
+    "file": "1658748886885_RAHUL SURESH SURVASE Updated (1).docx",
+    "src_exp_bullets": 0,
+    "n_exp": 0,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 0,
+    "jobs": [],
+    "src_sum_bullets": 2,
+    "sum_chars": 151,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "sum_head": "To be involved in a working environment where I can utilize my skills and creativity that will effectively contribute to the growth of an organization.",
+    "n_skills": 5,
+    "skills": [
+      "Programming Languages: Core Java.",
+      "SQL  Server.",
+      "Windows.",
+      "M & R Consultants Corporation",
+      "Role: manual Tester with Database controller"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 195,
+    "skills_src_head": "Skills | • Programming Languages: Core Java. |  | • Database: SQL  Server. |  | • Operating System: Windows. |  | ITERNSHIP SUMMARY: |  | "
+  },
+  {
+    "file": "1vinay(2)Ea3JB.pdf",
+    "src_exp_bullets": 3,
+    "n_exp": 2,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 0,
+    "jobs": [
+      {
+        "c": "TEGanalytics.",
+        "r": "System Admin and Web Admin",
+        "desc_chars": 0,
+        "desc_lines": 0,
+        "desc_has_bullet": false,
+        "desc_head": ""
+      },
+      {
+        "c": "BhoomiMitra.",
+        "r": "System Admin & Web Admin",
+        "desc_chars": 0,
+        "desc_lines": 0,
+        "desc_has_bullet": false,
+        "desc_head": ""
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 185,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "To work in an organization with a professional environment where I can utilize and apply my knowledge and skills to help me grow and fulfil the goals of the organization simultaneo",
+    "n_skills": 22,
+    "skills": [
+      "HTML",
+      "Windows",
+      "Linux",
+      "PostgreSQL",
+      "EDB",
+      "Wordpress",
+      "English structured writing",
+      "presentation",
+      "interpersonal and",
+      "teaming",
+      "people management",
+      "Academics: B.E (Electronics & communication)",
+      "Technology orientation: Database",
+      "Repmgr",
+      "Pgbackrest",
+      "pgpool",
+      "pgbouncer",
+      "BART",
+      "PEM",
+      "PSQL"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [
+      "Academics: B.E (Electronics & communication)"
+    ],
+    "skills_src_chars": 603,
+    "skills_src_head": "• Language: C, HTML | • Operating System: Windows, Linux | • Database: PostgreSQL ,EDB |  | • Wordpress |  |  |  | Skills | English struct"
+  },
+  {
+    "file": "2024 Miloni Shah Resume (1).pdf",
+    "src_exp_bullets": 1,
+    "n_exp": 1,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 1,
+    "jobs": [
+      {
+        "c": "After Effects, InDesign )",
+        "r": "Illustrator",
+        "desc_chars": 11,
+        "desc_lines": 1,
+        "desc_has_bullet": false,
+        "desc_head": "Premier Pro"
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 609,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "Managed the designed of printed materials, including stickers and packaging, for clients such as Colgate, Cello, and Mapro. A lifelong passion for creativity drives my pursuit of U",
+    "n_skills": 9,
+    "skills": [
+      "Ul/interaction Design",
+      "Wireframing",
+      "Prototyping",
+      "Data Analysis",
+      "Motion",
+      "Data Visualization",
+      "Print",
+      "Campaigns",
+      "Advertising"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 201,
+    "skills_src_head": "UX Research • Ul/interaction Design | • Journey Mapping • Wireframing | • Prototyping • Usability Testing | • Data Analysis • "
+  },
+  {
+    "file": "2025_UMAR_SHARIEF_RESUME postgresql dba.pdf",
+    "src_exp_bullets": 0,
+    "n_exp": 6,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 26,
+    "jobs": [
+      {
+        "c": "EDB",
+        "r": "I'm proficient experience in PostgreSQL DBA with 5.6+",
+        "desc_chars": 326,
+        "desc_lines": 3,
+        "desc_has_bullet": true,
+        "desc_head": "• years in Azure/AWS/EDB and On-prem. Leveraging strong skills and experience to provide strategic support to clients on complex projects involving \\n • PostgreSQL"
+      },
+      {
+        "c": "PostgreSQL Lead",
+        "r": "Senior Software Analyst",
+        "desc_chars": 645,
+        "desc_lines": 10,
+        "desc_has_bullet": true,
+        "desc_head": "• Im working as an Senior PostgreSQL Analyst of the \\n • Data Warehousing platform. I have worked both on- prem as well as cloud (Azure / AWS) Especially on \\n • Azur"
+      },
+      {
+        "c": "Allianz Technology",
+        "r": "Postgresql Database Administrator",
+        "desc_chars": 645,
+        "desc_lines": 10,
+        "desc_has_bullet": true,
+        "desc_head": "• Im working as an Senior PostgreSQL Analyst of the \\n • Data Warehousing platform. I have worked both on- prem as well as cloud (Azure / AWS) Especially on \\n • Azur"
+      },
+      {
+        "c": "InKnowTech Private Limited",
+        "r": "Postgresql Database Administrator",
+        "desc_chars": 7,
+        "desc_lines": 1,
+        "desc_has_bullet": false,
+        "desc_head": "English"
+      },
+      {
+        "c": "Appscore Solutions",
+        "r": "Junior Software Engineer",
+        "desc_chars": 22,
+        "desc_lines": 1,
+        "desc_has_bullet": false,
+        "desc_head": "Roles and highlights:-"
+      },
+      {
+        "c": "& L 2.",
+        "r": "Qualitative Postgresql DBA having to support both L1",
+        "desc_chars": 22,
+        "desc_lines": 1,
+        "desc_has_bullet": false,
+        "desc_head": "Roles and highlights:-"
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 374,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "I'm proficient experience in PostgreSQL DBA with 5.6+ years in Azure/AWS/EDB and On-prem. Leveraging strong skills and experience to provide strategic support to clients on complex",
+    "n_skills": 4,
+    "skills": [
+      "Certification",
+      "Microsoft Certified: Azure Data",
+      "Fundamentals",
+      "Microsoft Certified Azure"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 97,
+    "skills_src_head": "Certification | Microsoft Certified: Azure Data | Fundamentals | Microsoft Certified Azure | Fundamentals"
+  },
+  {
+    "file": "26160_1726557418Abhi-Resume.docx",
+    "src_exp_bullets": 0,
+    "n_exp": 0,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 0,
+    "jobs": [],
+    "src_sum_bullets": 0,
+    "sum_chars": 189,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "varying device shard drives database management and archival software. Can research problem. solve and communicate the best ways to perform and coordinate tasks throughout the orga",
+    "n_skills": 8,
+    "skills": [
+      "Red hat& CentOS Linux (6.x",
+      "x)",
+      "CLOUD:- AWS",
+      "NFS",
+      "HTTPD",
+      "LVM.",
+      "Patching",
+      "Ansible"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 86,
+    "skills_src_head": "Red hat& CentOS Linux (6.x,7.x,8.x), |  | CLOUD:- AWS |  | NFS, HTTPD, LVM. |  | Patching, Ansible"
+  },
+  {
+    "file": "3 Years of Exp MySQL Database Administrator.docx",
+    "src_exp_bullets": 0,
+    "n_exp": 0,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 0,
+    "jobs": [],
+    "src_sum_bullets": 0,
+    "sum_chars": 212,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "Having 3 years of experience in the diverse areas of Database Administration. Seeking a proactive responsible position where i can continue to expand my knowledge and contribute to",
+    "n_skills": 32,
+    "skills": [
+      "Project Name\t\t            :  Xerox",
+      "SQL",
+      "MYSQL",
+      "UNIX",
+      "PHP",
+      "Red hat Enterprise Linux",
+      "Taking backups for prod and non-prod database depends on requests.",
+      "Handling Scheduled and planned production changes",
+      "Setup master slave replication.",
+      "Performance Tuning on a daily basis for preventing issues and providing capacity",
+      "planning using MySQL Enterprise Monitor.",
+      "groups and set up restrictive permissions",
+      "Performed MySQL Replication setup and administration on Master-Slave",
+      "Design",
+      "Development and Testing and then deployment.",
+      "Workbench for database architecture design.",
+      "Shell script is being used for some data migration and backend work management.",
+      "Increased database performance by utilizing MySQL config changes",
+      "multiple instances and by upgrading hardware.",
+      "Supports onsite clients 24*7."
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [
+      "Taking backups for prod and non-prod database depends on requests.",
+      "Performance Tuning on a daily basis for preventing issues and providing capacity",
+      "Performed MySQL Replication setup and administration on Master-Slave",
+      "Development and Testing and then deployment.",
+      "Workbench for database architecture design.",
+      "Shell script is being used for some data migration and backend work management.",
+      "Increased database performance by utilizing MySQL config changes",
+      "multiple instances and by upgrading hardware."
+    ],
+    "skills_src_chars": 2950,
+    "skills_src_head": "PROJECT-1: |  | Organization                          : HCL TECH |  | Project Name\t\t            :  Xerox |  | Duration\t\t\t:  Aug 2021"
+  },
+  {
+    "file": "3.1_YRS_PUNE_VIPUL  PATIL (1).pdf",
+    "src_exp_bullets": 0,
+    "n_exp": 1,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 0,
+    "jobs": [
+      {
+        "c": "Mind Spark Technology, Pune",
+        "r": "",
+        "desc_chars": 0,
+        "desc_lines": 0,
+        "desc_has_bullet": false,
+        "desc_head": ""
+      }
+    ],
+    "src_sum_bullets": 10,
+    "sum_chars": 376,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "sum_head": "To obtain a challenging position in enterprise application integration environment where technology integrates with business functionalities to enhance business process I look forw",
+    "n_skills": 4,
+    "skills": [
+      "➢ Technologies used: Hive",
+      "Sqoop",
+      "SQL",
+      "HBase."
+    ],
+    "extra_or_ungrounded": [
+      "➢ Technologies used: Hive",
+      "Sqoop",
+      "SQL",
+      "HBase."
+    ],
+    "duty_like_skills": [],
+    "skills_src_chars": 0,
+    "skills_src_head": ""
+  },
+  {
+    "file": "3.5ATS-Resume-Aquib-2026.pdf",
+    "src_exp_bullets": 9,
+    "n_exp": 2,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 18,
+    "jobs": [
+      {
+        "c": "ICEICO Pvt. Ltd",
+        "r": "Linux System Administrator",
+        "desc_chars": 574,
+        "desc_lines": 11,
+        "desc_has_bullet": true,
+        "desc_head": "• Administer and maintain RHEL 7/8 production servers, ensuring system stability and security \\n • Perform installation, configuration, patching, and troubleshooti"
+      },
+      {
+        "c": "HCL Technologies Pvt. Ltd",
+        "r": "Linux System Administrator",
+        "desc_chars": 479,
+        "desc_lines": 7,
+        "desc_has_bullet": true,
+        "desc_head": "• Supported enterprise Linux infrastructure with 40+ RHEL/CentOS servers \\n • Managed critical services including Apache, Tomcat, MySQL, FTP, and NFS \\n • Resolved 15"
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 411,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "Linux System Administrator with 3.5+ years of experience managing and supporting RHEL/CentOS production environments. Strong expertise in server administration, L2 production suppo",
+    "n_skills": 16,
+    "skills": [
+      "RHEL 7/8",
+      "CentOS",
+      "Windows Server 2019/2022",
+      "Linux Administration: User & Group Management",
+      "LVM",
+      "Swap",
+      "Services & Servers: Apache",
+      "Tomcat",
+      "MySQL",
+      "FTP",
+      "NFS",
+      "Monitoring & Logs: Log Analysis",
+      "Ticketing Tool: ServiceNow",
+      "Virtualization: VMware",
+      "Scheduling & Automation: Cron Jobs",
+      "Web Technologies: HTML"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 403,
+    "skills_src_head": "Operating Systems: RHEL 7/8, CentOS, Windows Server 2019/2022 | Linux Administration: User & Group Management, LVM, File S"
+  },
+  {
+    "file": "45_MMS_Marketing_Akshay     Pujari -1.jpg (1) (1) (1).docx",
+    "src_exp_bullets": 0,
+    "n_exp": 1,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 3,
+    "jobs": [
+      {
+        "c": "Amul India Ltd",
+        "r": "Summer Internship",
+        "desc_chars": 510,
+        "desc_lines": 3,
+        "desc_has_bullet": true,
+        "desc_head": "• Project Title: A Consumer Behaviour and Perception Towards Amul Fresh Products. \\n • Learnings: Gained hand on experience in the dairy industry, understanding su"
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 105,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "A highly motivated and hardworking individual looking for a responsible role in a reputable organization.",
+    "n_skills": 5,
+    "skills": [
+      "MS-Office",
+      "Cricket & Football.",
+      "“B” and “C” Certificate.",
+      "Branding and Marketing committee of Kohinoor Business School",
+      "Certificate of Participation: Visit to NSE Program."
+    ],
+    "extra_or_ungrounded": [
+      "Cricket & Football.",
+      "“B” and “C” Certificate.",
+      "Branding and Marketing committee of Kohinoor Business School",
+      "Certificate of Participation: Visit to NSE Program."
+    ],
+    "duty_like_skills": [
+      "Branding and Marketing committee of Kohinoor Business School",
+      "Certificate of Participation: Visit to NSE Program."
+    ],
+    "skills_src_chars": 11,
+    "skills_src_head": "• MS-Office"
+  },
+  {
+    "file": "_ Abhinandan jha c.v .pdf",
+    "src_exp_bullets": 4,
+    "n_exp": 1,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 9,
+    "jobs": [
+      {
+        "c": "MUFG Intime India Pvt Ltd",
+        "r": "Associate client relation",
+        "desc_chars": 1083,
+        "desc_lines": 9,
+        "desc_has_bullet": true,
+        "desc_head": "• Processed company documentation, including shareholder registers, AGM documentation, invoices, and payment checks related to the sale of company program guide"
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 570,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "Detail-oriented and proactive Client Coordinator with 9 months of experience in managing client relationships, handling administrative tasks, and ensuring smooth communication betw",
+    "n_skills": 4,
+    "skills": [
+      "Communication",
+      "Critical thinking & Problem solving",
+      "Leadership",
+      "Team work and collaboration"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 104,
+    "skills_src_head": "Communication | Critical thinking & Problem solving | Decision Making | Leadership | Team work and collaboration"
+  },
+  {
+    "file": "_Trupti Kokate Resume will inform by 14 feb if comfortable for vikhroli location.docx",
+    "src_exp_bullets": 11,
+    "n_exp": 2,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 11,
+    "jobs": [
+      {
+        "c": "",
+        "r": "Social Media Executive / Intern",
+        "desc_chars": 394,
+        "desc_lines": 6,
+        "desc_has_bullet": true,
+        "desc_head": "• Managed Instagram and Facebook pages for the institute \\n • Created posts, reels, captions, and creatives using Canva \\n • Planned and maintained content calendars "
+      },
+      {
+        "c": "Real Estate Industry,Mumbai",
+        "r": "Digital Marketing Intern, Radhika Realty",
+        "desc_chars": 408,
+        "desc_lines": 5,
+        "desc_has_bullet": true,
+        "desc_head": "• Performed SEO activities for the company website including on-page and off-page tasks \\n • Conducted keyword research for real estate related and location-based "
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 592,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "Social Media Executive / Intern, Laqshya Institute of Skills Training – Education Industry July 2025 – Present; Managed Instagram and Facebook pages for the institute; Created post",
+    "n_skills": 6,
+    "skills": [
+      "& PLATFORMS",
+      "Canva",
+      "Google Analytics (Basics)",
+      "Google Search Console (Basics)",
+      "MS Word",
+      "Advanced Excel"
+    ],
+    "extra_or_ungrounded": [
+      "& PLATFORMS",
+      "Canva",
+      "Google Analytics (Basics)",
+      "Google Search Console (Basics)",
+      "MS Word",
+      "Advanced Excel"
+    ],
+    "duty_like_skills": [],
+    "skills_src_chars": 0,
+    "skills_src_head": ""
+  },
+  {
+    "file": "Ajeet Networking CV_Updated (1).pdf",
+    "src_exp_bullets": 0,
+    "n_exp": 3,
+    "jobs_desc_flat": 1,
+    "jobs_desc_lines": 7,
+    "jobs": [
+      {
+        "c": "Cheers Interactive Pvt Ltd.",
+        "r": "Network Support Engineer ( 16 Oct 2022 to Till Date)",
+        "desc_chars": 94,
+        "desc_lines": 2,
+        "desc_has_bullet": true,
+        "desc_head": "• Create and manage new VLANs in cisco switches. \\n • Monitoring of internet links via PRTG tool."
+      },
+      {
+        "c": "eClerx Services Ltd.",
+        "r": "Desktop Engineer  (15 May 2018 to 12 October2022)",
+        "desc_chars": 96,
+        "desc_lines": 1,
+        "desc_has_bullet": false,
+        "desc_head": "User account administration, i.e., account creation and management and password resets on Active"
+      },
+      {
+        "c": "IT Source Technologies Limited",
+        "r": "Desktop Analyst (16 July 2016 to 14 May 2018)",
+        "desc_chars": 312,
+        "desc_lines": 4,
+        "desc_has_bullet": true,
+        "desc_head": "• Create and manage new users, email IDs and resolve related problems. \\n • Provide Software, Hardware, Network and Operating System support to all users, Internet"
+      }
+    ],
+    "src_sum_bullets": 2,
+    "sum_chars": 153,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "sum_head": "Seeking a Network Support position with Organization that will benefit from a solid background in computer science and customer service. ACADEMIC PROFILE",
+    "n_skills": 11,
+    "skills": [
+      " Good understanding of OSI Model",
+      "TCP/IP protocol suite (IPv4 Addressing",
+      "ARP",
+      "ICMP",
+      "TCP",
+      "UDP ).  Basic Configurat",
+      "University/Board",
+      "% Of Marks 1.: BCA",
+      "55 2.: HSC",
+      "U.P. Board",
+      "50 3.: SSC"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 3487,
+    "skills_src_head": " Good understanding of OSI Model, TCP/IP protocol suite (IPv4 Addressing, ARP, ICMP, TCP,     UDP | ). |  Basic Configurat"
+  },
+  {
+    "file": "Ajeet Networking CV_Updated.pdf",
+    "src_exp_bullets": 0,
+    "n_exp": 3,
+    "jobs_desc_flat": 1,
+    "jobs_desc_lines": 7,
+    "jobs": [
+      {
+        "c": "Cheers Interactive Pvt Ltd.",
+        "r": "Network Support Engineer ( 16 Oct 2022 to Till Date)",
+        "desc_chars": 94,
+        "desc_lines": 2,
+        "desc_has_bullet": true,
+        "desc_head": "• Create and manage new VLANs in cisco switches. \\n • Monitoring of internet links via PRTG tool."
+      },
+      {
+        "c": "eClerx Services Ltd.",
+        "r": "Desktop Engineer  (15 May 2018 to 12 October2022)",
+        "desc_chars": 96,
+        "desc_lines": 1,
+        "desc_has_bullet": false,
+        "desc_head": "User account administration, i.e., account creation and management and password resets on Active"
+      },
+      {
+        "c": "IT Source Technologies Limited",
+        "r": "Desktop Analyst (16 July 2016 to 14 May 2018)",
+        "desc_chars": 312,
+        "desc_lines": 4,
+        "desc_has_bullet": true,
+        "desc_head": "• Create and manage new users, email IDs and resolve related problems. \\n • Provide Software, Hardware, Network and Operating System support to all users, Internet"
+      }
+    ],
+    "src_sum_bullets": 2,
+    "sum_chars": 153,
+    "sum_lines": 1,
+    "sum_flat": true,
+    "sum_head": "Seeking a Network Support position with Organization that will benefit from a solid background in computer science and customer service. ACADEMIC PROFILE",
+    "n_skills": 11,
+    "skills": [
+      " Good understanding of OSI Model",
+      "TCP/IP protocol suite (IPv4 Addressing",
+      "ARP",
+      "ICMP",
+      "TCP",
+      "UDP ).  Basic Configurat",
+      "University/Board",
+      "% Of Marks 1.: BCA",
+      "55 2.: HSC",
+      "U.P. Board",
+      "50 3.: SSC"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 3487,
+    "skills_src_head": " Good understanding of OSI Model, TCP/IP protocol suite (IPv4 Addressing, ARP, ICMP, TCP,     UDP | ). |  Basic Configurat"
+  },
+  {
+    "file": "Ajinkya K MYSQL DBA.pdf",
+    "src_exp_bullets": 4,
+    "n_exp": 1,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 0,
+    "jobs": [
+      {
+        "c": "Reliance Jio Platforms, Navi Mumbai",
+        "r": "MySQL and PostgreSQL Database Administrator",
+        "desc_chars": 0,
+        "desc_lines": 0,
+        "desc_has_bullet": false,
+        "desc_head": ""
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 739,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "o A detail-oriented professional with experience of nearly 3 years in Database Administrator in the IT industry. o Experienced as a MySQL and Postgresql at Reliance Jio Platforms, ",
+    "n_skills": 8,
+    "skills": [
+      "Analytical",
+      "Collaborator",
+      "Leader",
+      "Adaptable Skills o RDBMS: MySQL",
+      "PostgreSQL o Scripting: Shell Script",
+      "Python o Backup-Tools: Xtrabackup",
+      "mysqldump",
+      "pg_"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 792,
+    "skills_src_head": "Analytical | Collaborator | Leader | Adaptable |  |  |  | Skills | o | RDBMS: MySQL, PostgreSQL | o | Scripting: Shell Script, Python | o | "
+  },
+  {
+    "file": "Ajinkya Mahale PGSQL resume - Ajinkya Mahale.pdf",
+    "src_exp_bullets": 8,
+    "n_exp": 2,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 12,
+    "jobs": [
+      {
+        "c": "Vendor- Hewlett Packard Enterprise (HPE)",
+        "r": "Database Administrator",
+        "desc_chars": 25,
+        "desc_lines": 1,
+        "desc_has_bullet": false,
+        "desc_head": "Softenger India Pvt. Ltd."
+      },
+      {
+        "c": "Bombay Stock Exchange (BSE)",
+        "r": "Client Site",
+        "desc_chars": 1180,
+        "desc_lines": 11,
+        "desc_has_bullet": true,
+        "desc_head": "• Installed and initialized PostgreSQL databases on on-premises physical servers in both clustered and standalone environments. \\n • Configured database parameters"
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 523,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "Detail-oriented PostgreSQL Database Administrator with 1.2+ years of experience managing on-premise PostgreSQL environments on physical servers. Experienced in working with cluster",
+    "n_skills": 36,
+    "skills": [
+      "initialization",
+      "configuration",
+      "cluster &",
+      "standalone management",
+      "database maintenance",
+      "backup & recovery",
+      "WAL management",
+      "High Availability (HA) setup",
+      "Foreign Data Wrappers (FDW)",
+      "Security & Auditing: Role & user management",
+      "authorization",
+      "SSL certificate",
+      "database hardening",
+      "auditing & logging",
+      "compliance checks",
+      "Performance & Optimization: Query tuning",
+      "indexing",
+      "configuration tuning",
+      "(postgresql.conf)",
+      "monitoring system performance"
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [
+      "Other Skills: PostgreSQL configuration (postgresql.conf"
+    ],
+    "skills_src_chars": 837,
+    "skills_src_head": "Database Administration: PostgreSQL installation, initialization, configuration, cluster & | standalone management, databa"
+  },
+  {
+    "file": "Padmini Mongo dba Expertia AI.pdf",
+    "src_exp_bullets": 0,
+    "n_exp": 0,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 0,
+    "jobs": [],
+    "src_sum_bullets": 0,
+    "sum_chars": 240,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "ASSOCIATE DATABASE ENGINEER Employment background reflects well over 2 years, 7 months experience in Mongo DB. Currently seeking a position in an #244,1st Main Road, 2nd Cross Know",
+    "n_skills": 20,
+    "skills": [
+      "MongoDB",
+      "MongoBD",
+      "Linux Working knowledge in Mongo DB (version 3.6x4.0 and 4.2)",
+      "NoSQL",
+      "installation",
+      "configuration and Administration.",
+      "Upgradation",
+      "Backup & Restore",
+      "Replication managing with operation manager and MMS.",
+      "Sharding Creating replicaset (Arbiter",
+      "Priority",
+      "Hidden",
+      "Delayed nodes)&",
+      "Indexing",
+      "shared clustersin Mongo DB.",
+      "Performance tuning",
+      "Expertise in upgrading various versions of Mongo DB on different",
+      "Data Migration",
+      "Platforms (windows",
+      "Linux a n d Red Hat)."
+    ],
+    "extra_or_ungrounded": [
+      "MongoDB",
+      "MongoBD",
+      "Linux Working knowledge in Mongo DB (version 3.6x4.0 and 4.2)",
+      "NoSQL",
+      "installation",
+      "configuration and Administration.",
+      "Upgradation",
+      "Backup & Restore",
+      "Replication managing with operation manager and MMS.",
+      "Sharding Creating replicaset (Arbiter",
+      "Priority",
+      "Hidden"
+    ],
+    "duty_like_skills": [
+      "Linux Working knowledge in Mongo DB (version 3.6x4.0 and 4.2)",
+      "Replication managing with operation manager and MMS.",
+      "Expertise in upgrading various versions of Mongo DB on different"
+    ],
+    "skills_src_chars": 0,
+    "skills_src_head": ""
+  },
+  {
+    "file": "Ranju Gupta AI_engineer.pdf",
+    "src_exp_bullets": 7,
+    "n_exp": 2,
+    "jobs_desc_flat": 0,
+    "jobs_desc_lines": 7,
+    "jobs": [
+      {
+        "c": "Magic Bus India Foundation",
+        "r": "AI Trainer",
+        "desc_chars": 278,
+        "desc_lines": 3,
+        "desc_has_bullet": true,
+        "desc_head": "• Conduct engaging sessions on Artificial Intelligence concepts, problem-solving, and communication s \\n • Trained students on practical AI tools and applications "
+      },
+      {
+        "c": "ONLie Technology",
+        "r": "Data Science Intern",
+        "desc_chars": 217,
+        "desc_lines": 4,
+        "desc_has_bullet": true,
+        "desc_head": "• Built data preprocessing pipelines using Python, Pandas, NumPy \\n • Worked on data cleaning, transformation & analysis \\n • Created analytical dashboards using Powe"
+      }
+    ],
+    "src_sum_bullets": 0,
+    "sum_chars": 388,
+    "sum_lines": 1,
+    "sum_flat": false,
+    "sum_head": "Aspiring AI Engineer with hands-on experience in Python, Machine Learning, Data Preprocessing, and NLP-based applications. Skilled in building intelligent systems using PyTorch/Ten",
+    "n_skills": 8,
+    "skills": [
+      "Programming & Scripting: Python",
+      "SQL • Databases: SQL Server",
+      "MySQL",
+      "RDBMS",
+      "Normalization • Tools & Platforms: Power BI",
+      "SQL",
+      "Python for transformation",
+      "Power BI for visualization."
+    ],
+    "extra_or_ungrounded": [],
+    "duty_like_skills": [],
+    "skills_src_chars": 871,
+    "skills_src_head": "• | Programming & Scripting: Python, SQL | • | Databases: SQL Server, MySQL, RDBMS, Normalization | • | Tools & Platforms: Power B"
+  }
+]
