@@ -318,7 +318,7 @@ export function takeJDFormDTO(result) {
  * Validate file before upload.
  */
 export function validateFileForParsing(file) {
-  const allowedExtensions = ['pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp'];
+  const allowedExtensions = ['pdf', 'docx', 'webp'];
   const maxSize = 10 * 1024 * 1024; // 10MB
 
   const extension = file.name.split('.').pop().toLowerCase();
@@ -330,10 +330,17 @@ export function validateFileForParsing(file) {
     };
   }
 
+  if (extension === 'png' || extension === 'jpg' || extension === 'jpeg') {
+    return {
+      valid: false,
+      error: 'Image resumes (PNG/JPG) are not supported. Please upload PDF or DOCX.',
+    };
+  }
+
   if (!allowedExtensions.includes(extension)) {
     return {
       valid: false,
-      error: 'Invalid file type. Please upload PDF, DOCX, PNG, JPG, or WEBP files only.',
+      error: 'Invalid file type. Please upload PDF or DOCX files only.',
     };
   }
 

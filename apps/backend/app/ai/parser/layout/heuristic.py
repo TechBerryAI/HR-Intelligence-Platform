@@ -94,9 +94,27 @@ class LayoutRegion:
     score: float = 0.0
 
 
+def _strip_header_decoration(line: str) -> str:
+    """Remove Word/PDF decorative padding (___HEADER___, === HEADER ===)."""
+    s = (line or '').strip()
+    if not s:
+        return ''
+    # Leading/trailing runs of underscores, dashes, equals, tildes, asterisks
+    s = re.sub(r'^[\s_\-=~*•·]+', '', s)
+    s = re.sub(r'[\s_\-=~*•·]+$', '', s)
+    s = s.strip().strip(':').strip('*').strip()
+    # Collapse leftover interior decoration around a short title, e.g. "___ TITLE ___".
+    if '_' in s or '=' in s:
+        compact = re.sub(r'[_\-=~]{2,}', ' ', s)
+        compact = ' '.join(compact.split()).strip(' :*-')
+        if 2 <= len(compact) <= 80:
+            s = compact
+    return s
+
+
 def normalize_section_header(line: str) -> str | None:
     """Return canonical section title if line is a resume section header."""
-    stripped = (line or '').strip().strip(':').strip('*').strip()
+    stripped = _strip_header_decoration(line or '')
     if not stripped or len(stripped) > 80:
         return None
     # Isolated bullets / replacement glyphs are not headers (PDF extracts often
