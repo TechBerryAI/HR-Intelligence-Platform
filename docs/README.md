@@ -8,7 +8,7 @@ Single entry point for HR Intelligence Platform docs. Prefer live code when docs
 
 | If you are… | Read this |
 |-------------|-----------|
-| **External team / career page integration** | [external/HR_Intelligence_Platform_Partner_Guide.pdf](external/HR_Intelligence_Platform_Partner_Guide.pdf) · [GUIDE.md](GUIDE.md#career-page-integration) |
+| **External team / career page integration** | [external/Techberry_Careers_API.md](external/Techberry_Careers_API.md) · [GUIDE.md](GUIDE.md#career-page-integration) |
 | **Engineer onboarding (full app map)** | [GUIDE.md](GUIDE.md) |
 | **Engineer (local setup + production)** | [DEVELOPMENT.md](DEVELOPMENT.md) · root [README.md](../README.md) |
 | **End user / trainer** | [user-manual/](user-manual/README.md) (Word/PDF) |
@@ -26,7 +26,7 @@ docs/
   DEVELOPMENT.md      ← setup, workflows, production release, troubleshooting
   OPERATIONS.md       ← media storage + backup/restore
   AI.md               ← document intelligence, AI features, pipeline, ADRs
-  external/           ← partner PDF for other teams
+  external/           ← partner integration docs (e.g. Techberry careers API)
   user-manual/        ← only subfolder (Word/PDF + screenshots + build scripts)
 ```
 
