@@ -134,6 +134,7 @@ SECTION_HEADERS = frozenset({
     'current address', 'residential address',
     'profile summary', 'professional summary', 'career objective', 'career summary',
     'professional profile', 'personal profile',
+    'organisational experience', 'organizational experience',
     'social link', 'social links', 'social media', 'key skills',
 })
 
@@ -1084,7 +1085,12 @@ def heal_location_candidate(value: str) -> str:
 
 
 def is_section_header_line(line: str) -> bool:
-    cleaned = re.sub(r'^[\s#*•\-]+|[\s#:]+$', '', (line or '').strip()).strip()
+    cleaned = re.sub(r'^[\s#*•\-_=]+|[\s#:_\-=]+$', '', (line or '').strip()).strip()
+    if not cleaned:
+        return True
+    # Word decorative headers: ___CAREER OBJECTIVE___
+    cleaned = re.sub(r'[_\-=~]{2,}', ' ', cleaned)
+    cleaned = ' '.join(cleaned.split()).strip(' :*-')
     if not cleaned:
         return True
     words = cleaned.split()
@@ -1946,9 +1952,11 @@ def _extract_body_for_summary_heading(text: str, heading: str) -> str:
     other_headings = '|'.join(
         _heading_to_regex(x) for x in SUMMARY_HEADING_PRIORITY if x != heading
     )
+    # Allow Word-style underscore/dash padding around the heading title.
+    deco = r'[_\-=~*\s]*'
     # Multiline: heading on its own line, body until next known section header
     block = re.search(
-        rf'(?im)^(?:\*\*)?{h}(?:\*\*)?\s*:?\s*$\n+'
+        rf'(?im)^(?:\*\*)?{deco}{h}{deco}(?:\*\*)?\s*:?\s*$\n+'
         rf'([\s\S]*?)'
         rf'(?=^\s*(?:\*\*)?(?:{stop}|{other_headings})(?:\*\*)?\s*:?\s*$|\Z)',
         text,
@@ -1957,7 +1965,7 @@ def _extract_body_for_summary_heading(text: str, heading: str) -> str:
         return _continue_past_false_section_stops(text, block.group(1).strip())
     # Same-line: "Professional Summary: Experienced engineer..."
     inline = re.search(
-        rf'(?im)^(?:\*\*)?{h}(?:\*\*)?\s*:\s+(.+?)\s*$',
+        rf'(?im)^(?:\*\*)?{deco}{h}{deco}(?:\*\*)?\s*:\s+(.+?)\s*$',
         text,
     )
     if inline and inline.group(1):
