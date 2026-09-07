@@ -34,7 +34,9 @@ _OPENPYXL_MAX_CELL = 32767
 _export_rebuild_lock = threading.Lock()
 _export_rebuild_inflight: set[str] = set()
 
-ALLOWED_EXT = {'pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff'}
+# Image resumes (PNG/JPG) are rejected — OCR quality is too unreliable for bulk Excel export.
+# WEBP/TIFF kept for rare scanned archives; PDF/DOCX are preferred.
+ALLOWED_EXT = {'pdf', 'docx', 'webp', 'tif', 'tiff'}
 # Legacy .doc is not extractable by current text_extraction — reject before staging.
 EXCEL_HEADERS = [
     'Filename',
@@ -2118,11 +2120,13 @@ def stage_files(job_id: str, files_list: list[tuple[str, bytes]], started_by=Non
             return False, {
                 'error': (
                     'Unsupported format: legacy .doc is not accepted. '
-                    'Convert to PDF or DOCX (or upload PNG/JPG for scanned resumes).'
+                    'Convert to PDF or DOCX.'
                 ),
                 'code': 'unsupported_format',
             }
-        return False, {'error': 'No valid resume files (PDF/DOCX/PNG/JPG/WEBP/TIFF)'}
+        return False, {
+            'error': 'No valid resume files (PDF/DOCX). PNG/JPG are not supported.',
+        }
 
     with _local_jobs_lock:
         if job_id in _local_jobs:
@@ -2188,7 +2192,9 @@ def extract_zip_to_job(job_id: str, zip_bytes: bytes, started_by=None) -> tuple[
         return False, {'error': f'ZIP extract failed: {e}'}
 
     if not extracted:
-        return False, {'error': 'No valid resume files (PDF/DOCX/PNG/JPG/WEBP/TIFF) found in ZIP'}
+        return False, {
+            'error': 'No valid resume files (PDF/DOCX) found in ZIP. PNG/JPG are not supported.',
+        }
 
     return stage_files(job_id, extracted, started_by=started_by)
 

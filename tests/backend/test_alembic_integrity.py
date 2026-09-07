@@ -183,6 +183,8 @@ def test_postgres_application_name_sanitizes_role(monkeypatch):
 @pytest.mark.integration
 def test_live_alembic_current_matches_head():
     """When Postgres is reachable, version table must equal the application head."""
+    from app.database.alembic_runner import head_revision_ids
+
     try:
         from app.database.connection.db import db_get
         row = db_get('SELECT 1 AS ok')
@@ -191,6 +193,8 @@ def test_live_alembic_current_matches_head():
     except Exception as exc:
         pytest.skip(f'Postgres not reachable: {exc}')
 
+    heads = head_revision_ids()
+    assert len(heads) == 1, heads
     ver = db_get('SELECT version_num FROM alembic_version LIMIT 1')
     current = (ver or {}).get('version_num')
     head = _app_head()

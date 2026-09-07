@@ -452,13 +452,9 @@ def map_candidate_to_form(
         )
     )
 
-    # Empty placeholders so form UI always has at least one editable row
-    if not education_rows:
-        education_rows = [EducationFormRow()]
-    if not experience_rows:
-        experience_rows = [ExperienceFormRow()]
-    if not cert_rows:
-        cert_rows = [CertificationFormRow()]
+    # Leave arrays empty when source has no grounded rows. The apply form
+    # already seeds one editable blank row client-side. Inventing empty DTO
+    # rows looks like fabricated / half-filled records.
 
     # Merge coverage into field traces for UI visibility (JD parity)
     coverage_rows = list(coverage or [])

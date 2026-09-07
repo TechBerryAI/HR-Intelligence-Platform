@@ -168,6 +168,61 @@ def test_projects_never_become_experience():
     assert len(form.education) == 4
 
 
+def test_project_development_duty_does_not_end_experience():
+    """Lines starting with 'Project Development' are duties, not a Projects section."""
+    text = """
+Jane Doe
+jane@example.com
+
+Experience
+Assistant System Analyst
+National Stock Exchange (NSEIT)
+06/2024 - Present
+Mumbai
+Project Development & Execution Developed and optimized high-performance applications using C#.
+Implemented multithreading techniques in C# to reduce processing time.
+
+Projects
+VOLUME GENERATION TOOL
+"""
+    profile, form, _ = parse_resume_text_to_canonical(text)
+    assert any('NSEIT' in (e.company or '') or 'National Stock' in (e.company or '') for e in profile.experience)
+    job = next(e for e in profile.experience if 'NSEIT' in (e.company or '') or 'National Stock' in (e.company or ''))
+    desc = (job.description or '').lower()
+    assert 'c#' in desc or 'multithread' in desc
+    assert 'volume generation' not in (job.role or '').lower()
+    assert 'volume generation' not in (job.company or '').lower()
+
+
+def test_stacked_be_degree_not_split_from_institution():
+    section = """
+B.E DEGREE
+Datta Meghe College Of Enginerring, Airoli , Navi
+Mumbai.
+06/2018 - 07/2022,
+Airoli , Navi Mumbai.
+AGGREGATE- 8.00(CGPA)
+Bachelor of Engineering
+(Information Technology)
+HSC
+St. Mayer's High School & Junior College
+07/2016 - 07/2018,
+Navi Mumbai
+AGGREGATE- 60%
+"""
+    rows = coalesce_education(parse_education(section))
+    assert len(rows) == 2
+    be = rows[0]
+    assert 'datta meghe' in (be.institution or '').lower()
+    assert 'bachelor' in (be.degree or '').lower() or 'b.e' in (be.degree or '').lower()
+    assert 'information technology' in f'{be.degree} {be.field}'.lower()
+    assert '8.00' in (be.gpa or '') or '8' in (be.gpa or '')
+    hsc = rows[1]
+    assert re.search(r'(?i)\bhsc\b', hsc.degree or '')
+    assert 'aggregate' not in (hsc.institution or '').lower()
+    assert '60' in (hsc.gpa or '')
+
+
 def test_wrapped_education_still_four_complete_rows():
     _p, form, _ = parse_resume_text_to_canonical(ROSHAN_WRAPPED_EDU)
     assert len(form.education) == 4

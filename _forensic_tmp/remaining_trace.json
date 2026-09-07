@@ -1,0 +1,5071 @@
+[
+  {
+    "file": "#1_Vishal_Waghmode_Resume.pdf",
+    "engine": "pymupdf",
+    "fallback": "",
+    "raw_chars": 3125,
+    "raw_head": "Vishal Waghmode\nSoftware Developer\nExperienced Full Stack Software Developer with a passion for games and creating connected experiences.\nSkilled in c# , .NET core , sql queries and source control. Knowledgeable in Agile software development.\nStrong communication skills and a team player. Excited to work with Rockstar Games on bleeding edge\ntechnol",
+    "sections": [
+      [
+        "Preamble",
+        494
+      ],
+      [
+        "Experience",
+        1064
+      ],
+      [
+        "Education",
+        284
+      ],
+      [
+        "Skills",
+        125
+      ],
+      [
+        "Projects",
+        921
+      ],
+      [
+        "Strengths",
+        170
+      ],
+      [
+        "Achievements",
+        14
+      ],
+      [
+        "Achievements",
+        53
+      ]
+    ],
+    "parsed": {
+      "name": "Vishal Waghmode",
+      "email": "vishalwaghmode247@gmail.com",
+      "phone": "8104350466",
+      "loc": "Navi Mumbai",
+      "edu": [
+        {
+          "d": "Bachelor of Engineering",
+          "i": "Datta Meghe College Of Enginerring, Airoli , Navi Mumbai.",
+          "f": "Information Technology",
+          "g": "8.00",
+          "s": "2018-06",
+          "e": "2022-07"
+        },
+        {
+          "d": "HSC",
+          "i": "St . Mayer's High School & Junior College, Navi Mumbai",
+          "f": "",
+          "g": "60%",
+          "s": "2016-07",
+          "e": "2018-07"
+        }
+      ],
+      "exp": [
+        {
+          "c": "Tata Consultancy Services (TCS)",
+          "r": "Assistant System Engineer",
+          "s": "2022-07",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "National Stock Exchange (NSEIT)",
+          "r": "Assistant System Analyst",
+          "s": "2024-06",
+          "e": "",
+          "dl": 2
+        }
+      ],
+      "skills": [
+        "C#",
+        ".NET CORE",
+        "SQL (Structured Query Language)",
+        "HTML5",
+        "CSS3",
+        "JavaScript",
+        "Multi-Threading",
+        "Data Structure",
+        "AGILE"
+      ],
+      "n_skills": 9,
+      "n_proj": 2,
+      "n_lang": 0
+    },
+    "coverage": {
+      "name": "Vishal Waghmode",
+      "email": "vishalwaghmode247@gmail.com",
+      "phone": "8104350466",
+      "loc": "Navi Mumbai",
+      "edu": [
+        {
+          "d": "Bachelor of Engineering",
+          "i": "Datta Meghe College Of Enginerring, Airoli , Navi Mumbai.",
+          "f": "Information Technology",
+          "g": "8.00",
+          "s": "2018-06",
+          "e": "2022-07"
+        },
+        {
+          "d": "HSC",
+          "i": "St . Mayer's High School & Junior College, Navi Mumbai",
+          "f": "",
+          "g": "60%",
+          "s": "2016-07",
+          "e": "2018-07"
+        }
+      ],
+      "exp": [
+        {
+          "c": "Tata Consultancy Services (TCS)",
+          "r": "Assistant System Engineer",
+          "s": "2022-07",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "National Stock Exchange (NSEIT)",
+          "r": "Assistant System Analyst",
+          "s": "2024-06",
+          "e": "",
+          "dl": 2
+        }
+      ],
+      "skills": [
+        "C#",
+        ".NET CORE",
+        "SQL (Structured Query Language)",
+        "HTML5",
+        "CSS3",
+        "JavaScript",
+        "Multi-Threading",
+        "Data Structure",
+        "AGILE"
+      ],
+      "n_skills": 9,
+      "n_proj": 2,
+      "n_lang": 0
+    },
+    "repair": {
+      "name": "Vishal Waghmode",
+      "email": "vishalwaghmode247@gmail.com",
+      "phone": "8104350466",
+      "loc": "Navi Mumbai",
+      "edu": [
+        {
+          "d": "Bachelor of Engineering",
+          "i": "Datta Meghe College Of Enginerring, Airoli , Navi Mumbai.",
+          "f": "Information Technology",
+          "g": "8.00",
+          "s": "2018-06",
+          "e": "2022-07"
+        },
+        {
+          "d": "HSC",
+          "i": "St . Mayer's High School & Junior College, Navi Mumbai",
+          "f": "",
+          "g": "60%",
+          "s": "2016-07",
+          "e": "2018-07"
+        }
+      ],
+      "exp": [
+        {
+          "c": "Tata Consultancy Services (TCS)",
+          "r": "Assistant System Engineer",
+          "s": "2022-07",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "National Stock Exchange (NSEIT)",
+          "r": "Assistant System Analyst",
+          "s": "2024-06",
+          "e": "",
+          "dl": 2
+        }
+      ],
+      "skills": [
+        "C#",
+        ".NET CORE",
+        "SQL (Structured Query Language)",
+        "HTML5",
+        "CSS3",
+        "JavaScript",
+        "Multi-Threading",
+        "Data Structure",
+        "AGILE"
+      ],
+      "n_skills": 9,
+      "n_proj": 2,
+      "n_lang": 0
+    },
+    "final": {
+      "name": "Vishal Waghmode",
+      "email": "vishalwaghmode247@gmail.com",
+      "phone": "8104350466",
+      "loc": "Navi Mumbai",
+      "edu": [
+        {
+          "d": "Bachelor of Engineering",
+          "i": "Datta Meghe College Of Enginerring, Airoli , Navi Mumbai.",
+          "f": "Information Technology",
+          "g": "8.00",
+          "s": "2018-06",
+          "e": "2022-07"
+        },
+        {
+          "d": "HSC",
+          "i": "St . Mayer's High School & Junior College, Navi Mumbai",
+          "f": "",
+          "g": "60%",
+          "s": "2016-07",
+          "e": "2018-07"
+        }
+      ],
+      "exp": [
+        {
+          "c": "Tata Consultancy Services (TCS)",
+          "r": "Assistant System Engineer",
+          "s": "2022-07",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "National Stock Exchange (NSEIT)",
+          "r": "Assistant System Analyst",
+          "s": "2024-06",
+          "e": "",
+          "dl": 2
+        }
+      ],
+      "skills": [
+        "C#",
+        ".NET CORE",
+        "SQL (Structured Query Language)",
+        "HTML5",
+        "CSS3",
+        "JavaScript",
+        "Multi-Threading",
+        "Data Structure",
+        "AGILE"
+      ],
+      "n_skills": 9,
+      "n_proj": 2,
+      "n_lang": 0
+    },
+    "form": {
+      "name": "Vishal Waghmode",
+      "email": "vishalwaghmode247@gmail.com",
+      "loc": "Navi Mumbai",
+      "n_edu": 2,
+      "n_exp": 2,
+      "n_cert": 0,
+      "skills": "C#, .NET CORE, SQL (Structured Query Language), HTML5, CSS3, JavaScript, Multi-Threading, Data Structure, AGILE"
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "45_MMS_Marketing_Akshay     Pujari -1.jpg (1) (1) (1).docx",
+    "engine": "pymupdf",
+    "fallback": "",
+    "raw_chars": 2252,
+    "raw_head": "Akshay Pujari\n\nPermanent Address: At- Satave, Tal -Panhala\n\nDistrict – Kolhapur 416114.\n\nTemporary Address: 504/C, Vasant Springwoods,\n\nMauli Chowk, Bhosale Nagar, Shirgaon\n\nBadlapur East – 421503.\n\nMobile No: 8459024923\n\nEmail id : pujariakshay03@gmail.com\n\nDOB: 22-04-2002\n\nCareer Objective: A highly motivated and hardworking individual looking fo",
+    "sections": [
+      [
+        "Preamble",
+        402
+      ],
+      [
+        "Personal Details",
+        189
+      ],
+      [
+        "Education",
+        923
+      ],
+      [
+        "Achievements",
+        720
+      ],
+      [
+        "Skills",
+        18
+      ]
+    ],
+    "parsed": {
+      "name": "Akshay Pujari",
+      "email": "pujariakshay03@gmail.com",
+      "phone": "8459024923",
+      "loc": "Kolhapur",
+      "edu": [
+        {
+          "d": "2023-2025: MMS",
+          "i": "Kohinoor Business School Kurla, Mumbai",
+          "f": "Marketing",
+          "g": "Pursuing",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "2022: BSc",
+          "i": "Yashwantrao Chavan Mahavidyalaya Warananagar",
+          "f": "Chemistry",
+          "g": "73.04%",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "2019: Class 12th",
+          "i": "Shri Shamrao Patil Prathamik Madhyamik Vidyalaya",
+          "f": "",
+          "g": "69.38%",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "2017: Class 10th",
+          "i": "Satara Sainik School",
+          "f": "",
+          "g": "64.06%",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "Amul India Ltd",
+          "r": "Summer Internship",
+          "s": "2024-05",
+          "e": "2024-07",
+          "dl": 3
+        }
+      ],
+      "skills": [
+        "MS-Office"
+      ],
+      "n_skills": 1,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "coverage": {
+      "name": "Akshay Pujari",
+      "email": "pujariakshay03@gmail.com",
+      "phone": "8459024923",
+      "loc": "Kolhapur",
+      "edu": [
+        {
+          "d": "2023-2025: MMS",
+          "i": "Kohinoor Business School Kurla, Mumbai",
+          "f": "Marketing",
+          "g": "Pursuing",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "2022: BSc",
+          "i": "Yashwantrao Chavan Mahavidyalaya Warananagar",
+          "f": "Chemistry",
+          "g": "73.04%",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "2019: Class 12th",
+          "i": "Shri Shamrao Patil Prathamik Madhyamik Vidyalaya",
+          "f": "",
+          "g": "69.38%",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "2017: Class 10th",
+          "i": "Satara Sainik School",
+          "f": "",
+          "g": "64.06%",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "Amul India Ltd",
+          "r": "Summer Internship",
+          "s": "2024-05",
+          "e": "2024-07",
+          "dl": 3
+        }
+      ],
+      "skills": [
+        "MS-Office"
+      ],
+      "n_skills": 1,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "repair": {
+      "name": "Akshay Pujari",
+      "email": "pujariakshay03@gmail.com",
+      "phone": "8459024923",
+      "loc": "Kolhapur",
+      "edu": [
+        {
+          "d": "2023-2025: MMS",
+          "i": "Kohinoor Business School Kurla, Mumbai",
+          "f": "Marketing",
+          "g": "Pursuing",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "2022: BSc",
+          "i": "Yashwantrao Chavan Mahavidyalaya Warananagar",
+          "f": "Chemistry",
+          "g": "73.04%",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "2019: Class 12th",
+          "i": "Shri Shamrao Patil Prathamik Madhyamik Vidyalaya",
+          "f": "",
+          "g": "69.38%",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "2017: Class 10th",
+          "i": "Satara Sainik School",
+          "f": "",
+          "g": "64.06%",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "Amul India Ltd",
+          "r": "Summer Internship",
+          "s": "2024-05",
+          "e": "2024-07",
+          "dl": 3
+        }
+      ],
+      "skills": [
+        "MS-Office"
+      ],
+      "n_skills": 1,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "final": {
+      "name": "Akshay Pujari",
+      "email": "pujariakshay03@gmail.com",
+      "phone": "8459024923",
+      "loc": "Kolhapur",
+      "edu": [
+        {
+          "d": "2023-2025: MMS",
+          "i": "Kohinoor Business School Kurla, Mumbai",
+          "f": "Marketing",
+          "g": "Pursuing",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "2022: BSc",
+          "i": "Yashwantrao Chavan Mahavidyalaya Warananagar",
+          "f": "Chemistry",
+          "g": "73.04%",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "2019: Class 12th",
+          "i": "Shri Shamrao Patil Prathamik Madhyamik Vidyalaya",
+          "f": "",
+          "g": "69.38%",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "2017: Class 10th",
+          "i": "Satara Sainik School",
+          "f": "",
+          "g": "64.06%",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "Amul India Ltd",
+          "r": "Summer Internship",
+          "s": "2024-05",
+          "e": "2024-07",
+          "dl": 3
+        }
+      ],
+      "skills": [
+        "MS-Office"
+      ],
+      "n_skills": 1,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "form": {
+      "name": "Akshay Pujari",
+      "email": "pujariakshay03@gmail.com",
+      "loc": "Kolhapur",
+      "n_edu": 4,
+      "n_exp": 1,
+      "n_cert": 0,
+      "skills": "MS-Office"
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "1.docx",
+    "engine": "pymupdf",
+    "fallback": "",
+    "raw_chars": 2408,
+    "raw_head": "Email\t- dparthe45@gmail.com\n\nContact No - 8408897040\n\n\nSummary\nTo work in challenging position in field of Information Technology & IT Sector to gain experience and enhance my skills. My greatest attributes are hardworking and good learning.\n\nMy objective is to utilize my skills and knowledge for the success of the organization I believe in the con",
+    "sections": [
+      [
+        "Preamble",
+        55
+      ],
+      [
+        "Summary",
+        477
+      ],
+      [
+        "Skills",
+        1370
+      ],
+      [
+        "Education",
+        11
+      ],
+      [
+        "Activities",
+        239
+      ],
+      [
+        "Declaration",
+        256
+      ]
+    ],
+    "parsed": {
+      "name": "",
+      "email": "dparthe45@gmail.com",
+      "phone": "8408897040",
+      "loc": "Mumbai",
+      "edu": [],
+      "exp": [],
+      "skills": [
+        "ApplicationServers\t: WebLogic Server  14c.",
+        "Web Server                           : Oracle",
+        "HTTP Server",
+        "Apache web server",
+        "ApplicationProtocol\t: SSH",
+        "HTTP",
+        "HTTPS",
+        "TELNET",
+        "FTP.",
+        "Work experience = fresher",
+        "Completed weblogic and OHS class from Hydrabad team.",
+        "WebLogic Administration with expertise in Installation",
+        "Configuration",
+        "Troubleshootingand",
+        "Maintenance of WebLogic Server",
+        "Oracle HTTP Server",
+        "basic",
+        "Cluster setup creation on different Linux and windows environment.",
+        "JDK upgradation in WebLogic and OHS on different Linux .",
+        "WebLogic upgradation on different Linux ."
+      ],
+      "n_skills": 38,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "coverage": {
+      "name": "",
+      "email": "dparthe45@gmail.com",
+      "phone": "8408897040",
+      "loc": "Mumbai",
+      "edu": [],
+      "exp": [],
+      "skills": [
+        "ApplicationServers\t: WebLogic Server  14c.",
+        "Web Server                           : Oracle",
+        "HTTP Server",
+        "Apache web server",
+        "ApplicationProtocol\t: SSH",
+        "HTTP",
+        "HTTPS",
+        "TELNET",
+        "FTP.",
+        "Work experience = fresher",
+        "Completed weblogic and OHS class from Hydrabad team.",
+        "WebLogic Administration with expertise in Installation",
+        "Configuration",
+        "Troubleshootingand",
+        "Maintenance of WebLogic Server",
+        "Oracle HTTP Server",
+        "basic",
+        "Cluster setup creation on different Linux and windows environment.",
+        "JDK upgradation in WebLogic and OHS on different Linux .",
+        "WebLogic upgradation on different Linux ."
+      ],
+      "n_skills": 38,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "repair": {
+      "name": "",
+      "email": "dparthe45@gmail.com",
+      "phone": "8408897040",
+      "loc": "Mumbai",
+      "edu": [],
+      "exp": [],
+      "skills": [
+        "ApplicationServers\t: WebLogic Server  14c.",
+        "Web Server                           : Oracle",
+        "HTTP Server",
+        "Apache web server",
+        "ApplicationProtocol\t: SSH",
+        "HTTP",
+        "HTTPS",
+        "TELNET",
+        "FTP.",
+        "Work experience = fresher",
+        "Completed weblogic and OHS class from Hydrabad team.",
+        "WebLogic Administration with expertise in Installation",
+        "Configuration",
+        "Troubleshootingand",
+        "Maintenance of WebLogic Server",
+        "Oracle HTTP Server",
+        "basic",
+        "Cluster setup creation on different Linux and windows environment.",
+        "JDK upgradation in WebLogic and OHS on different Linux .",
+        "WebLogic upgradation on different Linux ."
+      ],
+      "n_skills": 38,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "final": {
+      "name": "",
+      "email": "dparthe45@gmail.com",
+      "phone": "8408897040",
+      "loc": "Mumbai",
+      "edu": [],
+      "exp": [],
+      "skills": [
+        "ApplicationServers\t: WebLogic Server  14c.",
+        "Web Server                           : Oracle",
+        "HTTP Server",
+        "Apache web server",
+        "ApplicationProtocol\t: SSH",
+        "HTTP",
+        "HTTPS",
+        "TELNET",
+        "FTP.",
+        "Work experience = fresher",
+        "Completed weblogic and OHS class from Hydrabad team.",
+        "WebLogic Administration with expertise in Installation",
+        "Configuration",
+        "Troubleshootingand",
+        "Maintenance of WebLogic Server",
+        "Oracle HTTP Server",
+        "basic",
+        "Cluster setup creation on different Linux and windows environment.",
+        "JDK upgradation in WebLogic and OHS on different Linux .",
+        "WebLogic upgradation on different Linux ."
+      ],
+      "n_skills": 38,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "form": {
+      "name": "",
+      "email": "dparthe45@gmail.com",
+      "loc": "Mumbai",
+      "n_edu": 0,
+      "n_exp": 0,
+      "n_cert": 0,
+      "skills": "ApplicationServers\t: WebLogic Server  14c., Web Server                           : Oracle, HTTP Server, Apache web server, ApplicationProtocol\t: SSH, HTTP, HTTPS, TELNET, FTP., Wor"
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "2025_UMAR_SHARIEF_RESUME postgresql dba.pdf",
+    "engine": "pymupdf",
+    "fallback": "",
+    "raw_chars": 3291,
+    "raw_head": "Skills\nCertification\nMicrosoft Certified: Azure Data\nFundamentals\nMicrosoft Certified Azure\nFundamentals\n\nLanguages\nTamil\nMOHAMMED UMAR\nSHARIEF\nSENIOR SOFTWARE\nANALYST - POSTGRESQL\nLEAD\nPHONE\n(+91) 8825989994\nEMAIL\na.umarsharief@outlook.c\nom\nLOCATION\nChennai, INDIA\n\nExperience\n5 Years 6 Months\nPostgresql Administration\nShell Scripting\nLinux\nServer ",
+    "sections": [
+      [
+        "Skills",
+        106
+      ],
+      [
+        "Languages",
+        161
+      ],
+      [
+        "Experience",
+        257
+      ],
+      [
+        "Summary",
+        384
+      ],
+      [
+        "Experience",
+        805
+      ],
+      [
+        "Activities",
+        827
+      ],
+      [
+        "Education",
+        70
+      ],
+      [
+        "Projects",
+        681
+      ]
+    ],
+    "parsed": {
+      "name": "Umar Sharief",
+      "email": "",
+      "phone": "8825989994",
+      "loc": "Chennai",
+      "edu": [
+        {
+          "d": "B.Sc",
+          "i": "Computers",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "The New College, Chennai",
+          "f": "",
+          "g": "69%",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "",
+          "r": "Database Administrator",
+          "s": "",
+          "e": "",
+          "dl": 8
+        },
+        {
+          "c": "PostgreSQL Lead",
+          "r": "Senior Software Analyst",
+          "s": "",
+          "e": "",
+          "dl": 10
+        },
+        {
+          "c": "Allianz Technology",
+          "r": "",
+          "s": "2021-10",
+          "e": "",
+          "dl": 10
+        },
+        {
+          "c": "InKnowTech Private Limited",
+          "r": "Postgresql Database Administrator",
+          "s": "2021-03",
+          "e": "2021-09",
+          "dl": 1
+        }
+      ],
+      "skills": [
+        "Certification",
+        "Microsoft Certified: Azure Data",
+        "Fundamentals",
+        "Microsoft Certified Azure"
+      ],
+      "n_skills": 4,
+      "n_proj": 5,
+      "n_lang": 14
+    },
+    "coverage": {
+      "name": "Umar Sharief",
+      "email": "",
+      "phone": "8825989994",
+      "loc": "Chennai",
+      "edu": [
+        {
+          "d": "B.Sc",
+          "i": "Computers",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "The New College, Chennai",
+          "f": "",
+          "g": "69%",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "",
+          "r": "Database Administrator",
+          "s": "",
+          "e": "",
+          "dl": 8
+        },
+        {
+          "c": "EDB",
+          "r": "I'm proficient experience in PostgreSQL DBA with 5.6+",
+          "s": "",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "PostgreSQL Lead",
+          "r": "Senior Software Analyst",
+          "s": "",
+          "e": "",
+          "dl": 10
+        },
+        {
+          "c": "Allianz Technology",
+          "r": "",
+          "s": "2021-10",
+          "e": "",
+          "dl": 10
+        },
+        {
+          "c": "InKnowTech Private Limited",
+          "r": "Postgresql Database Administrator",
+          "s": "2021-03",
+          "e": "2021-09",
+          "dl": 1
+        },
+        {
+          "c": "Social Activist",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "Division Health Inspector",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 4
+        },
+        {
+          "c": "Appscore Solutions",
+          "r": "Junior Software Engineer",
+          "s": "2019-06",
+          "e": "2021-03",
+          "dl": 1
+        },
+        {
+          "c": "& L 2.",
+          "r": "Qualitative Postgresql DBA having to support both L1",
+          "s": "",
+          "e": "",
+          "dl": 1
+        },
+        {
+          "c": "Routine Server Health Check",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 2
+        }
+      ],
+      "skills": [
+        "Certification",
+        "Microsoft Certified: Azure Data",
+        "Fundamentals",
+        "Microsoft Certified Azure"
+      ],
+      "n_skills": 4,
+      "n_proj": 5,
+      "n_lang": 14
+    },
+    "repair": {
+      "name": "Umar Sharief",
+      "email": "",
+      "phone": "8825989994",
+      "loc": "Chennai",
+      "edu": [
+        {
+          "d": "B.Sc",
+          "i": "Computers",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "The New College, Chennai",
+          "f": "",
+          "g": "69%",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "EDB",
+          "r": "I'm proficient experience in PostgreSQL DBA with 5.6+",
+          "s": "",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "PostgreSQL Lead",
+          "r": "Senior Software Analyst",
+          "s": "",
+          "e": "",
+          "dl": 10
+        },
+        {
+          "c": "Allianz Technology",
+          "r": "Junior Software Engineer",
+          "s": "2021-06",
+          "e": "",
+          "dl": 10
+        },
+        {
+          "c": "InKnowTech Private Limited",
+          "r": "Postgresql Database Administrator",
+          "s": "2021-06",
+          "e": "2021-06",
+          "dl": 1
+        },
+        {
+          "c": "Social Activist",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "Division Health Inspector",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 4
+        },
+        {
+          "c": "Appscore Solutions",
+          "r": "Junior Software Engineer",
+          "s": "2019-06",
+          "e": "2021-06",
+          "dl": 1
+        },
+        {
+          "c": "& L 2.",
+          "r": "Qualitative Postgresql DBA having to support both L1",
+          "s": "",
+          "e": "",
+          "dl": 1
+        },
+        {
+          "c": "Routine Server Health Check",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 2
+        }
+      ],
+      "skills": [
+        "Certification",
+        "Microsoft Certified: Azure Data",
+        "Fundamentals",
+        "Microsoft Certified Azure"
+      ],
+      "n_skills": 4,
+      "n_proj": 5,
+      "n_lang": 14
+    },
+    "final": {
+      "name": "Umar Sharief",
+      "email": "",
+      "phone": "8825989994",
+      "loc": "Chennai",
+      "edu": [
+        {
+          "d": "B.Sc",
+          "i": "Computers",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "The New College, Chennai",
+          "f": "",
+          "g": "69%",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "EDB",
+          "r": "I'm proficient experience in PostgreSQL DBA with 5.6+",
+          "s": "",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "PostgreSQL Lead",
+          "r": "Senior Software Analyst",
+          "s": "",
+          "e": "",
+          "dl": 10
+        },
+        {
+          "c": "Allianz Technology",
+          "r": "Junior Software Engineer",
+          "s": "2021-06",
+          "e": "",
+          "dl": 10
+        },
+        {
+          "c": "InKnowTech Private Limited",
+          "r": "Postgresql Database Administrator",
+          "s": "2021-06",
+          "e": "2021-06",
+          "dl": 1
+        },
+        {
+          "c": "Social Activist",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "Division Health Inspector",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 4
+        },
+        {
+          "c": "Appscore Solutions",
+          "r": "Junior Software Engineer",
+          "s": "2019-06",
+          "e": "2021-06",
+          "dl": 1
+        },
+        {
+          "c": "& L 2.",
+          "r": "Qualitative Postgresql DBA having to support both L1",
+          "s": "",
+          "e": "",
+          "dl": 1
+        },
+        {
+          "c": "Routine Server Health Check",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 2
+        }
+      ],
+      "skills": [
+        "Certification",
+        "Microsoft Certified: Azure Data",
+        "Fundamentals",
+        "Microsoft Certified Azure"
+      ],
+      "n_skills": 4,
+      "n_proj": 5,
+      "n_lang": 14
+    },
+    "form": {
+      "name": "Umar Sharief",
+      "email": "",
+      "loc": "Chennai",
+      "n_edu": 2,
+      "n_exp": 9,
+      "n_cert": 4,
+      "skills": "Certification, Microsoft Certified: Azure Data, Fundamentals, Microsoft Certified Azure"
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "13_Ms.-Saloni-Dhuru.pdf",
+    "engine": "pymupdf",
+    "fallback": "",
+    "raw_chars": 623,
+    "raw_head": "Curriculum Vitae\nName\n: Ms. Saloni V. Dhuru\nDesignation\n: Assistant Professor\n\nEducation\n: Ph.D. (Pursuing-I.T.)\nM. E (Computer Engineering )\nB. E (I.T.)\nArea of\nSpecialization\n: Artificial Intelligence and Data Science, Machine Learning and Deep Learning,\nDatabase System\n\nTeaching\n\nExperience\n: 4.7 Years\nTotal Experience\n: 4.7 Years\nPaper publishe",
+    "sections": [
+      [
+        "Curriculum Vitae",
+        79
+      ],
+      [
+        "Education",
+        205
+      ],
+      [
+        "Experience",
+        339
+      ]
+    ],
+    "parsed": {
+      "name": "Saloni V. Dhuru",
+      "email": "saloni.dhuru@thadomal.org",
+      "phone": "",
+      "loc": "",
+      "edu": [
+        {
+          "d": ": Ph.D. (Pursuing",
+          "i": "I.T.)",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "B. E (I.T.)",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "coverage": {
+      "name": "Saloni V. Dhuru",
+      "email": "saloni.dhuru@thadomal.org",
+      "phone": "",
+      "loc": "",
+      "edu": [
+        {
+          "d": ": Ph.D. (Pursuing",
+          "i": "I.T.)",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "B. E (I.T.)",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "repair": {
+      "name": "Saloni V. Dhuru",
+      "email": "saloni.dhuru@thadomal.org",
+      "phone": "",
+      "loc": "",
+      "edu": [
+        {
+          "d": ": Ph.D. (Pursuing",
+          "i": "I.T.)",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "B. E (I.T.)",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "final": {
+      "name": "Saloni V. Dhuru",
+      "email": "saloni.dhuru@thadomal.org",
+      "phone": "",
+      "loc": "",
+      "edu": [
+        {
+          "d": ": Ph.D. (Pursuing",
+          "i": "I.T.)",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "B. E (I.T.)",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "form": {
+      "name": "Saloni V. Dhuru",
+      "email": "saloni.dhuru@thadomal.org",
+      "loc": "",
+      "n_edu": 2,
+      "n_exp": 0,
+      "n_cert": 0,
+      "skills": ""
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "Padmini Mongo dba Expertia AI.pdf",
+    "engine": "pymupdf",
+    "fallback": "address_first_missing_name",
+    "raw_chars": 2378,
+    "raw_head": "8217276434\npadduchethu96@gmail.com\n#244,1st Main Road, 2nd Cross\nMaruthi Nagar\nBapuji Nagar, Bangalore\n\nContact\n\nSummary\n\nSkills\n\nEducation\n\nSummary\nMongoBD\nLinux\nNoSQL\nUpgradation\nBackup & Restore\nReplication\nSharding\nIndexing\nPerformance tuning\nData Migration\nbachelor of engineering in\nelectronics and communication\ncauvery institute of technology",
+    "sections": [
+      [
+        "Preamble",
+        104
+      ],
+      [
+        "Contact",
+        9
+      ],
+      [
+        "Summary",
+        9
+      ],
+      [
+        "Skills",
+        8
+      ],
+      [
+        "Education",
+        11
+      ],
+      [
+        "Summary",
+        229
+      ],
+      [
+        "Experience",
+        2008
+      ]
+    ],
+    "parsed": {
+      "name": "Padmini Mongo",
+      "email": "padduchethu96@gmail.com",
+      "phone": "8217276434",
+      "loc": "Maruthi Nagar",
+      "edu": [],
+      "exp": [
+        {
+          "c": "In MEGAC",
+          "r": "TECHNOLOGY PRIVATE LIMITED",
+          "s": "2020",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "Mongo export-import.",
+          "r": "managing with operation  manager and MMS.",
+          "s": "",
+          "e": "",
+          "dl": 11
+        },
+        {
+          "c": "",
+          "r": "field of DBA service",
+          "s": "",
+          "e": "",
+          "dl": 1
+        },
+        {
+          "c": "PADMINI P",
+          "r": "ASSOCIATE DATABASE ENGINEER",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "TECHNICAL EXPERTIES:",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "Mongo dump/restore.",
+          "r": "Utilities: Mongo DB Export/Import",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "Red Hat,",
+          "r": "Operating Systems: Linux",
+          "s": "",
+          "e": "",
+          "dl": 2
+        }
+      ],
+      "skills": [
+        "in upgrading various versions of Mongo DB on different",
+        "Platforms (windows",
+        "Linux a n d  Red Hat).",
+        "Extensive Experience in hosting Mongo DBon AWS cloud."
+      ],
+      "n_skills": 4,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "coverage": {
+      "name": "Padmini Mongo",
+      "email": "padduchethu96@gmail.com",
+      "phone": "8217276434",
+      "loc": "Maruthi Nagar",
+      "edu": [],
+      "exp": [
+        {
+          "c": "In MEGAC",
+          "r": "TECHNOLOGY PRIVATE LIMITED",
+          "s": "2020",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "Mongo export-import.",
+          "r": "managing with operation  manager and MMS.",
+          "s": "",
+          "e": "",
+          "dl": 11
+        },
+        {
+          "c": "",
+          "r": "field of DBA service",
+          "s": "",
+          "e": "",
+          "dl": 1
+        },
+        {
+          "c": "PADMINI P",
+          "r": "ASSOCIATE DATABASE ENGINEER",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "TECHNICAL EXPERTIES:",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "Mongo dump/restore.",
+          "r": "Utilities: Mongo DB Export/Import",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "Red Hat,",
+          "r": "Operating Systems: Linux",
+          "s": "",
+          "e": "",
+          "dl": 2
+        }
+      ],
+      "skills": [
+        "in upgrading various versions of Mongo DB on different",
+        "Platforms (windows",
+        "Linux a n d  Red Hat).",
+        "Extensive Experience in hosting Mongo DBon AWS cloud."
+      ],
+      "n_skills": 4,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "repair": {
+      "name": "Padmini Mongo",
+      "email": "padduchethu96@gmail.com",
+      "phone": "8217276434",
+      "loc": "Maruthi Nagar",
+      "edu": [
+        {
+          "d": "bachelor of engineering in",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "cauvery institute of technology",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "In MEGAC",
+          "r": "TECHNOLOGY PRIVATE LIMITED",
+          "s": "2020",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "Mongo export-import.",
+          "r": "managing with operation  manager and MMS.",
+          "s": "",
+          "e": "",
+          "dl": 11
+        },
+        {
+          "c": "",
+          "r": "field of DBA service",
+          "s": "",
+          "e": "",
+          "dl": 1
+        },
+        {
+          "c": "PADMINI P",
+          "r": "ASSOCIATE DATABASE ENGINEER",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "TECHNICAL EXPERTIES:",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "Mongo dump/restore.",
+          "r": "Utilities: Mongo DB Export/Import",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "Red Hat,",
+          "r": "Operating Systems: Linux",
+          "s": "",
+          "e": "",
+          "dl": 2
+        }
+      ],
+      "skills": [
+        "in upgrading various versions of Mongo DB on different",
+        "Platforms (windows",
+        "Linux a n d  Red Hat).",
+        "Extensive Experience in hosting Mongo DBon AWS cloud."
+      ],
+      "n_skills": 4,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "final": {
+      "name": "Padmini Mongo",
+      "email": "padduchethu96@gmail.com",
+      "phone": "8217276434",
+      "loc": "Maruthi Nagar",
+      "edu": [],
+      "exp": [
+        {
+          "c": "In MEGAC",
+          "r": "TECHNOLOGY PRIVATE LIMITED",
+          "s": "2020",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "Mongo export-import.",
+          "r": "managing with operation  manager and MMS.",
+          "s": "",
+          "e": "",
+          "dl": 11
+        },
+        {
+          "c": "",
+          "r": "field of DBA service",
+          "s": "",
+          "e": "",
+          "dl": 1
+        },
+        {
+          "c": "PADMINI P",
+          "r": "ASSOCIATE DATABASE ENGINEER",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "TECHNICAL EXPERTIES:",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "Mongo dump/restore.",
+          "r": "Utilities: Mongo DB Export/Import",
+          "s": "",
+          "e": "",
+          "dl": 2
+        },
+        {
+          "c": "Red Hat,",
+          "r": "Operating Systems: Linux",
+          "s": "",
+          "e": "",
+          "dl": 2
+        }
+      ],
+      "skills": [
+        "in upgrading various versions of Mongo DB on different",
+        "Platforms (windows",
+        "Linux a n d  Red Hat).",
+        "Extensive Experience in hosting Mongo DBon AWS cloud."
+      ],
+      "n_skills": 4,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "form": {
+      "name": "Padmini Mongo",
+      "email": "padduchethu96@gmail.com",
+      "loc": "Maruthi Nagar",
+      "n_edu": 0,
+      "n_exp": 7,
+      "n_cert": 0,
+      "skills": "in upgrading various versions of Mongo DB on different, Platforms (windows, Linux a n d  Red Hat)., Extensive Experience in hosting Mongo DBon AWS cloud."
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "1-Ashish_Chandel.docx",
+    "engine": "pymupdf",
+    "fallback": "address_first_missing_name",
+    "raw_chars": 9054,
+    "raw_head": "ASHISH R. CHANDEL\n\nHead of IT Operations  |  Cloud Infrastructure & Service Delivery Leader\n\n+91 8850897115  |  ashish.chandel25@gmail.com  |  Navi Mumbai, Maharashtra  |  linkedin.com/in/ashishrchandel\n\nOpen to Hybrid / Remote / Relocation opportunities\n\n\nSummary\nResults-driven IT Operations leader with 14+ years of progressive experience directin",
+    "sections": [
+      [
+        "Preamble",
+        257
+      ],
+      [
+        "Summary",
+        1534
+      ],
+      [
+        "Skills",
+        8
+      ],
+      [
+        "Experience",
+        5685
+      ],
+      [
+        "Skills",
+        8
+      ],
+      [
+        "Certifications",
+        218
+      ],
+      [
+        "Education",
+        226
+      ],
+      [
+        "Languages",
+        1110
+      ]
+    ],
+    "parsed": {
+      "name": "Ashish R. Chandel",
+      "email": "ashish.chandel25@gmail.com",
+      "phone": "+918850897115",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "Master of Business Administration (MBA)",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "Bachelor of Science (B.Sc.) — Computer Science",
+          "i": "Institute of Technology and Management, Navi Mumbai",
+          "f": "Computer Science",
+          "g": "",
+          "s": "",
+          "e": "2014"
+        },
+        {
+          "d": "",
+          "i": "University of Mumbai, Mumbai",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2008"
+        }
+      ],
+      "exp": [
+        {
+          "c": "Alexander Mann Solutions",
+          "r": "Senior Technology Manager",
+          "s": "2022-11",
+          "e": "2025-06",
+          "dl": 8
+        },
+        {
+          "c": "Sify Technologies",
+          "r": "Service Desk Manager",
+          "s": "2022-03",
+          "e": "2022-10",
+          "dl": 5
+        },
+        {
+          "c": "Teleperformance",
+          "r": "NOC Team Lead",
+          "s": "2020-11",
+          "e": "2022-02",
+          "dl": 5
+        },
+        {
+          "c": "Reliance Jio",
+          "r": "Senior Executive — Network Operations",
+          "s": "2017-07",
+          "e": "2020-09",
+          "dl": 5
+        },
+        {
+          "c": "CMS Info Systems Ltd",
+          "r": "Network Administrator",
+          "s": "2015-03",
+          "e": "2016-12",
+          "dl": 4
+        },
+        {
+          "c": "Reliance Communications",
+          "r": "Network Engineer",
+          "s": "2011-08",
+          "e": "2014-09",
+          "dl": 4
+        }
+      ],
+      "skills": [
+        "managing dat",
+        "Navi Mumbai",
+        "000+ endpoints",
+        "performing proactiv",
+        "ensuring",
+        "ITIL V4",
+        "ISO/IEC 27001",
+        "CAB",
+        "Incident / Problem / Change Management",
+        "Leadership: IT Budget Management",
+        "Vendor Governance",
+        "Team Development",
+        "Business Continuity Planning"
+      ],
+      "n_skills": 13,
+      "n_proj": 0,
+      "n_lang": 1
+    },
+    "coverage": {
+      "name": "Ashish R. Chandel",
+      "email": "ashish.chandel25@gmail.com",
+      "phone": "+918850897115",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "Master of Business Administration (MBA)",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "Bachelor of Science (B.Sc.) — Computer Science",
+          "i": "Institute of Technology and Management, Navi Mumbai",
+          "f": "Computer Science",
+          "g": "",
+          "s": "",
+          "e": "2014"
+        },
+        {
+          "d": "",
+          "i": "University of Mumbai, Mumbai",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2008"
+        }
+      ],
+      "exp": [
+        {
+          "c": "Alexander Mann Solutions",
+          "r": "Senior Technology Manager",
+          "s": "2022-11",
+          "e": "2025-06",
+          "dl": 8
+        },
+        {
+          "c": "Sify Technologies",
+          "r": "Service Desk Manager",
+          "s": "2022-03",
+          "e": "2022-10",
+          "dl": 5
+        },
+        {
+          "c": "Teleperformance",
+          "r": "NOC Team Lead",
+          "s": "2020-11",
+          "e": "2022-02",
+          "dl": 5
+        },
+        {
+          "c": "Reliance Jio",
+          "r": "Senior Executive — Network Operations",
+          "s": "2017-07",
+          "e": "2020-09",
+          "dl": 5
+        },
+        {
+          "c": "CMS Info Systems Ltd",
+          "r": "Network Administrator",
+          "s": "2015-03",
+          "e": "2016-12",
+          "dl": 4
+        },
+        {
+          "c": "Reliance Communications",
+          "r": "Network Engineer",
+          "s": "2011-08",
+          "e": "2014-09",
+          "dl": 4
+        }
+      ],
+      "skills": [
+        "managing dat",
+        "Navi Mumbai",
+        "000+ endpoints",
+        "performing proactiv",
+        "ensuring",
+        "ITIL V4",
+        "ISO/IEC 27001",
+        "CAB",
+        "Incident / Problem / Change Management",
+        "Leadership: IT Budget Management",
+        "Vendor Governance",
+        "Team Development",
+        "Business Continuity Planning"
+      ],
+      "n_skills": 13,
+      "n_proj": 0,
+      "n_lang": 1
+    },
+    "repair": {
+      "name": "Ashish R. Chandel",
+      "email": "ashish.chandel25@gmail.com",
+      "phone": "+918850897115",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "Master of Business Administration (MBA)",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "Bachelor of Science (B.Sc.) — Computer Science",
+          "i": "Institute of Technology and Management, Navi Mumbai",
+          "f": "Computer Science",
+          "g": "",
+          "s": "",
+          "e": "2014"
+        },
+        {
+          "d": "",
+          "i": "University of Mumbai, Mumbai",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2008"
+        }
+      ],
+      "exp": [
+        {
+          "c": "Alexander Mann Solutions",
+          "r": "Senior Technology Manager",
+          "s": "2022-11",
+          "e": "2025-06",
+          "dl": 8
+        },
+        {
+          "c": "Sify Technologies",
+          "r": "Service Desk Manager",
+          "s": "2022-03",
+          "e": "2022-10",
+          "dl": 5
+        },
+        {
+          "c": "Teleperformance",
+          "r": "NOC Team Lead",
+          "s": "2020-11",
+          "e": "2022-02",
+          "dl": 5
+        },
+        {
+          "c": "Reliance Jio",
+          "r": "Senior Executive — Network Operations",
+          "s": "2017-07",
+          "e": "2020-09",
+          "dl": 5
+        },
+        {
+          "c": "CMS Info Systems Ltd",
+          "r": "Network Administrator",
+          "s": "2015-03",
+          "e": "2016-12",
+          "dl": 4
+        },
+        {
+          "c": "Reliance Communications",
+          "r": "Network Engineer",
+          "s": "2011-08",
+          "e": "2014-09",
+          "dl": 4
+        }
+      ],
+      "skills": [
+        "managing dat",
+        "Navi Mumbai",
+        "000+ endpoints",
+        "performing proactiv",
+        "ensuring",
+        "ITIL V4",
+        "ISO/IEC 27001",
+        "CAB",
+        "Incident / Problem / Change Management",
+        "Leadership: IT Budget Management",
+        "Vendor Governance",
+        "Team Development",
+        "Business Continuity Planning"
+      ],
+      "n_skills": 13,
+      "n_proj": 0,
+      "n_lang": 1
+    },
+    "final": {
+      "name": "Ashish R. Chandel",
+      "email": "ashish.chandel25@gmail.com",
+      "phone": "+918850897115",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "Master of Business Administration (MBA)",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "Bachelor of Science (B.Sc.) — Computer Science",
+          "i": "Institute of Technology and Management, Navi Mumbai",
+          "f": "Computer Science",
+          "g": "",
+          "s": "",
+          "e": "2014"
+        },
+        {
+          "d": "",
+          "i": "University of Mumbai, Mumbai",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2008"
+        }
+      ],
+      "exp": [
+        {
+          "c": "Alexander Mann Solutions",
+          "r": "Senior Technology Manager",
+          "s": "2022-11",
+          "e": "2025-06",
+          "dl": 8
+        },
+        {
+          "c": "Sify Technologies",
+          "r": "Service Desk Manager",
+          "s": "2022-03",
+          "e": "2022-10",
+          "dl": 5
+        },
+        {
+          "c": "Teleperformance",
+          "r": "NOC Team Lead",
+          "s": "2020-11",
+          "e": "2022-02",
+          "dl": 5
+        },
+        {
+          "c": "Reliance Jio",
+          "r": "Senior Executive — Network Operations",
+          "s": "2017-07",
+          "e": "2020-09",
+          "dl": 5
+        },
+        {
+          "c": "CMS Info Systems Ltd",
+          "r": "Network Administrator",
+          "s": "2015-03",
+          "e": "2016-12",
+          "dl": 4
+        },
+        {
+          "c": "Reliance Communications",
+          "r": "Network Engineer",
+          "s": "2011-08",
+          "e": "2014-09",
+          "dl": 4
+        }
+      ],
+      "skills": [
+        "managing dat",
+        "Navi Mumbai",
+        "000+ endpoints",
+        "performing proactiv",
+        "ensuring",
+        "ITIL V4",
+        "ISO/IEC 27001",
+        "CAB",
+        "Incident / Problem / Change Management",
+        "Leadership: IT Budget Management",
+        "Vendor Governance",
+        "Team Development",
+        "Business Continuity Planning"
+      ],
+      "n_skills": 13,
+      "n_proj": 0,
+      "n_lang": 1
+    },
+    "form": {
+      "name": "Ashish R. Chandel",
+      "email": "ashish.chandel25@gmail.com",
+      "loc": "Mumbai",
+      "n_edu": 3,
+      "n_exp": 6,
+      "n_cert": 4,
+      "skills": "managing dat, Navi Mumbai, 000+ endpoints, performing proactiv, ensuring, ITIL V4, ISO/IEC 27001, CAB, Incident / Problem / Change Management, Leadership: IT Budget Management, Ven"
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "26160_1726557418Abhi-Resume.docx",
+    "engine": "pymupdf",
+    "fallback": "address_first_missing_name",
+    "raw_chars": 1983,
+    "raw_head": "ABHISHEK RAJESH NIKALJI\n\nContact: 9833647101\tEmail id :- abhishek.rajesh.nikalji@gmail.com\n\n\nSummary\nvarying device shard drives database management and archival software. Can research problem.\n\nsolve and communicate the best ways to perform and coordinate tasks throughout the organization.\n\nTECHNICALSKILL: -\n\nRed hat& CentOS Linux (6.x,7.x,8.x),\n\n",
+    "sections": [
+      [
+        "Preamble",
+        93
+      ],
+      [
+        "Summary",
+        1502
+      ],
+      [
+        "Education",
+        108
+      ],
+      [
+        "Certifications",
+        122
+      ],
+      [
+        "Summary",
+        158
+      ]
+    ],
+    "parsed": {
+      "name": "Abhishek Rajesh Nikalji",
+      "email": "abhishek.rajesh.nikalji@gmail.com",
+      "phone": "9833647101",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "HSC from Maharashtra State Board",
+          "i": "BCOM from Mumbai University",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "SSC from Maharashtra State Board",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "coverage": {
+      "name": "Abhishek Rajesh Nikalji",
+      "email": "abhishek.rajesh.nikalji@gmail.com",
+      "phone": "9833647101",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "HSC from Maharashtra State Board",
+          "i": "BCOM from Mumbai University",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "SSC from Maharashtra State Board",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "repair": {
+      "name": "Abhishek Rajesh Nikalji",
+      "email": "abhishek.rajesh.nikalji@gmail.com",
+      "phone": "9833647101",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "HSC from Maharashtra State Board",
+          "i": "BCOM from Mumbai University",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "SSC from Maharashtra State Board",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "final": {
+      "name": "Abhishek Rajesh Nikalji",
+      "email": "abhishek.rajesh.nikalji@gmail.com",
+      "phone": "9833647101",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "HSC from Maharashtra State Board",
+          "i": "BCOM from Mumbai University",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "SSC from Maharashtra State Board",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "form": {
+      "name": "Abhishek Rajesh Nikalji",
+      "email": "abhishek.rajesh.nikalji@gmail.com",
+      "loc": "Mumbai",
+      "n_edu": 2,
+      "n_exp": 0,
+      "n_cert": 3,
+      "skills": ""
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "1658748886885_RAHUL SURESH SURVASE Updated (1).docx",
+    "engine": "pymupdf",
+    "fallback": "address_first_missing_name",
+    "raw_chars": 2928,
+    "raw_head": "RAHUL SURESH SURVASE\n\nEmail : Rahulsurvase08@gmail.com\n\nPhone: 8655656976\n\n\nSummary\nTo be involved in a working environment where I can utilize my skills and creativity that will effectively contribute to the growth of an organization.\n\n\nEducation\nBACHELOR OF ENGINEERING IN COMPUTER SCIENCE\t\t\t\t2017\nMumbai University | BHARAT COLLEGE OF ENGINEERING\n",
+    "sections": [
+      [
+        "Preamble",
+        76
+      ],
+      [
+        "Summary",
+        162
+      ],
+      [
+        "Education",
+        2396
+      ],
+      [
+        "Declaration",
+        291
+      ]
+    ],
+    "parsed": {
+      "name": "Rahul Suresh Survase",
+      "email": "Rahulsurvase08@gmail.com",
+      "phone": "8655656976",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "BACHELOR OF ENGINEERING IN COMPUTER SCIENCE",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2017"
+        },
+        {
+          "d": "",
+          "i": "BHARAT COLLEGE OF ENGINEERING CGPI :6.28 SGPI:7.48",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "DIPLOMA",
+          "i": "COMPUTER ENGINEERING",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2014"
+        },
+        {
+          "d": "",
+          "i": "KALA VIDYA MANDIR POLYTECHNIC",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "HSC",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2010"
+        },
+        {
+          "d": "",
+          "i": "MATRUCHHYA JUNIOR COLLEGE",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "SSC",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2008"
+        },
+        {
+          "d": "",
+          "i": "L.S.VIDYLAI",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "coverage": {
+      "name": "Rahul Suresh Survase",
+      "email": "Rahulsurvase08@gmail.com",
+      "phone": "8655656976",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "BACHELOR OF ENGINEERING IN COMPUTER SCIENCE",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2017"
+        },
+        {
+          "d": "",
+          "i": "BHARAT COLLEGE OF ENGINEERING CGPI :6.28 SGPI:7.48",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "DIPLOMA",
+          "i": "COMPUTER ENGINEERING",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2014"
+        },
+        {
+          "d": "",
+          "i": "KALA VIDYA MANDIR POLYTECHNIC",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "HSC",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2010"
+        },
+        {
+          "d": "",
+          "i": "MATRUCHHYA JUNIOR COLLEGE",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "SSC",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2008"
+        },
+        {
+          "d": "",
+          "i": "L.S.VIDYLAI",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "PERSONALINFORMATION:",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 3
+        }
+      ],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "repair": {
+      "name": "Rahul Suresh Survase",
+      "email": "Rahulsurvase08@gmail.com",
+      "phone": "8655656976",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "BACHELOR OF ENGINEERING IN COMPUTER SCIENCE",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2017"
+        },
+        {
+          "d": "",
+          "i": "BHARAT COLLEGE OF ENGINEERING CGPI :6.28 SGPI:7.48",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "DIPLOMA",
+          "i": "COMPUTER ENGINEERING",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2014"
+        },
+        {
+          "d": "",
+          "i": "KALA VIDYA MANDIR POLYTECHNIC",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "HSC",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2010"
+        },
+        {
+          "d": "",
+          "i": "MATRUCHHYA JUNIOR COLLEGE",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "SSC",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2008"
+        },
+        {
+          "d": "",
+          "i": "L.S.VIDYLAI",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "PERSONALINFORMATION:",
+          "r": "Title: SQL DBA",
+          "s": "",
+          "e": "",
+          "dl": 3
+        }
+      ],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "final": {
+      "name": "Rahul Suresh Survase",
+      "email": "Rahulsurvase08@gmail.com",
+      "phone": "8655656976",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "BACHELOR OF ENGINEERING IN COMPUTER SCIENCE",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2017"
+        },
+        {
+          "d": "",
+          "i": "BHARAT COLLEGE OF ENGINEERING CGPI :6.28 SGPI:7.48",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "DIPLOMA",
+          "i": "COMPUTER ENGINEERING",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2014"
+        },
+        {
+          "d": "",
+          "i": "KALA VIDYA MANDIR POLYTECHNIC",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "HSC",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2010"
+        },
+        {
+          "d": "",
+          "i": "MATRUCHHYA JUNIOR COLLEGE",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "SSC",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": "2008"
+        },
+        {
+          "d": "",
+          "i": "L.S.VIDYLAI",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "PERSONALINFORMATION:",
+          "r": "SQL DBA",
+          "s": "",
+          "e": "",
+          "dl": 3
+        }
+      ],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 0,
+      "n_lang": 3
+    },
+    "form": {
+      "name": "Rahul Suresh Survase",
+      "email": "Rahulsurvase08@gmail.com",
+      "loc": "Mumbai",
+      "n_edu": 8,
+      "n_exp": 1,
+      "n_cert": 0,
+      "skills": ""
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "3.1_YRS_PUNE_VIPUL  PATIL (1).pdf",
+    "engine": "pymupdf",
+    "fallback": "",
+    "raw_chars": 3385,
+    "raw_head": "RESUME\nMr. VIPUL ARVIND PATIL\nDATA ENGINEER\n+91- 99 70 38 80 01\nMind Spark Technology, Pune\nvipulpatil2502@gmail.com                                   -FROM SEPTEMBER 2020 TO STILL DATE-\n\n\nSummary\nTo obtain a challenging position in enterprise application integration\nenvironment where technology integrates with business functionalities\nto enhance b",
+    "sections": [
+      [
+        "Preamble",
+        189
+      ],
+      [
+        "Summary",
+        386
+      ],
+      [
+        "Summary",
+        944
+      ],
+      [
+        "Education",
+        328
+      ],
+      [
+        "Project",
+        1385
+      ],
+      [
+        "Declaration",
+        153
+      ]
+    ],
+    "parsed": {
+      "name": "Vipul Arvind Patil",
+      "email": "vipulpatil2502@gmail.com",
+      "phone": "9970388001",
+      "loc": "Pune",
+      "edu": [
+        {
+          "d": "",
+          "i": "Bachelor Degree in BE MECHANICAL in college PVPIT Budgaon",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "First Class in Higher Secondary, June 2014 at 64.77%",
+          "i": "",
+          "f": "",
+          "g": "55.56 %",
+          "s": "2014",
+          "e": "2018"
+        },
+        {
+          "d": "First Class in SSC June 2012, at",
+          "i": "",
+          "f": "",
+          "g": "83.45%",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 7,
+      "n_lang": 0
+    },
+    "coverage": {
+      "name": "Vipul Arvind Patil",
+      "email": "vipulpatil2502@gmail.com",
+      "phone": "9970388001",
+      "loc": "Pune",
+      "edu": [
+        {
+          "d": "",
+          "i": "Bachelor Degree in BE MECHANICAL in college PVPIT Budgaon",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "First Class in Higher Secondary, June 2014 at 64.77%",
+          "i": "",
+          "f": "",
+          "g": "55.56 %",
+          "s": "2014",
+          "e": "2018"
+        },
+        {
+          "d": "First Class in SSC June 2012, at",
+          "i": "",
+          "f": "",
+          "g": "83.45%",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 7,
+      "n_lang": 0
+    },
+    "repair": {
+      "name": "Vipul Arvind Patil",
+      "email": "vipulpatil2502@gmail.com",
+      "phone": "9970388001",
+      "loc": "Pune",
+      "edu": [
+        {
+          "d": "",
+          "i": "Bachelor Degree in BE MECHANICAL in college PVPIT Budgaon",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "First Class in Higher Secondary, June 2014 at 64.77%",
+          "i": "",
+          "f": "",
+          "g": "55.56 %",
+          "s": "2014",
+          "e": "2018"
+        },
+        {
+          "d": "First Class in SSC June 2012, at",
+          "i": "",
+          "f": "",
+          "g": "83.45%",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 7,
+      "n_lang": 0
+    },
+    "final": {
+      "name": "Vipul Arvind Patil",
+      "email": "vipulpatil2502@gmail.com",
+      "phone": "9970388001",
+      "loc": "Pune",
+      "edu": [
+        {
+          "d": "",
+          "i": "Bachelor Degree in BE MECHANICAL in college PVPIT Budgaon",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "First Class in Higher Secondary, June 2014 at 64.77%",
+          "i": "",
+          "f": "",
+          "g": "55.56 %",
+          "s": "2014",
+          "e": "2018"
+        },
+        {
+          "d": "First Class in SSC June 2012, at",
+          "i": "",
+          "f": "",
+          "g": "83.45%",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [],
+      "skills": [],
+      "n_skills": 0,
+      "n_proj": 7,
+      "n_lang": 0
+    },
+    "form": {
+      "name": "Vipul Arvind Patil",
+      "email": "vipulpatil2502@gmail.com",
+      "loc": "Pune",
+      "n_edu": 2,
+      "n_exp": 0,
+      "n_cert": 0,
+      "skills": ""
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "Ajinkya K MYSQL DBA.pdf",
+    "engine": "pymupdf",
+    "fallback": "",
+    "raw_chars": 9909,
+    "raw_head": "Contact\najinkyakharateak@gmail.com\n\n+91 7030556854\n\nLinkedIn\n\n\nEducation\no\nBachelor In Technology (B.Tech.)\nElectrical  Engineering\nVeermata Jijabai Technological Institute\n(2017-2021)\n\nSoft Skills\n\nAnalytical | Collaborator | Leader | Adaptable\n\n\nSkills\no\nRDBMS: MySQL, PostgreSQL\no\nScripting: Shell Script, Python\no\nBackup-Tools: Xtrabackup, mysqld",
+    "sections": [
+      [
+        "Contact",
+        63
+      ],
+      [
+        "Education",
+        185
+      ],
+      [
+        "Skills",
+        327
+      ],
+      [
+        "Skills",
+        184
+      ],
+      [
+        "Summary",
+        750
+      ],
+      [
+        "Experience",
+        1100
+      ],
+      [
+        "Achievements",
+        461
+      ],
+      [
+        "Personal Details",
+        3688
+      ],
+      [
+        "Contact",
+        800
+      ],
+      [
+        "Experience",
+        1086
+      ],
+      [
+        "Achievements",
+        460
+      ],
+      [
+        "Personal Details",
+        121
+      ],
+      [
+        "Education",
+        181
+      ],
+      [
+        "Skills",
+        330
+      ],
+      [
+        "Skills",
+        173
+      ]
+    ],
+    "parsed": {
+      "name": "",
+      "email": "ajinkyakharateak@gmail.com",
+      "phone": "+917030556854",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "Bachelor In Technology (B.Tech.)",
+          "i": "Veermata Jijabai Technological Institute  Soft Skills",
+          "f": "",
+          "g": "",
+          "s": "2017",
+          "e": "2021"
+        },
+        {
+          "d": "",
+          "i": "Collaborator",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "Veermata Jijabai Technological Institute  Soft Skills",
+          "f": "",
+          "g": "",
+          "s": "2017",
+          "e": "2021"
+        },
+        {
+          "d": "",
+          "i": "Collaborator",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "",
+          "r": "MySQL and PostgreSQL Database Administrator",
+          "s": "",
+          "e": "",
+          "dl": 10
+        },
+        {
+          "c": "",
+          "r": "MySQL and PostgreSQL Database Administrator",
+          "s": "",
+          "e": "",
+          "dl": 3
+        }
+      ],
+      "skills": [
+        "RDBMS: MySQL",
+        "PostgreSQL",
+        "Scripting: Shell Script",
+        "Python",
+        "Backup-Tools: Xtrabackup",
+        "mysqldump",
+        "pg_dump",
+        "pg_basebackup",
+        "SQL",
+        "PL/SQL",
+        "Monitoring Tools: Prometheus",
+        "Percona",
+        "Monitoring Management (PMM)",
+        "Grafana",
+        "Alerting Tool: Alertmanager",
+        "RHEL 7/8",
+        "Centos7",
+        "Ubuntu",
+        "Windows.",
+        "Installation and Configuring"
+      ],
+      "n_skills": 37,
+      "n_proj": 0,
+      "n_lang": 4
+    },
+    "coverage": {
+      "name": "",
+      "email": "ajinkyakharateak@gmail.com",
+      "phone": "+917030556854",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "Bachelor In Technology (B.Tech.)",
+          "i": "Veermata Jijabai Technological Institute  Soft Skills",
+          "f": "",
+          "g": "",
+          "s": "2017",
+          "e": "2021"
+        },
+        {
+          "d": "",
+          "i": "Collaborator",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "Veermata Jijabai Technological Institute  Soft Skills",
+          "f": "",
+          "g": "",
+          "s": "2017",
+          "e": "2021"
+        },
+        {
+          "d": "",
+          "i": "Collaborator",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "",
+          "r": "MySQL and PostgreSQL Database Administrator",
+          "s": "",
+          "e": "",
+          "dl": 10
+        },
+        {
+          "c": "",
+          "r": "MySQL and PostgreSQL Database Administrator",
+          "s": "",
+          "e": "",
+          "dl": 3
+        }
+      ],
+      "skills": [
+        "RDBMS: MySQL",
+        "PostgreSQL",
+        "Scripting: Shell Script",
+        "Python",
+        "Backup-Tools: Xtrabackup",
+        "mysqldump",
+        "pg_dump",
+        "pg_basebackup",
+        "SQL",
+        "PL/SQL",
+        "Monitoring Tools: Prometheus",
+        "Percona",
+        "Monitoring Management (PMM)",
+        "Grafana",
+        "Alerting Tool: Alertmanager",
+        "RHEL 7/8",
+        "Centos7",
+        "Ubuntu",
+        "Windows.",
+        "Installation and Configuring"
+      ],
+      "n_skills": 37,
+      "n_proj": 0,
+      "n_lang": 4
+    },
+    "repair": {
+      "name": "",
+      "email": "ajinkyakharateak@gmail.com",
+      "phone": "+917030556854",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "Bachelor In Technology (B.Tech.)",
+          "i": "Veermata Jijabai Technological Institute  Soft Skills",
+          "f": "",
+          "g": "",
+          "s": "2017",
+          "e": "2021"
+        },
+        {
+          "d": "",
+          "i": "Collaborator",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "Veermata Jijabai Technological Institute  Soft Skills",
+          "f": "",
+          "g": "",
+          "s": "2017",
+          "e": "2021"
+        },
+        {
+          "d": "",
+          "i": "Collaborator",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "Reliance Jio Platforms, Navi Mumbai",
+          "r": "MySQL and PostgreSQL Database Administrator",
+          "s": "2021-06",
+          "e": "",
+          "dl": 10
+        },
+        {
+          "c": "",
+          "r": "MySQL and PostgreSQL Database Administrator",
+          "s": "2021-06",
+          "e": "",
+          "dl": 3
+        }
+      ],
+      "skills": [
+        "RDBMS: MySQL",
+        "PostgreSQL",
+        "Scripting: Shell Script",
+        "Python",
+        "Backup-Tools: Xtrabackup",
+        "mysqldump",
+        "pg_dump",
+        "pg_basebackup",
+        "SQL",
+        "PL/SQL",
+        "Monitoring Tools: Prometheus",
+        "Percona",
+        "Monitoring Management (PMM)",
+        "Grafana",
+        "Alerting Tool: Alertmanager",
+        "RHEL 7/8",
+        "Centos7",
+        "Ubuntu",
+        "Windows.",
+        "Installation and Configuring"
+      ],
+      "n_skills": 37,
+      "n_proj": 0,
+      "n_lang": 4
+    },
+    "final": {
+      "name": "",
+      "email": "ajinkyakharateak@gmail.com",
+      "phone": "+917030556854",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "Bachelor In Technology (B.Tech.)",
+          "i": "Veermata Jijabai Technological Institute  Soft Skills",
+          "f": "",
+          "g": "",
+          "s": "2017",
+          "e": "2021"
+        },
+        {
+          "d": "",
+          "i": "Collaborator",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "Veermata Jijabai Technological Institute  Soft Skills",
+          "f": "",
+          "g": "",
+          "s": "2017",
+          "e": "2021"
+        },
+        {
+          "d": "",
+          "i": "Collaborator",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "Reliance Jio Platforms, Navi Mumbai",
+          "r": "MySQL and PostgreSQL Database Administrator",
+          "s": "2021-06",
+          "e": "",
+          "dl": 10
+        },
+        {
+          "c": "",
+          "r": "MySQL and PostgreSQL Database Administrator",
+          "s": "2021-06",
+          "e": "",
+          "dl": 3
+        }
+      ],
+      "skills": [
+        "RDBMS: MySQL",
+        "PostgreSQL",
+        "Scripting: Shell Script",
+        "Python",
+        "Backup-Tools: Xtrabackup",
+        "mysqldump",
+        "pg_dump",
+        "pg_basebackup",
+        "SQL",
+        "PL/SQL",
+        "Monitoring Tools: Prometheus",
+        "Percona",
+        "Monitoring Management (PMM)",
+        "Grafana",
+        "Alerting Tool: Alertmanager",
+        "RHEL 7/8",
+        "Centos7",
+        "Ubuntu",
+        "Windows.",
+        "Installation and Configuring"
+      ],
+      "n_skills": 37,
+      "n_proj": 0,
+      "n_lang": 4
+    },
+    "form": {
+      "name": "",
+      "email": "ajinkyakharateak@gmail.com",
+      "loc": "Mumbai",
+      "n_edu": 4,
+      "n_exp": 2,
+      "n_cert": 0,
+      "skills": "RDBMS: MySQL, PostgreSQL, Scripting: Shell Script, Python, Backup-Tools: Xtrabackup, mysqldump, pg_dump, pg_basebackup, SQL, PL/SQL, Monitoring Tools: Prometheus, Percona, Monitori"
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "1vinay(2)Ea3JB.pdf",
+    "engine": "pymupdf",
+    "fallback": "",
+    "raw_chars": 2844,
+    "raw_head": "VINAY KUMAR OLI\n\n9071840599\n------------------------------------------------------------------------------------------------\n\nSummary\nTo work in an organization with a professional environment where I  can\nutilize and apply my knowledge and skills to help me grow and fulfil the\ngoals of the organization simultaneously.\n\nEducation\nSECONDARY SCHOOL -",
+    "sections": [
+      [
+        "Preamble",
+        126
+      ],
+      [
+        "Summary",
+        196
+      ],
+      [
+        "Education",
+        175
+      ],
+      [
+        "Skills",
+        104
+      ],
+      [
+        "Experience",
+        1255
+      ],
+      [
+        "Education",
+        219
+      ],
+      [
+        "Languages",
+        579
+      ],
+      [
+        "Personal Details",
+        189
+      ]
+    ],
+    "parsed": {
+      "name": "Vinay Kumar Oli",
+      "email": "",
+      "phone": "9071840599",
+      "loc": "",
+      "edu": [
+        {
+          "d": "SECONDARY SCHOOL",
+          "i": "Karnataka State Board",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "Pre University Education Board - 2016  -84%",
+          "i": "PRE UNIVERSITY",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "BACHELOR OF ENGINEERING - VTU",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "B.E (Electronics & communication)",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "Arduino projects.",
+          "r": "Website",
+          "s": "",
+          "e": "",
+          "dl": 1
+        },
+        {
+          "c": "AREAS OF STRENGTH",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "HOBBIES",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "PERSONAL SUMMARY",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 3
+        }
+      ],
+      "skills": [
+        "HTML",
+        "Windows",
+        "Linux",
+        "PostgreSQL",
+        "EDB",
+        "Wordpress"
+      ],
+      "n_skills": 6,
+      "n_proj": 0,
+      "n_lang": 31
+    },
+    "coverage": {
+      "name": "Vinay Kumar Oli",
+      "email": "",
+      "phone": "9071840599",
+      "loc": "",
+      "edu": [
+        {
+          "d": "SECONDARY SCHOOL",
+          "i": "Karnataka State Board",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "Pre University Education Board - 2016  -84%",
+          "i": "PRE UNIVERSITY",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "BACHELOR OF ENGINEERING - VTU",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "B.E (Electronics & communication)",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "Arduino projects.",
+          "r": "Website",
+          "s": "",
+          "e": "",
+          "dl": 1
+        },
+        {
+          "c": "AREAS OF STRENGTH",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "HOBBIES",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "PERSONAL SUMMARY",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 3
+        }
+      ],
+      "skills": [
+        "HTML",
+        "Windows",
+        "Linux",
+        "PostgreSQL",
+        "EDB",
+        "Wordpress"
+      ],
+      "n_skills": 6,
+      "n_proj": 0,
+      "n_lang": 31
+    },
+    "repair": {
+      "name": "Vinay Kumar Oli",
+      "email": "",
+      "phone": "9071840599",
+      "loc": "",
+      "edu": [
+        {
+          "d": "SECONDARY SCHOOL",
+          "i": "Karnataka State Board",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "Pre University Education Board - 2016  -84%",
+          "i": "PRE UNIVERSITY",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "BACHELOR OF ENGINEERING - VTU",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "B.E (Electronics & communication)",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "Arduino projects.",
+          "r": "Website",
+          "s": "",
+          "e": "",
+          "dl": 1
+        },
+        {
+          "c": "AREAS OF STRENGTH",
+          "r": "System Admin & Web Admin",
+          "s": "",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "HOBBIES",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "PERSONAL SUMMARY",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 3
+        }
+      ],
+      "skills": [
+        "HTML",
+        "Windows",
+        "Linux",
+        "PostgreSQL",
+        "EDB",
+        "Wordpress"
+      ],
+      "n_skills": 6,
+      "n_proj": 0,
+      "n_lang": 31
+    },
+    "final": {
+      "name": "Vinay Kumar Oli",
+      "email": "",
+      "phone": "9071840599",
+      "loc": "",
+      "edu": [
+        {
+          "d": "SECONDARY SCHOOL",
+          "i": "Karnataka State Board",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "Pre University Education Board - 2016  -84%",
+          "i": "PRE UNIVERSITY",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "BACHELOR OF ENGINEERING - VTU",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "B.E (Electronics & communication)",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "Arduino projects.",
+          "r": "Website",
+          "s": "",
+          "e": "",
+          "dl": 1
+        },
+        {
+          "c": "AREAS OF STRENGTH",
+          "r": "System Admin & Web Admin",
+          "s": "",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "HOBBIES",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 3
+        },
+        {
+          "c": "PERSONAL SUMMARY",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 3
+        }
+      ],
+      "skills": [
+        "HTML",
+        "Windows",
+        "Linux",
+        "PostgreSQL",
+        "EDB",
+        "Wordpress"
+      ],
+      "n_skills": 6,
+      "n_proj": 0,
+      "n_lang": 31
+    },
+    "form": {
+      "name": "Vinay Kumar Oli",
+      "email": "",
+      "loc": "",
+      "n_edu": 4,
+      "n_exp": 4,
+      "n_cert": 0,
+      "skills": "HTML, Windows, Linux, PostgreSQL, EDB, Wordpress"
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "_Trupti Kokate Resume will inform by 14 feb if comfortable for vikhroli location.docx",
+    "engine": "pymupdf",
+    "fallback": "",
+    "raw_chars": 2770,
+    "raw_head": "Trupti Kokate\n\nEmail: truptikokate0701@gmail.com Phone:  9321444676  Address: Mira Road, Thane\n\n\nExperience\nSocial Media Executive / Intern, Laqshya Institute of Skills Training – Education Industry \t          July 2025 – Present\n\n• Managed Instagram and Facebook pages for the institute\n• Created posts, reels, captions, and creatives using Canva\n• ",
+    "sections": [
+      [
+        "Preamble",
+        97
+      ],
+      [
+        "Experience",
+        1068
+      ],
+      [
+        "Education",
+        1047
+      ],
+      [
+        "Certifications",
+        544
+      ]
+    ],
+    "parsed": {
+      "name": "Trupti Kokate",
+      "email": "truptikokate0701@gmail.com",
+      "phone": "9321444676",
+      "loc": "Thane",
+      "edu": [
+        {
+          "d": "MS Word",
+          "i": "Additional Website & SEO Experience – SAP Course Pages (Laqshya Institute)",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "",
+          "r": "Social Media Executive / Intern",
+          "s": "2025-07",
+          "e": "",
+          "dl": 6
+        },
+        {
+          "c": "Real Estate Industry,Mumbai",
+          "r": "Digital Marketing Intern, Radhika Realty",
+          "s": "2025-05",
+          "e": "2025-07",
+          "dl": 5
+        }
+      ],
+      "skills": [
+        "& PLATFORMS",
+        "Canva",
+        "Google Analytics (Basics)",
+        "Google Search Console (Basics)",
+        "MS Word",
+        "Advanced Excel"
+      ],
+      "n_skills": 6,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "coverage": {
+      "name": "Trupti Kokate",
+      "email": "truptikokate0701@gmail.com",
+      "phone": "9321444676",
+      "loc": "Thane",
+      "edu": [
+        {
+          "d": "MS Word",
+          "i": "Additional Website & SEO Experience – SAP Course Pages (Laqshya Institute)",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "",
+          "r": "Social Media Executive / Intern",
+          "s": "2025-07",
+          "e": "",
+          "dl": 6
+        },
+        {
+          "c": "Real Estate Industry,Mumbai",
+          "r": "Digital Marketing Intern, Radhika Realty",
+          "s": "2025-05",
+          "e": "2025-07",
+          "dl": 5
+        }
+      ],
+      "skills": [
+        "& PLATFORMS",
+        "Canva",
+        "Google Analytics (Basics)",
+        "Google Search Console (Basics)",
+        "MS Word",
+        "Advanced Excel"
+      ],
+      "n_skills": 6,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "repair": {
+      "name": "Trupti Kokate",
+      "email": "truptikokate0701@gmail.com",
+      "phone": "9321444676",
+      "loc": "Thane",
+      "edu": [
+        {
+          "d": "MS Word",
+          "i": "Additional Website & SEO Experience – SAP Course Pages (Laqshya Institute)",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "Laqshya Institute of Skills Training – Education Industry",
+          "r": "Social Media Executive / Intern",
+          "s": "2025-06",
+          "e": "",
+          "dl": 6
+        },
+        {
+          "c": "Real Estate Industry,Mumbai",
+          "r": "Digital Marketing Intern, Radhika Realty",
+          "s": "2025-06",
+          "e": "2025-06",
+          "dl": 5
+        }
+      ],
+      "skills": [
+        "& PLATFORMS",
+        "Canva",
+        "Google Analytics (Basics)",
+        "Google Search Console (Basics)",
+        "MS Word",
+        "Advanced Excel"
+      ],
+      "n_skills": 6,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "final": {
+      "name": "Trupti Kokate",
+      "email": "truptikokate0701@gmail.com",
+      "phone": "9321444676",
+      "loc": "Thane",
+      "edu": [
+        {
+          "d": "MS Word",
+          "i": "Additional Website & SEO Experience – SAP Course Pages (Laqshya Institute)",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "",
+          "r": "Social Media Executive / Intern",
+          "s": "2025-07",
+          "e": "",
+          "dl": 6
+        },
+        {
+          "c": "Real Estate Industry,Mumbai",
+          "r": "Digital Marketing Intern, Radhika Realty",
+          "s": "2025-05",
+          "e": "2025-07",
+          "dl": 5
+        }
+      ],
+      "skills": [
+        "& PLATFORMS",
+        "Canva",
+        "Google Analytics (Basics)",
+        "Google Search Console (Basics)",
+        "MS Word",
+        "Advanced Excel"
+      ],
+      "n_skills": 6,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "form": {
+      "name": "Trupti Kokate",
+      "email": "truptikokate0701@gmail.com",
+      "loc": "Thane",
+      "n_edu": 1,
+      "n_exp": 2,
+      "n_cert": 8,
+      "skills": "& PLATFORMS, Canva, Google Analytics (Basics), Google Search Console (Basics), MS Word, Advanced Excel"
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "recovered",
+        "evidence": true,
+        "detail": "2 rows"
+      }
+    ]
+  },
+  {
+    "file": "01 Furqan Khan - HR - 9 Years Experience.pdf",
+    "engine": "pymupdf",
+    "fallback": "",
+    "raw_chars": 4711,
+    "raw_head": "Furqan Khan\n7039834046 | furqan.khan.fk86@gmail.com\n\nSummary\nA dynamic HR Professional with over 9 years of experience in Recruitment, Resourcing & Development,\nPerformance Management, Compensation & Benefits, and Employee Engagement Activities.\n\nExperience in implementing HR systems, policies & processes. Major expertise in start-up + corporate. W",
+    "sections": [
+      [
+        "Preamble",
+        53
+      ],
+      [
+        "Summary",
+        487
+      ],
+      [
+        "Skills",
+        172
+      ],
+      [
+        "Experience",
+        3999
+      ]
+    ],
+    "parsed": {
+      "name": "Furqan Khan",
+      "email": "furqan.khan.fk86@gmail.com",
+      "phone": "7039834046",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "B. Com",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "ImmersionX Technologies LLP – HR Generalist",
+          "r": "Klasy Innovations Pvt Ltd – Human Resource",
+          "s": "2022-07",
+          "e": "2026-02",
+          "dl": 1
+        },
+        {
+          "c": "Wohlig Transformation Pvt Ltd",
+          "r": "Senior HR Executive",
+          "s": "2019-06",
+          "e": "2021-01",
+          "dl": 1
+        },
+        {
+          "c": "Work Summary",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 12
+        },
+        {
+          "c": "HR Generalist",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 12
+        },
+        {
+          "c": "Recruitments: Onboarding",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "HR Policy & Process: Payroll",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Employee Engagement: Grievance Redressal",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Employee Life Cycle: Induction",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Retentions: HR Branding",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Job Analysis: Exit",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "B. Com",
+          "r": "Education:",
+          "s": "",
+          "e": "",
+          "dl": 1
+        }
+      ],
+      "skills": [
+        "Recruitments",
+        "Onboarding",
+        "HR Policy & Process",
+        "Payroll",
+        "Employee Engagement",
+        "Grievance Redressal",
+        "Employee Life Cycle",
+        "Induction",
+        "Retentions",
+        "HR Branding",
+        "Job Analysis",
+        "Exit"
+      ],
+      "n_skills": 12,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "coverage": {
+      "name": "Furqan Khan",
+      "email": "furqan.khan.fk86@gmail.com",
+      "phone": "7039834046",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "B. Com",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "ImmersionX Technologies LLP – HR Generalist",
+          "r": "Klasy Innovations Pvt Ltd – Human Resource",
+          "s": "2022-07",
+          "e": "2026-02",
+          "dl": 1
+        },
+        {
+          "c": "Wohlig Transformation Pvt Ltd",
+          "r": "Senior HR Executive",
+          "s": "2019-06",
+          "e": "2021-01",
+          "dl": 1
+        },
+        {
+          "c": "Work Summary",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 12
+        },
+        {
+          "c": "HR Generalist",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 12
+        },
+        {
+          "c": "Recruitments: Onboarding",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "HR Policy & Process: Payroll",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Employee Engagement: Grievance Redressal",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Employee Life Cycle: Induction",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Retentions: HR Branding",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Job Analysis: Exit",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "B. Com",
+          "r": "Education:",
+          "s": "",
+          "e": "",
+          "dl": 1
+        }
+      ],
+      "skills": [
+        "Recruitments",
+        "Onboarding",
+        "HR Policy & Process",
+        "Payroll",
+        "Employee Engagement",
+        "Grievance Redressal",
+        "Employee Life Cycle",
+        "Induction",
+        "Retentions",
+        "HR Branding",
+        "Job Analysis",
+        "Exit"
+      ],
+      "n_skills": 12,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "repair": {
+      "name": "Furqan Khan",
+      "email": "furqan.khan.fk86@gmail.com",
+      "phone": "7039834046",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "B. Com",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "ImmersionX Technologies LLP – HR Generalist",
+          "r": "Klasy Innovations Pvt Ltd – Human Resource",
+          "s": "2022-07",
+          "e": "2026-02",
+          "dl": 1
+        },
+        {
+          "c": "Wohlig Transformation Pvt Ltd",
+          "r": "Senior HR Executive",
+          "s": "2019-06",
+          "e": "2021-01",
+          "dl": 1
+        },
+        {
+          "c": "Work Summary",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 12
+        },
+        {
+          "c": "HR Generalist",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 12
+        },
+        {
+          "c": "Recruitments: Onboarding",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "HR Policy & Process: Payroll",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Employee Engagement: Grievance Redressal",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Employee Life Cycle: Induction",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Retentions: HR Branding",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Job Analysis: Exit",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "B. Com",
+          "r": "Education:",
+          "s": "",
+          "e": "",
+          "dl": 1
+        }
+      ],
+      "skills": [
+        "Recruitments",
+        "Onboarding",
+        "HR Policy & Process",
+        "Payroll",
+        "Employee Engagement",
+        "Grievance Redressal",
+        "Employee Life Cycle",
+        "Induction",
+        "Retentions",
+        "HR Branding",
+        "Job Analysis",
+        "Exit"
+      ],
+      "n_skills": 12,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "final": {
+      "name": "Furqan Khan",
+      "email": "furqan.khan.fk86@gmail.com",
+      "phone": "7039834046",
+      "loc": "Mumbai",
+      "edu": [
+        {
+          "d": "B. Com",
+          "i": "",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        }
+      ],
+      "exp": [
+        {
+          "c": "ImmersionX Technologies LLP – HR Generalist",
+          "r": "Klasy Innovations Pvt Ltd – Human Resource",
+          "s": "2022-07",
+          "e": "2026-02",
+          "dl": 1
+        },
+        {
+          "c": "Wohlig Transformation Pvt Ltd",
+          "r": "Senior HR Executive",
+          "s": "2019-06",
+          "e": "2021-01",
+          "dl": 1
+        },
+        {
+          "c": "Work Summary",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 12
+        },
+        {
+          "c": "HR Generalist",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 12
+        },
+        {
+          "c": "Recruitments: Onboarding",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "HR Policy & Process: Payroll",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Employee Engagement: Grievance Redressal",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Employee Life Cycle: Induction",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Retentions: HR Branding",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "Job Analysis: Exit",
+          "r": "",
+          "s": "",
+          "e": "",
+          "dl": 13
+        },
+        {
+          "c": "B. Com",
+          "r": "Education:",
+          "s": "",
+          "e": "",
+          "dl": 1
+        }
+      ],
+      "skills": [
+        "Recruitments",
+        "Onboarding",
+        "HR Policy & Process",
+        "Payroll",
+        "Employee Engagement",
+        "Grievance Redressal",
+        "Employee Life Cycle",
+        "Induction",
+        "Retentions",
+        "HR Branding",
+        "Job Analysis",
+        "Exit"
+      ],
+      "n_skills": 12,
+      "n_proj": 0,
+      "n_lang": 0
+    },
+    "form": {
+      "name": "Furqan Khan",
+      "email": "furqan.khan.fk86@gmail.com",
+      "loc": "Mumbai",
+      "n_edu": 1,
+      "n_exp": 11,
+      "n_cert": 0,
+      "skills": "Recruitments, Onboarding, HR Policy & Process, Payroll, Employee Engagement, Grievance Redressal, Employee Life Cycle, Induction, Retentions, HR Branding, Job Analysis, Exit"
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      }
+    ]
+  },
+  {
+    "file": "3 Years of Exp MySQL Database Administrator.docx",
+    "engine": "pymupdf",
+    "fallback": "",
+    "raw_chars": 4975,
+    "raw_head": "Jeevan kumar reddy C\n\nMobile: 8867587360\n\nMail ID: jeevanreddy.dsql@gmail.com\n\n\nSummary\nHaving 3 years of experience in the diverse areas of Database Administration. Seeking a proactive responsible position where i can continue to expand my knowledge and contribute to the growth of the organization.\n\n\nSummary\nStrong Experience in MySQL Server versi",
+    "sections": [
+      [
+        "Preamble",
+        80
+      ],
+      [
+        "Summary",
+        223
+      ],
+      [
+        "Summary",
+        994
+      ],
+      [
+        "Education",
+        149
+      ],
+      [
+        "Experience",
+        89
+      ],
+      [
+        "Skills",
+        2960
+      ],
+      [
+        "Personal Details",
+        175
+      ],
+      [
+        "Declaration",
+        305
+      ]
+    ],
+    "parsed": {
+      "name": "Jeevan kumar reddy C",
+      "email": "jeevanreddy.dsql@gmail.com",
+      "phone": "8867587360",
+      "loc": "",
+      "edu": [
+        {
+          "d": "B.com",
+          "i": "SV University, Tirupathi",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "Organization: Infosys Duration:",
+          "f": "",
+          "g": "",
+          "s": "2023-07",
+          "e": "Present"
+        }
+      ],
+      "exp": [
+        {
+          "c": "HCL TECH",
+          "r": "Lead Engineer",
+          "s": "",
+          "e": "",
+          "dl": 0
+        },
+        {
+          "c": "Duration:",
+          "r": "",
+          "s": "2021-08",
+          "e": "2023-07",
+          "dl": 0
+        }
+      ],
+      "skills": [
+        "PROJECT-1:",
+        "Organization                          : HCL TECH",
+        "Project Name\t\t            :  Xerox",
+        "Duration\t\t\t:  Aug 2021 to July 2023",
+        "SQL",
+        "MYSQL",
+        "UNIX",
+        "PHP",
+        "Red hat Enterprise Linux",
+        "Roles and Responsibilities:",
+        "Taking backups for prod and non-prod database depends on requests.",
+        "Configured innodb and MyISAM variables",
+        "Handling Scheduled and planned production changes",
+        "Setup master slave replication.",
+        "Performance Tuning on a daily basis for preventing issues and providing capacity",
+        "planning using MySQL Enterprise Monitor.",
+        "groups and set up restrictive permissions",
+        "Performed MySQL Replication setup and administration on Master-Slave",
+        "Design",
+        "Development and Testing and then deployment."
+      ],
+      "n_skills": 36,
+      "n_proj": 0,
+      "n_lang": 4
+    },
+    "coverage": {
+      "name": "Jeevan kumar reddy C",
+      "email": "jeevanreddy.dsql@gmail.com",
+      "phone": "8867587360",
+      "loc": "",
+      "edu": [
+        {
+          "d": "B.com",
+          "i": "SV University, Tirupathi",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "Organization: Infosys Duration:",
+          "f": "",
+          "g": "",
+          "s": "2023-07",
+          "e": "Present"
+        }
+      ],
+      "exp": [
+        {
+          "c": "HCL TECH",
+          "r": "Lead Engineer",
+          "s": "",
+          "e": "",
+          "dl": 0
+        },
+        {
+          "c": "Duration:",
+          "r": "",
+          "s": "2021-08",
+          "e": "2023-07",
+          "dl": 0
+        }
+      ],
+      "skills": [
+        "PROJECT-1:",
+        "Organization                          : HCL TECH",
+        "Project Name\t\t            :  Xerox",
+        "Duration\t\t\t:  Aug 2021 to July 2023",
+        "SQL",
+        "MYSQL",
+        "UNIX",
+        "PHP",
+        "Red hat Enterprise Linux",
+        "Roles and Responsibilities:",
+        "Taking backups for prod and non-prod database depends on requests.",
+        "Configured innodb and MyISAM variables",
+        "Handling Scheduled and planned production changes",
+        "Setup master slave replication.",
+        "Performance Tuning on a daily basis for preventing issues and providing capacity",
+        "planning using MySQL Enterprise Monitor.",
+        "groups and set up restrictive permissions",
+        "Performed MySQL Replication setup and administration on Master-Slave",
+        "Design",
+        "Development and Testing and then deployment."
+      ],
+      "n_skills": 36,
+      "n_proj": 0,
+      "n_lang": 4
+    },
+    "repair": {
+      "name": "Jeevan kumar reddy C",
+      "email": "jeevanreddy.dsql@gmail.com",
+      "phone": "8867587360",
+      "loc": "",
+      "edu": [
+        {
+          "d": "B.com",
+          "i": "SV University, Tirupathi",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "Organization: Infosys Duration:",
+          "f": "",
+          "g": "",
+          "s": "2023-07",
+          "e": "Present"
+        }
+      ],
+      "exp": [
+        {
+          "c": "HCL TECH",
+          "r": "Lead Engineer",
+          "s": "",
+          "e": "",
+          "dl": 0
+        },
+        {
+          "c": "Duration:",
+          "r": "",
+          "s": "2021-08",
+          "e": "2023-07",
+          "dl": 0
+        }
+      ],
+      "skills": [
+        "PROJECT-1:",
+        "Organization                          : HCL TECH",
+        "Project Name\t\t            :  Xerox",
+        "Duration\t\t\t:  Aug 2021 to July 2023",
+        "SQL",
+        "MYSQL",
+        "UNIX",
+        "PHP",
+        "Red hat Enterprise Linux",
+        "Roles and Responsibilities:",
+        "Taking backups for prod and non-prod database depends on requests.",
+        "Configured innodb and MyISAM variables",
+        "Handling Scheduled and planned production changes",
+        "Setup master slave replication.",
+        "Performance Tuning on a daily basis for preventing issues and providing capacity",
+        "planning using MySQL Enterprise Monitor.",
+        "groups and set up restrictive permissions",
+        "Performed MySQL Replication setup and administration on Master-Slave",
+        "Design",
+        "Development and Testing and then deployment."
+      ],
+      "n_skills": 36,
+      "n_proj": 0,
+      "n_lang": 4
+    },
+    "final": {
+      "name": "Jeevan kumar reddy C",
+      "email": "jeevanreddy.dsql@gmail.com",
+      "phone": "8867587360",
+      "loc": "",
+      "edu": [
+        {
+          "d": "B.com",
+          "i": "SV University, Tirupathi",
+          "f": "",
+          "g": "",
+          "s": "",
+          "e": ""
+        },
+        {
+          "d": "",
+          "i": "Organization: Infosys Duration:",
+          "f": "",
+          "g": "",
+          "s": "2023-07",
+          "e": "Present"
+        }
+      ],
+      "exp": [
+        {
+          "c": "HCL TECH",
+          "r": "Lead Engineer",
+          "s": "",
+          "e": "",
+          "dl": 0
+        },
+        {
+          "c": "Duration:",
+          "r": "",
+          "s": "2021-08",
+          "e": "2023-07",
+          "dl": 0
+        }
+      ],
+      "skills": [
+        "PROJECT-1:",
+        "Organization                          : HCL TECH",
+        "Project Name\t\t            :  Xerox",
+        "Duration\t\t\t:  Aug 2021 to July 2023",
+        "SQL",
+        "MYSQL",
+        "UNIX",
+        "PHP",
+        "Red hat Enterprise Linux",
+        "Roles and Responsibilities:",
+        "Taking backups for prod and non-prod database depends on requests.",
+        "Configured innodb and MyISAM variables",
+        "Handling Scheduled and planned production changes",
+        "Setup master slave replication.",
+        "Performance Tuning on a daily basis for preventing issues and providing capacity",
+        "planning using MySQL Enterprise Monitor.",
+        "groups and set up restrictive permissions",
+        "Performed MySQL Replication setup and administration on Master-Slave",
+        "Design",
+        "Development and Testing and then deployment."
+      ],
+      "n_skills": 36,
+      "n_proj": 0,
+      "n_lang": 4
+    },
+    "form": {
+      "name": "Jeevan kumar reddy C",
+      "email": "jeevanreddy.dsql@gmail.com",
+      "loc": "",
+      "n_edu": 2,
+      "n_exp": 2,
+      "n_cert": 0,
+      "skills": "PROJECT-1:, Organization                          : HCL TECH, Project Name\t\t            :  Xerox, Duration\t\t\t:  Aug 2021 to July 2023, SQL, MYSQL, UNIX, PHP, Red hat Enterprise Lin"
+    },
+    "coverage_status": [
+      {
+        "field": "fullName",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "email",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "phone",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "location",
+        "status": "missing_no_evidence",
+        "evidence": false,
+        "detail": ""
+      },
+      {
+        "field": "education",
+        "status": "filled",
+        "evidence": true,
+        "detail": ""
+      },
+      {
+        "field": "experience",
+        "status": "missing_with_evidence",
+        "evidence": true,
+        "detail": ""
+      }
+    ]
+  }
+]

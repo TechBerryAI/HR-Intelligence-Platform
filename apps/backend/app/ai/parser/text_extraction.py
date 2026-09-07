@@ -1,8 +1,11 @@
 """
 Text Extraction from PDF, DOCX, and image files.
 
-Prefers PyMuPDF for digital PDF text; falls back to OCR for scanned/image PDFs
-and direct image uploads. OCR uses RapidOCR (pip-only via requirements.txt);
+Prefers PyMuPDF for digital PDF text. pdfplumber is an automatic secondary
+extractor for table-heavy / poor-quality digital PDFs (see
+pdfplumber_extractor.py); the system chooses it — there is no extractor env flag.
+Falls back to OCR for scanned/image PDFs and
+direct image uploads. OCR uses RapidOCR (pip-only via requirements.txt);
 optional system Tesseract is a secondary fallback. Optional PARSING_API is last resort.
 """
 from __future__ import annotations
@@ -42,6 +45,9 @@ OCR_DPI_FAST = max(72, int(os.getenv('OCR_DPI_FAST', os.getenv('HCIP_OCR_DPI_STA
 MIN_TEXT_CHARS = 30
 # Last PDF/image extract max DPI (pipeline uses this to skip a second 300 DPI pass).
 _LAST_EXTRACT_MAX_DPI = 0
+# Last PDF engine used by extract_text_from_pdf (pymupdf | pdfplumber | pypdf2).
+_LAST_PDF_EXTRACTOR = ''
+_LAST_PDF_FALLBACK_REASON = ''
 # Per-page digital text below this triggers OCR.
 PAGE_OCR_TEXT_THRESHOLD = 80
 # If digital text is below this and page has images, prefer OCR.
@@ -80,6 +86,16 @@ def _ocr_dpi_fast() -> int:
 def last_extract_max_dpi() -> int:
     """Max DPI used by the most recent extract_text() call (0 if none / digital-only)."""
     return int(_LAST_EXTRACT_MAX_DPI or 0)
+
+
+def last_pdf_extractor() -> str:
+    """Engine that produced the most recent extract_text_from_pdf() result."""
+    return _LAST_PDF_EXTRACTOR
+
+
+def last_pdf_fallback_reason() -> str:
+    """Why pdfplumber was considered (empty when PyMuPDF was used as-is)."""
+    return _LAST_PDF_FALLBACK_REASON
 
 
 def looks_like_garbage_extract(s: str, *, min_chars: int | None = None) -> bool:
@@ -749,23 +765,88 @@ def extract_text_from_pdf_via_api(file_data: bytes, filename: str) -> str:
         raise ValueError(f'Failed to extract text via API: {e}') from e
 
 
+def _is_pymupdf_missing(exc: BaseException) -> bool:
+    msg = str(exc)
+    return 'pymupdf' in msg.lower() or 'PyMuPDF' in msg
+
+
+def _set_last_pdf_extractor(name: str, reason: str = '') -> None:
+    global _LAST_PDF_EXTRACTOR, _LAST_PDF_FALLBACK_REASON
+    _LAST_PDF_EXTRACTOR = name
+    _LAST_PDF_FALLBACK_REASON = reason
+
+
+def _try_pypdf2_fallback(file_data: bytes) -> str:
+    text = extract_text_from_pdf_pypdf2(file_data)
+    _set_last_pdf_extractor('pypdf2')
+    return text
+
+
 def extract_text_from_pdf(file_data: bytes, *, dpi: int | None = None) -> str:
-    """Extract text from PDF: PyMuPDF (+OCR) → PyPDF2 → raise."""
+    """Extract text from PDF: PyMuPDF (+OCR) → [pdfplumber if needed] → PyPDF2 → raise."""
+    _set_last_pdf_extractor('')
+    pymupdf_text: str | None = None
+    pymupdf_error: BaseException | None = None
+    unexpected = False
+
     try:
-        return extract_text_from_pdf_pymupdf(file_data, dpi=dpi)
+        pymupdf_text = extract_text_from_pdf_pymupdf(file_data, dpi=dpi)
     except ValueError as e:
-        # If PyMuPDF missing, try PyPDF2; otherwise re-raise for OCR/API fallback chain.
-        if 'pymupdf' in str(e).lower() or 'PyMuPDF' in str(e):
+        pymupdf_error = e
+        if _is_pymupdf_missing(e):
             logger.warning('PyMuPDF unavailable, falling back to PyPDF2: %s', e)
-            return extract_text_from_pdf_pypdf2(file_data)
-        raise
+        # Insufficient-text and other ValueErrors keep the existing raise path
+        # unless pdfplumber produces a better result below.
     except Exception as e:
-        # Unexpected PyMuPDF errors — try PyPDF2 before failing.
+        pymupdf_error = e
+        unexpected = True
         logger.warning('PyMuPDF extraction error, trying PyPDF2: %s', e)
+
+    plumber_text = None
+    plumber_reason = ''
+    try:
+        from app.ai.parser.pdfplumber_extractor import maybe_use_pdfplumber
+
+        plumber_text, plumber_reason = maybe_use_pdfplumber(
+            file_data,
+            pymupdf_text=pymupdf_text,
+            pymupdf_error=pymupdf_error,
+        )
+    except Exception as exc:
+        # pdfplumber must never break the existing pipeline.
+        logger.warning(
+            'pdfplumber orchestration failed; ignoring: %s',
+            type(exc).__name__,
+        )
+        plumber_text = None
+
+    if plumber_text:
+        _set_last_pdf_extractor('pdfplumber', plumber_reason)
+        return plumber_text
+
+    if pymupdf_text:
+        _set_last_pdf_extractor('pymupdf', plumber_reason)
+        logger.debug(
+            'PDF extractor selected=pymupdf chars=%s fallback_reason=%s',
+            len(pymupdf_text),
+            plumber_reason or 'none',
+        )
+        return pymupdf_text
+
+    if pymupdf_error is None:
+        raise ValueError('Failed to extract text from PDF')
+
+    if unexpected or _is_pymupdf_missing(pymupdf_error):
         try:
-            return extract_text_from_pdf_pypdf2(file_data)
+            return _try_pypdf2_fallback(file_data)
         except Exception:
-            raise ValueError(f'Failed to extract text from PDF: {e}') from e
+            if unexpected:
+                raise ValueError(
+                    f'Failed to extract text from PDF: {pymupdf_error}'
+                ) from pymupdf_error
+            raise
+
+    raise pymupdf_error
 
 
 def extract_text_from_docx(file_data: bytes) -> str:

@@ -67,6 +67,8 @@ pytest
 ```
 
 Scanned PDF / image resumes need **RapidOCR** (`rapidocr-onnxruntime` in `requirements.txt`; Python **3.10–3.12** recommended). Without it, digital PDF/DOCX still parse; OCR pages fall back to Tesseract if installed, else thin-text skips.
+
+PDF digital text uses **PyMuPDF as the primary extractor**. **pdfplumber** is an automatic secondary engine used only when PyMuPDF output is unusable (thin, garbage, broken layout, or table-like). There is no env flag to enable or disable it. See [DOCUMENT_INTELLIGENCE.md](DOCUMENT_INTELLIGENCE.md#pdf-text-extraction).
 ## Common workflows
 
 ### Run frontend only

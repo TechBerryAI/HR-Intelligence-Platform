@@ -1,0 +1,91 @@
+
+========================================
+   HR Job Portal - Start
+========================================
+
+[start] [2026-09-03 06:00:16] Step 1/7: Checking environment
+[start] [2026-09-03 06:00:16] Node: v22.22.0
+[start] [2026-09-03 06:00:16] Python: Python 3.13.13
+[start] [2026-09-03 06:00:16] Environment check OK
+[start] [2026-09-03 06:00:16] Step 2/7: Checking apps/backend/.env
+[start] [2026-09-03 06:00:16] apps/backend/.env exists
+[start] [2026-09-03 06:00:16] Ollama config: host=http://192.168.1.200:11434, model=qwen2.5:14b-instruct (operator pin)
+[start] [2026-09-03 06:00:16] Frontend .env OK (VITE_API_URL=(same-origin), VITE_PUBLIC_ORIGIN=http://192.168.1.125:5173)
+[start] [2026-09-03 06:00:16] Step 3/7: Setting up backend (venv + pip)
+[start] [2026-09-03 06:00:16] Backend venv already exists
+[start] [2026-09-03 06:00:16] Upgrading pip...
+[start] [2026-09-03 06:00:18] Installing backend dependencies from requirements.txt (includes OCR: pymupdf, Pillow; RapidOCR on Python <3.13)...
+[start] [2026-09-03 06:00:20] Verifying OCR packages import...
+OCR core packages OK (pymupdf, Pillow)
+[WARN] [2026-09-03 06:00:20] RapidOCR not available on this Python (3.13). Scanned-image OCR needs Python 3.12 (recommended) or system Tesseract. Continuing setup...
+[start] [2026-09-03 06:00:20] Backend setup complete
+[start] [2026-09-03 06:00:21] Step 4/7: Checking Ollama
+[start] [2026-09-03 06:00:21] Using Ollama model: qwen2.5:14b-instruct (operator)
+[start] [2026-09-03 06:00:21] Using Ollama host: http://192.168.1.200:11434
+[start] [2026-09-03 06:00:21] Remote Ollama host — will not start a local daemon; JD/resume/bulk parse use this IP
+[WARN] [2026-09-03 06:00:26] Ollama did not become ready at http://192.168.1.200:11434. Parsing may fail until the central server is reachable.
+[start] [2026-09-03 06:00:26] Step 5/7: Setting up frontend (npm)
+[start] [2026-09-03 06:00:26] Installing frontend dependencies from package.json...
+
+up to date, audited 434 packages in 3s
+
+62 packages are looking for funding
+  run `npm fund` for details
+
+11 vulnerabilities (1 low, 4 moderate, 6 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues possible (including breaking changes), run:
+  npm audit fix --force
+
+Some issues need review, and may require choosing
+a different dependency.
+
+Run `npm audit` for details.
+[start] [2026-09-03 06:00:30] Frontend setup complete
+[start] [2026-09-03 06:00:30] Step 6/7: Starting backend (Flask)
+[start] [2026-09-03 06:00:30] Backend process started (port 3000)
+[start] [2026-09-03 06:00:30] Step 7/7: Starting frontend (Vite)
+[start] [2026-09-03 06:00:30] Frontend process started (port 5173)
+[start] [2026-09-03 06:00:30] Waiting for backend and frontend to be ready...
+
+> hr-intelligence@0.0.1 dev
+> vite
+
+
+  VITE v5.4.21  ready in 1538 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.56.1:5173/
+  ➜  Network: http://192.168.0.97:5173/
+[SQLAlchemy] Using PostgreSQL
+[CORS] Allowed origins: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5174', 'http://127.0.0.1:5174', 'http://192.168.1.125:5173', 'http://192.168.1.125', 'http://localhost:\\d+', 'http://127\\.0\\.0\\.1:\\d+', 'http://192\\.168\\.\\d+\\.\\d+:\\d+', 'http://10\\.\\d+\\.\\d+\\.\\d+:\\d+', 'http://172\\.(1[6-9]|2\\d|3[0-1])\\.\\d+\\.\\d+:\\d+']
+[MAIL] Configured — sending enabled (server=smtp.gmail.com, user=aiteamtbi@gmail.com)
+[DB] Initializing database at startup...
+[DB] Target: 192.168.1.120:6567/hrms
+[DB] Initializing connection pool with 16 connections...
+[DB] Alembic upgrade head complete
+[DB] Database initialized successfully
+[MEDIA] DATA_HOME=C:\Users\DELL\Documents\GitHub\hcip-data MEDIA_ROOT=C:\Users\DELL\Documents\GitHub\hcip-data\media hero_db_bytes=3741875
+[INTEGRATIONS] Framework initialized
+[DEVELOPER MODE] Enabled — Admin performance collector active
+[ollama] host=http://192.168.1.200:11434
+[ollama] model=qwen2.5:14b-instruct
+[ollama] reachable=false
+[ollama] model_available=false
+[backend] semantic_single_llm_fix=enabled
+[SERVER] Starting Flask server on port 3000...
+[SERVER] Debug mode: True, Reloader: False
+ * Serving Flask app 'app.bootstrap.create_app'
+ * Debug mode: on
+[start] [2026-09-03 06:00:52] Backend and frontend are ready
+[start] [2026-09-03 06:00:52] Opening browser: http://localhost:5173
+
+--- Ready ---
+Backend:  http://localhost:3000
+Frontend: http://localhost:5173
+Ollama:   http://192.168.1.200:11434  model=qwen2.5:14b-instruct (not ready — check host/model)
+Press Ctrl+C to stop.
+

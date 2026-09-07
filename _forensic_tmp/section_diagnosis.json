@@ -1,0 +1,610 @@
+[
+  {
+    "file": "#1_Vishal_Waghmode_Resume.pdf",
+    "n_spans": 8,
+    "labels": [
+      "Preamble",
+      "Experience",
+      "Education",
+      "Skills",
+      "Projects",
+      "Strengths",
+      "Achievements",
+      "Achievements"
+    ],
+    "dupes": {
+      "Achievements": 2
+    },
+    "short_content": [],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 492,
+    "preamble_head": "Vishal Waghmode | Software Developer | Experienced Full Stack Software Developer with a passion for games and creating connected experiences. | Skilled in c# , .NET core , sql queries an",
+    "uncertain": []
+  },
+  {
+    "file": "01 Furqan Khan - HR - 9 Years Experience.pdf",
+    "n_spans": 5,
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Skills",
+      "Experience",
+      "Work Summary"
+    ],
+    "dupes": {},
+    "short_content": [],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": false,
+    "preamble_chars": 51,
+    "preamble_head": "Furqan Khan | 7039834046 | furqan.khan.fk86@gmail.com",
+    "uncertain": []
+  },
+  {
+    "file": "1 Senthil_Chandrasekaran_Resume.pdf",
+    "n_spans": 8,
+    "labels": [
+      "Preamble",
+      "Experience",
+      "Languages",
+      "Summary",
+      "Skills",
+      "Skills",
+      "Education",
+      "Certifications"
+    ],
+    "dupes": {
+      "Skills": 2
+    },
+    "short_content": [
+      {
+        "label": "Experience",
+        "body": 7,
+        "source": "heuristic",
+        "head": "Experience | Contact |  | "
+      },
+      {
+        "label": "Languages",
+        "body": 22,
+        "source": "heuristic",
+        "head": "Languages | Senthil Chandrasekaran |  | "
+      },
+      {
+        "label": "Education",
+        "body": 0,
+        "source": "uncertain",
+        "head": "Education |  | "
+      }
+    ],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 22,
+    "preamble_head": "Database Administrator",
+    "uncertain": [
+      "Education"
+    ]
+  },
+  {
+    "file": "1-Ashish_Chandel.docx",
+    "n_spans": 8,
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Skills",
+      "Experience",
+      "Skills",
+      "Certifications",
+      "Education",
+      "Languages"
+    ],
+    "dupes": {
+      "Skills": 2
+    },
+    "short_content": [
+      {
+        "label": "Skills",
+        "body": 0,
+        "source": "uncertain",
+        "head": "Skills |  | "
+      },
+      {
+        "label": "Skills",
+        "body": 0,
+        "source": "uncertain",
+        "head": "Skills |  | "
+      }
+    ],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 254,
+    "preamble_head": "ASHISH R. CHANDEL |  | Head of IT Operations  |  Cloud Infrastructure & Service Delivery Leader |  | +91 8850897115  |  ashish.chandel25@gmail.com  |  Navi Mumbai, Maharashtra  |  linkedin",
+    "uncertain": [
+      "Skills",
+      "Skills"
+    ]
+  },
+  {
+    "file": "1.docx",
+    "n_spans": 6,
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Skills",
+      "Education",
+      "Activities",
+      "Declaration"
+    ],
+    "dupes": {},
+    "short_content": [
+      {
+        "label": "Education",
+        "body": 0,
+        "source": "uncertain",
+        "head": "Education |  | "
+      }
+    ],
+    "has_experience": false,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 52,
+    "preamble_head": "Email\t- dparthe45@gmail.com |  | Contact No - 8408897040",
+    "uncertain": [
+      "Education"
+    ]
+  },
+  {
+    "file": "11zon_Mrunalbhaisare Resume.pdf",
+    "n_spans": 7,
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Education",
+      "Skills",
+      "Projects",
+      "Experience",
+      "Achievements"
+    ],
+    "dupes": {},
+    "short_content": [],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 99,
+    "preamble_head": "Name: Mrunal Bhaisare | Contact: 7709718548 | Email: mbhaisare31@gmail.com | Address: Nagpur, Maharashtra",
+    "uncertain": []
+  },
+  {
+    "file": "13_Ms.-Saloni-Dhuru.pdf",
+    "n_spans": 3,
+    "labels": [
+      "Curriculum Vitae",
+      "Education",
+      "Experience"
+    ],
+    "dupes": {},
+    "short_content": [],
+    "has_experience": true,
+    "has_skills": false,
+    "has_education": true,
+    "preamble_chars": 0,
+    "preamble_head": "",
+    "uncertain": []
+  },
+  {
+    "file": "1658748886885_RAHUL SURESH SURVASE Updated (1).docx",
+    "n_spans": 5,
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Education",
+      "Personalinformation",
+      "Declaration"
+    ],
+    "dupes": {},
+    "short_content": [],
+    "has_experience": false,
+    "has_skills": false,
+    "has_education": true,
+    "preamble_chars": 73,
+    "preamble_head": "RAHUL SURESH SURVASE |  | Email : Rahulsurvase08@gmail.com |  | Phone: 8655656976",
+    "uncertain": []
+  },
+  {
+    "file": "1vinay(2)Ea3JB.pdf",
+    "n_spans": 12,
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Education",
+      "Skills",
+      "Experience",
+      "Strengths",
+      "Hobbies",
+      "Personal Summary",
+      "Education",
+      "Languages",
+      "Skills",
+      "Personal Details"
+    ],
+    "dupes": {
+      "Education": 2,
+      "Skills": 2
+    },
+    "short_content": [],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 124,
+    "preamble_head": "VINAY KUMAR OLI |  | 9071840599 | ------------------------------------------------------------------------------------------------",
+    "uncertain": []
+  },
+  {
+    "file": "2024 Miloni Shah Resume (1).pdf",
+    "n_spans": 4,
+    "labels": [
+      "Preamble",
+      "Experience",
+      "Skills",
+      "Education"
+    ],
+    "dupes": {},
+    "short_content": [],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 11,
+    "preamble_head": "Miloni Shah",
+    "uncertain": []
+  },
+  {
+    "file": "2025_UMAR_SHARIEF_RESUME postgresql dba.pdf",
+    "n_spans": 8,
+    "labels": [
+      "Skills",
+      "Languages",
+      "Experience",
+      "Summary",
+      "Experience",
+      "Activities",
+      "Education",
+      "Projects"
+    ],
+    "dupes": {
+      "Experience": 2
+    },
+    "short_content": [],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 0,
+    "preamble_head": "",
+    "uncertain": []
+  },
+  {
+    "file": "26160_1726557418Abhi-Resume.docx",
+    "n_spans": 6,
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Skills",
+      "Education",
+      "Certifications",
+      "Summary"
+    ],
+    "dupes": {
+      "Summary": 2
+    },
+    "short_content": [],
+    "has_experience": false,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 90,
+    "preamble_head": "ABHISHEK RAJESH NIKALJI |  | Contact: 9833647101\tEmail id :- abhishek.rajesh.nikalji@gmail.com",
+    "uncertain": []
+  },
+  {
+    "file": "3 Years of Exp MySQL Database Administrator.docx",
+    "n_spans": 8,
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Summary",
+      "Education",
+      "Experience",
+      "Skills",
+      "Personal Details",
+      "Declaration"
+    ],
+    "dupes": {
+      "Summary": 2
+    },
+    "short_content": [],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 77,
+    "preamble_head": "Jeevan kumar reddy C |  | Mobile: 8867587360 |  | Mail ID: jeevanreddy.dsql@gmail.com",
+    "uncertain": []
+  },
+  {
+    "file": "3.1_YRS_PUNE_VIPUL  PATIL (1).pdf",
+    "n_spans": 6,
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Summary",
+      "Education",
+      "Project",
+      "Declaration"
+    ],
+    "dupes": {
+      "Summary": 2
+    },
+    "short_content": [],
+    "has_experience": false,
+    "has_skills": false,
+    "has_education": true,
+    "preamble_chars": 186,
+    "preamble_head": "RESUME | Mr. VIPUL ARVIND PATIL | DATA ENGINEER | +91- 99 70 38 80 01 | Mind Spark Technology, Pune | vipulpatil2502@gmail.com                                   -FROM SEPTEMBER 2020 TO STILL",
+    "uncertain": []
+  },
+  {
+    "file": "3.5ATS-Resume-Aquib-2026.pdf",
+    "n_spans": 8,
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Skills",
+      "Experience",
+      "Certifications",
+      "Education",
+      "Languages",
+      "Strengths"
+    ],
+    "dupes": {},
+    "short_content": [
+      {
+        "label": "Languages",
+        "body": 23,
+        "source": "heuristic",
+        "head": "Languages | English, Hindi, Marathi |  | "
+      }
+    ],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 165,
+    "preamble_head": "Aquib Khan | Linux System Administrator | 📍 Nagpur, Maharashtra, India | 📞 +91 7768870739 | ✉️ aquibk1511@gmail.com | 🔗 LinkedIn: https://www.linkedin.com/in/aquib-k-66954a37a",
+    "uncertain": []
+  },
+  {
+    "file": "45_MMS_Marketing_Akshay     Pujari -1.jpg (1) (1) (1).docx",
+    "n_spans": 5,
+    "labels": [
+      "Preamble",
+      "Personal Details",
+      "Education",
+      "Achievements",
+      "Skills"
+    ],
+    "dupes": {},
+    "short_content": [
+      {
+        "label": "Skills",
+        "body": 11,
+        "source": "uncertain",
+        "head": "Skills | • MS-Office"
+      }
+    ],
+    "has_experience": false,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 399,
+    "preamble_head": "Akshay Pujari |  | Permanent Address: At- Satave, Tal -Panhala |  | District – Kolhapur 416114. |  | Temporary Address: 504/C, Vasant Springwoods, |  | Mauli Chowk, Bhosale Nagar, Shirgaon |  | Badlap",
+    "uncertain": [
+      "Skills"
+    ]
+  },
+  {
+    "file": "_ Abhinandan jha c.v .pdf",
+    "n_spans": 10,
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Experience",
+      "Education",
+      "Skills",
+      "Certifications",
+      "Projects",
+      "Activities",
+      "Languages",
+      "Projects"
+    ],
+    "dupes": {
+      "Projects": 2
+    },
+    "short_content": [],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 138,
+    "preamble_head": "07-07-2025 - Till | 2025 | 2021 | Abhinandan Kumar Jha | Mumbai | 8873370936 | jhaabhinandan66@gmail.com | https://www.linkedin.com/in/abhinandan-jha",
+    "uncertain": []
+  },
+  {
+    "file": "_Trupti Kokate Resume will inform by 14 feb if comfortable for vikhroli location.docx",
+    "n_spans": 4,
+    "labels": [
+      "Preamble",
+      "Experience",
+      "Education",
+      "Certifications"
+    ],
+    "dupes": {},
+    "short_content": [],
+    "has_experience": true,
+    "has_skills": false,
+    "has_education": true,
+    "preamble_chars": 94,
+    "preamble_head": "Trupti Kokate |  | Email: truptikokate0701@gmail.com Phone:  9321444676  Address: Mira Road, Thane",
+    "uncertain": []
+  },
+  {
+    "file": "Ajeet Networking CV_Updated (1).pdf",
+    "n_spans": 4,
+    "labels": [
+      "Curriculum Vitae",
+      "Summary",
+      "Skills",
+      "Personal Information"
+    ],
+    "dupes": {},
+    "short_content": [],
+    "has_experience": false,
+    "has_skills": true,
+    "has_education": false,
+    "preamble_chars": 0,
+    "preamble_head": "",
+    "uncertain": []
+  },
+  {
+    "file": "Ajeet Networking CV_Updated.pdf",
+    "n_spans": 4,
+    "labels": [
+      "Curriculum Vitae",
+      "Summary",
+      "Skills",
+      "Personal Information"
+    ],
+    "dupes": {},
+    "short_content": [],
+    "has_experience": false,
+    "has_skills": true,
+    "has_education": false,
+    "preamble_chars": 0,
+    "preamble_head": "",
+    "uncertain": []
+  },
+  {
+    "file": "Ajinkya K MYSQL DBA.pdf",
+    "n_spans": 17,
+    "labels": [
+      "Contact",
+      "Education",
+      "Skills",
+      "Skills",
+      "Skills",
+      "Summary",
+      "Experience",
+      "Achievements",
+      "Personal Details",
+      "Contact",
+      "Experience",
+      "Achievements",
+      "Personal Details",
+      "Education",
+      "Skills",
+      "Skills",
+      "Skills"
+    ],
+    "dupes": {
+      "Contact": 2,
+      "Education": 2,
+      "Skills": 6,
+      "Experience": 2,
+      "Achievements": 2,
+      "Personal Details": 2
+    },
+    "short_content": [],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 0,
+    "preamble_head": "",
+    "uncertain": []
+  },
+  {
+    "file": "Ajinkya Mahale PGSQL resume - Ajinkya Mahale.pdf",
+    "n_spans": 5,
+    "labels": [
+      "Preamble",
+      "Summary",
+      "Experience",
+      "Education",
+      "Skills"
+    ],
+    "dupes": {},
+    "short_content": [],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 84,
+    "preamble_head": "AJINKYA MAHALE | ajinkyamahale17@gmail.com | LinkedIn - ajinkyamahale | +91 9423353623 | | | |",
+    "uncertain": []
+  },
+  {
+    "file": "Padmini Mongo dba Expertia AI.pdf",
+    "n_spans": 2,
+    "labels": [
+      "Preamble",
+      "Languages"
+    ],
+    "dupes": {},
+    "short_content": [],
+    "has_experience": false,
+    "has_skills": false,
+    "has_education": false,
+    "preamble_chars": 2253,
+    "preamble_head": "P A D M I N I P | ASSOCIATE DATABASE ENGINEER | CONTACT: CAREER OBJECTIVE: | Employment background reflects well over 2 years, 7 months | 8217276434 | experience in Mongo DB. Currently seeki",
+    "uncertain": []
+  },
+  {
+    "file": "Ranju Gupta AI_engineer.pdf",
+    "n_spans": 9,
+    "labels": [
+      "Preamble",
+      "Experience",
+      "Summary",
+      "Education",
+      "Skills",
+      "Certifications",
+      "Certifications",
+      "Languages",
+      "Languages"
+    ],
+    "dupes": {
+      "Certifications": 2,
+      "Languages": 2
+    },
+    "short_content": [
+      {
+        "label": "Certifications",
+        "body": 0,
+        "source": "heuristic",
+        "head": "Certifications |  | "
+      },
+      {
+        "label": "Certifications",
+        "body": 15,
+        "source": "heuristic",
+        "head": "Certifications | Python | AI | · | SQL |  |  | "
+      },
+      {
+        "label": "Languages",
+        "body": 0,
+        "source": "heuristic",
+        "head": "Languages |  | "
+      }
+    ],
+    "has_experience": true,
+    "has_skills": true,
+    "has_education": true,
+    "preamble_chars": 132,
+    "preamble_head": "Ranju Gupta | +91 8828550821 ranjuggupta11@gmail.com | https://www.linkedin.com/in/ranju-gupta-08a983249/ https://github.com/ranjuggupta",
+    "uncertain": []
+  }
+]

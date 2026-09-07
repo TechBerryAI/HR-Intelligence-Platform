@@ -635,14 +635,28 @@ def test_p4_bulk_allowed_ext_rejects_doc():
 
     assert 'doc' not in bp.ALLOWED_EXT
     assert 'pdf' in bp.ALLOWED_EXT and 'docx' in bp.ALLOWED_EXT
-    assert 'png' in bp.ALLOWED_EXT and 'jpg' in bp.ALLOWED_EXT
+    assert 'png' not in bp.ALLOWED_EXT
+    assert 'jpg' not in bp.ALLOWED_EXT
+    assert 'jpeg' not in bp.ALLOWED_EXT
     assert 'webp' in bp.ALLOWED_EXT and 'tiff' in bp.ALLOWED_EXT
-    # Staging gate mirrors ALLOWED_EXT (legacy .doc never queued)
-    assert 'doc' not in bp.ALLOWED_EXT
+    # Staging gate mirrors ALLOWED_EXT (legacy .doc and PNG/JPG never queued)
     assert all(
         ext in bp.ALLOWED_EXT
-        for ext in ('pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff')
+        for ext in ('pdf', 'docx', 'webp', 'tif', 'tiff')
     )
+
+
+def test_p4_single_parse_rejects_png():
+    from app.domains.recruitment.api.parsing import ALLOWED_EXTENSIONS, allowed_file
+
+    assert 'png' not in ALLOWED_EXTENSIONS
+    assert 'jpg' not in ALLOWED_EXTENSIONS
+    assert 'jpeg' not in ALLOWED_EXTENSIONS
+    assert not allowed_file('Janhavi_Rane_Digital_marketing_intern_resume.png')
+    assert not allowed_file('resume.jpg')
+    assert not allowed_file('resume.jpeg')
+    assert allowed_file('resume.pdf')
+    assert allowed_file('resume.docx')
 
 
 def test_p6_bulk_gate_refuses_bad_titles_and_ocr_mush():

@@ -1,0 +1,1512 @@
+{
+  "files": 24,
+  "invented_jobs": [],
+  "jobs_removed": [],
+  "new_degree_losses": [
+    {
+      "file": "1 Senthil_Chandrasekaran_Resume.pdf",
+      "lost": [
+        "be"
+      ]
+    },
+    {
+      "file": "1vinay(2)Ea3JB.pdf",
+      "lost": [
+        "me"
+      ]
+    },
+    {
+      "file": "Padmini Mongo dba Expertia AI.pdf",
+      "lost": [
+        "bachelor"
+      ]
+    }
+  ],
+  "new_skill_losses": [
+    {
+      "file": "1 Senthil_Chandrasekaran_Resume.pdf",
+      "lost": [
+        "mysql"
+      ]
+    },
+    {
+      "file": "1.docx",
+      "lost": [
+        "linux"
+      ]
+    },
+    {
+      "file": "1658748886885_RAHUL SURESH SURVASE Updated (1).docx",
+      "lost": [
+        "java"
+      ]
+    }
+  ],
+  "skill_count_spikes": [],
+  "deltas": [
+    {
+      "file": "#1_Vishal_Waghmode_Resume.pdf",
+      "n_edu": [
+        2,
+        2
+      ],
+      "n_exp": [
+        2,
+        2
+      ],
+      "n_skills": [
+        9,
+        9
+      ],
+      "desc_lines": [
+        4,
+        4
+      ],
+      "desc_flat": [
+        1,
+        1
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Experience",
+        "Education",
+        "Skills",
+        "Projects",
+        "Strengths",
+        "Achievements",
+        "Achievements"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Experience",
+        "Education",
+        "Skills",
+        "Projects",
+        "Strengths",
+        "Achievements",
+        "Achievements"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [
+        "b.e"
+      ],
+      "degree_hints_lost_after": [
+        "b.e"
+      ],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "01 Furqan Khan - HR - 9 Years Experience.pdf",
+      "n_edu": [
+        1,
+        1
+      ],
+      "n_exp": [
+        2,
+        2
+      ],
+      "n_skills": [
+        8,
+        6
+      ],
+      "desc_lines": [
+        2,
+        2
+      ],
+      "desc_flat": [
+        2,
+        2
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Skills",
+        "Experience",
+        "Summary"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Skills",
+        "Experience",
+        "Summary"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "1 Senthil_Chandrasekaran_Resume.pdf",
+      "n_edu": [
+        3,
+        3
+      ],
+      "n_exp": [
+        1,
+        1
+      ],
+      "n_skills": [
+        31,
+        13
+      ],
+      "desc_lines": [
+        0,
+        0
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        23,
+        16
+      ],
+      "labels_before": [
+        "Preamble",
+        "Experience",
+        "Languages",
+        "Summary",
+        "Skills",
+        "Skills",
+        "Education",
+        "Certifications"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Experience",
+        "Languages",
+        "Summary",
+        "Skills",
+        "Skills",
+        "Education",
+        "Certifications"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [
+        "azure",
+        "linux"
+      ],
+      "skill_hints_lost_after": [
+        "azure",
+        "mysql"
+      ],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [
+        "be"
+      ],
+      "recovered_skills": [
+        "linux"
+      ],
+      "new_skill_losses": [
+        "mysql"
+      ],
+      "recovered_degrees": [],
+      "new_degree_losses": [
+        "be"
+      ]
+    },
+    {
+      "file": "1-Ashish_Chandel.docx",
+      "n_edu": [
+        3,
+        3
+      ],
+      "n_exp": [
+        6,
+        6
+      ],
+      "n_skills": [
+        5,
+        5
+      ],
+      "desc_lines": [
+        31,
+        31
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        8,
+        4
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Skills",
+        "Experience",
+        "Unclassified",
+        "Certifications",
+        "Education",
+        "Languages"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Skills",
+        "Experience",
+        "Unclassified",
+        "Certifications",
+        "Education",
+        "Languages"
+      ],
+      "unclassified_chars": 8,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [
+        "aws",
+        "azure"
+      ],
+      "skill_hints_lost_after": [
+        "aws",
+        "azure"
+      ],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "1.docx",
+      "n_edu": [
+        0,
+        0
+      ],
+      "n_exp": [
+        0,
+        0
+      ],
+      "n_skills": [
+        24,
+        6
+      ],
+      "desc_lines": [
+        0,
+        0
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Personal Information",
+        "Skills",
+        "Education",
+        "Activities",
+        "Declaration",
+        "Unclassified",
+        "Unclassified"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Personal Information",
+        "Skills",
+        "Education",
+        "Activities",
+        "Declaration",
+        "Unclassified",
+        "Unclassified"
+      ],
+      "unclassified_chars": 705,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [
+        "linux"
+      ],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [
+        "linux"
+      ],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "11zon_Mrunalbhaisare Resume.pdf",
+      "n_edu": [
+        3,
+        3
+      ],
+      "n_exp": [
+        1,
+        1
+      ],
+      "n_skills": [
+        17,
+        7
+      ],
+      "desc_lines": [
+        3,
+        3
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Education",
+        "Skills",
+        "Projects",
+        "Experience",
+        "Achievements"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Education",
+        "Skills",
+        "Projects",
+        "Experience",
+        "Achievements"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "13_Ms.-Saloni-Dhuru.pdf",
+      "n_edu": [
+        2,
+        2
+      ],
+      "n_exp": [
+        0,
+        0
+      ],
+      "n_skills": [
+        0,
+        0
+      ],
+      "desc_lines": [
+        0,
+        0
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Education",
+        "Experience"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Education",
+        "Experience"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "1658748886885_RAHUL SURESH SURVASE Updated (1).docx",
+      "n_edu": [
+        7,
+        7
+      ],
+      "n_exp": [
+        0,
+        0
+      ],
+      "n_skills": [
+        5,
+        4
+      ],
+      "desc_lines": [
+        0,
+        0
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Education",
+        "Skills",
+        "Skills",
+        "Summary",
+        "Personal Information",
+        "Declaration",
+        "Unclassified"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Education",
+        "Skills",
+        "Skills",
+        "Summary",
+        "Personal Information",
+        "Declaration",
+        "Unclassified"
+      ],
+      "unclassified_chars": 73,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [
+        "java"
+      ],
+      "degree_hints_lost_before": [
+        "be"
+      ],
+      "degree_hints_lost_after": [
+        "be"
+      ],
+      "recovered_skills": [],
+      "new_skill_losses": [
+        "java"
+      ],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "1vinay(2)Ea3JB.pdf",
+      "n_edu": [
+        4,
+        4
+      ],
+      "n_exp": [
+        2,
+        2
+      ],
+      "n_skills": [
+        22,
+        11
+      ],
+      "desc_lines": [
+        0,
+        0
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Education",
+        "Skills",
+        "Experience",
+        "Strengths",
+        "Hobbies",
+        "Summary",
+        "Education",
+        "Languages",
+        "Skills",
+        "Personal Details"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Education",
+        "Skills",
+        "Experience",
+        "Strengths",
+        "Hobbies",
+        "Summary",
+        "Education",
+        "Languages",
+        "Skills",
+        "Personal Details"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [
+        "master"
+      ],
+      "degree_hints_lost_after": [
+        "master",
+        "me"
+      ],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": [
+        "me"
+      ]
+    },
+    {
+      "file": "2024 Miloni Shah Resume (1).pdf",
+      "n_edu": [
+        4,
+        4
+      ],
+      "n_exp": [
+        1,
+        1
+      ],
+      "n_skills": [
+        9,
+        9
+      ],
+      "desc_lines": [
+        1,
+        1
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Experience",
+        "Skills",
+        "Education"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Experience",
+        "Skills",
+        "Education"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "2025_UMAR_SHARIEF_RESUME postgresql dba.pdf",
+      "n_edu": [
+        2,
+        2
+      ],
+      "n_exp": [
+        6,
+        6
+      ],
+      "n_skills": [
+        4,
+        2
+      ],
+      "desc_lines": [
+        6,
+        6
+      ],
+      "desc_flat": [
+        3,
+        3
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Skills",
+        "Languages",
+        "Experience",
+        "Summary",
+        "Experience",
+        "Activities",
+        "Education",
+        "Projects"
+      ],
+      "labels_after": [
+        "Skills",
+        "Languages",
+        "Experience",
+        "Summary",
+        "Experience",
+        "Activities",
+        "Education",
+        "Projects"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [
+        "aws",
+        "linux",
+        "oracle"
+      ],
+      "skill_hints_lost_after": [
+        "aws",
+        "linux",
+        "oracle"
+      ],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "26160_1726557418Abhi-Resume.docx",
+      "n_edu": [
+        2,
+        2
+      ],
+      "n_exp": [
+        0,
+        0
+      ],
+      "n_skills": [
+        8,
+        7
+      ],
+      "desc_lines": [
+        0,
+        0
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Skills",
+        "Summary",
+        "Education",
+        "Certifications",
+        "Summary",
+        "Unclassified"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Skills",
+        "Summary",
+        "Education",
+        "Certifications",
+        "Summary",
+        "Unclassified"
+      ],
+      "unclassified_chars": 90,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [
+        "mysql"
+      ],
+      "skill_hints_lost_after": [
+        "mysql"
+      ],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "3 Years of Exp MySQL Database Administrator.docx",
+      "n_edu": [
+        1,
+        1
+      ],
+      "n_exp": [
+        0,
+        0
+      ],
+      "n_skills": [
+        26,
+        10
+      ],
+      "desc_lines": [
+        0,
+        0
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Summary",
+        "Education",
+        "Experience",
+        "Skills",
+        "Personal Details",
+        "Declaration"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Summary",
+        "Education",
+        "Experience",
+        "Skills",
+        "Personal Details",
+        "Declaration"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "3.1_YRS_PUNE_VIPUL  PATIL (1).pdf",
+      "n_edu": [
+        3,
+        3
+      ],
+      "n_exp": [
+        1,
+        1
+      ],
+      "n_skills": [
+        1,
+        1
+      ],
+      "desc_lines": [
+        0,
+        0
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Summary",
+        "Education",
+        "Project",
+        "Declaration",
+        "Unclassified",
+        "Unclassified"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Summary",
+        "Education",
+        "Project",
+        "Declaration",
+        "Unclassified",
+        "Unclassified"
+      ],
+      "unclassified_chars": 339,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [
+        "azure",
+        "mysql",
+        "oracle",
+        "python",
+        "sql"
+      ],
+      "skill_hints_lost_after": [
+        "azure",
+        "mysql",
+        "oracle",
+        "python",
+        "sql"
+      ],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "3.5ATS-Resume-Aquib-2026.pdf",
+      "n_edu": [
+        3,
+        3
+      ],
+      "n_exp": [
+        2,
+        2
+      ],
+      "n_skills": [
+        16,
+        13
+      ],
+      "desc_lines": [
+        8,
+        5
+      ],
+      "desc_flat": [
+        1,
+        1
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Skills",
+        "Experience",
+        "Certifications",
+        "Education",
+        "Languages",
+        "Strengths"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Skills",
+        "Experience",
+        "Certifications",
+        "Education",
+        "Languages",
+        "Strengths"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "45_MMS_Marketing_Akshay     Pujari -1.jpg (1) (1) (1).docx",
+      "n_edu": [
+        4,
+        4
+      ],
+      "n_exp": [
+        1,
+        1
+      ],
+      "n_skills": [
+        6,
+        1
+      ],
+      "desc_lines": [
+        3,
+        3
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Personal Details",
+        "Education",
+        "Achievements",
+        "Skills",
+        "Unclassified",
+        "Unclassified"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Personal Details",
+        "Education",
+        "Achievements",
+        "Skills",
+        "Unclassified",
+        "Unclassified"
+      ],
+      "unclassified_chars": 1303,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "_ Abhinandan jha c.v .pdf",
+      "n_edu": [
+        2,
+        2
+      ],
+      "n_exp": [
+        1,
+        1
+      ],
+      "n_skills": [
+        4,
+        4
+      ],
+      "desc_lines": [
+        9,
+        9
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Experience",
+        "Education",
+        "Skills",
+        "Certifications",
+        "Projects",
+        "Activities",
+        "Languages",
+        "Projects"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Experience",
+        "Education",
+        "Skills",
+        "Certifications",
+        "Projects",
+        "Activities",
+        "Languages",
+        "Projects"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [
+        "ms office"
+      ],
+      "skill_hints_lost_after": [
+        "ms office"
+      ],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "_Trupti Kokate Resume will inform by 14 feb if comfortable for vikhroli location.docx",
+      "n_edu": [
+        1,
+        1
+      ],
+      "n_exp": [
+        2,
+        2
+      ],
+      "n_skills": [
+        6,
+        5
+      ],
+      "desc_lines": [
+        11,
+        11
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        8,
+        8
+      ],
+      "labels_before": [
+        "Preamble",
+        "Experience",
+        "Education",
+        "Certifications"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Experience",
+        "Education",
+        "Certifications"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [
+        "b.com"
+      ],
+      "degree_hints_lost_after": [
+        "b.com"
+      ],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "Ajeet Networking CV_Updated (1).pdf",
+      "n_edu": [
+        3,
+        3
+      ],
+      "n_exp": [
+        3,
+        3
+      ],
+      "n_skills": [
+        11,
+        5
+      ],
+      "desc_lines": [
+        7,
+        6
+      ],
+      "desc_flat": [
+        1,
+        1
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Skills",
+        "Personal Information",
+        "Unclassified",
+        "Unclassified"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Skills",
+        "Personal Information",
+        "Unclassified",
+        "Unclassified"
+      ],
+      "unclassified_chars": 888,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "Ajeet Networking CV_Updated.pdf",
+      "n_edu": [
+        3,
+        3
+      ],
+      "n_exp": [
+        3,
+        3
+      ],
+      "n_skills": [
+        11,
+        5
+      ],
+      "desc_lines": [
+        7,
+        6
+      ],
+      "desc_flat": [
+        1,
+        1
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Skills",
+        "Personal Information",
+        "Unclassified",
+        "Unclassified"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Skills",
+        "Personal Information",
+        "Unclassified",
+        "Unclassified"
+      ],
+      "unclassified_chars": 888,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "Ajinkya K MYSQL DBA.pdf",
+      "n_edu": [
+        1,
+        1
+      ],
+      "n_exp": [
+        1,
+        1
+      ],
+      "n_skills": [
+        8,
+        6
+      ],
+      "desc_lines": [
+        0,
+        0
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Contact",
+        "Education",
+        "Skills",
+        "Skills",
+        "Skills",
+        "Summary",
+        "Experience",
+        "Achievements",
+        "Personal Details",
+        "Contact",
+        "Unclassified",
+        "Achievements",
+        "Personal Details",
+        "Unclassified",
+        "Skills",
+        "Unclassified",
+        "Skills"
+      ],
+      "labels_after": [
+        "Contact",
+        "Education",
+        "Skills",
+        "Skills",
+        "Skills",
+        "Summary",
+        "Experience",
+        "Achievements",
+        "Personal Details",
+        "Contact",
+        "Unclassified",
+        "Achievements",
+        "Personal Details",
+        "Unclassified",
+        "Skills",
+        "Unclassified",
+        "Skills"
+      ],
+      "unclassified_chars": 1538,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "Ajinkya Mahale PGSQL resume - Ajinkya Mahale.pdf",
+      "n_edu": [
+        3,
+        3
+      ],
+      "n_exp": [
+        2,
+        2
+      ],
+      "n_skills": [
+        35,
+        7
+      ],
+      "desc_lines": [
+        12,
+        12
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Summary",
+        "Experience",
+        "Education",
+        "Skills"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Summary",
+        "Experience",
+        "Education",
+        "Skills"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [],
+      "skill_hints_lost_after": [],
+      "degree_hints_lost_before": [],
+      "degree_hints_lost_after": [],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    },
+    {
+      "file": "Padmini Mongo dba Expertia AI.pdf",
+      "n_edu": [
+        0,
+        0
+      ],
+      "n_exp": [
+        0,
+        0
+      ],
+      "n_skills": [
+        27,
+        11
+      ],
+      "desc_lines": [
+        0,
+        0
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Languages",
+        "Unclassified"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Languages",
+        "Unclassified"
+      ],
+      "unclassified_chars": 2253,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [
+        "aws",
+        "linux"
+      ],
+      "skill_hints_lost_after": [
+        "aws",
+        "linux"
+      ],
+      "degree_hints_lost_before": [
+        "mms"
+      ],
+      "degree_hints_lost_after": [
+        "bachelor",
+        "mms"
+      ],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": [
+        "bachelor"
+      ]
+    },
+    {
+      "file": "Ranju Gupta AI_engineer.pdf",
+      "n_edu": [
+        3,
+        3
+      ],
+      "n_exp": [
+        2,
+        2
+      ],
+      "n_skills": [
+        8,
+        7
+      ],
+      "desc_lines": [
+        7,
+        7
+      ],
+      "desc_flat": [
+        0,
+        0
+      ],
+      "sum_lines": [
+        1,
+        1
+      ],
+      "labels_before": [
+        "Preamble",
+        "Experience",
+        "Summary",
+        "Education",
+        "Skills",
+        "Certifications",
+        "Certifications",
+        "Languages",
+        "Languages"
+      ],
+      "labels_after": [
+        "Preamble",
+        "Experience",
+        "Summary",
+        "Education",
+        "Skills",
+        "Certifications",
+        "Certifications",
+        "Languages",
+        "Languages"
+      ],
+      "unclassified_chars": 0,
+      "added_jobs": [],
+      "removed_jobs": [],
+      "skill_hints_lost_before": [
+        "linux"
+      ],
+      "skill_hints_lost_after": [
+        "linux"
+      ],
+      "degree_hints_lost_before": [
+        "be"
+      ],
+      "degree_hints_lost_after": [
+        "be"
+      ],
+      "recovered_skills": [],
+      "new_skill_losses": [],
+      "recovered_degrees": [],
+      "new_degree_losses": []
+    }
+  ]
+}

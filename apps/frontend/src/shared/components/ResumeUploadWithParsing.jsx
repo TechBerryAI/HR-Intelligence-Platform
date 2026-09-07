@@ -367,7 +367,7 @@ export default function ResumeUploadWithParsing({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
+                accept=".pdf,.docx"
                 onChange={handleFileChange}
                 disabled={isUploading}
                 className="hidden"

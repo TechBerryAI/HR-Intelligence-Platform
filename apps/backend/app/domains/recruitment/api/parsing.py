@@ -60,7 +60,8 @@ def _jd_client(body: dict, status: int):
 
 parsing_bp = Blueprint('parsing', __name__)
 
-ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp'}
+# Image resumes (PNG/JPG) are rejected — OCR quality is too unreliable for apply/autofill.
+ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'webp'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 _PUBLIC_PARSE_LIMIT = int(os.getenv('PUBLIC_PARSE_RATE_LIMIT', '10'))

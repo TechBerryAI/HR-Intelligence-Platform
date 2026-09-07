@@ -245,6 +245,16 @@ def test_section_header_aliases_map_experience_and_education():
     assert normalize_section_header('Work') == 'Experience'
     assert normalize_section_header('Organisational Experience') == 'Experience'
     assert normalize_section_header('Organizational Experience') == 'Experience'
+    # Word decorative underscore padding (common in Indian CVs)
+    assert normalize_section_header(
+        '________________________________________________CAREER OBJECTIVE______________________________________________'
+    ) == 'Summary'
+    assert normalize_section_header(
+        '________________________________________________TECHNICAL SKILLS_______________________________________________'
+    ) == 'Skills'
+    assert normalize_section_header(
+        '____________________________________________ORGANISATIONAL EXPERIENCE____________________________________'
+    ) == 'Experience'
     assert normalize_section_header('Academic Qualifications') == 'Education'
     assert normalize_section_header('Educational Details') == 'Education'
     assert normalize_section_header('•') is None

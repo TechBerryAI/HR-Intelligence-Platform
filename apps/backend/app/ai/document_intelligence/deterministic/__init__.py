@@ -27,19 +27,21 @@ _MONTH_MAP = {
     'oct': '10', 'october': '10', 'nov': '11', 'november': '11',
     'dec': '12', 'december': '12',
 }
+_DATE_ATOM = (
+    r'(?:'
+    r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\s+)?'
+    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+    r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+    r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+    r'|(?:19|20)\d{2}(?:[/\-](?:0?[1-9]|1[0-2]))?'
+    r')'
+)
+_PRESENT_ATOM = r'(?:Present|Current|Now|Till\s*Date|Tilldate|Ongoing|Pursuing|Still(?:\s+Date)?)'
 _DATE_RANGE_RE = re.compile(
-    r'(?i)\b('
-    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
-    r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
-    r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
-    r'|(?:19|20)\d{2}(?:[/\-](?:0?[1-9]|1[0-2]))?'
-    r')\s*(?:[-–—]|to)\s*('
-    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
-    r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
-    r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
-    r'|(?:19|20)\d{2}(?:[/\-](?:0?[1-9]|1[0-2]))?'
-    r'|Present|Current|Now'
-    r')\b'
+    rf'(?i)\b({_DATE_ATOM})\s*(?:[-–—]|to)\s*({_DATE_ATOM}|{_PRESENT_ATOM})\b'
+)
+_PRESENT_TOKEN_RE = re.compile(
+    r'(?i)^(present|current|now|till\s*date|tilldate|ongoing|pursuing|still(?:\s+date)?)$'
 )
 
 
@@ -218,7 +220,7 @@ def normalize_month_token(token: str) -> str:
     t = (token or '').strip()
     if not t:
         return ''
-    if re.match(r'(?i)^(present|current|now)$', t):
+    if _PRESENT_TOKEN_RE.match(t):
         return 'Present'
     m_dmy = re.match(
         r'^(0?[1-9]|[12]\d|3[01])[/\-](0?[1-9]|1[0-2])[/\-]((?:19|20)\d{2})$',
@@ -226,6 +228,15 @@ def normalize_month_token(token: str) -> str:
     )
     if m_dmy:
         return f'{m_dmy.group(3)}-{int(m_dmy.group(2)):02d}'
+    m_ord = re.match(
+        r'(?i)^(0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\s+'
+        r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+'
+        r'((?:19|20)\d{2})$',
+        t,
+    )
+    if m_ord:
+        mon = _MONTH_MAP.get(m_ord.group(2).lower()[:3], '01')
+        return f'{m_ord.group(3)}-{mon}'
     m = re.match(
         r'(?i)^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+((?:19|20)\d{2})$',
         t,
