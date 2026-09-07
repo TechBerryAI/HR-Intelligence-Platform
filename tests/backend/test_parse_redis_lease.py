@@ -338,8 +338,11 @@ def test_stale_owner_recoverable_after_heartbeat_stop():
     assert store.set_json_nx(lkey, {'owner': token}, ttl_seconds=2)
     hb = LeaseHeartbeat(store, lkey, token, 2, 0.25)
     hb.start()
-    time.sleep(0.4)
-    assert hb.renew_count >= 1
+    _wait_until(
+        lambda: hb.renew_count >= 1,
+        timeout=3.0,
+        msg='heartbeat did not renew lease before stop',
+    )
     hb.stop()
     _assert_no_heartbeats()
     _wait_until(
