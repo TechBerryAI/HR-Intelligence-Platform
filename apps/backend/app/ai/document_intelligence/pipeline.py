@@ -481,6 +481,8 @@ def parse_resume_from_working_text(
     max_workers: int | None = None,
     allow_semantic: bool | None = None,
     source_filename: str = '',
+    parse_job_id: str | None = None,
+    on_stage: StageCallback | None = None,
 ):
     """Shared parse tail after ``prepare_resume_working_text``.
 
@@ -504,6 +506,7 @@ def parse_resume_from_working_text(
     text = working or ''
 
     t0 = _time.perf_counter()
+    _emit(parse_job_id, 'sections', 'started', on_stage=on_stage)
     sections = detect_sections(text, 'resume')
     record_pipeline_stage(
         'sections',
@@ -511,8 +514,10 @@ def parse_resume_from_working_text(
         duration_ms=(_time.perf_counter() - t0) * 1000.0,
         module='app.ai.document_intelligence.pipeline',
     )
+    _emit(parse_job_id, 'sections', 'completed', f'{len(sections)} sections', on_stage=on_stage)
 
     t0 = _time.perf_counter()
+    _emit(parse_job_id, 'deterministic', 'started', 'Section parsers', on_stage=on_stage)
     profile = parse_resume_from_sections(
         sections, text, max_workers=workers, source_filename=source_filename or '',
     )
@@ -522,8 +527,10 @@ def parse_resume_from_working_text(
         duration_ms=(_time.perf_counter() - t0) * 1000.0,
         module='app.ai.document_intelligence.pipeline',
     )
+    _emit(parse_job_id, 'deterministic', 'completed', on_stage=on_stage)
 
     t0 = _time.perf_counter()
+    _emit(parse_job_id, 'coverage', 'started', on_stage=on_stage)
     profile, coverage = recover_resume_profile_gaps(profile, text)
     record_pipeline_stage(
         'coverage',
@@ -531,8 +538,16 @@ def parse_resume_from_working_text(
         duration_ms=(_time.perf_counter() - t0) * 1000.0,
         module='app.ai.document_intelligence.pipeline',
     )
+    _emit(
+        parse_job_id,
+        'coverage',
+        'completed',
+        f'missing_evidence={len(coverage.missing_with_evidence)}',
+        on_stage=on_stage,
+    )
     allow_experience_fill = bool(profile.experience) or has_experience_section_evidence(text)
 
+    _emit(parse_job_id, 'knowledge', 'started', on_stage=on_stage)
     t0 = _time.perf_counter()
     profile = apply_knowledge_to_candidate(profile)
     knowledge_ms = (_time.perf_counter() - t0) * 1000.0
@@ -545,6 +560,7 @@ def parse_resume_from_working_text(
         or (not resume_deterministic_is_strong(profile, coverage, source_text=text))
     )
     used_llm = False
+    _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
     if run_semantic:
         t0 = _time.perf_counter()
         unresolved = unresolved_semantic_text(sections, 'resume') or text
@@ -561,6 +577,7 @@ def parse_resume_from_working_text(
             duration_ms=(_time.perf_counter() - t0) * 1000.0,
             module='app.ai.document_intelligence.pipeline',
         )
+        _emit(parse_job_id, 'semantic', 'completed', on_stage=on_stage)
         t0 = _time.perf_counter()
         profile = apply_knowledge_to_candidate(profile)
         knowledge_ms += (_time.perf_counter() - t0) * 1000.0
@@ -571,6 +588,7 @@ def parse_resume_from_working_text(
             duration_ms=0.0,
             module='app.ai.document_intelligence.pipeline',
         )
+        _emit(parse_job_id, 'semantic', 'skipped', 'Deterministic coverage sufficient', on_stage=on_stage)
 
     profile, toon = _apply_resume_repair(profile, text)
     profile = sanitize_candidate_profile(profile, source_text=text or '')
@@ -582,6 +600,7 @@ def parse_resume_from_working_text(
         duration_ms=knowledge_ms,
         module='app.ai.document_intelligence.pipeline',
     )
+    _emit(parse_job_id, 'knowledge', 'completed', on_stage=on_stage)
     return profile, coverage, sections, used_llm, toon
 
 
@@ -846,37 +865,13 @@ def _run_resume(
     hw = detect_hardware_profile()
     workers = min(6, max(2, hw.cpu_count // 2))
 
-    _emit(parse_job_id, 'sections', 'started', on_stage=on_stage)
-    _emit(parse_job_id, 'deterministic', 'started', 'Section parsers', on_stage=on_stage)
-    _emit(parse_job_id, 'coverage', 'started', on_stage=on_stage)
-    _emit(parse_job_id, 'semantic', 'started', on_stage=on_stage)
-    _emit(parse_job_id, 'knowledge', 'started', on_stage=on_stage)
     profile, coverage, sections, used_llm, toon = parse_resume_from_working_text(
         raw_text,
         max_workers=workers,
         source_filename=filename or '',
-    )
-    _emit(
-        parse_job_id,
-        'sections',
-        'completed',
-        f'{len(sections)} sections',
-        detail={'labels': [s.label for s in sections]},
+        parse_job_id=parse_job_id,
         on_stage=on_stage,
     )
-    _emit(parse_job_id, 'deterministic', 'completed', on_stage=on_stage)
-    _emit(
-        parse_job_id,
-        'coverage',
-        'completed',
-        f'missing_evidence={len(coverage.missing_with_evidence)}',
-        on_stage=on_stage,
-    )
-    if used_llm:
-        _emit(parse_job_id, 'semantic', 'completed', on_stage=on_stage)
-    else:
-        _emit(parse_job_id, 'semantic', 'skipped', 'Deterministic coverage sufficient', on_stage=on_stage)
-    _emit(parse_job_id, 'knowledge', 'completed', on_stage=on_stage)
 
     toon = candidate_to_toon(profile)
     missing_ev = _resume_core_missing(coverage)

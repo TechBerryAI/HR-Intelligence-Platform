@@ -57,28 +57,40 @@ def _has_email_evidence(text: str) -> bool:
 
 
 def _has_phone_evidence(text: str) -> bool:
+    blob = text or ''
     return bool(
         re.search(
-            r'(?i)(?:phone|mobile|mob|cell|tel)\s*[:.\-–—]?|'
-            r'\+?\d[\d\s().\-]{8,}\d|'
-            r'\b[6-9]\d{9}\b',
-            text or '',
+            r'(?i)(?:phone|mobile|mob|cell|tel)(?:\s*(?:no\.?|number))?\s*[:.\-–—]?\s*[+\d]',
+            blob,
         )
+        or re.search(r'\+?\d[\d\s().\-]{8,}\d', blob)
+        or re.search(r'\b[6-9]\d{9}\b', blob)
     )
 
 
 def _has_location_evidence(text: str) -> bool:
     from app.ai.parser.enrichment.resume_text_inference import known_location_cities
 
+    blob = text or ''
     if re.search(
-        r'(?i)(?:location|address|based\s+in|residing|current\s+location)',
-        text or '',
+        r'(?i)(?:current\s+location|location|address|based\s+in|residing)\s*[:.\-–—]',
+        blob,
     ):
         return True
-    if re.search(r'(?i)\b(?:remote|hybrid|vellore\s+institute)\b', text or ''):
+    header_lines: list[str] = []
+    for line in blob.splitlines()[:24]:
+        if re.match(
+            r'(?i)^(?:experience|education|skills|summary|objective|projects|'
+            r'certifications|work\s+history)\b',
+            line.strip(),
+        ):
+            break
+        header_lines.append(line)
+    header = '\n'.join(header_lines)[:800]
+    if re.search(r'(?i)\bremote\b', header):
         return True
     for city in known_location_cities():
-        if re.search(rf'(?i)\b{re.escape(city)}\b', text or ''):
+        if re.search(rf'(?i)\b{re.escape(city)}\b', header):
             return True
     return False
 
@@ -95,6 +107,19 @@ def _has_education_evidence(text: str) -> bool:
 
 def _experience_section_text(text: str) -> str:
     """Slice Experience/Internship body from raw text for grounded re-parse."""
+    try:
+        from app.ai.parser.engine.sections import detect_sections
+
+        bodies = [
+            (s.text or '').strip()
+            for s in detect_sections(text or '', 'resume')
+            if (getattr(s, 'label', '') or '').strip().lower() == 'experience'
+        ]
+        joined = '\n'.join(b for b in bodies if b).strip()
+        if joined:
+            return joined
+    except Exception:
+        pass
     m = re.search(
         r'(?ims)(?:^|\n)\s*(?:\*\*)?(?:work\s*experience|professional\s*experience|'
         r'technical\s+experience|experience|employment|work\s+history|internships?|'
@@ -201,6 +226,12 @@ def recover_resume_profile_gaps(
         fields.append(FieldCoverage('phone', 'filled', True))
     elif phone_ev:
         found = extract_phone(text)
+        if found and not validate_phone(found)[0]:
+            digits = re.sub(r'\D', '', found)
+            if len(digits) >= 12 and digits.startswith('91'):
+                digits = digits[-10:]
+            if len(digits) == 10 and validate_phone(digits)[0]:
+                found = digits
         if found and validate_phone(found)[0]:
             contact['phone'] = found
             recovered.append('phone')
@@ -364,6 +395,12 @@ def recover_resume_profile_gaps(
                 )
             )
         elif existing_rows:
+            if parsed_exp and not any(row_is_anchored(e) for e in existing_rows):
+                anchored = [e for e in parsed_exp if row_is_anchored(e)]
+                if anchored:
+                    data['experience'] = [e.model_dump() for e in anchored]
+                    recovered.append('experience')
+                    existing_rows = anchored
             fields.append(
                 FieldCoverage(
                     'experience',
@@ -380,6 +417,22 @@ def recover_resume_profile_gaps(
             fields.append(FieldCoverage('experience', 'filled', True))
     else:
         fields.append(FieldCoverage('experience', 'missing_no_evidence', False))
+
+    # Certifications: recover when a heading exists but rows are empty
+    certs = list(data.get('certificates') or [])
+    has_cert_heading = bool(
+        re.search(r'(?im)^.{0,40}\b(?:certifications?|certificates?)\b', text or '')
+    )
+    if not certs and has_cert_heading:
+        from app.ai.document_intelligence.parsers.resume import parse_certifications
+
+        parsed_certs = parse_certifications('', text) or parse_certifications(
+            'Certifications\n' + (text or ''),
+            text,
+        )
+        if parsed_certs:
+            data['certificates'] = [c.model_dump() for c in parsed_certs]
+            recovered.append('certificates')
 
     # Skills: never harvest the full document when a Skills section already produced items
     skills = list(data.get('skills') or [])

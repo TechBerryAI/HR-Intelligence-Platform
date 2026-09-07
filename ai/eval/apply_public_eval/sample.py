@@ -4,10 +4,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[3]
 SUPPORTED = {'.pdf', '.docx'}
+UNSUPPORTED_SKIP = {'.doc'}
 DEFAULT_CORPUS = Path(os.environ.get(
     'RESUME_CORPUS_DIR',
-    r'C:\Users\DELL\Downloads\resume testing',
+    str(ROOT / 'resume testing'),
 ))
 # Layout classes used in prior Apply validation — filenames only, never parser rules.
 _LAYOUT_CLASS_PREFIXES = (
@@ -25,6 +27,17 @@ def list_corpus_files(corpus_dir: Path | None = None) -> list[Path]:
     return sorted(
         p for p in root.iterdir()
         if p.is_file() and p.suffix.lower() in SUPPORTED
+    )
+
+
+def list_skipped_files(corpus_dir: Path | None = None) -> list[Path]:
+    """Legacy .doc (and similar) — Apply rejects these; not scored."""
+    root = Path(corpus_dir or DEFAULT_CORPUS)
+    if not root.is_dir():
+        return []
+    return sorted(
+        p for p in root.iterdir()
+        if p.is_file() and p.suffix.lower() in UNSUPPORTED_SKIP
     )
 
 

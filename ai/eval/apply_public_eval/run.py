@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate 10–20 diverse resumes through POST /api/parse/resume/public.
+"""Evaluate resumes through POST /api/parse/resume/public.
 
 Does not modify production parser code. Writes artifacts under _forensic_tmp/.
 """
@@ -24,6 +24,7 @@ if str(ROOT) not in sys.path:
 from ai.eval.apply_public_eval.sample import (  # noqa: E402
     DEFAULT_CORPUS,
     list_corpus_files,
+    list_skipped_files,
     load_reference,
     select_diverse,
 )
@@ -120,7 +121,11 @@ def _post_with_retry(api: str, path: Path) -> tuple[int, dict]:
     return _post_public(api, path)
 
 
-def _render_report(summary: dict, cases: list[dict], health: dict) -> str:
+def _pct(value: float | None) -> str:
+    return '—' if value is None else f'{value:.0%}'
+
+
+def _render_report(summary: dict, cases: list[dict], health: dict, skipped: list[str] | None = None) -> str:
     pf = summary['per_field']
     lines = [
         '# Public Apply resume evaluation',
@@ -131,34 +136,195 @@ def _render_report(summary: dict, cases: list[dict], health: dict) -> str:
         f"- Failures: {summary['failure_count']}",
         f"- Class counts (resumes with that class): {summary['class_counts_resumes']}",
         '',
+        '## Phase 2 training backlog (ranked)',
+        '',
+        'Gold-label the example files, then fix deterministic parsers + coverage recovery. '
+        'Do not train on Class C / absent fields. API clusters are not parser work.',
+        '',
+        '| Rank | Section | Impact | Class B | weak_missing | weak_ungrounded | Why |',
+        '|---:|---|---:|---:|---:|---:|---|',
+    ]
+    backlog = summary.get('training_backlog') or []
+    if not backlog:
+        lines.append('| — | none | 0 | 0 | 0 | 0 | No parser-training targets. |')
+    for i, item in enumerate(backlog, 1):
+        lines.append(
+            f"| {i} | {item.get('section')} | {item.get('impact')} | "
+            f"{item.get('class_b')} | {item.get('weak_missing')} | "
+            f"{item.get('weak_ungrounded')} | {item.get('why')} |"
+        )
+    lines += ['']
+    for item in backlog:
+        examples = ', '.join(item.get('examples') or []) or '—'
+        reasons = ', '.join(
+            f"{r.get('reason')} ({r.get('count')})" for r in (item.get('top_reasons') or [])
+        ) or '—'
+        lines.append(f"- **{item.get('section')}** — {item.get('phase2')}")
+        lines.append(f"  - reasons: {reasons}")
+        lines.append(f"  - examples: {examples}")
+        lines.append('')
+
+    lines += [
         '## Per-field accuracy (among scored; n/a = source does not support)',
         '',
         '| Field | pass | fail | n/a | accuracy |',
         '|---|---:|---:|---:|---:|',
     ]
     for key, st in pf.items():
-        acc = st['accuracy']
-        acc_s = '—' if acc is None else f"{acc:.0%}"
-        lines.append(f"| {key} | {st['pass']} | {st['fail']} | {st['n/a']} | {acc_s} |")
+        lines.append(
+            f"| {key} | {st['pass']} | {st['fail']} | {st['n/a']} | {_pct(st['accuracy'])} |"
+        )
+
+    lines += [
+        '',
+        '## Empty rates (form blank, regardless of source support)',
+        '',
+        '| Field | empty | filled | empty rate |',
+        '|---|---:|---:|---:|',
+    ]
+    for key, st in (summary.get('empty_rates') or {}).items():
+        lines.append(f"| {key} | {st['empty']} | {st['filled']} | {_pct(st.get('rate'))} |")
+
+    lines += [
+        '',
+        '## Coverage (`missing_with_evidence` = true weak section)',
+        '',
+        '| Field | filled | recovered | missing_with_evidence | missing_no_evidence | other |',
+        '|---|---:|---:|---:|---:|---:|',
+    ]
+    cov = summary.get('coverage_counts') or {}
+    if not cov:
+        lines.append('| — | 0 | 0 | 0 | 0 | 0 |')
+    for field, st in cov.items():
+        lines.append(
+            f"| {field} | {st.get('filled', 0)} | {st.get('recovered', 0)} | "
+            f"{st.get('missing_with_evidence', 0)} | {st.get('missing_no_evidence', 0)} | "
+            f"{st.get('other', 0)} |"
+        )
+
+    lines += [
+        '',
+        '## Field Trace verdicts',
+        '',
+        '| Field | ok | weak_missing | weak_ungrounded | absent | fallback |',
+        '|---|---:|---:|---:|---:|---:|',
+    ]
+    for field, st in (summary.get('verdict_counts') or {}).items():
+        lines.append(
+            f"| {field} | {st.get('ok', 0)} | {st.get('weak_missing', 0)} | "
+            f"{st.get('weak_ungrounded', 0)} | {st.get('absent', 0)} | {st.get('fallback', 0)} |"
+        )
+
+    lines += [
+        '',
+        '## Failure clusters (section / reason)',
+        '',
+        '| Section | Class | Reason | Count | Examples |',
+        '|---|---|---|---:|---|',
+    ]
+    clusters = summary.get('clusters') or []
+    if not clusters:
+        lines.append('| — | — | none | 0 | |')
+    for c in clusters:
+        examples = ', '.join(c.get('examples') or [])
+        lines.append(
+            f"| {c.get('section')} | {c.get('class')} | {c.get('reason')} | "
+            f"{c.get('count')} | {examples} |"
+        )
+
+    if skipped:
+        lines += ['', '## Skipped (unsupported Apply formats)', '']
+        for name in skipped:
+            lines.append(f'- {name}')
+
     lines += ['', '## Failures', '']
     fails = summary.get('failures') or []
     if not fails:
         lines.append('None.')
     for f in fails:
         lines.append(f"- **{f.get('file')}** classes={f.get('classes')} issues={f.get('issues')}")
-    lines += ['', '## Recorded Form DTOs', '']
+
+    fail_names = {f.get('file') for f in fails}
+    lines += ['', '## Recorded Form DTOs (failures only; full dump in cases.json)', '']
+    dumped = 0
     for case in cases:
+        if case.get('file') not in fail_names:
+            continue
+        dumped += 1
         ev = case.get('evaluation') or {}
         form = ev.get('form') or {}
+        traces = ev.get('field_trace') or {}
+        weak = ', '.join(
+            f"{k}:{v.get('verdict')}"
+            for k, v in traces.items()
+            if isinstance(v, dict) and v.get('verdict') in ('weak_missing', 'weak_ungrounded')
+        ) or '—'
         lines.append(f"### {case.get('file')}")
         lines.append(f"- acceptable: {ev.get('acceptable')} classes={ev.get('classes')}")
-        lines.append(f"- Name: {form.get('name')}")
+        lines.append(f"- Name: {form.get('name')} | Email: {form.get('email')} | Phone: {form.get('phone')}")
+        lines.append(f"- Location: {form.get('location')} | LinkedIn: {form.get('linkedin')}")
         lines.append(f"- Experience: {form.get('experiences')}")
         lines.append(f"- Education: {form.get('education')}")
         lines.append(f"- Skills: {form.get('skills')}")
         summ = form.get('summary') or ''
         lines.append(f"- Summary: {summ[:220]}")
+        lines.append(f"- Weak trace: {weak}")
         lines.append('')
+    if dumped == 0:
+        lines.append('None.')
+    return '\n'.join(lines) + '\n'
+
+
+def _render_training_backlog(summary: dict) -> str:
+    lines = [
+        '# Phase 2 training backlog',
+        '',
+        'From the full Apply parse diagnostic.',
+        '',
+        'In this repo training means gold fixtures (`expected_form.json`) plus deterministic',
+        'section parsers and coverage recovery — not QLoRA / custom weights.',
+        '',
+        f"- Corpus: `{summary.get('corpus')}`",
+        f"- Mode: {summary.get('mode')}",
+        f"- Total scored: {summary.get('total')}",
+        f"- Parser/API failures: {summary.get('failure_count')}",
+        '',
+        '## Ranked sections',
+        '',
+    ]
+    backlog = summary.get('training_backlog') or []
+    if not backlog:
+        lines.append('No parser-training targets.')
+        return '\n'.join(lines) + '\n'
+    for i, item in enumerate(backlog, 1):
+        lines.append(f"## {i}. {item.get('section')} (impact {item.get('impact')})")
+        lines.append('')
+        lines.append(item.get('why') or '')
+        lines.append('')
+        lines.append(f"- Class B resumes: {item.get('class_b')}")
+        lines.append(f"- weak_missing: {item.get('weak_missing')}")
+        lines.append(f"- weak_ungrounded: {item.get('weak_ungrounded')}")
+        lines.append(f"- Next step: {item.get('phase2')}")
+        reasons = item.get('top_reasons') or []
+        if reasons:
+            lines.append('- Top reasons:')
+            for r in reasons:
+                lines.append(f"  - `{r.get('reason')}` × {r.get('count')}")
+        examples = item.get('examples') or []
+        if examples:
+            lines.append('- Gold-label these first:')
+            for name in examples:
+                lines.append(f'  - {name}')
+        lines.append('')
+    lines += [
+        '## Suggested Phase 2 order',
+        '',
+        '1. Add `expected_form.json` gold for the example files of rank 1.',
+        '2. Fix that section parser under `apps/backend/app/ai/document_intelligence/parsers/resume/`.',
+        '3. Re-run `python ai/eval/apply_public_eval/run.py --all --out _forensic_tmp/apply_public_eval_full`.',
+        '4. Repeat down the ranked list. Skip `api` and Class C / absent fields.',
+        '',
+    ]
     return '\n'.join(lines) + '\n'
 
 
@@ -168,6 +334,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--corpus', type=Path, default=DEFAULT_CORPUS)
     parser.add_argument('--out', type=Path, default=DEFAULT_OUT)
     parser.add_argument('--n', type=int, default=16)
+    parser.add_argument(
+        '--all',
+        action='store_true',
+        help='Evaluate every PDF/DOCX in the corpus (skip 10–20 diverse sample)',
+    )
     parser.add_argument('--references', type=Path, default=ROOT / 'ai' / 'eval' / 'apply_public_eval' / 'references')
     args = parser.parse_args(argv)
 
@@ -183,11 +354,15 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Health OK pid={health.get('pid')} status={health.get('status')}")
 
     files = list_corpus_files(args.corpus)
-    sample = select_diverse(files, n=args.n)
+    skipped = list_skipped_files(args.corpus)
+    sample = files if args.all else select_diverse(files, n=args.n)
     if not sample:
         print(f'ERROR: no pdf/docx files in {args.corpus}')
         return 2
-    print(f'Evaluating {len(sample)} resumes via POST /api/parse/resume/public')
+    mode = 'all' if args.all else f'diverse n={args.n}'
+    print(f'Evaluating {len(sample)} resumes ({mode}) via POST /api/parse/resume/public')
+    if skipped:
+        print(f'Skipping {len(skipped)} unsupported files: {[p.name for p in skipped]}')
 
     out_dir = args.out.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -205,8 +380,14 @@ def main(argv: list[str] | None = None) -> int:
         status, payload = _post_with_retry(args.api, path)
         form = (payload or {}).get('form') if isinstance(payload, dict) else {}
         server_raw = ''
+        coverage = None
         if isinstance(payload, dict):
             server_raw = payload.get('raw_text') or ''
+            coverage = payload.get('coverage')
+        if isinstance(form, dict) and coverage is None:
+            coverage = form.get('coverage')
+        if coverage is None and isinstance(inproc, dict):
+            coverage = inproc.get('coverage')
         extract_for_score = server_raw or raw
         local_extract_ok = len(raw.strip()) >= 40
         ref = load_reference(path, args.references if args.references.is_dir() else None)
@@ -217,6 +398,7 @@ def main(argv: list[str] | None = None) -> int:
             inproc_form=(inproc or None) if local_extract_ok else None,
             reference=ref,
             extract_short=len(extract_for_score.strip()) < 40,
+            coverage=coverage if isinstance(coverage, list) else None,
         )
         rec = {
             'file': path.name,
@@ -233,6 +415,9 @@ def main(argv: list[str] | None = None) -> int:
 
     summary = aggregate(cases)
     summary['health_pid'] = health.get('pid')
+    summary['corpus'] = str(args.corpus)
+    summary['mode'] = 'all' if args.all else 'diverse'
+    summary['skipped'] = [p.name for p in skipped]
     (out_dir / 'cases.json').write_text(
         json.dumps(cases, indent=2, ensure_ascii=False),
         encoding='utf-8',
@@ -241,10 +426,16 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps(summary, indent=2, ensure_ascii=False),
         encoding='utf-8',
     )
-    report = _render_report(summary, cases, health)
+    report = _render_report(summary, cases, health, skipped=[p.name for p in skipped])
     (out_dir / 'report.md').write_text(report, encoding='utf-8')
-    print(report)
+    backlog_md = _render_training_backlog(summary)
+    (out_dir / 'training_backlog.md').write_text(backlog_md, encoding='utf-8')
+    try:
+        print(report)
+    except UnicodeEncodeError:
+        sys.stdout.buffer.write((report + '\n').encode('utf-8', errors='replace'))
     print(f'Wrote {out_dir / "report.md"}')
+    print(f'Wrote {out_dir / "training_backlog.md"}')
     return 0
 
 

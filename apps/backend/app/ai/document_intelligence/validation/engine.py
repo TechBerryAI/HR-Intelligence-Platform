@@ -754,15 +754,22 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
             role = ''
             role_ok = False
 
-    start_ok, _ = validate_month_year(exp.start)
-    end_ok, _ = validate_month_year(exp.end)
+    from app.ai.document_intelligence.deterministic import normalize_month_token
+
+    start_norm = normalize_month_token(exp.start) or (exp.start or '').strip()
+    end_norm = normalize_month_token(exp.end) or (exp.end or '').strip()
+    if end_norm.lower() in {'present', 'current', 'now', 'till date', 'ongoing'}:
+        end_norm = ''
+        exp = exp.model_copy(update={'is_current': True})
+    start_ok, _ = validate_month_year(start_norm)
+    end_ok, _ = validate_month_year(end_norm)
     if loc and _is_geo_only_token(loc) is False and len(loc) > 80:
         loc = ''
     cleaned = ExperienceEntry(
         company=company if company_ok else '',
         role=role if role_ok else '',
-        start=exp.start if start_ok else '',
-        end=exp.end if end_ok else '',
+        start=start_norm if start_ok else '',
+        end=end_norm if end_ok else '',
         is_current=exp.is_current,
         description=desc,
         location=loc[:120],
@@ -770,7 +777,7 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
     # Prefer rows with a real role; keep dated company-only (Infosenseglobal has no Ltd suffix)
     if cleaned.role:
         return cleaned
-    if cleaned.company and cleaned.start:
+    if cleaned.company and (cleaned.start or cleaned.end or cleaned.is_current):
         return cleaned
     if cleaned.company and cleaned.location:
         return cleaned

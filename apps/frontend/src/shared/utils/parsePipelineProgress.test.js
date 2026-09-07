@@ -4,6 +4,7 @@ import {
   isPipelineComplete,
   overlayCatchupMs,
   overlayStepIndex,
+  overlayGroupMsFromSpans,
   progressPctForStage,
   formatStepMs,
   createStageClock,
@@ -92,5 +93,19 @@ describe('parse pipeline overlay mapping', () => {
     const byKey = Object.fromEntries(clock.getSpans().map((s) => [s.key, s.duration_ms]))
     expect(byKey.text).toBe(180000)
     expect(byKey.semantic).toBe(3200)
+  })
+
+  it('sums stage spans into overlay step buckets', () => {
+    expect(
+      overlayGroupMsFromSpans('resume', [
+        { key: 'text', duration_ms: 2400 },
+        { key: 'layout', duration_ms: 80 },
+        { key: 'sections', duration_ms: 420 },
+        { key: 'deterministic', duration_ms: 180 },
+        { key: 'coverage', duration_ms: 90 },
+        { key: 'knowledge', duration_ms: 40 },
+        { key: 'validate', duration_ms: 25 },
+      ]),
+    ).toEqual([2480, 600, 130, 25])
   })
 })

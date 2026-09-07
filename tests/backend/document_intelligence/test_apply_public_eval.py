@@ -11,7 +11,7 @@ if str(BACKEND) not in sys.path:
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from ai.eval.apply_public_eval.sample import select_diverse
+from ai.eval.apply_public_eval.sample import list_corpus_files, list_skipped_files, select_diverse
 from ai.eval.apply_public_eval.score import (
     CLASS_A,
     CLASS_B,
@@ -53,6 +53,7 @@ def test_missing_company_without_cue_is_source_ambiguity():
         'education': [{'degree': '', 'institution': 'Example University', 'startMonth': '', 'endMonth': ''}],
         'skills': '',
         'summary': '',
+        'email': 'jordan@example.com',
     }
     ev = evaluate_case(form=form, extract=extract, http_status=200, inproc_form=form)
     assert ev['acceptable']
@@ -139,6 +140,7 @@ def test_reference_compare_and_aggregate():
         'education': [],
         'skills': 'Python',
         'summary': '',
+        'email': 'jordan@example.com',
     }
     ref = {
         'fullName': 'Jordan Hale',
@@ -152,6 +154,7 @@ def test_reference_compare_and_aggregate():
         'education': [],
         'skills': 'Python',
         'summary': '',
+        'email': 'jordan@example.com',
     }
     ev = evaluate_case(form=form, extract=extract, http_status=200, inproc_form=form, reference=ref)
     assert ev['acceptable']
@@ -175,3 +178,71 @@ def test_select_diverse_bounds(tmp_path):
     assert 10 <= len(picked) <= 16
     assert any(p.suffix == '.pdf' for p in picked)
     assert any(p.suffix == '.docx' for p in picked)
+
+
+def test_list_corpus_skips_doc(tmp_path):
+    (tmp_path / 'a.pdf').write_bytes(b'%PDF')
+    (tmp_path / 'b.docx').write_bytes(b'PK')
+    (tmp_path / 'legacy.doc').write_bytes(b'OLE')
+    files = list_corpus_files(tmp_path)
+    skipped = list_skipped_files(tmp_path)
+    assert [p.name for p in files] == ['a.pdf', 'b.docx']
+    assert [p.name for p in skipped] == ['legacy.doc']
+
+
+def test_email_in_extract_empty_form_is_parser_fail():
+    extract = 'Jordan Hale\nEmail: jordan@example.com\nPhone: 9876543210\n'
+    form = {'fullName': 'Jordan Hale', 'experiences': [], 'education': [], 'skills': '', 'summary': ''}
+    ev = evaluate_case(form=form, extract=extract, http_status=200, inproc_form=form)
+    assert not ev['acceptable']
+    assert ev['fields']['email'] == 'fail'
+    assert any(i['class'] == CLASS_B and i['field'] == 'email' for i in ev['issues'])
+    assert ev['field_trace']['email']['verdict'] == 'weak_missing'
+
+
+def test_coverage_missing_with_evidence_marks_experience():
+    extract = 'Jordan Hale\nEmail: jordan@example.com\n'
+    form = {
+        'fullName': 'Jordan Hale',
+        'email': 'jordan@example.com',
+        'experiences': [],
+        'education': [],
+        'skills': '',
+        'summary': '',
+    }
+    coverage = [
+        {'field': 'fullName', 'status': 'filled', 'evidence': True},
+        {'field': 'email', 'status': 'filled', 'evidence': True},
+        {'field': 'experience', 'status': 'missing_with_evidence', 'evidence': True},
+    ]
+    ev = evaluate_case(
+        form=form, extract=extract, http_status=200, inproc_form=form, coverage=coverage,
+    )
+    assert ev['fields']['experience'] == 'fail'
+    assert any(i['reason'] == 'coverage_missing_with_evidence' for i in ev['issues'])
+    assert ev['field_trace']['experience']['verdict'] == 'weak_missing'
+
+
+def test_aggregate_clusters_and_training_backlog():
+    extract = (
+        'Jordan Hale\nEmail: jordan@example.com\n'
+        'Experience\nAcme Technologies Pvt Ltd\nSoftware Engineer\nJan 2020 - Present\n'
+        'Skills\nPython\n'
+    )
+    form = {
+        'fullName': 'Jordan Hale',
+        'email': 'jordan@example.com',
+        'experiences': [],
+        'education': [],
+        'skills': 'Python',
+        'summary': '',
+    }
+    ev = evaluate_case(form=form, extract=extract, http_status=200, inproc_form=form)
+    agg = aggregate([{'file': 'weak.pdf', 'evaluation': ev}])
+    assert agg['clusters']
+    assert any(c['section'] == 'experience' for c in agg['clusters'])
+    assert agg['training_backlog']
+    assert agg['training_backlog'][0]['section'] in ('experience', 'contact')
+    assert 'empty_rates' in agg
+    assert 'verdict_counts' in agg
+

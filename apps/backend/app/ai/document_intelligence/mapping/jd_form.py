@@ -68,21 +68,26 @@ def format_jd_description(profile: JobProfile) -> str:
         raw,
         title=profile.basic.title or '',
     )
-    if narrative and len(narrative) >= 15:
-        return narrative
-
     responsibilities = [
         strip_source_bullets_to_prose(r)
         for r in profile.responsibilities.items
         if r and str(r).strip()
     ]
     responsibilities = [r for r in responsibilities if r]
+    structured = bool(
+        responsibilities
+        or (profile.requirements.qualifications or [])
+        or (profile.skills.mandatory or [])
+        or (profile.skills.preferred or profile.skills.general or [])
+    )
+    if narrative and len(narrative) >= 15 and not structured:
+        return narrative
     include_kr = bool(responsibilities) and (
         has_responsibilities_section(raw) or '• ' in raw or bool(responsibilities)
     )
 
     body = build_description_from_available(
-        overview='',
+        overview=narrative if len(narrative) >= 15 else '',
         responsibilities=responsibilities,
         mandatory_skills=list(profile.skills.mandatory or []),
         preferred_skills=list(profile.skills.preferred or profile.skills.general or []),
@@ -105,7 +110,7 @@ def format_jd_description(profile: JobProfile) -> str:
         s.lower() in body.lower() for s in required[:2]
     ):
         body = f"{body.rstrip()}\n\n**Required Skills:**\n{', '.join(required)}"
-    return body
+    return body or narrative
 
 
 def map_job_to_form(

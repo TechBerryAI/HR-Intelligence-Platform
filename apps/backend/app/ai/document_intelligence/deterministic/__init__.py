@@ -38,8 +38,13 @@ _DATE_ATOM = (
 )
 _PRESENT_ATOM = r'(?:Present|Current|Now|Till\s*Date|Tilldate|Ongoing|Pursuing|Still(?:\s+Date)?)'
 _DATE_RANGE_RE = re.compile(
-    rf'(?i)\b({_DATE_ATOM})\s*(?:[-–—]|to)\s*({_DATE_ATOM}|{_PRESENT_ATOM})\b'
+    rf'(?i)\b(?:from\s+)?({_DATE_ATOM})\s*(?:[-–—]|to|until|till(?!\s*date))\s*'
+    rf'({_DATE_ATOM}|{_PRESENT_ATOM})\b'
 )
+_TILL_DATE_RANGE_RE = re.compile(
+    rf'(?i)\b(?:from\s+)?({_DATE_ATOM})\s+till\s*date\b'
+)
+_SINCE_RE = re.compile(rf'(?i)\bsince\s+({_DATE_ATOM})\b')
 _PRESENT_TOKEN_RE = re.compile(
     r'(?i)^(present|current|now|till\s*date|tilldate|ongoing|pursuing|still(?:\s+date)?)$'
 )
@@ -115,7 +120,8 @@ def extract_phone(text: str) -> str:
 
     # Prefer labeled lines, then header, then whole document
     m2 = re.search(
-        r'(?i)(?:phone|mobile|mob|cell|tel|contact(?:\s*no)?)\s*[:.\-–—]?\s*([+\d][\d\s().-]{7,}\d)',
+        r'(?i)(?:phone|mobile|mob|cell|tel|contact)'
+        r'(?:\s*(?:no\.?|number|num))?\s*[:.\-–—]?\s*([+\d][\d\s().-]{7,}\d)',
         text,
     )
     if m2:
@@ -311,10 +317,22 @@ def peel_education_date_phrase(text: str) -> Tuple[str, str]:
 
 
 def extract_date_range(line: str) -> Tuple[str, str]:
-    m = _DATE_RANGE_RE.search(line or '')
+    s = (line or '').strip()
+    if s.startswith('(') and s.endswith(')') and len(s) > 2:
+        s = s[1:-1].strip()
+    m = _DATE_RANGE_RE.search(s)
+    if not m:
+        inner = re.search(r'\(([^)]{6,80})\)', s)
+        if inner:
+            m = _DATE_RANGE_RE.search(inner.group(1))
     if m:
         return normalize_month_token(m.group(1)), normalize_month_token(m.group(2))
-    s = (line or '').strip()
+    m_till = _TILL_DATE_RANGE_RE.search(s)
+    if m_till:
+        return normalize_month_token(m_till.group(1)), 'Present'
+    m_since = _SINCE_RE.search(s)
+    if m_since and not re.search(r'(?i)\b(?:server|sql|windows|oracle|version)\b', s):
+        return normalize_month_token(m_since.group(1)), 'Present'
     if _PRESENT_TOKEN_RE.match(s):
         return '', 'Present'
     m1 = _DATE_ATOM_RE.search(s)

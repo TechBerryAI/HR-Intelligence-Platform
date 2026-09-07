@@ -180,14 +180,49 @@ def ground_experience_rows(
     return out
 
 
+def _split_role_company(role: str, company: str) -> tuple[str, str]:
+    """Undo Role — Company packed into one field so merge keys match sanitize."""
+    role, company = (role or '').strip(), (company or '').strip()
+    packed = company if (company and not role) else (role if (role and not company) else '')
+    if packed:
+        for dash in ('—', '–', '-'):
+            if dash in packed:
+                left, _, right = packed.partition(dash)
+                if left.strip() and right.strip() and len(left.split()) <= 8:
+                    return left.strip(), right.strip()
+    return role, company
+
+
+def _companies_compatible(left: str, right: str) -> bool:
+    a, b = (left or '').strip().lower(), (right or '').strip().lower()
+    if not a or not b:
+        return True
+    if a == b:
+        return True
+    # Unsanitized "Role — Company" blob vs split company
+    return a in b or b in a
+
+
 def _same_job(left: Any, right: Any) -> bool:
+    """True only when identity keys agree. Same title at two companies is not one job."""
     lr, lc, ls, _ = _parts(left)
     rr, rc, rs, _ = _parts(right)
-    if ls and rs and ls == rs:
+    lr, lc = _split_role_company(lr, lc)
+    rr, rc = _split_role_company(rr, rc)
+    lr, rr = lr.lower(), rr.lower()
+    lc, rc = lc.lower(), rc.lower()
+    if ls and rs and ls != rs:
+        return False
+    if lc and rc and not _companies_compatible(lc, rc):
+        return False
+    start_compat = not ls or not rs or ls == rs
+    company_compat = _companies_compatible(lc, rc)
+    role_compat = not lr or not rr or lr == rr
+    if ls and rs and ls == rs and company_compat:
         return True
-    if lr and rr and lr.lower() == rr.lower():
+    if lr and rr and lr == rr and company_compat and start_compat:
         return True
-    if lc and rc and lc.lower() == rc.lower() and (lr.lower() == rr.lower() or not (lr and rr)):
+    if lc and rc and company_compat and role_compat and start_compat:
         return True
     return False
 
@@ -233,8 +268,28 @@ def merge_experience_field_level(
                     updates['role'] = other_role[:200]
             if not (cur.start or '').strip() and (other.start or '').strip():
                 updates['start'] = other.start
-                updates['end'] = cur.end or other.end
-                updates['is_current'] = cur.is_current or other.is_current
+            if not (cur.end or '').strip() and not cur.is_current and (
+                (other.end or '').strip() or other.is_current
+            ):
+                updates['end'] = other.end or ''
+            if other.is_current and not cur.is_current:
+                same_company = (
+                    not (cur.company or '').strip()
+                    or not (other.company or '').strip()
+                    or (cur.company or '').strip().lower()
+                    == (other.company or '').strip().lower()
+                )
+                same_start = (
+                    not (cur.start or '').strip()
+                    or not (other.start or '').strip()
+                    or (cur.start or '').strip() == (other.start or '').strip()
+                )
+                if same_company and same_start:
+                    updates['is_current'] = True
+                    if not (cur.end or '').strip():
+                        updates['end'] = ''
+            if not (cur.description or '').strip() and (other.description or '').strip():
+                updates['description'] = (other.description or '')[:2000]
             if updates:
                 nxt = nxt.model_copy(update=updates)
             break

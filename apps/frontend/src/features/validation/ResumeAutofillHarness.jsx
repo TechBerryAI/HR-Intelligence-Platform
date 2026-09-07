@@ -233,6 +233,7 @@ export default function ResumeAutofillHarness() {
                 key={uploadKey}
                 publicMode
                 currentFileName={form.resumeFileName}
+                resumeFile={form.resumeFile}
                 onFileSelect={(file) => {
                   const t0 = Date.now()
                   setStartedAt(t0)

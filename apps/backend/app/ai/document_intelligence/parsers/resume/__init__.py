@@ -168,16 +168,22 @@ _CITY_LIKE = re.compile(
     r'Tamil\s+Nadu|Telangana|Gujarat|KA|MH|TN|TS|UP|DL|USA|UK))'
     r')$'
 )
-_DATE_FIRST_LINE = re.compile(
-    r'(?i)^\(?\s*('
+_DATE_ATOM_LINE = (
     r'(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:19|20)\d{2})'
-    r'\s*(?:[-–—]|to)\s*'
-    r'(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
-    r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
-    r'|(?:19|20)\d{2}|Present|Current|Now|Till\s*Date|Ongoing|Pursuing)'
-    r')\s*\)?(?:\s*[|•·]\s*(.+))?$'
+)
+_DATE_PRESENT_LINE = (
+    r'(?:Present|Current|Now|Till\s*Date|Tilldate|Ongoing|Pursuing)'
+)
+_DATE_FIRST_LINE = re.compile(
+    rf'(?i)^\(?\s*('
+    rf'(?:from\s+|since\s+)?{_DATE_ATOM_LINE}'
+    rf'(?:'
+    rf'\s*(?:[-–—]|to|until|till(?!\s*date))\s*(?:{_DATE_ATOM_LINE}|{_DATE_PRESENT_LINE})'
+    rf'|\s+till\s*date'
+    rf')?'
+    rf')\s*\)?(?:\s*[|•·]\s*(.+))?$'
 )
 _DEGREE_PAT = re.compile(
     r'(?i)\b('
@@ -220,16 +226,20 @@ _INSTITUTION_CUE = re.compile(
 )
 _DATE_RANGE_STRIP = re.compile(
     r'(?i)\(?\s*(?:'
+    r'(?:from\s+)?'
     r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\s+)?'
     r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:19|20)\d{2}'
-    r')\s*(?:[-–—]|to)\s*'
+    r')(?:'
+    r'\s*(?:[-–—]|to|until|till(?!\s*date))\s*'
     r'(?:'
     r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\s+)?'
     r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
-    r'|(?:19|20)\d{2}|Present|Current|Now|Till\s*Date|Ongoing|Pursuing'
+    r'|(?:19|20)\d{2}|Present|Current|Now|Till\s*Date|Tilldate|Ongoing|Pursuing'
+    r')'
+    r'|\s+till\s*date'
     r')\s*\)?'
 )
 
@@ -2264,6 +2274,23 @@ _DATE_ATOM = re.compile(
 )
 
 
+_DATE_JOIN_TAIL = re.compile(
+    r'(?i)^(?:to|till|until|[-–—])?\s*'
+    r'(?:present|current|now|till\s*date|ongoing|pursuing|(?:19|20)\d{2})\s*$'
+)
+
+
+def _is_date_line_fragment(s: str) -> bool:
+    t = (s or '').strip()
+    if not t:
+        return False
+    if _DATE_ATOM.match(t) or _DATE_ONLY_LINE.match(t) or _DATE_JOIN_TAIL.match(t):
+        return True
+    if re.match(r'(?i)^(?:from|since)\s+', t) and extract_date_range(t)[0]:
+        return True
+    return False
+
+
 def _join_wrapped_date_lines(lines: list[str]) -> list[str]:
     """Reassemble PDF-split date ranges: May / 2024 / – / July / 2024."""
     out: list[str] = []
@@ -2279,7 +2306,7 @@ def _join_wrapped_date_lines(lines: list[str]) -> list[str]:
         s = (raw or '').strip()
         if not s:
             continue
-        if _DATE_ATOM.match(s):
+        if _is_date_line_fragment(s):
             buf.append(s)
             continue
         flush()
@@ -3073,6 +3100,51 @@ def _coalesce_stacked_experience_entries(rows: list[ExperienceEntry]) -> list[Ex
                 )
                 i += 2
                 continue
+            # Date-first then company/role, optionally a third complementary line
+            if cur.start and not cur_role and not cur_co and (nxt_role or nxt_co):
+                if (
+                    nxt2
+                    and not n2_dates_conflict
+                    and (
+                        (nxt_co and not nxt_role and n2_role and not n2_co)
+                        or (nxt_role and not nxt_co and n2_co and not n2_role)
+                    )
+                ):
+                    out.append(
+                        cur.model_copy(
+                            update={
+                                'company': (nxt_co or n2_co)[:200],
+                                'role': (nxt_role or n2_role)[:200],
+                                'start': cur.start or nxt.start or nxt2.start,
+                                'end': cur.end or nxt.end or nxt2.end,
+                                'is_current': cur.is_current or nxt.is_current or nxt2.is_current,
+                                'location': (
+                                    cur.location or nxt.location or nxt2.location or ''
+                                )[:120],
+                                'description': (
+                                    cur.description or nxt.description or nxt2.description or ''
+                                ).strip(),
+                            }
+                        )
+                    )
+                    i += 3
+                    continue
+                if not dates_conflict:
+                    out.append(
+                        cur.model_copy(
+                            update={
+                                'company': nxt_co[:200],
+                                'role': nxt_role[:200],
+                                'start': cur.start or nxt.start,
+                                'end': cur.end or nxt.end,
+                                'is_current': cur.is_current or nxt.is_current,
+                                'location': (cur.location or nxt.location or '')[:120],
+                                'description': (cur.description or nxt.description or '').strip(),
+                            }
+                        )
+                    )
+                    i += 2
+                    continue
         out.append(cur)
         i += 1
     return out
@@ -3157,6 +3229,13 @@ def _description_is_job_header_echo(job: ExperienceEntry, desc: str) -> bool:
     d = (desc or '').strip()
     if not d or '\n' in d:
         return False
+    if len(d) > 90 or _DUTY_VERB_START.match(d):
+        return False
+    if re.search(
+        r'(?i)\b(?:responsible for|developed|managed|implemented|supported|built)\b',
+        d,
+    ):
+        return False
     if _looks_like_job_header_line(d) and extract_date_range(d)[0]:
         return True
     company = (job.company or '').strip().lower()
@@ -3164,9 +3243,57 @@ def _description_is_job_header_echo(job: ExperienceEntry, desc: str) -> bool:
     blob = d.lower()
     if company and company in blob and extract_date_range(d)[0]:
         return True
-    if role and company and role in blob and company in blob:
+    if role and company and role in blob and company in blob and len(d.split()) <= 10:
         return True
     return False
+
+
+def _attach_orphan_dates_to_entries(
+    entries: list[ExperienceEntry],
+    lines: list[str],
+) -> list[ExperienceEntry]:
+    """Attach leftover date-only lines to the nearest row missing start or end."""
+    if not entries or not lines:
+        return entries
+    blobs: list[tuple[str, str]] = []
+    for ln in lines:
+        stripped = re.sub(r'^[\s•·\-\*●]+', '', (ln or '').strip())
+        leftover = _DATE_RANGE_STRIP.sub('', stripped).strip(' \t|-–—,()')
+        d_start, d_end = extract_date_range(stripped)
+        if not d_start:
+            continue
+        if leftover and leftover.lower() not in {
+            'present', 'current', 'now', 'ongoing', 'till date', 'tilldate',
+        } and len(leftover.split()) > 2:
+            continue
+        blobs.append((d_start, d_end or ''))
+    if not blobs:
+        return entries
+    out = list(entries)
+    used: set[int] = set()
+    for i, job in enumerate(out):
+        has_start = bool((job.start or '').strip())
+        has_end = bool((job.end or '').strip()) or bool(job.is_current)
+        if has_start and has_end:
+            continue
+        for j, (ds, de) in enumerate(blobs):
+            if j in used:
+                continue
+            is_cur = bool(de and re.match(
+                r'(?i)^(present|current|now|till\s*date|ongoing|pursuing)$',
+                de,
+            ))
+            updates: dict[str, str | bool] = {}
+            if not has_start:
+                updates['start'] = ds
+            if not has_end:
+                updates['end'] = '' if is_cur else de
+                updates['is_current'] = bool(job.is_current or is_cur)
+            if updates:
+                out[i] = job.model_copy(update=updates)
+                used.add(j)
+                break
+    return out
 
 
 def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceEntry]:
@@ -3278,19 +3405,18 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
                 continue
             if is_non_job_experience_record(job):
                 continue
-            if desc and _description_is_job_header_echo(job, desc):
-                desc = ''
-            if desc:
-                job = job.model_copy(update={'description': desc})
+            job_desc = desc or (job.description or '')
+            if job_desc and _description_is_job_header_echo(job, job_desc):
+                job_desc = ''
+            if job_desc:
+                job = job.model_copy(update={'description': job_desc})
             entries.append(job)
         pending_jobs = []
 
-    def _attach_duration_to_pending(blob: str) -> bool:
-        if not pending_jobs:
-            return False
+    def _attach_duration_to_row(target: ExperienceEntry, blob: str) -> ExperienceEntry | None:
         d_start, d_end = extract_date_range(blob)
         if not d_start:
-            return False
+            return None
         is_cur = bool(
             d_end
             and re.match(
@@ -3298,15 +3424,33 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
                 d_end,
             )
         )
-        prev = pending_jobs[-1]
-        pending_jobs[-1] = prev.model_copy(
+        return target.model_copy(
             update={
-                'start': prev.start or d_start,
-                'end': prev.end or ('' if is_cur else (d_end or '')),
-                'is_current': prev.is_current or is_cur,
+                'start': target.start or d_start,
+                'end': target.end or ('' if is_cur else (d_end or '')),
+                'is_current': target.is_current or is_cur,
             }
         )
-        return True
+
+    def _row_needs_duration(target: ExperienceEntry) -> bool:
+        return (not (target.start or '').strip()) or (
+            not (target.end or '').strip() and not target.is_current
+        )
+
+    def _attach_duration_to_pending(blob: str) -> bool:
+        if pending_jobs and _row_needs_duration(pending_jobs[-1]):
+            updated = _attach_duration_to_row(pending_jobs[-1], blob)
+            if updated is None:
+                return False
+            pending_jobs[-1] = updated
+            return True
+        if entries and _row_needs_duration(entries[-1]):
+            updated = _attach_duration_to_row(entries[-1], blob)
+            if updated is None:
+                return False
+            entries[-1] = updated
+            return True
+        return False
 
     for line in lines:
         header_probe = re.sub(r'^[\s•·\-\*●]+', '', line.strip())
@@ -3396,41 +3540,69 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
         duration_m = _EMPLOYMENT_DURATION_LABEL.match(header_probe)
         if duration_m and not in_project_block:
             blob = duration_m.group(1) or header_probe
-            if pending_jobs:
-                if _attach_duration_to_pending(blob):
-                    continue
-            else:
-                d_start, d_end = extract_date_range(blob)
-                if d_start:
-                    is_cur = bool(
-                        d_end
-                        and re.match(
-                            r'(?i)^(present|current|now|till\s*date|ongoing|pursuing)$',
-                            d_end,
-                        )
+            if _attach_duration_to_pending(blob):
+                continue
+            d_start, d_end = extract_date_range(blob)
+            if d_start:
+                is_cur = bool(
+                    d_end
+                    and re.match(
+                        r'(?i)^(present|current|now|till\s*date|ongoing|pursuing)$',
+                        d_end,
                     )
-                    pending_jobs.append(
-                        ExperienceEntry(
-                            start=d_start,
-                            end='' if is_cur else (d_end or ''),
-                            is_current=is_cur,
-                        )
+                )
+                pending_jobs.append(
+                    ExperienceEntry(
+                        start=d_start,
+                        end='' if is_cur else (d_end or ''),
+                        is_current=is_cur,
                     )
-                    continue
+                )
+                continue
         entry = _parse_experience_line(line, identity_names=identity_names)
         if entry and (entry.role or entry.company or entry.start or entry.location):
             if _is_project_like_experience(entry.role, entry.company):
                 continue
-            # Date/location-only line → attach to previous job header
-            if (
-                pending_jobs
-                and not pending_desc
-                and not (entry.role or '').strip()
+            # Date/location-only line → attach to the open job (even after duties)
+            # when that job has no start yet. If the open job already has dates,
+            # this line starts the next date-first row.
+            date_only = (
+                not (entry.role or '').strip()
                 and not (entry.company or '').strip()
-                and (entry.start or entry.location)
-            ):
+                and bool(entry.start or entry.location)
+            )
+            if date_only and pending_jobs and not (pending_jobs[-1].start or '').strip():
                 prev = pending_jobs[-1]
                 pending_jobs[-1] = prev.model_copy(
+                    update={
+                        'start': prev.start or entry.start,
+                        'end': prev.end or entry.end,
+                        'is_current': prev.is_current or entry.is_current,
+                        'location': (prev.location or entry.location or '')[:120],
+                    }
+                )
+                continue
+            if (
+                date_only
+                and pending_jobs
+                and (pending_jobs[-1].start or '').strip()
+                and not (pending_jobs[-1].end or '').strip()
+                and not pending_jobs[-1].is_current
+                and (entry.start or '')
+                and not (entry.end or '').strip()
+                and not entry.is_current
+            ):
+                prev = pending_jobs[-1]
+                pending_jobs[-1] = prev.model_copy(update={'end': entry.start})
+                continue
+            if (
+                date_only
+                and not pending_jobs
+                and entries
+                and not (entries[-1].start or '').strip()
+            ):
+                prev = entries[-1]
+                entries[-1] = prev.model_copy(
                     update={
                         'start': prev.start or entry.start,
                         'end': prev.end or entry.end,
@@ -3524,15 +3696,14 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
         if is_contact_or_reference_line(stripped) or looks_like_contact_person_line(stripped):
             in_contact_block = True
             continue
-        if pending_jobs:
-            leftover = _DATE_RANGE_STRIP.sub('', stripped).strip(' \t|-–—,()')
-            if extract_date_range(stripped)[0] and (
-                not leftover
-                or leftover.lower() in {'present', 'current', 'now', 'ongoing'}
-                or len(leftover.split()) <= 1
-            ):
-                if _attach_duration_to_pending(stripped):
-                    continue
+        leftover = _DATE_RANGE_STRIP.sub('', stripped).strip(' \t|-–—,()')
+        if extract_date_range(stripped)[0] and (
+            not leftover
+            or leftover.lower() in {'present', 'current', 'now', 'ongoing', 'till date'}
+            or len(leftover.split()) <= 1
+        ):
+            if _attach_duration_to_pending(stripped):
+                continue
         if pending_jobs and _looks_like_job_location_line(stripped) and not extract_date_range(stripped)[0]:
             prev = pending_jobs[-1]
             if not (prev.location or '').strip():
@@ -3560,9 +3731,18 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
             pending_jobs[-1] = prev.model_copy(update={'company': stripped[:200]})
             continue
         if pending_jobs:
+            last = pending_jobs[-1]
+            if (
+                not (last.role or '').strip()
+                and ((last.company or '').strip() or (last.start or '').strip())
+                and _looks_like_role_only_line(stripped)
+            ):
+                pending_jobs[-1] = last.model_copy(update={'role': stripped[:200]})
+                continue
             pending_desc.append(line)
 
     _flush_pending()
+    entries[:] = _attach_orphan_dates_to_entries(entries, lines)
 
     cleaned: list[ExperienceEntry] = []
     for e in entries:
@@ -3625,35 +3805,76 @@ def parse_summary(section_text: str, full_text: str = '') -> str:
     return extract_summary_from_text(full_text)
 
 
-def parse_certifications(section_text: str, full_text: str = '') -> list[CertificateEntry]:
-    raw = section_text.strip()
-    if not raw and full_text:
-        from app.ai.parser.enrichment.resume_text_inference import extract_certifications_from_text
+_CERT_HEADING_LINE = re.compile(
+    r'(?i)^(?:\*\*)?(?:certifications?|certificates?|licenses?|'
+    r'professional\s+certifications?|courses?)\s*:?\s*(.*)$'
+)
 
-        certs = []
-        for c in extract_certifications_from_text(full_text):
-            if isinstance(c, str):
-                certs.append(CertificateEntry(name=c))
-            elif isinstance(c, dict):
+
+def _certificate_entries_from_extract(full_text: str) -> list[CertificateEntry]:
+    from app.ai.parser.enrichment.resume_text_inference import extract_certifications_from_text
+
+    certs: list[CertificateEntry] = []
+    for c in extract_certifications_from_text(full_text or ''):
+        if isinstance(c, str) and c.strip():
+            certs.append(CertificateEntry(name=c.strip()[:200]))
+        elif isinstance(c, dict):
+            name = str(c.get('name') or '').strip()
+            if name:
                 certs.append(
                     CertificateEntry(
-                        name=str(c.get('name') or ''),
-                        issuer=str(c.get('issuer') or ''),
+                        name=name[:200],
+                        issuer=str(c.get('issuer') or '')[:200],
                     )
                 )
-        return certs
+    return certs
+
+
+def _split_inline_cert_tokens(blob: str) -> list[CertificateEntry]:
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_cert_name
+
     out: list[CertificateEntry] = []
-    for line in raw.splitlines():
-        stripped = re.sub(r'^[\s•·\-\*]+', '', line.strip())
-        if stripped and not is_section_header_line(stripped):
+    for piece in re.split(r'[,;/|]', blob or ''):
+        name = re.sub(r'^[\s•·\-\*]+', '', piece.strip())
+        if len(name) < 3 or is_section_header_line(name):
+            continue
+        if is_plausible_cert_name(name) or (len(name.split()) <= 8 and name[0].isupper()):
+            out.append(CertificateEntry(name=name[:200]))
+    return out
+
+
+def parse_certifications(section_text: str, full_text: str = '') -> list[CertificateEntry]:
+    raw = (section_text or '').strip()
+    lines = [ln.strip() for ln in raw.splitlines() if ln.strip()] if raw else []
+    out: list[CertificateEntry] = []
+    if lines:
+        head = _CERT_HEADING_LINE.match(lines[0])
+        if head:
+            trailing = (head.group(1) or '').strip()
+            if trailing:
+                out.extend(_split_inline_cert_tokens(trailing))
+            lines = lines[1:]
+        for line in lines:
+            stripped = re.sub(r'^[\s•·\-\*\d\.]+', '', line.strip())
+            if not stripped or is_section_header_line(stripped):
+                continue
+            if extract_date_range(stripped)[0] and len(stripped.split()) <= 4:
+                continue
             parts = re.split(r'\s+[-–—|]\s+|\s+from\s+|\s+by\s+', stripped, maxsplit=1, flags=re.I)
+            name = parts[0].strip()
+            if len(name) < 3:
+                continue
             out.append(
                 CertificateEntry(
-                    name=parts[0].strip()[:200],
+                    name=name[:200],
                     issuer=parts[1].strip()[:200] if len(parts) > 1 else '',
                 )
             )
-    return out
+    if out:
+        return out
+    if full_text:
+        return _certificate_entries_from_extract(full_text)
+    return []
 
 
 _PROJECT_STOP_LINE = re.compile(
@@ -4038,7 +4259,18 @@ def _structural_employment_window(text: str) -> str:
         if not s:
             continue
         labeled = bool(_LABELED_EMPLOYMENT_LINE.match(s) or _parse_unheaded_employment_row(s))
-        if not labeled:
+        title_at = bool(
+            re.search(r'(?i)\bat\s+[A-Z]', s)
+            and (
+                _has_job_title_cue(s.split(' at ')[0] if ' at ' in s.lower() else s)
+                or _looks_like_role_only_line(re.split(r'(?i)\bat\s+', s, maxsplit=1)[0].strip())
+            )
+        )
+        pipe_title = '|' in s and (
+            _has_job_title_cue(s.split('|', 1)[0].strip())
+            or _looks_like_role_only_line(s.split('|', 1)[0].strip())
+        )
+        if not labeled and not title_at and not pipe_title:
             continue
         keep.add(i)
         for j in (i - 2, i - 1, i + 1, i + 2):

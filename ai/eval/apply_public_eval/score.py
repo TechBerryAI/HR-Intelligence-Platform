@@ -4,6 +4,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ai.eval.apply_public_eval.trace import (
+    apply_coverage_gaps,
+    cluster_issues,
+    field_trace_verdicts,
+    rank_training_backlog,
+)
+
 CLASS_A = 'A'  # extraction/layout
 CLASS_B = 'B'  # parser
 CLASS_C = 'C'  # source ambiguity
@@ -11,12 +18,17 @@ CLASS_D = 'D'  # API/UI
 
 FIELD_KEYS = (
     'name',
+    'email',
+    'phone',
+    'location',
+    'linkedin',
     'experience',
     'company',
     'role',
     'start',
     'end',
     'isCurrent',
+    'description',
     'education',
     'degree',
     'institution',
@@ -24,6 +36,7 @@ FIELD_KEYS = (
     'edu_end',
     'skills',
     'summary',
+    'certifications',
 )
 
 _JOB_TITLE = re.compile(
@@ -50,6 +63,17 @@ _INST_CUE = re.compile(
 _SKILLS_HEAD = re.compile(r'(?im)^.{0,40}\bskills?\b',)
 _SUMMARY_HEAD = re.compile(r'(?im)^.{0,40}\b(?:summary|objective|profile|synopsis)\b')
 _EMAIL = re.compile(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', re.I)
+_PHONE = re.compile(r'(?:\+91[\s-]?)?[6-9]\d{9}|\b\d{10}\b')
+_LINKEDIN = re.compile(r'(?i)linkedin\.com')
+_LOC_CUE = re.compile(
+    r'(?i)\b(?:location|address|city|mumbai|pune|bengaluru|bangalore|'
+    r'hyderabad|delhi|chennai|noida|gurgaon|gurugram|kolkata|remote)\b',
+)
+_CERT_HEAD = re.compile(r'(?im)^.{0,40}\b(?:certifications?|certificates?)\b')
+_DUTY_CUE = re.compile(
+    r'(?i)\b(?:responsible for|developed|managed|implemented|supported|built|'
+    r'designed|configured|maintained|administered)\b',
+)
 _PROSE_SKILL = re.compile(
     r'(?i)\b(?:i am responsible|project description|secured a training|'
     r'developed and implemented|business critical processes)\b',
@@ -74,6 +98,7 @@ def slim_form(form: dict | None) -> dict[str, Any]:
             'start': _norm(e.get('startMonth') or e.get('start')),
             'end': _norm(e.get('endMonth') or e.get('end')),
             'isCurrent': bool(e.get('isCurrent') if 'isCurrent' in e else e.get('is_current')),
+            'description': _norm(e.get('description')),
         }
         for e in (form.get('experiences') or form.get('experience') or [])
         if isinstance(e, dict)
@@ -93,12 +118,26 @@ def slim_form(form: dict | None) -> dict[str, Any]:
         skills_s = ', '.join(_norm(s) for s in skills if _norm(s))
     else:
         skills_s = _norm(skills)
+    certifications = [
+        {
+            'name': _norm(c.get('name')),
+            'issuer': _norm(c.get('issuer')),
+        }
+        for c in (form.get('certifications') or [])
+        if isinstance(c, dict) and (_norm(c.get('name')) or _norm(c.get('issuer')))
+    ]
     return {
         'name': _norm(form.get('fullName') or form.get('name')),
+        'email': _norm(form.get('email')),
+        'phone': _norm(form.get('phone')),
+        'location': _norm(form.get('currentLocation') or form.get('preferredLocation')),
+        'preferredLocation': _norm(form.get('preferredLocation')),
+        'linkedin': _norm(form.get('linkedinUrl') or form.get('linkedin')),
         'experiences': experiences,
         'education': education,
         'skills': skills_s,
         'summary': _norm(form.get('summary')),
+        'certifications': certifications,
     }
 
 
@@ -106,6 +145,10 @@ def source_support(extract: str) -> dict[str, bool]:
     text = extract or ''
     return {
         'name': bool(_EMAIL.search(text) or re.search(r'(?m)^[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){1,3}\s*$', text[:800])),
+        'email': bool(_EMAIL.search(text)),
+        'phone': bool(_PHONE.search(text)),
+        'location': bool(_LOC_CUE.search(text)),
+        'linkedin': bool(_LINKEDIN.search(text)),
         'experience': bool(_JOB_TITLE.search(text) and _DATE_HINT.search(text)),
         'company': bool(_COMPANY_CUE.search(text)),
         'role': bool(_JOB_TITLE.search(text)),
@@ -115,6 +158,8 @@ def source_support(extract: str) -> dict[str, bool]:
         'institution': bool(_INST_CUE.search(text)),
         'skills': bool(_SKILLS_HEAD.search(text)),
         'summary': bool(_SUMMARY_HEAD.search(text)),
+        'certifications': bool(_CERT_HEAD.search(text)),
+        'description': bool(_DUTY_CUE.search(text)),
     }
 
 
@@ -135,6 +180,8 @@ def _values_close(a: str, b: str) -> bool:
 def json_expected_blob(ref: dict, key: str) -> str:
     if key == 'name':
         return ref.get('name') or ''
+    if key in ('email', 'phone', 'location', 'linkedin'):
+        return ref.get(key) or ''
     if key in ('company', 'role', 'start', 'end'):
         rows = ref.get('experiences') or []
         return (rows[0].get(key) if rows else '') or ''
@@ -164,6 +211,8 @@ def compare_forms(actual: dict, expected: dict) -> dict[str, bool]:
     a, e = slim_form(actual), slim_form(expected)
     out: dict[str, bool] = {}
     out['name'] = _values_close(a['name'], e['name'])
+    for k in ('email', 'phone', 'location', 'linkedin'):
+        out[k] = True if not e.get(k) else _values_close(a.get(k, ''), e.get(k, ''))
     out['experience'] = bool(a['experiences']) == bool(e['experiences']) or (
         len(a['experiences']) >= 1 and len(e['experiences']) >= 1
     )
@@ -217,6 +266,10 @@ def compare_forms(actual: dict, expected: dict) -> dict[str, bool]:
     else:
         out['skills'] = True
     out['summary'] = (not e['summary']) or _values_close(a['summary'][:80], e['summary'][:80])
+    if e.get('certifications'):
+        out['certifications'] = bool(a.get('certifications'))
+    else:
+        out['certifications'] = True
     return out
 
 
@@ -234,6 +287,9 @@ def _form_vs_inproc_mismatch(http: dict, inproc: dict) -> bool:
         return True
     if _fold(h['skills']) != _fold(p['skills']):
         return True
+    for k in ('email', 'phone', 'location', 'linkedin'):
+        if _fold(h.get(k)) != _fold(p.get(k)):
+            return True
     return False
 
 
@@ -245,6 +301,7 @@ def evaluate_case(
     inproc_form: dict | None = None,
     reference: dict | None = None,
     extract_short: bool | None = None,
+    coverage: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Score one Apply Form DTO. Missing source evidence is not a parser failure."""
     slim = slim_form(form)
@@ -252,6 +309,9 @@ def evaluate_case(
     issues: list[dict[str, str]] = []
     field_ok: dict[str, str] = {k: 'n/a' for k in FIELD_KEYS}
     short = bool(extract_short) or len((extract or '').strip()) < 40
+    coverage_rows = coverage if coverage is not None else (
+        form.get('coverage') if isinstance(form, dict) else None
+    )
 
     if http_status == 429:
         issues.append({'class': CLASS_D, 'field': '*', 'reason': 'rate_limited'})
@@ -299,6 +359,53 @@ def evaluate_case(
             })
     else:
         mark('name', 'n/a' if not slim['name'] else 'pass')
+
+    def _score_contact(field: str, value: str, *, empty_reason: str, ungrounded_reason: str) -> None:
+        if support.get(field):
+            if value:
+                grounded = value.casefold() in hay if field != 'phone' else (
+                    re.sub(r'\D', '', value)[-10:] in re.sub(r'\D', '', extract or '')
+                    if len(re.sub(r'\D', '', value)) >= 8 else False
+                )
+                if field == 'linkedin':
+                    token = value.casefold().replace('https://', '').replace('http://', '').rstrip('/')
+                    grounded = bool(token) and token[:24] in hay
+                if field == 'location':
+                    toks = [t for t in re.findall(r'[a-z]{3,}', value.casefold()) if t]
+                    grounded = bool(toks) and sum(1 for t in toks if t in hay) >= max(1, len(toks) // 2)
+                mark(field, 'pass' if grounded else 'fail')
+                if not grounded:
+                    issues.append({'class': CLASS_B, 'field': field, 'reason': ungrounded_reason})
+            else:
+                mark(field, 'fail')
+                issues.append({
+                    'class': CLASS_A if short else CLASS_B,
+                    'field': field,
+                    'reason': empty_reason,
+                })
+        else:
+            mark(field, 'n/a' if not value else 'pass')
+
+    _score_contact(
+        'email', slim.get('email') or '',
+        empty_reason='email_supported_but_empty',
+        ungrounded_reason='email_not_in_extract',
+    )
+    _score_contact(
+        'phone', slim.get('phone') or '',
+        empty_reason='phone_supported_but_empty',
+        ungrounded_reason='phone_not_in_extract',
+    )
+    _score_contact(
+        'location', slim.get('location') or '',
+        empty_reason='location_supported_but_empty',
+        ungrounded_reason='location_not_in_extract',
+    )
+    _score_contact(
+        'linkedin', slim.get('linkedin') or '',
+        empty_reason='linkedin_supported_but_empty',
+        ungrounded_reason='linkedin_not_in_extract',
+    )
 
     exp = slim['experiences']
     first = exp[0] if exp else {}
@@ -381,6 +488,19 @@ def evaluate_case(
         mark('start', 'n/a' if not first.get('start') else 'pass')
         mark('end', 'n/a' if not (first.get('end') or first.get('isCurrent')) else 'pass')
         mark('isCurrent', 'n/a' if not exp else 'pass')
+
+    first_desc = (first.get('description') or '') if first else ''
+    if first_desc:
+        mark('description', 'pass')
+    elif exp and support.get('description'):
+        mark('description', 'fail')
+        issues.append({
+            'class': CLASS_B,
+            'field': 'description',
+            'reason': 'duty_cues_in_extract_empty_description',
+        })
+    else:
+        mark('description', 'n/a')
 
     if first.get('company') and slim['name'] and _fold(first['company']) == _fold(slim['name']):
         issues.append({'class': CLASS_B, 'field': 'company', 'reason': 'person_name_used_as_company'})
@@ -490,6 +610,26 @@ def evaluate_case(
     else:
         mark('summary', 'n/a' if not slim['summary'] else 'pass')
 
+    certs = slim.get('certifications') or []
+    if support.get('certifications'):
+        mark('certifications', 'pass' if certs else 'fail')
+        if not certs:
+            issues.append({
+                'class': CLASS_B,
+                'field': 'certifications',
+                'reason': 'cert_heading_in_extract_empty_form',
+            })
+    else:
+        mark('certifications', 'n/a' if not certs else 'pass')
+
+    apply_coverage_gaps(
+        slim=slim,
+        coverage=coverage_rows if isinstance(coverage_rows, list) else None,
+        field_ok=field_ok,
+        issues=issues,
+        mark=mark,
+    )
+
     if reference:
         ref_cmp = compare_forms(form, reference)
         ref_slim = slim_form(reference)
@@ -515,6 +655,24 @@ def evaluate_case(
     api_fail = any(i['class'] == CLASS_D for i in issues)
     acceptable = (not parser_fail) and (not api_fail) and http_status == 200
     classes = sorted({i['class'] for i in issues})
+    traces = field_trace_verdicts(
+        slim=slim,
+        extract=extract or '',
+        coverage=coverage_rows if isinstance(coverage_rows, list) else None,
+        support=support,
+    )
+    empty = {
+        'name': not slim.get('name'),
+        'email': not slim.get('email'),
+        'phone': not slim.get('phone'),
+        'location': not slim.get('location'),
+        'linkedin': not slim.get('linkedin'),
+        'experience': not slim.get('experiences'),
+        'education': not slim.get('education'),
+        'skills': not slim.get('skills'),
+        'summary': not slim.get('summary'),
+        'certifications': not slim.get('certifications'),
+    }
     return {
         'form': slim,
         'support': support,
@@ -523,6 +681,9 @@ def evaluate_case(
         'classes': classes,
         'acceptable': acceptable,
         'had_reference': bool(reference),
+        'coverage': coverage_rows if isinstance(coverage_rows, list) else [],
+        'field_trace': traces,
+        'empty': empty,
     }
 
 
@@ -561,11 +722,66 @@ def aggregate(cases: list[dict[str, Any]]) -> dict[str, Any]:
             'accuracy': (st['pass'] / scored) if scored else None,
             'scored': scored,
         }
+
+    empty_keys = (
+        'name', 'email', 'phone', 'location', 'linkedin',
+        'experience', 'education', 'skills', 'summary', 'certifications',
+    )
+    empty_rates: dict[str, dict[str, Any]] = {
+        k: {'empty': 0, 'filled': 0, 'rate': None} for k in empty_keys
+    }
+    coverage_counts: dict[str, dict[str, int]] = {}
+    verdict_counts: dict[str, dict[str, int]] = {}
+    for case in cases:
+        ev = case.get('evaluation') or {}
+        for k in empty_keys:
+            if (ev.get('empty') or {}).get(k):
+                empty_rates[k]['empty'] += 1
+            else:
+                empty_rates[k]['filled'] += 1
+        for row in ev.get('coverage') or []:
+            if not isinstance(row, dict):
+                continue
+            field = str(row.get('field') or '')
+            status = str(row.get('status') or '')
+            if not field:
+                continue
+            bucket = coverage_counts.setdefault(
+                field,
+                {'filled': 0, 'recovered': 0, 'missing_with_evidence': 0, 'missing_no_evidence': 0, 'other': 0},
+            )
+            if status in bucket:
+                bucket[status] += 1
+            else:
+                bucket['other'] += 1
+        for field, tr in (ev.get('field_trace') or {}).items():
+            if not isinstance(tr, dict):
+                continue
+            verdict = str(tr.get('verdict') or 'other')
+            bucket = verdict_counts.setdefault(
+                field,
+                {'ok': 0, 'weak_missing': 0, 'weak_ungrounded': 0, 'absent': 0, 'fallback': 0, 'other': 0},
+            )
+            if verdict in bucket:
+                bucket[verdict] += 1
+            else:
+                bucket['other'] += 1
+    for k, st in empty_rates.items():
+        total = st['empty'] + st['filled']
+        st['rate'] = (st['empty'] / total) if total else None
+
+    clusters = cluster_issues(cases)
+    backlog = rank_training_backlog(cases)
     return {
         'total': n,
         'acceptable': acceptable,
         'failure_count': n - acceptable,
         'per_field': per_field,
+        'empty_rates': empty_rates,
+        'coverage_counts': coverage_counts,
+        'verdict_counts': verdict_counts,
+        'clusters': clusters,
+        'training_backlog': backlog,
         'class_counts_resumes': class_counts,
         'failures': failures,
     }

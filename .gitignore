@@ -304,6 +304,7 @@ apps/backend/data/bulk_exports/
 # Local resume / JD corpora (large PII — keep on disk, never push)
 /Resumes/
 /resumes/
+/resume testing/
 /JDs/
 /JD/
 /jds/
