@@ -463,11 +463,18 @@ def test_ocr_retry_on_extract_err_even_when_text_present():
         return_value=True,
     ):
         assert _bulk_needs_ocr_retry(
-            'pdf', 'plenty of extracted text here ' * 20, 'boom', looks_like_garbage=never_garbage
+            'pdf', '', 'boom', looks_like_garbage=never_garbage
         )
         assert _bulk_needs_ocr_retry('pdf', '', None, looks_like_garbage=never_garbage)
         assert not _bulk_needs_ocr_retry(
             'docx', 'plenty of extracted text here ' * 20, 'boom', looks_like_garbage=never_garbage
+        )
+        # Unified with single parse: good digital text does not retry even if extract_err was set.
+        assert not _bulk_needs_ocr_retry(
+            'pdf',
+            'Jane Example jane@example.com Experience Python SQL education skills ' + ('x' * 20),
+            'boom',
+            looks_like_garbage=never_garbage,
         )
         assert not _bulk_needs_ocr_retry(
             'pdf', 'plenty of extracted text here ' * 20, None, looks_like_garbage=never_garbage

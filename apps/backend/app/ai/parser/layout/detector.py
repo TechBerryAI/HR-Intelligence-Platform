@@ -127,7 +127,7 @@ def _rapidocr_detections(image_bytes: bytes) -> list | None:
     try:
         import numpy as np
         from PIL import Image
-        from app.ai.parser.text_extraction import _get_rapidocr_engine
+        from app.ai.parser.text_extraction import run_rapidocr_inference
     except ImportError:
         return None
 
@@ -136,8 +136,7 @@ def _rapidocr_detections(image_bytes: bytes) -> list | None:
         if image.mode not in ('RGB', 'L'):
             image = image.convert('RGB')
         arr = np.array(image)
-        engine = _get_rapidocr_engine()
-        result, _ = engine(arr)
+        result = run_rapidocr_inference(arr)
         return result or []
     except Exception as exc:
         logger.debug('RapidOCR detections failed: %s', exc)

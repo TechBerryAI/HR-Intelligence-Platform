@@ -1371,29 +1371,24 @@ def _bulk_needs_ocr_retry(
     raw_text: str,
     extract_err: str | None,
     *,
-    looks_like_garbage,
+    looks_like_garbage=None,
+    max_dpi_used: int = 0,
 ) -> bool:
-    """Match single-parse pipeline: retry DPI on error, thin text, or short garbage.
+    """Match single-parse pipeline via should_retry_high_dpi_extract.
 
-    Fail-fast: never retry high-DPI OCR when no local OCR engine is installed —
-    that path previously burned minutes per scanned PDF in bulk.
+    Fail-fast: never retry high-DPI OCR when no local OCR engine is installed.
+    Image rasters skip DPI retry (bytes do not change). `looks_like_garbage` is
+    accepted for call-site compatibility and ignored.
     """
-    image_exts = ('pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp')
-    if (ext or '').lower() not in image_exts:
-        return False
-    try:
-        from app.ai.parser.text_extraction import ocr_engines_available
+    from app.ai.parser.text_extraction import should_retry_high_dpi_extract
 
-        if not ocr_engines_available():
-            return False
-    except Exception:
-        return False
-    if extract_err:
-        return True
-    t = (raw_text or '').strip()
-    if not t or len(t) < BULK_MIN_TEXT_CHARS:
-        return True
-    return bool(looks_like_garbage(raw_text))
+    filename = f'file.{ext}' if ext else 'file.pdf'
+    return should_retry_high_dpi_extract(
+        filename,
+        raw_text,
+        extract_failed=bool(extract_err),
+        max_dpi_used=max_dpi_used,
+    )
 
 
 def _process_one_file(args: tuple) -> tuple[str, dict | None, bool, str, str]:
@@ -1461,9 +1456,8 @@ def _process_one_file_inner(
     job_id: str | None = None,
 ) -> tuple[str, dict | None, bool, str, str]:
     from app.ai.parser.text_extraction import (
-        extract_text,
-        last_extract_max_dpi,
-        looks_like_garbage_extract,
+        extract_document,
+        should_retry_high_dpi_extract,
     )
     from app.domains.recruitment.services.parsing_storage import validate_toon_format_bulk
 
@@ -1476,8 +1470,10 @@ def _process_one_file_inner(
         raw_text = ""
         t_text = time.perf_counter()
         ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+        extract_result = None
         try:
-            raw_text = extract_text(data, filename) or ""
+            extract_result = extract_document(data, filename)
+            raw_text = extract_result.text or ""
         except Exception as extract_err:
             raw_text = ""
             last_extract_err = str(extract_err)[:200]
@@ -1485,16 +1481,16 @@ def _process_one_file_inner(
         if raw_text and '\x00' in raw_text:
             raw_text = raw_text.replace('\x00', '')
 
-        if last_extract_max_dpi() < BULK_OCR_RETRY_DPI and _bulk_needs_ocr_retry(
-            ext,
+        max_dpi_used = extract_result.final_dpi if extract_result is not None else 0
+        if should_retry_high_dpi_extract(
+            filename,
             raw_text,
-            last_extract_err,
-            looks_like_garbage=lambda s: looks_like_garbage_extract(
-                s, min_chars=BULK_MIN_TEXT_CHARS
-            ),
+            extract_failed=bool(last_extract_err),
+            max_dpi_used=max_dpi_used,
         ):
             try:
-                raw_text = extract_text(data, filename, dpi=BULK_OCR_RETRY_DPI) or ""
+                extract_result = extract_document(data, filename, dpi=BULK_OCR_RETRY_DPI)
+                raw_text = extract_result.text or ""
                 if raw_text and '\x00' in raw_text:
                     raw_text = raw_text.replace('\x00', '')
                 last_extract_err = None
