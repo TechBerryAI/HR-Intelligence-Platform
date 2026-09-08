@@ -883,3 +883,323 @@ def test_complete_job_outranks_company_only_metadata_row():
     first = jobs[0]
     assert 'contoso' in (first.company or '').lower()
     assert 'administrator' in (first.role or '').lower() or 'dba' in (first.role or '').lower()
+
+
+def test_same_line_title_then_org_pipe_dates():
+    jobs = parse_experience(
+        'Experience\n'
+        'Specialist Database Administrator Northwind Infotech Pvt. Ltd. | Nov 2021 – Present | Mumbai\n'
+        '• Installed and configured MongoDB Enterprise Server\n'
+        'Associate Database Administrator Contoso Labs Pvt. Ltd. | Jul 2019 – Sep 2021\n'
+        '• Assisted senior DBA with replica sets\n'
+    )
+    first = jobs[0]
+    assert 'northwind' in (first.company or '').lower()
+    assert 'administrator' in (first.role or '').lower()
+    assert (first.start or '').startswith('2021')
+    assert 'contoso' not in (first.company or '').lower()
+
+
+def test_working_for_narrative_dates():
+    jobs = parse_experience(
+        'Experience\n'
+        'Working for Northwind Solutions Pvt Ltd from 29th November 2023 to tll now.\n'
+        'Worked for Contoso Technologies from August 2021 to September 2022.\n'
+        'Role : WebLogic Administrator\n'
+    )
+    assert any('northwind' in (j.company or '').lower() for j in jobs)
+    current = _hit(jobs, company='northwind')
+    assert (current.start or '').startswith('2023')
+    assert current.is_current or not (current.end or '').strip()
+    prior = _hit(jobs, company='contoso')
+    assert (prior.start or '').startswith('2021')
+    assert (prior.end or '').startswith('2022')
+
+
+def test_since_mon_yy_with_org_as_role():
+    jobs = parse_experience(
+        'Experience\n'
+        'Since Mar 22 with Northwind Mutual Fund Limited, Mumbai as CISO\n'
+        'Key Result Areas: Manage infrastructure security\n'
+        'Sep 21-Mar 22 with Contoso Bank, Mumbai as DVP\n'
+    )
+    first = _hit(jobs, company='northwind')
+    assert 'northwind' in (first.company or '').lower()
+    assert 'ciso' in (first.role or '').lower()
+    assert (first.start or '').startswith('2022')
+    assert first.is_current or not (first.end or '').strip()
+
+
+def test_cert_course_and_marks_are_not_employers():
+    jobs = parse_experience(
+        'Experience\n'
+        'Percentage\n'
+        '78.67% (3rd in Division)\n'
+        'M001(MongoDB Basics)\n'
+        'Till Date\n'
+        'Database Administrator\n'
+        'Contoso Infotech Pvt Ltd\n'
+        'Feb 2021 – Present\n'
+        '• Configured replica sets\n'
+    )
+    companies = ' '.join((j.company or '').lower() for j in jobs)
+    assert 'contoso' in companies
+    assert 'percentage' not in companies
+    assert 'm001' not in companies
+    assert '78.67' not in companies
+    first = jobs[0]
+    assert 'contoso' in (first.company or '').lower()
+    assert 'administrator' in (first.role or '').lower() or 'dba' in (first.role or '').lower()
+
+
+def test_education_dates_do_not_become_employment_dates():
+    profile, form, *_ = parse_resume_text_to_canonical(
+        'Pat Lee\npat@example.com\n'
+        'Education\n'
+        'Bachelor of Arts (2020-2021)\n'
+        'HSC (2017 - 2018)\n'
+        'Experience\n'
+        'Production Designer\n'
+        'Northwind Cinema Pvt Ltd\n'
+        '• Designed sets for independent films\n',
+        allow_semantic=False,
+    )
+    assert profile.experience
+    first = profile.experience[0]
+    assert 'northwind' in (first.company or '').lower()
+    assert not (first.start or '').startswith('2020')
+    assert not (first.start or '').startswith('2017')
+
+
+def test_banner_title_on_dated_employer_list():
+    profile, form, *_ = parse_resume_text_to_canonical(
+        'Pat Lee\n'
+        'iOS Developer\n'
+        'pat@example.com\n'
+        'Experience\n'
+        'July 2023 – Present\n'
+        'Northwind Limited\n'
+        '• Built client-server iOS applications\n'
+        'Education\n'
+        'B.E Computer Science 2018 - 2022\n',
+        allow_semantic=False,
+    )
+    assert profile.experience
+    first = profile.experience[0]
+    assert 'northwind' in (first.company or '').lower()
+    assert 'developer' in (first.role or '').lower() or 'ios' in (first.role or '').lower()
+    assert (first.start or '').startswith('2023')
+
+
+def test_working_as_role_in_employer_not_for():
+    jobs = parse_experience(
+        'Experience\n'
+        'Working as a Service Desk Enginner in Salemax Soluation Form\n'
+        '9-May-2023 to 5-June-2024.\n'
+        '• Installed and configured Windows servers\n'
+    )
+    hit = _hit(jobs, company='salemax', role='enginner')
+    assert 'salemax' in (hit.company or '').lower()
+    assert 'enginner' in (hit.role or '').lower() or 'engineer' in (hit.role or '').lower()
+    assert (hit.start or '').startswith('2023')
+    assert (hit.end or '').startswith('2024')
+
+
+def test_first_bullet_title_promoted_when_role_empty():
+    jobs = parse_experience(
+        'Experience\n'
+        'Northwind Interactive\n'
+        'July 2022 – Present\n'
+        '• Associate .Net Developer\n'
+        '• Developed a loyalty engine using Redis\n'
+    )
+    hit = _hit(jobs, company='northwind')
+    assert 'northwind' in (hit.company or '').lower()
+    assert 'developer' in (hit.role or '').lower() or 'associate' in (hit.role or '').lower()
+    assert 'loyalty' in (hit.description or '').lower() or 'redis' in (hit.description or '').lower()
+
+
+def test_from_ordinal_dates_colon_company_as_role():
+    jobs = parse_experience(
+        'Experience\n'
+        'From Mar 1st - 2022 to June 30th-2024: KG Information System PVT LTD, Mumbai as Team Lead.\n'
+        '• Designed and maintained internal web applications\n'
+    )
+    hit = _hit(jobs, company='information', role='lead')
+    assert 'information' in (hit.company or '').lower()
+    assert 'lead' in (hit.role or '').lower()
+    assert (hit.start or '').startswith('2022')
+
+
+def test_inline_role_label_on_same_line_as_employer():
+    jobs = parse_experience(
+        'Experience\n'
+        'Contoso Tech Pvt Ltd July 2024 - Feb 2025 Role: Infra Engineer Responsibilities: '
+        'MongoDB cluster administration\n'
+    )
+    hit = _hit(jobs, company='contoso', role='engineer')
+    assert 'contoso' in (hit.company or '').lower()
+    assert 'engineer' in (hit.role or '').lower()
+
+
+def test_title_then_org_pipe_dates_same_line():
+    jobs = parse_experience(
+        'Experience\n'
+        'Specialist Database Administrator Lentra AI Pvt. Ltd. | Nov 2021 – Present | Mumbai, India\n'
+        '• Installed and configured MongoDB Enterprise Server\n'
+    )
+    hit = _hit(jobs, company='lentra', role='administrator')
+    assert 'lentra' in (hit.company or '').lower()
+    assert 'administrator' in (hit.role or '').lower() or 'specialist' in (hit.role or '').lower()
+    assert (hit.start or '').startswith('2021')
+
+
+def test_education_year_header_is_not_first_job():
+    jobs = parse_experience(
+        'Experience\n'
+        'Year | University | Percentage\n'
+        '2008 | University of Example | 73.17%\n'
+        'Chief Information Security Officer\n'
+        'Northwind Bank\n'
+        'November 2025 to Present\n'
+        '• Led the security program\n'
+    )
+    companies = ' '.join((j.company or '').lower() for j in jobs)
+    assert 'year' not in companies.split()
+    hit = _hit(jobs, company='northwind', role='officer')
+    assert 'northwind' in (hit.company or '').lower()
+    assert 'officer' in (hit.role or '').lower() or 'ciso' in (hit.role or '').lower()
+
+
+def test_city_pincode_is_not_an_employer():
+    jobs = parse_experience(
+        'Experience\n'
+        'Thane 401105\n'
+        'Software Engineer\n'
+        'Northwind Ltd\n'
+        'Oct 2023 - Feb 2025\n'
+        '• Built reporting dashboards\n'
+    )
+    companies = ' '.join((j.company or '').lower() for j in jobs)
+    assert '401105' not in companies
+    hit = _hit(jobs, company='northwind', role='engineer')
+    assert 'northwind' in (hit.company or '').lower()
+    assert (hit.start or '').startswith('2023')
+
+
+def test_working_as_after_title_banner_keeps_following_dates():
+    jobs = parse_experience(
+        'Experience\n'
+        'Service Desk Enginner\n'
+        'Enthusiastic and solutions oriented individual seeking a service desk role '
+        'in a supportive team environment.\n'
+        'Working as a Service Desk Engineer in Salemax Soluation Form\n'
+        '9-may-2023 to 5-June-2024.\n'
+        'Ability to diagnose and resolve basic technical issues.\n'
+    )
+    hit = _hit(jobs, company='salemax', role='engineer')
+    assert 'salemax' in (hit.company or '').lower()
+    assert (hit.start or '').startswith('2023')
+    assert (hit.end or '').startswith('2024')
+    assert not any((j.company or '').lower().startswith('enthusiastic') for j in jobs)
+
+
+def test_project_dates_attach_to_following_labeled_organization():
+    jobs = parse_experience(
+        'Experience\n'
+        'Project : Bank of Example (April 2023 to present) – Downtown\n'
+        'Organization: Northwind Ltd\n'
+        'Database Administrator\n'
+        '• Supported production Oracle databases\n'
+    )
+    hit = _hit(jobs, company='northwind')
+    assert 'northwind' in (hit.company or '').lower()
+    assert 'bank of example' not in (hit.company or '').lower()
+    assert (hit.start or '').startswith('2023')
+    assert hit.is_current or (hit.end or '').lower() in ('', 'present')
+
+
+def test_date_only_day_month_year_attaches_to_undated_job():
+    jobs = parse_experience(
+        'Experience\n'
+        'Software Engineer\n'
+        'Northwind Ltd\n'
+        '9-may-2023 to 5-June-2024.\n'
+        '• Built reporting dashboards\n'
+    )
+    hit = _hit(jobs, company='northwind', role='engineer')
+    assert (hit.start or '').startswith('2023')
+    assert (hit.end or '').startswith('2024')
+
+
+def test_bare_title_label_is_not_an_employer():
+    jobs = parse_experience(
+        'Experience\n'
+        'Title: Executive-Business Development\n'
+        'Northwind Ltd\n'
+        'July 2021 - March 2024\n'
+        '• Owned enterprise accounts\n'
+    )
+    companies = ' '.join((j.company or '').lower() for j in jobs)
+    assert 'title' not in companies.split()
+    hit = _hit(jobs, company='northwind')
+    assert 'northwind' in (hit.company or '').lower()
+
+
+def test_duplicate_employer_role_copies_later_dates_to_first():
+    jobs = parse_experience(
+        'Experience\n'
+        'Organization: Northwind Ltd\n'
+        'Database Administrator\n'
+        'Organization: Contoso Pvt Ltd\n'
+        'Database Administrator\n'
+        'Organization: Northwind Ltd\n'
+        'Database Administrator\n'
+        'April 2023 to Present\n'
+        '• Supported production Oracle databases\n'
+    )
+    north = [j for j in jobs if 'northwind' in (j.company or '').lower()]
+    assert north
+    assert (north[0].start or '').startswith('2023')
+    assert jobs[0].company and 'northwind' in (jobs[0].company or '').lower()
+
+
+def test_column_bleed_date_attaches_to_undated_working_as():
+    profile, form, *_ = parse_resume_text_to_canonical(
+        'Pat Lee\npat@example.com\n'
+        'Experience\n'
+        'Working as a Service Desk Engineer in Salemax Soluation Form\n'
+        'Hobbies\n'
+        '9-may-2023 to 5-June-2024.\n'
+        'Dancing\n'
+        'Education\n'
+        'B.Tech\n'
+        '2019 - 2022\n',
+        allow_semantic=False,
+    )
+    assert profile.experience
+    job = profile.experience[0]
+    assert 'salemax' in (job.company or '').lower()
+    assert (job.start or '').startswith('2023')
+    assert (job.end or '').startswith('2024')
+    assert not (job.start or '').startswith('2019')
+
+
+def test_education_dates_stay_isolated_from_employment():
+    profile, form, *_ = parse_resume_text_to_canonical(
+        'Pat Lee\npat@example.com\n'
+        'Education\n'
+        'B.Tech\n'
+        '2019 - 2022\n'
+        'Experience\n'
+        'Software Engineer\n'
+        'ABC Ltd\n'
+        'Present\n'
+        '• Developed REST APIs\n',
+        allow_semantic=False,
+    )
+    assert profile.experience
+    job = profile.experience[0]
+    assert 'abc' in (job.company or '').lower()
+    assert not (job.start or '').startswith('2019')
+    assert (job.end or '') != '2022'

@@ -89,6 +89,21 @@ def _fold(v: Any) -> str:
     return _norm(v).casefold()
 
 
+def _employment_date_haystack(extract: str) -> str:
+    """Ignore education/certification timelines when scoring employment dates."""
+    text = extract or ''
+    return re.sub(
+        r'(?is)(?:^|\n)\s*(?:education|academic(?:\s+details)?|qualifications?|'
+        r'educational\s+(?:qualification|background)s?|'
+        r'certifications?|certificates?|licenses?|'
+        r'publications?|awards?|achievements?)\b.*?'
+        r'(?=\n\s*(?:experience|employment|work\s+history|professional\s+experience|'
+        r'skills|projects?|summary|objective)\b|\Z)',
+        '\n',
+        text,
+    )
+
+
 def slim_form(form: dict | None) -> dict[str, Any]:
     form = form or {}
     experiences = [
@@ -462,7 +477,7 @@ def evaluate_case(
         r'(?i)(?:20\d{2}|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)'
         r'.{0,48}(?:to|–|-|till|until).{0,24}'
         r'(?:20\d{2}|present|current|till\s*date)',
-        extract or '',
+        _employment_date_haystack(extract or ''),
     ))
     if exp and range_hint:
         has_start = bool(first.get('start'))

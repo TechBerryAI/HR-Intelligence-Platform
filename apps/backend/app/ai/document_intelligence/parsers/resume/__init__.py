@@ -185,12 +185,32 @@ _TRAINING_ONLY_COMPANY = re.compile(
 )
 _JOB_TITLE_CUE = re.compile(
     r'(?i)\b(?:'
-    r'intern|engineer|developer|analyst|trainee|manager|officer|associate|'
-    r'consultant|lead|executive|specialist|administrator|admin|architect|'
+    r'intern|engineer|enginner|enginneer|developer|developper|analyst|trainee|'
+    r'manager|maneger|officer|associate|consultant|lead|executive|specialist|'
+    r'administrator|adminstrator|admin|architect|'
     r'designer|scientist|director|head|dba|programmer|coordinator|supervisor|'
     r'recruiter|accountant|teacher|professor|nurse|technician|trainer|'
-    r'instructor|apprentice'
+    r'instructor|apprentice|assitant|assistant'
     r')\b'
+)
+_INLINE_ROLE_LABEL = re.compile(
+    r'(?i)(?:^|[\s|,;])(?:role|title|designation|position|job\s+title)\s*[:\-–—]\s*'
+    r'(.{2,60}?)(?=\s+(?:responsibilit\w*|duties|location|duration|company|employer)\b|$)'
+)
+_FROM_COLON_ORG_AS = re.compile(
+    r'(?i)^(?:from\s+)?.{0,90}?:\s*(.+?)\s+as\s+(?:an?\s+)?(.+)$'
+)
+_NON_ORG_IN_TAIL = re.compile(
+    r'(?i)\b(?:production|environment|support|team|department|office|field|'
+    r'domain|industry)\s*$'
+)
+_CITY_PIN_LINE = re.compile(
+    r'(?i)^(?:'
+    r'remote|hybrid|wfh|mumbai|delhi|new\s+delhi|pune|thane|hyderabad|chennai|'
+    r'bangalore|bengaluru|noida|gurugram|gurgaon|kolkata|ahmedabad|'
+    r'navi\s+mumbai|kalwa|nashik|surat|vadodara|andheri|powai|kalyan|vasai|'
+    r'virar|panvel|india'
+    r')\s+[1-9]\d{5}$'
 )
 _PIPE_TWO = re.compile(r'^(.+?)\s*[|]\s*(.+)$')
 _CITY_LIKE = re.compile(
@@ -263,10 +283,10 @@ _INSTITUTION_CUE = re.compile(
 )
 _DATE_RANGE_STRIP = re.compile(
     r'(?i)\(?\s*(?:'
-    r'(?:from\s+)?'
+    r'(?:(?:from|since)\s+)?'
     r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\s+)?'
     r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
-    r'(?:\s+(?:19|20)\d{2}|\s*[\'’]\s*\d{2})'
+    r'(?:\s+(?:19|20)\d{2}|\s*[\'’]\s*\d{2}|\s+\d{2}(?!\d))'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:19|20)\d{2}'
     r')(?:'
@@ -274,9 +294,10 @@ _DATE_RANGE_STRIP = re.compile(
     r'(?:'
     r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\s+)?'
     r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
-    r'(?:\s+(?:19|20)\d{2}|\s*[\'’]\s*\d{2})'
+    r'(?:\s+(?:19|20)\d{2}|\s*[\'’]\s*\d{2}|\s+\d{2}(?!\d))'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
-    r'|(?:19|20)\d{2}|Present|Current|Now|Till\s*Date|Tilldate|Ongoing|Pursuing'
+    r'|(?:19|20)\d{2}|Present|Current|Now|Till\s*Date|Tilldate|'
+    r'T[il]l\s+now|Ongoing|Pursuing'
     r')'
     r'|\s+till\s*date'
     r')\s*\)?'
@@ -1990,8 +2011,12 @@ def _looks_like_job_location_line(text: str) -> bool:
     t = re.sub(r'\s+', ' ', (text or '').strip().rstrip('.'))
     if not t:
         return False
-    if _CITY_LIKE.match(t):
+    if _CITY_LIKE.match(t) or _CITY_PIN_LINE.match(t):
         return True
+    if re.search(r'\b[1-9]\d{5}\b', t):
+        city_only = re.sub(r'\s*\b[1-9]\d{5}\b', '', t).strip(' ,.')
+        if city_only and (_CITY_LIKE.match(city_only) or _CITY_PIN_LINE.match(f'{city_only} 400001')):
+            return True
     parts = [p.strip() for p in re.split(r'\s*,\s*', t) if p.strip()]
     if 2 <= len(parts) <= 3 and all(_CITY_LIKE.match(p) for p in parts):
         return True
@@ -2049,7 +2074,7 @@ def _is_employment_date_carrier(text: str) -> bool:
     start, _end = extract_date_range(s)
     if not start:
         return False
-    leftover = _DATE_RANGE_STRIP.sub('', s).strip(' \t|-–—,()')
+    leftover = _identity_leftover_after_dates(s)
     leftover = _DATE_CARRIER_PREFIX.sub('', leftover).strip(' \t|-–—,():')
     if not leftover or leftover.lower() in {
         'present', 'current', 'now', 'ongoing', 'till date', 'tilldate',
@@ -2181,6 +2206,69 @@ def _strip_date_range(text: str) -> str:
     return _DATE_RANGE_STRIP.sub('', text or '').strip(' |-–—,()')
 
 
+_DATE_RANGE_TOKEN_CRUFT = re.compile(
+    r'(?i)\b(?:'
+    r'(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?'
+    r'|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
+    r'|(?:19|20)\d{2}'
+    r'|present|current|now|ongoing|from|since|to|until|till|date'
+    r')\b'
+)
+
+
+def _identity_leftover_after_dates(text: str) -> str:
+    """Leftover identity after dates. Does not change global date stripping.
+
+    ``extract_date_range`` already accepts ``9-May-2023`` / ``5-June-2024``.
+    ``_DATE_RANGE_STRIP`` does not, so a date-only line would otherwise look
+    like leftover identity and become a new first job.
+    """
+    s = (text or '').strip()
+    leftover = _DATE_RANGE_STRIP.sub('', s).strip(' \t|-–—,()')
+    if leftover and extract_date_range(s)[0]:
+        cruft = _DATE_RANGE_TOKEN_CRUFT.sub('', leftover)
+        cruft = re.sub(r'[\s|/\\,.\-–—()]+', ' ', cruft).strip()
+        if (
+            not cruft
+            or cruft.lower() in {
+                'present', 'current', 'now', 'ongoing', 'till date', 'tilldate',
+            }
+            or (
+                len(cruft.split()) <= 1
+                and not _has_job_title_cue(cruft)
+                and not _looks_like_org_header(cruft)
+            )
+        ):
+            return cruft
+    return leftover
+
+
+def _is_date_range_stub_text(text: str) -> bool:
+    s = (text or '').strip()
+    if not s or not extract_date_range(s)[0]:
+        return False
+    leftover = _identity_leftover_after_dates(s)
+    return not leftover or leftover.lower() in {
+        'present', 'current', 'now', 'ongoing', 'till date', 'tilldate',
+    }
+
+
+def _is_date_range_stub_entry(entry: ExperienceEntry) -> bool:
+    role = (entry.role or '').strip()
+    company = (entry.company or '').strip()
+    if company and _is_date_range_stub_text(company) and (
+        not role or role.isdigit() or _is_date_range_stub_text(role)
+    ):
+        return True
+    if company:
+        return False
+    if _is_date_range_stub_text(role):
+        return True
+    if role:
+        return False
+    return bool((entry.start or '').strip())
+
+
 def _looks_like_role_only_line(text: str) -> bool:
     s = peel_inline_contact((text or '').strip())
     if not s or len(s.split()) > 8 or extract_date_range(s)[0]:
@@ -2235,15 +2323,41 @@ _EMPLOYMENT_WITH_ORG_AS = re.compile(
 )
 _EMPLOYMENT_AS_FOR = re.compile(
     r'(?i)^(?:currently\s+)?(?:working|worked)\s+as\s+(?:an?\s+)?'
-    r'(.+?)\s+for\s+(.+?)$'
+    r'(.+?)\s+(?:for|in|at)\s+(.+?)$'
 )
 _EMPLOYMENT_ORG_AS_ROLE = re.compile(
     r'(?i)^(.+?),\s*([A-Za-z][A-Za-z .]{1,28})\s+as\s+(?:an?\s+)?(.+?)$'
+)
+_EMPLOYMENT_FOR_ORG = re.compile(
+    r'(?i)^(?:currently\s+)?(?:working|worked)\s+for\s+(.+?)$'
 )
 
 
 def _strip_employment_lead_in(line: str) -> str:
     return re.sub(r'^[\s•·\-\*●▪▸►]+', '', (line or '').strip())
+
+
+def _accept_prose_employer(company: str) -> bool:
+    """True when a working-as / in / at tail is an employer, not a workplace noun."""
+    c = (company or '').strip(' .,')
+    if not c or looks_like_skill_or_duration_company(c):
+        return False
+    if _CITY_LIKE.match(c) or _looks_like_job_location_line(c) or _CITY_PIN_LINE.match(c):
+        return False
+    if _NON_ORG_IN_TAIL.search(c):
+        return False
+    if re.search(
+        r'(?i)\b(?:pvt|ltd|llc|inc|corp|limited|private|technologies|solutions|'
+        r'infotech|systems|services)\b',
+        c,
+    ):
+        return True
+    if _looks_like_org_header(c):
+        return True
+    words = c.split()
+    if 2 <= len(words) <= 5 and words[0][:1].isupper() and not _DUTY_VERB_START.match(c):
+        return True
+    return False
 
 
 def _parse_employment_sentence(
@@ -2266,6 +2380,7 @@ def _parse_employment_sentence(
     if is_current:
         end = ''
     leftover = _DATE_RANGE_STRIP.sub('', raw).strip(' \t|-–—,')
+    leftover = re.sub(r'(?i)^\s*since\s+', '', leftover).strip(' \t|-–—,')
     leftover = re.sub(
         r'(?i)\s+\b(?:experience|education|skills|projects?|certifications?)\s*$',
         '',
@@ -2303,7 +2418,13 @@ def _parse_employment_sentence(
     elif as_for:
         role = (as_for.group(1) or '').strip(' ,')
         company = (as_for.group(2) or '').strip(' ,')
-        if ',' in company:
+        if not (_has_job_title_cue(role) or is_plausible_job_title(role)):
+            role, company = '', ''
+            as_for = None
+        elif not _accept_prose_employer(company.split(',')[0].strip()):
+            role, company = '', ''
+            as_for = None
+        elif ',' in company:
             left, _, right = company.partition(',')
             right = right.strip()
             if right and (_CITY_LIKE.match(right) or _looks_like_job_location_line(right)):
@@ -2333,22 +2454,53 @@ def _parse_employment_sentence(
             else:
                 org_as = None
         if not org_as:
-            since_m = re.match(
-                r'(?i)^(.{3,60}?)\s+(?:in\s+[A-Za-z][A-Za-z .]{1,32}\s+)?since\s+'
-                r'((?:19|20)\d{2})\b',
-                leftover,
-            )
-            if since_m:
-                maybe_role = since_m.group(1).strip(' ,')
-                year = since_m.group(2)
-                if _looks_like_role_only_line(maybe_role) or _has_job_title_cue(maybe_role):
-                    if not start:
-                        start = year
-                    role = maybe_role
-                else:
-                    return None
+            for_org = _EMPLOYMENT_FOR_ORG.match(leftover)
+            if for_org and start:
+                company = _DATE_RANGE_STRIP.sub('', for_org.group(1)).strip(' ,.')
+                company = re.sub(r'(?i)\bfrom\s*$', '', company).strip(' ,.')
             else:
-                return None
+                since_m = re.match(
+                    r'(?i)^(.{3,60}?)\s+(?:in\s+[A-Za-z][A-Za-z .]{1,32}\s+)?since\s+'
+                    r'((?:19|20)\d{2})\b',
+                    leftover,
+                )
+                if since_m:
+                    maybe_role = since_m.group(1).strip(' ,')
+                    year = since_m.group(2)
+                    if _looks_like_role_only_line(maybe_role) or _has_job_title_cue(maybe_role):
+                        if not start:
+                            start = year
+                        role = maybe_role
+                    else:
+                        return None
+                else:
+                    from_as = _FROM_COLON_ORG_AS.match(leftover) if start else None
+                    if from_as:
+                        maybe_co = (from_as.group(1) or '').strip(' ,')
+                        maybe_role = (from_as.group(2) or '').strip(' ,.')
+                        if ',' in maybe_co:
+                            left, _, right = maybe_co.partition(',')
+                            right = right.strip()
+                            if right and (
+                                _CITY_LIKE.match(right) or _looks_like_job_location_line(right)
+                            ):
+                                maybe_co, loc = left.strip(), right
+                        if (
+                            maybe_co
+                            and maybe_role
+                            and (_has_job_title_cue(maybe_role) or is_plausible_job_title(maybe_role))
+                            and (
+                                _accept_prose_employer(maybe_co)
+                                or re.search(
+                                    r'(?i)\b(?:pvt|ltd|llc|inc|limited|private)\b', maybe_co
+                                )
+                            )
+                        ):
+                            company, role = maybe_co, maybe_role
+                        else:
+                            return None
+                    else:
+                        return None
 
     if identity_is_employer_value(company, identity_names):
         company = ''
@@ -2500,6 +2652,15 @@ def _employment_wrap_continuation(prev: str, nxt: str) -> bool:
     n = strip_bullet_prefix(nxt or '')
     if not p or not n or is_section_header_line(n):
         return False
+    already = _parse_employment_sentence(p)
+    if (
+        already
+        and (already.role or '').strip()
+        and (already.company or '').strip()
+        and extract_date_range(n)[0]
+        and len(n.split()) <= 8
+    ):
+        return False
     if extract_date_range(n)[0] and len(n.split()) <= 8 and re.search(
         r'(?i)\b(?:working|worked|as|for|from|to)\b',
         p,
@@ -2616,20 +2777,30 @@ def _parse_unheaded_employment_row(line: str) -> ExperienceEntry | None:
             company, role = labeled.group(1).strip(), labeled.group(2).strip()
         elif len(other) >= 2:
             a, b = other[0], other[1]
-            a_role = _has_job_title_cue(a) or is_plausible_job_title(a)
-            b_role = _has_job_title_cue(b)
-            if a_role and not b_role:
-                role, company = a, b
-            elif b_role or is_plausible_job_title(b):
-                company, role = a, b
-            elif a_role:
-                role, company = a, b
+            split = _split_title_and_org_blob(a)
+            if split and (
+                _CITY_LIKE.match(b) or _looks_like_job_location_line(b)
+            ):
+                role, company = split
             else:
-                company, role = a, b
+                a_role = _has_job_title_cue(a) or is_plausible_job_title(a)
+                b_role = _has_job_title_cue(b)
+                if a_role and not b_role:
+                    role, company = a, b
+                elif b_role or is_plausible_job_title(b):
+                    company, role = a, b
+                elif a_role:
+                    role, company = a, b
+                else:
+                    company, role = a, b
         elif _has_job_title_cue(first) or is_plausible_job_title(first):
             role = first
         else:
             company = first
+    if company and not role:
+        split = _split_title_and_org_blob(company)
+        if split:
+            role, company = split
     if not date_cells:
         return None
     start = date_cells[0][0] or ''
@@ -2764,6 +2935,23 @@ def _parse_experience_line(
         return None
     if is_labeled_contact_metadata(stripped):
         return None
+    inline_role = ''
+    if not re.match(r'(?i)^(role|title|designation|position|job\s+title)\s*:', stripped):
+        labeled_inline = _INLINE_ROLE_LABEL.search(stripped)
+        if labeled_inline:
+            cand = labeled_inline.group(1).strip(' ,.|')
+            if (
+                cand
+                and len(cand.split()) <= 10
+                and (_has_job_title_cue(cand) or is_plausible_job_title(cand))
+            ):
+                inline_role = cand[:200]
+                stripped = re.sub(
+                    r'(?i)\s*(?:responsibilit\w*|duties)\s*[:\-–—]\s*.*$',
+                    '',
+                    stripped,
+                )
+                stripped = re.sub(r'\s{2,}', ' ', stripped).strip(' ,.|')
     labeled_co = _LABELED_EMPLOYER_LINE.match(stripped)
     if not labeled_co:
         prefixed = _EXPERIENCE_PREFIX_COMPANY.match(stripped)
@@ -2788,11 +2976,14 @@ def _parse_experience_line(
             company, identity_names=identity_names
         ):
             return None
-        return ExperienceEntry(
-            company=company[:200],
-            start=start,
-            end=end,
-            is_current=is_current,
+        return _attach_parsed_role(
+            ExperienceEntry(
+                company=company[:200],
+                start=start,
+                end=end,
+                is_current=is_current,
+            ),
+            inline_role,
         )
     pair = _split_employer_city_line(stripped)
     if pair:
@@ -2800,12 +2991,15 @@ def _parse_experience_line(
         is_current = bool(end and re.match(r'(?i)^(present|current|now|till\s*date|ongoing|pursuing)$', end))
         if is_current:
             end = ''
-        return ExperienceEntry(
-            company=pair[0][:200],
-            location=pair[1][:120],
-            start=start,
-            end=end,
-            is_current=is_current,
+        return _attach_parsed_role(
+            ExperienceEntry(
+                company=pair[0][:200],
+                location=pair[1][:120],
+                start=start,
+                end=end,
+                is_current=is_current,
+            ),
+            inline_role,
         )
     if (
         _CITY_LIKE.match(stripped)
@@ -2815,7 +3009,7 @@ def _parse_experience_line(
         return None
     prose = _parse_employment_sentence(stripped, identity_names=identity_names)
     if prose:
-        return prose
+        return _attach_parsed_role(prose, inline_role)
     if looks_like_phone_token(stripped) or looks_like_email_or_url(stripped):
         return None
     # Never promote bullets / duty sentences / meta labels to experience rows
@@ -2905,7 +3099,7 @@ def _parse_experience_line(
         return None
     pipe_job = _parse_unheaded_employment_row(stripped)
     if pipe_job:
-        return pipe_job
+        return _attach_parsed_role(pipe_job, inline_role)
 
     # Pure geo / City, Region lines are job locations — not roles/companies
     if _CITY_LIKE.match(stripped) or _looks_like_job_location_line(stripped):
@@ -3252,7 +3446,25 @@ def _parse_experience_line(
         return ExperienceEntry(company=line_wo.strip()[:200])
     leftover = (line_wo or '').strip(' |-–—,()')
     if start and not leftover:
-        return ExperienceEntry(start=start, end=end, is_current=is_current)
+        return _attach_parsed_role(
+            ExperienceEntry(start=start, end=end, is_current=is_current),
+            inline_role,
+        )
+    if start and leftover:
+        recovered = _recover_labeled_role(
+            ExperienceEntry(
+                company=leftover[:200],
+                role=inline_role,
+                start=start,
+                end=end,
+                is_current=is_current,
+            )
+        )
+        if (recovered.company or '').strip() or (recovered.role or '').strip():
+            if _looks_like_company_line(
+                recovered.company or leftover, identity_names=identity_names
+            ) or _looks_like_org_header(recovered.company or leftover):
+                return _attach_parsed_role(recovered, inline_role)
 
     return None
 
@@ -3585,7 +3797,7 @@ def _attach_orphan_dates_to_entries(
     blobs: list[tuple[str, str]] = []
     for ln in lines:
         stripped = re.sub(r'^[\s•·\-\*●]+', '', (ln or '').strip())
-        leftover = _DATE_RANGE_STRIP.sub('', stripped).strip(' \t|-–—,()')
+        leftover = _identity_leftover_after_dates(stripped)
         d_start, d_end = extract_date_range(stripped)
         if not d_start:
             continue
@@ -3699,6 +3911,9 @@ def _recover_company_from_description(entry: ExperienceEntry) -> str:
     if beside and not looks_like_skill_or_duration_company(beside):
         return beside[:200]
     first = re.sub(r'^[\s•·\-\*●]+', '', desc.splitlines()[0]).strip()
+    prose = _parse_employment_sentence(first)
+    if prose and (prose.company or '').strip() and _accept_prose_employer(prose.company):
+        return (prose.company or '')[:200]
     emp, cli = _split_client_annotation(first)
     if emp and cli:
         return emp[:200]
@@ -3754,24 +3969,163 @@ def _peel_header_dates(entry: ExperienceEntry) -> ExperienceEntry:
     return entry
 
 
+def _promote_leading_date_from_description(entry: ExperienceEntry) -> ExperienceEntry:
+    """Move a leading date-only duty line onto an undated job (association, not invention)."""
+    if (entry.start or '').strip():
+        return entry
+    desc = (entry.description or '').strip()
+    if not desc:
+        return entry
+    first, _, rest = desc.partition('\n')
+    first = re.sub(r'^[\s•·\-\*●]+', '', first).strip()
+    if not _is_date_range_stub_text(first):
+        return entry
+    d_start, d_end = extract_date_range(first)
+    if not d_start:
+        return entry
+    is_cur = bool(
+        d_end
+        and re.match(
+            r'(?i)^(present|current|now|till\s*date|ongoing|pursuing)$',
+            d_end,
+        )
+    )
+    return entry.model_copy(
+        update={
+            'start': d_start,
+            'end': '' if is_cur else (d_end or entry.end or ''),
+            'is_current': bool(entry.is_current or is_cur),
+            'description': rest.strip()[:2000],
+        }
+    )
+
+
+def _attach_parsed_role(entry: ExperienceEntry | None, role: str) -> ExperienceEntry | None:
+    if entry is None or not (role or '').strip() or (entry.role or '').strip():
+        return entry
+    return entry.model_copy(update={'role': role.strip()[:200]})
+
+
+def _recover_labeled_role(entry: ExperienceEntry) -> ExperienceEntry:
+    """Peel ``Role:`` / ``Designation:`` off a company blob or description."""
+    if (entry.role or '').strip():
+        return entry
+    blob = f'{entry.company or ""}\n{entry.description or ""}'
+    m = _INLINE_ROLE_LABEL.search(blob)
+    if not m:
+        return entry
+    cand = m.group(1).strip(' ,.|')
+    if not cand or len(cand.split()) > 10:
+        return entry
+    if not (_has_job_title_cue(cand) or is_plausible_job_title(cand)):
+        return entry
+    company = re.sub(
+        r'(?i)\s*(?:role|title|designation|position|job\s+title)\s*[:\-–—]\s*'
+        + re.escape(cand),
+        '',
+        entry.company or '',
+    ).strip(' ,.|')
+    return entry.model_copy(update={'role': cand[:200], 'company': company[:200]})
+
+
+def _promote_title_from_description(entry: ExperienceEntry) -> ExperienceEntry:
+    """Move a short first-duty title into role when the header left role empty."""
+    if (entry.role or '').strip():
+        return entry
+    desc = (entry.description or '').strip()
+    if not desc:
+        return entry
+    parts = re.split(r'(?:\n|\s+[•·]\s+)', desc, maxsplit=1)
+    first = re.sub(r'^[\s•·\-\*●]+', '', parts[0]).strip()
+    rest = parts[1].strip() if len(parts) > 1 else ''
+    if re.match(r'(?i)^(?:project\s+title|project\s+name)\b', first):
+        first = re.sub(
+            r'(?i)^(?:project\s+title|project\s+name)\s*[:\-–—]?\s*',
+            '',
+            first,
+        ).strip()
+    spaced = re.split(r'\s{2,}', first, maxsplit=1)
+    if len(spaced) == 2 and (
+        _looks_like_role_only_line(spaced[0]) or (
+            _has_job_title_cue(spaced[0]) and len(spaced[0].split()) <= 6
+        )
+    ):
+        first, extra = spaced[0].strip(), spaced[1].strip()
+        rest = f'{extra} {rest}'.strip()
+    if not first or len(first.split()) > 10 or _DUTY_VERB_START.match(first):
+        return entry
+    if not (_looks_like_role_only_line(first) or _has_job_title_cue(first)):
+        return entry
+    if looks_like_skill_or_duration_company(first) or _looks_like_job_location_line(first):
+        return entry
+    return entry.model_copy(update={'role': first[:200], 'description': rest[:2000]})
+
+
+def _split_title_and_org_blob(text: str) -> tuple[str, str] | None:
+    """Split a same-line title+employer blob without assuming order."""
+    s = (text or '').strip()
+    if not s or len(s.split()) < 3:
+        return None
+    m = re.match(
+        r'(?i)^(.{3,70}?)\s+'
+        r'([A-Z][\w.&\'\- ]{0,70}?'
+        r'(?:Pvt\.?|Ltd\.?|LLC|LLP|Inc\.?|Limited|Private|GmbH|PLC)\b.*)$',
+        s,
+    )
+    if m and _has_job_title_cue(m.group(1)) and not _has_job_title_cue(m.group(2)):
+        return m.group(1).strip()[:200], m.group(2).strip()[:200]
+    words = s.split()
+    for i in range(1, len(words)):
+        left, right = ' '.join(words[:i]).strip(), ' '.join(words[i:]).strip()
+        if not left or not right:
+            continue
+        if _looks_like_job_location_line(left) or _CITY_LIKE.match(left):
+            continue
+        left_title = _has_job_title_cue(left)
+        right_title = _has_job_title_cue(right)
+        left_org = _looks_like_org_header(left) and not left_title
+        right_org = _looks_like_org_header(right) and not right_title
+        if left_title and right_org and not right_title:
+            return left[:200], right[:200]
+        if left_org and right_title and not left_title:
+            return right[:200], left[:200]
+    return None
+
+
 def _split_role_embedded_company(role: str, company: str) -> tuple[str, str]:
-    """``Role : Org`` / ``Role – Org Pvt Ltd`` when company is empty."""
+    """``Role : Org`` / ``Role – Org Pvt Ltd`` / same-line title+employer."""
     r, c = (role or '').strip(), (company or '').strip()
+    if c and not r:
+        split = _split_title_and_org_blob(c)
+        if split:
+            return split
+    if r and not c:
+        split = _split_title_and_org_blob(r)
+        if split:
+            return split
     if c or not r:
         return r, c
     m = re.match(r'^(.+?)\s*[:\-–—]\s*(.+)$', r)
     if not m:
         return r, c
     left, right = m.group(1).strip(), m.group(2).strip()
+    right_wo = _strip_date_range(right).strip(' \t|-–—,()')
+    if _DUTY_VERB_START.match(right) or _DUTY_VERB_START.match(right_wo):
+        return r, c
+    if re.match(r'(?i)^present\b', right_wo):
+        return r, c
     if (
         (_has_job_title_cue(left) or is_plausible_job_title(left))
-        and not _has_job_title_cue(right)
+        and not _has_job_title_cue(right_wo or right)
         and (
-            _looks_like_org_header(right)
-            or _looks_like_company_line(right)
-            or len(right.split()) <= 6
+            _looks_like_org_header(right_wo or right)
+            or _looks_like_company_line(right_wo or right)
+            or (
+                len((right_wo or right).split()) <= 6
+                and not _has_job_title_cue(right_wo or right)
+            )
         )
-        and not looks_like_skill_or_duration_company(right)
+        and not looks_like_skill_or_duration_company(right_wo or right)
     ):
         return left[:200], right[:200]
     return r, c
@@ -3853,6 +4207,28 @@ def _is_complete_experience_row(entry: ExperienceEntry) -> bool:
     )
 
 
+def _is_title_banner_stub(entry: ExperienceEntry) -> bool:
+    """True when the row is a title/summary banner, not a real employer job."""
+    role = (entry.role or '').strip()
+    company = (entry.company or '').strip()
+    if company and looks_like_skill_or_duration_company(company):
+        company = ''
+    if company and len(company.split()) > 8:
+        return True
+    if role and not company and (
+        _has_job_title_cue(role) or is_plausible_job_title(role)
+    ):
+        return True
+    if (
+        company
+        and _has_job_title_cue(company)
+        and not _looks_like_org_header(company)
+        and not _looks_like_company_line(company)
+    ):
+        return True
+    return False
+
+
 def _is_weak_experience_row(entry: ExperienceEntry) -> bool:
     role = (entry.role or '').strip()
     company = (entry.company or '').strip()
@@ -3860,6 +4236,10 @@ def _is_weak_experience_row(entry: ExperienceEntry) -> bool:
     if company and looks_like_skill_or_duration_company(company) and not role:
         return True
     if company and not role and not _description_looks_like_duties(desc):
+        if (entry.start or entry.is_current) and (
+            _looks_like_org_header(company) or _looks_like_company_line(company)
+        ):
+            return False
         return True
     if role and looks_like_skill_or_duration_company(role) and not company:
         return True
@@ -4037,6 +4417,7 @@ def _finalize_experience_entries(entries: list[ExperienceEntry]) -> list[Experie
     fixed: list[ExperienceEntry] = []
     for e in entries:
         e = _peel_header_dates(e)
+        e = _promote_leading_date_from_description(e)
         role, company = (e.role or '').strip(), (e.company or '').strip()
         prefixed = _EXPERIENCE_PREFIX_COMPANY.match(company)
         if prefixed:
@@ -4047,6 +4428,9 @@ def _finalize_experience_entries(entries: list[ExperienceEntry]) -> list[Experie
         role, company = _split_role_embedded_company(role, company)
         if role != (e.role or '').strip() or company != (e.company or '').strip():
             e = e.model_copy(update={'role': role[:200], 'company': company[:200]})
+        e = _recover_labeled_role(e)
+        e = _promote_title_from_description(e)
+        role, company = (e.role or '').strip(), (e.company or '').strip()
         if not company:
             recovered = _recover_company_from_description(e)
             if recovered:
@@ -4089,6 +4473,52 @@ def _finalize_experience_entries(entries: list[ExperienceEntry]) -> list[Experie
                 )
                 if nxt_desc and not cur_desc:
                     cur = cur.model_copy(update={'description': nxt_desc[:2000]})
+                merged.append(cur)
+                i += 2
+                continue
+            if (
+                _is_title_banner_stub(cur)
+                and (cur.start or '').strip()
+                and (nxt.role or '').strip()
+                and (nxt.company or '').strip()
+                and not (nxt.start or '').strip()
+                and not _is_title_banner_stub(nxt)
+            ):
+                nxt = nxt.model_copy(
+                    update={
+                        'start': cur.start,
+                        'end': nxt.end or cur.end,
+                        'is_current': nxt.is_current or cur.is_current,
+                    }
+                )
+                merged.append(nxt)
+                i += 2
+                continue
+            if (
+                _is_date_range_stub_entry(nxt)
+                and not (cur.start or '').strip()
+                and ((cur.role or '').strip() or (cur.company or '').strip())
+            ):
+                stub_start, stub_end = nxt.start, nxt.end
+                if not stub_start:
+                    stub_start, stub_end = extract_date_range(nxt.role or '')
+                is_cur = bool(
+                    nxt.is_current
+                    or (
+                        stub_end
+                        and re.match(
+                            r'(?i)^(present|current|now|till\s*date|ongoing|pursuing)$',
+                            stub_end,
+                        )
+                    )
+                )
+                cur = cur.model_copy(
+                    update={
+                        'start': stub_start or cur.start,
+                        'end': cur.end or ('' if is_cur else (stub_end or nxt.end or '')),
+                        'is_current': cur.is_current or is_cur,
+                    }
+                )
                 merged.append(cur)
                 i += 2
                 continue
@@ -4136,7 +4566,36 @@ def _finalize_experience_entries(entries: list[ExperienceEntry]) -> list[Experie
                 deduped[-1] = _merge_experience_pair(prev, e)
                 continue
         deduped.append(e)
-    return deduped
+    collapsed = _collapse_duplicate_identity_dates(deduped)
+    return [e for e in collapsed if not _is_date_range_stub_entry(e)]
+
+
+def _collapse_duplicate_identity_dates(entries: list[ExperienceEntry]) -> list[ExperienceEntry]:
+    """Keep first role+company occurrence; copy dates from later duplicates."""
+    first: dict[tuple[str, str], int] = {}
+    out: list[ExperienceEntry] = []
+    for e in entries:
+        role = (e.role or '').strip().lower()
+        company = (e.company or '').strip().lower()
+        if not role or not company:
+            out.append(e)
+            continue
+        key = (company, role)
+        if key not in first:
+            first[key] = len(out)
+            out.append(e)
+            continue
+        prev = out[first[key]]
+        updates: dict[str, str | bool] = {}
+        if not (prev.start or '').strip() and (e.start or '').strip():
+            updates['start'] = e.start
+            updates['end'] = prev.end or e.end or ''
+            updates['is_current'] = bool(prev.is_current or e.is_current)
+        if (e.description or '').strip() and not (prev.description or '').strip():
+            updates['description'] = e.description
+        if updates:
+            out[first[key]] = prev.model_copy(update=updates)
+    return out
 
 
 def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceEntry]:
@@ -4212,8 +4671,10 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
                     )
                 )
         if table_jobs:
+            stacked = _coalesce_stacked_experience_entries(table_jobs)
+            stacked = _attach_headline_role_from_text(stacked, full_text)
             return _attach_prefix_tenures(
-                _coalesce_stacked_experience_entries(table_jobs),
+                _finalize_experience_entries(stacked),
                 full_text,
             )
 
@@ -4233,6 +4694,7 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
     pending_desc: list[str] = []
     in_contact_block = False
     in_project_block = False
+    pending_project_tenure: tuple[str, str, bool] | None = None
     identity_names = document_identity_names(full_text)
 
     def _flush_pending() -> None:
@@ -4319,6 +4781,32 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
         if _PROJECT_BLOCK_HEADING.match(header_probe):
             _flush_pending()
             in_project_block = True
+            a, b = extract_date_range(header_probe)
+            if a:
+                is_cur = bool(
+                    b
+                    and re.match(
+                        r'(?i)^(present|current|now|till\s*date|ongoing|pursuing)$',
+                        b,
+                    )
+                )
+                pending_project_tenure = (a, '' if is_cur else (b or ''), is_cur)
+            continue
+        if (
+            re.match(r'(?i)^projects?\s*[:\-–—]', header_probe)
+            and not re.match(r'(?i)^project\s+(?:title|name)\b', header_probe)
+            and not _LABELED_EMPLOYER_LINE.match(header_probe)
+            and extract_date_range(header_probe)[0]
+        ):
+            a, b = extract_date_range(header_probe)
+            is_cur = bool(
+                b
+                and re.match(
+                    r'(?i)^(present|current|now|till\s*date|ongoing|pursuing)$',
+                    b,
+                )
+            )
+            pending_project_tenure = (a, '' if is_cur else (b or ''), is_cur)
             continue
         if in_project_block:
             if is_labeled_contact_metadata(header_probe) or is_contact_or_reference_line(header_probe):
@@ -4379,7 +4867,7 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
                 )
                 if not jobbish:
                     if pending_jobs:
-                        leftover = _DATE_RANGE_STRIP.sub('', peeled).strip(' \t|-–—,()')
+                        leftover = _identity_leftover_after_dates(peeled)
                         if extract_date_range(peeled)[0] and (
                             not leftover
                             or leftover.lower() in {'present', 'current', 'now', 'ongoing'}
@@ -4414,7 +4902,36 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
         entry = _parse_experience_line(line, identity_names=identity_names)
         if entry and (entry.role or entry.company or entry.start or entry.location):
             if _is_project_like_experience(entry.role, entry.company):
+                a, b = (entry.start or ''), (entry.end or '')
+                if not a:
+                    a, b = extract_date_range(line)
+                if a:
+                    is_cur = bool(
+                        entry.is_current
+                        or (
+                            b
+                            and re.match(
+                                r'(?i)^(present|current|now|till\s*date|ongoing|pursuing)$',
+                                b,
+                            )
+                        )
+                    )
+                    pending_project_tenure = (a, '' if is_cur else (b or ''), is_cur)
                 continue
+            if (
+                pending_project_tenure
+                and (entry.company or '').strip()
+                and not (entry.start or '').strip()
+                and (
+                    _looks_like_org_header(entry.company)
+                    or _looks_like_company_line(entry.company)
+                )
+            ):
+                ps, pe, pc = pending_project_tenure
+                entry = entry.model_copy(
+                    update={'start': ps, 'end': pe, 'is_current': bool(entry.is_current or pc)}
+                )
+                pending_project_tenure = None
             # Date/location-only line → attach to the open job (even after duties)
             # when that job has no start yet. If the open job already has dates,
             # this line starts the next date-first row.
@@ -4592,7 +5109,7 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
         if is_contact_or_reference_line(stripped) or looks_like_contact_person_line(stripped):
             in_contact_block = True
             continue
-        leftover = _DATE_RANGE_STRIP.sub('', stripped).strip(' \t|-–—,()')
+        leftover = _identity_leftover_after_dates(stripped)
         if _is_employment_date_carrier(stripped) or (
             extract_date_range(stripped)[0] and (
                 not leftover
@@ -5145,6 +5662,9 @@ def _keeps_adjacent_employment_line(text: str) -> bool:
         return True
     if _LABELED_EMPLOYER_LINE.match(s) or _is_employment_date_carrier(s):
         return True
+    prose = _parse_employment_sentence(s)
+    if prose and (prose.role or '').strip() and (prose.company or '').strip():
+        return True
     if extract_date_range(s)[0]:
         return True
     if _looks_like_role_only_line(s) or _looks_like_company_line(s):
@@ -5166,6 +5686,13 @@ def _structural_employment_window(text: str) -> str:
         if not s:
             continue
         labeled = bool(_LABELED_EMPLOYMENT_LINE.match(s) or _parse_unheaded_employment_row(s))
+        if not labeled:
+            prose = _parse_employment_sentence(s)
+            labeled = bool(
+                prose
+                and (prose.role or '').strip()
+                and (prose.company or '').strip()
+            )
         title_at = bool(
             re.search(r'(?i)\bat\s+[A-Z]', s)
             and (
@@ -5228,6 +5755,28 @@ def _blob_has_employment_evidence(blob: str) -> bool:
     return bool((has_title and has_org) or (has_title and has_date) or (has_org and has_date))
 
 
+_NON_EMPLOYMENT_DATE_SECTIONS = {
+    'education', 'academic', 'certifications', 'certificates', 'awards',
+    'honors', 'honours', 'personal details', 'declaration', 'publications',
+}
+
+
+def _orphan_employment_date_lines(
+    sections: list[SectionSpan] | None,
+) -> list[str]:
+    """Date-only lines from non-education sections (two-column bleed)."""
+    lines: list[str] = []
+    for span in sections or []:
+        label = (getattr(span, 'label', '') or '').strip().lower()
+        if label in _NON_EMPLOYMENT_DATE_SECTIONS or 'education' in label:
+            continue
+        for ln in (getattr(span, 'text', '') or '').splitlines():
+            s = (ln or '').strip()
+            if s and (_is_employment_date_carrier(s) or _is_date_range_stub_text(s)):
+                lines.append(s)
+    return lines
+
+
 def _recover_jobs_from_unlabeled_preamble(
     experience: list[ExperienceEntry],
     sections: list[SectionSpan],
@@ -5236,6 +5785,10 @@ def _recover_jobs_from_unlabeled_preamble(
 ) -> list[ExperienceEntry]:
     """When Experience is missing or only metadata stubs, recover structural jobs."""
     if experience and any(_is_strong_experience_row(e) for e in experience):
+        if any(not (e.start or '').strip() for e in experience):
+            extra = _orphan_employment_date_lines(sections)
+            if extra:
+                experience = _attach_orphan_dates_to_entries(experience, extra)
         return experience
     misplaced: list[str] = []
     for span in sections or []:

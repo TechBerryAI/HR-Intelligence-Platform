@@ -288,6 +288,7 @@ _FILENAME_NAME_NOISE = frozenset({
     'postgresql', 'postgres', 'oracle', 'expertia', 'ai', 'consultant',
     'specialist', 'analyst', 'architect', 'engineer', 'developer',
     'administrator', 'admin', 'database', 'middleware', 'network', 'fresher',
+    'copy',
 })
 _INSTITUTION_LIKE = re.compile(
     r'(?i)\b(?:university|college|school|institute|academy|polytechnic|vidyalaya|'
@@ -994,9 +995,16 @@ def name_from_resume_filename(filename: str | None) -> str:
     )
     # Drop leading indexes / hashes
     base = re.sub(r'^(?:#?\d+[_\-\s]+)+', '', base)
+    # Portal tenure in brackets: [2y_7m], [3y_5m] — must run before unbracketed strip
+    base = re.sub(
+        r'(?i)\[[^\]]{0,24}?\d+\s*y(?:ea)?r?s?[^\]]{0,16}\]',
+        ' ',
+        base,
+    )
     # Experience markers: 4y_0m, 4yrs, 2y3m
     base = re.sub(r'(?i)\d+\s*y(?:ea)?r?s?\s*[_\-]?\s*\d*\s*m(?:onths?)?', ' ', base)
     base = re.sub(r'(?i)[_\-]?\d+y\d*m?', ' ', base)
+    base = re.sub(r'[\[\]]+', ' ', base)
     base = re.sub(r'[_\-]+', ' ', base)
     # CamelCase → words (AnushkaGohil, AshishAdityaTripathi)
     base = re.sub(r'([a-z])([A-Z])', r'\1 \2', base)
@@ -1760,7 +1768,9 @@ _NON_JOB_COMPANY_HEADER = re.compile(
     r'sales\s+and\s+marketing|roles?\s+(?:and|&)\s+responsibilit(?:y|ies)|'
     r'duration|period(?:\s*/\s*duration)?|organization|organisation|project(?:s)?(?:\s+name)?|'
     r'recruitments?|onboarding|responsibilities|work\s+summary|'
-    r'declaration|objective|profile|about\s+me'
+    r'declaration|objective|profile|about\s+me|'
+    r'year|university|percentage|marks|cgpa|grade|board|'
+    r'title|designation|position|job\s+title|company(?:\s+name)?|employer|role'
     r')\s*:?\s*$'
 )
 _PROJECT_TITLE_AS_COMPANY = re.compile(
@@ -1837,7 +1847,15 @@ def looks_like_skill_or_duration_company(value: str) -> bool:
     if is_section_header_line(raw) and not _ORG_EMPLOYMENT_CUE_RE.search(raw):
         if not _is_employment_header_role(raw):
             return True
-    if raw in {'|', '-', '–', '—', '/', '\\'} or set(raw) <= {'|', '-', '–', '—', '/', '\\', '.', ' '}:
+    if raw in {'|', '-', '–', '—', '/', '\\', '[]'} or set(raw) <= {'|', '-', '–', '—', '/', '\\', '.', ' '}:
+        return True
+    if '%' in raw or re.match(r'(?i)^percentage\b', raw):
+        return True
+    if re.match(r'(?i)^page\s+\d+\s+of\s+\d+$', raw):
+        return True
+    if re.match(r'(?i)^(?:till\s*date|tilldate|present|current|now|ongoing)$', raw.strip('.:')):
+        return True
+    if re.match(r'(?i)^[A-Z]?\d{3}\s*\([^)]{3,48}\)$', raw):
         return True
     if re.match(r'(?i)^(?:total\s+)?(?:work\s+)?experience$', raw):
         return True
@@ -1845,9 +1863,12 @@ def looks_like_skill_or_duration_company(value: str) -> bool:
         return True
     if re.match(r'(?i)^(?:duration|period(?:\s*/\s*duration)?|organization|organisation)\s*:?\s*$', raw):
         return True
+    if re.match(r'(?i)^present\s*\)', raw):
+        return True
     if re.match(
         r'(?i)^(?:successfully|working\s+knowledge|good\s+knowledge|'
-        r'knowledge\s+about|extensive\s+experience|configured|creating)\b',
+        r'knowledge\s+about|extensive\s+experience|configured|creating|'
+        r'developed|managed|implemented)\b',
         raw,
     ):
         return True
@@ -1946,6 +1967,14 @@ def looks_like_education_as_experience_row(company: str | None, role: str | None
         return False
     degree = bool(_EDU_AS_JOB_DEGREE_CUE.search(blob))
     institution = bool(_EDU_AS_JOB_INST_CUE.search(blob))
+    if re.match(r'(?i)^percentage$', company):
+        return True
+    if re.match(r'(?i)^(?:year|university|percentage|marks|cgpa|grade|board)$', company):
+        return True
+    if re.search(r'%', blob) and re.search(
+        r'(?i)\b(?:division|class|board|percentage|aggregate|marks?)\b', blob
+    ):
+        return True
     if degree and institution:
         return True
     if degree and not _is_employment_header_role(role) and not _is_employment_header_role(company):
@@ -2004,12 +2033,19 @@ def is_non_job_experience_record(row: Any) -> bool:
         return True
     if looks_like_education_as_experience_row(company, role):
         return True
-    # Person-name token as employer with no org cue (sidebar identity bleed)
+    # Person-name token as employer with no org cue (sidebar identity bleed).
+    # A titled role is employment evidence — small firms often lack Pvt/Ltd.
     if (
         company
         and is_plausible_person_name(company)
         and not _ORG_EMPLOYMENT_CUE_RE.search(company)
         and experience_lacks_employment_evidence(role, company, start, end)
+        and not re.search(
+            r'(?i)\b(?:intern|engineer|enginner|developer|analyst|manager|'
+            r'officer|associate|consultant|lead|executive|specialist|'
+            r'administrator|admin|architect|dba)\b',
+            role,
+        )
     ):
         return True
     if looks_like_contact_person_line(role) and experience_lacks_employment_evidence(

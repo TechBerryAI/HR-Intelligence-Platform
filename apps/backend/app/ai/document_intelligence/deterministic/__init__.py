@@ -28,21 +28,24 @@ _MONTH_MAP = {
     'dec': '12', 'december': '12',
 }
 _MONTH_NAME = r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
-# Indian/Naukri resumes often write Aug'20 / Dec’21 instead of Aug 2020.
+# Indian/Naukri resumes often write Aug'20 / Dec’21 / Sep 21 instead of Aug 2020.
 _MONTH_APOS_YEAR = rf'{_MONTH_NAME}\s*[\'’]\s*\d{{2}}'
+_MONTH_SPACE_YY = rf'{_MONTH_NAME}\s+\d{{2}}(?!\d)'
 _DATE_ATOM = (
     r'(?:'
     r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?[\s\-]+)?'
     rf'{_MONTH_NAME}[\s\-]+(?:19|20)\d{{2}}'
     rf'|{_MONTH_APOS_YEAR}'
+    rf'|{_MONTH_SPACE_YY}'
     r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
-    r'|(?:19|20)\d{2}(?:[/\-](?:0?[1-9]|1[0-2]))?'
+    r'|(?:19|20)\d{2}(?:\s*[/\-]\s*(?:0?[1-9]|1[0-2]))?'
     r')'
 )
 _PRESENT_ATOM = (
     r'(?:Present|Current|Now|Currently|'
     r'Till\s*(?:Date|Present|Now)|Tilldate|'
+    r'T[il]l\s+now|'
     r'To\s+Date|Ongoing|Pursuing|Still(?:\s+Date)?)'
 )
 _DATE_RANGE_RE = re.compile(
@@ -55,7 +58,7 @@ _TILL_DATE_RANGE_RE = re.compile(
 _SINCE_RE = re.compile(rf'(?i)\bsince\s+({_DATE_ATOM})\b')
 _PRESENT_TOKEN_RE = re.compile(
     r'(?i)^(present|current|now|currently|till\s*(?:date|present|now)|tilldate|'
-    r'to\s+date|ongoing|pursuing|still(?:\s+date)?)$'
+    r't[il]l\s+now|to\s+date|ongoing|pursuing|still(?:\s+date)?)$'
 )
 
 
@@ -268,10 +271,19 @@ def normalize_month_token(token: str) -> str:
         year = 2000 + yy if yy < 80 else 1900 + yy
         mon = _MONTH_MAP.get(m_apos.group(1).lower()[:3], '01')
         return f'{year}-{mon}'
+    m_space_yy = re.match(
+        r'(?i)^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{2})$',
+        t,
+    )
+    if m_space_yy:
+        yy = int(m_space_yy.group(2))
+        year = 2000 + yy if yy < 80 else 1900 + yy
+        mon = _MONTH_MAP.get(m_space_yy.group(1).lower()[:3], '01')
+        return f'{year}-{mon}'
     m2 = re.match(r'^(0?[1-9]|1[0-2])[/\-]((?:19|20)\d{2})$', t)
     if m2:
         return f'{m2.group(2)}-{int(m2.group(1)):02d}'
-    m3 = re.match(r'^((?:19|20)\d{2})(?:[/\-](0?[1-9]|1[0-2]))?$', t)
+    m3 = re.match(r'^((?:19|20)\d{2})(?:\s*[/\-]\s*(0?[1-9]|1[0-2]))?$', t)
     if m3:
         if m3.group(2):
             return f'{m3.group(1)}-{int(m3.group(2)):02d}'

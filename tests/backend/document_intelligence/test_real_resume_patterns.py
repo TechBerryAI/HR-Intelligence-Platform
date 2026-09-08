@@ -311,6 +311,14 @@ Bachelor of Commerce, Mumbai University, 2021
 """
 
 
+def test_nul_byte_stripped_from_extracted_text():
+    from app.ai.parser.text_extraction import normalize_extracted_text
+
+    cleaned = normalize_extracted_text('Hello\x00 World')
+    assert '\x00' not in cleaned
+    assert 'Hello' in cleaned and 'World' in cleaned
+
+
 def test_zero_width_space_name_still_extracts():
     from app.ai.parser.enrichment.resume_text_inference import (
         extract_name_from_text,

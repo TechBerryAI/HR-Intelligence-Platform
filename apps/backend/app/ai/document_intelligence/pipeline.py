@@ -807,6 +807,7 @@ def _run_resume(
     except Exception as e:
         extract_err = e
         raw_text = ''
+        logger.warning('Resume text extraction failed: %s', e)
 
     # VALIDATION_FIX_nul_strip — PostgreSQL text columns reject NUL bytes
     if raw_text and '\x00' in raw_text:
@@ -828,13 +829,20 @@ def _run_resume(
             text_done_msg = f'OCR DPI retry → {text_length} chars'
             extract_err = None
         except Exception as retry_err:
+            logger.warning('Resume DPI retry failed: %s', retry_err)
             if extract_err is not None and (not raw_text or text_length < 30):
-                _emit(parse_job_id, 'text', 'failed', f'DPI retry: {retry_err}', on_stage=on_stage)
-                return {'status': 'error', 'error': f'Text extraction failed: {retry_err}'}, 400
+                _emit(parse_job_id, 'text', 'failed', 'extraction failed', on_stage=on_stage)
+                return {
+                    'status': 'error',
+                    'error': 'Could not extract sufficient text from document',
+                }, 400
 
     if extract_err is not None and (not raw_text or text_length < 30):
-        _emit(parse_job_id, 'text', 'failed', str(extract_err), on_stage=on_stage)
-        return {'status': 'error', 'error': f'Text extraction failed: {str(extract_err)}'}, 400
+        _emit(parse_job_id, 'text', 'failed', 'extraction failed', on_stage=on_stage)
+        return {
+            'status': 'error',
+            'error': 'Could not extract sufficient text from document',
+        }, 400
 
     if not raw_text or text_length < 30:
         error_msg = 'Could not extract sufficient text from document'

@@ -305,10 +305,11 @@ _INSTITUTION_AS_JOB_RE = re.compile(
     r'(?i)\b(?:university|college|institute|polytechnic|iit|nit|school)\b'
 )
 _JOB_TITLE_CUE_RE = re.compile(
-    r'(?i)\b(?:intern(?:ship)?s?|engineer|developer|analyst|trainee|apprentice|'
-    r'manager|officer|associate|consultant|lead|executive|specialist|'
-    r'administrator|admin|architect|dba|designer|scientist|director|head|'
-    r'programmer|coordinator|supervisor|trainer|instructor)\b'
+    r'(?i)\b(?:intern(?:ship)?s?|engineer|enginner|enginneer|developer|developper|'
+    r'analyst|trainee|apprentice|manager|maneger|officer|associate|consultant|'
+    r'lead|executive|specialist|administrator|adminstrator|admin|architect|dba|'
+    r'designer|scientist|director|head|programmer|coordinator|supervisor|'
+    r'trainer|instructor|assitant|assistant)\b'
 )
 
 
@@ -387,7 +388,7 @@ def validate_role(value: str) -> Tuple[bool, str]:
             return False, 'role_is_project_meta'
     except Exception:
         pass
-    if s[:1].islower():
+    if s[:1].islower() and not _JOB_TITLE_CUE_RE.search(s):
         return False, 'role_is_fragment'
     if re.match(
         r'(?i)^(?:and|or|the|for|with|based|implement|develop|build|create|'

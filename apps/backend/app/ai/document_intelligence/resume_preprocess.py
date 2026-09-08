@@ -57,11 +57,12 @@ def prepare_resume_working_text(
     """Layout (optional) → glued-heading split → normalize → bullet restore.
 
     This is the single preprocessing path for Apply ``_run_resume`` and
-    ``parse_resume_text_to_canonical``.
+    ``parse_resume_text_to_canonical``. Strip NUL bytes first so HTTP persist
+    (Postgres rejects ``\\x00``) and in-process eval reconstruct the same text.
     """
     from app.ai.document_intelligence.layout_doc import normalize_extracted_resume_text
 
-    text = raw_text or ''
+    text = (raw_text or '').replace('\x00', '')
     if file_data:
         try:
             from app.ai.document_intelligence.layout_doc import maybe_reorder_two_column

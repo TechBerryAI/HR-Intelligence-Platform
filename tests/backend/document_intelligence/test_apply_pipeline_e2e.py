@@ -1329,3 +1329,26 @@ def test_deterministic_role_not_overwritten_by_semantic_enrichment():
     assert merged[0].role == 'Platform Engineer'
     assert 'northwind' in (merged[0].company or '').lower()
 
+
+def test_http_inprocess_nul_strip_keeps_experience_dto_aligned():
+    """Class D: HTTP strips PDF NULs before reconstruct; in-process must match."""
+    dirty = (
+        'Pat Lee\npat@example.com\n+919876543210\n'
+        'Experience\n'
+        'Northwind Ltd\n'
+        'Sales Executive\n'
+        'May 2022 - Feb 2024\n'
+        'Gave online demos to the sales team for closures and\n'
+        'contracting.\n'
+        '\x00 Learned More than 6 Products / Modules\n'
+        'Skills\nExcel, SQL\n'
+    )
+    clean = dirty.replace('\x00', '')
+    assert '\x00' not in prepare_resume_working_text(dirty)
+    assert prepare_resume_working_text(dirty) == prepare_resume_working_text(clean)
+    _pd, form_dirty, *_ = _apply_parse(dirty)
+    _pc, form_clean, *_ = _apply_parse(clean)
+    dirty_keys = [(e.company, e.role, e.startMonth) for e in form_dirty.experiences]
+    clean_keys = [(e.company, e.role, e.startMonth) for e in form_clean.experiences]
+    assert dirty_keys == clean_keys
+

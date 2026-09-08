@@ -79,6 +79,17 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+def _parse_source_filename(uploaded: str | None) -> str:
+    """Basename used for parse / name inference.
+
+    Do not run ``secure_filename`` on this value. Werkzeug strips ``[Ny_Nm]``
+    tenure markers and turns `` - Copy`` into ``_-_Copy``, which changes
+    filename-derived names versus the in-process parser. Storage writes
+    ``{uploader}_{uuid}{ext}`` and does not use this string as a path.
+    """
+    return (uploaded or '').replace('\\', '/').split('/')[-1].strip()
+
+
 def _reject_legacy_doc(filename):
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
     if ext == 'doc':
@@ -114,6 +125,16 @@ def _reject_public_oversize():
             'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
         }), 413
     return None
+
+
+def _read_upload_bytes(file) -> bytes:
+    """Read at most MAX_FILE_SIZE+1 bytes.
+
+    Flask's process-wide MAX_CONTENT_LENGTH defaults to 512MB for bulk
+    uploads. Public Apply must not buffer that much when Content-Length is
+    omitted or spoofed low.
+    """
+    return file.read(MAX_FILE_SIZE + 1)
 
 
 def _generic_parse_error(exc: Exception, where: str):
@@ -303,7 +324,6 @@ def parse_resume_public():
             return jsonify({
                 'status': 'error',
                 'error': 'Too many resume parse requests. Please try again later.',
-                'pid': os.getpid(),
             }), 429
 
         oversize = _reject_public_oversize()
@@ -311,7 +331,7 @@ def parse_resume_public():
             return oversize
 
         if 'file' not in request.files:
-            return jsonify({'status': 'error', 'error': 'No file provided', 'pid': os.getpid()}), 400
+            return jsonify({'status': 'error', 'error': 'No file provided'}), 400
 
         file = request.files['file']
         if file.filename == '':
@@ -327,13 +347,13 @@ def parse_resume_public():
                 'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
             }), 400
 
-        file_data = file.read()
+        file_data = _read_upload_bytes(file)
         if len(file_data) > MAX_FILE_SIZE:
             return jsonify({
                 'status': 'error',
                 'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
             }), 413
-        filename = secure_filename(file.filename)
+        filename = _parse_source_filename(file.filename)
         public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
 
         body, status = run_resume_parse_pipeline(
@@ -374,7 +394,7 @@ def parse_resume_upload():
             }), 400
 
         file_data = file.read()
-        filename = secure_filename(file.filename)
+        filename = _parse_source_filename(file.filename)
 
         uploader_id = get_user_id(current_user)
         jwt_role = get_role(current_user)
@@ -510,13 +530,13 @@ def parse_resume_public_stream():
             'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
         }), 400
 
-    file_data = file.read()
+    file_data = _read_upload_bytes(file)
     if len(file_data) > MAX_FILE_SIZE:
         return jsonify({
             'status': 'error',
             'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
         }), 413
-    filename = secure_filename(file.filename)
+    filename = _parse_source_filename(file.filename)
     public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
 
     def _run(on_stage):
@@ -556,7 +576,7 @@ def parse_resume_stream():
         }), 400
 
     file_data = file.read()
-    filename = secure_filename(file.filename)
+    filename = _parse_source_filename(file.filename)
     uploader_id = get_user_id(current_user)
     jwt_role = get_role(current_user)
     if not uploader_id:

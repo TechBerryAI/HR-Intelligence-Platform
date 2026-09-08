@@ -83,6 +83,14 @@ def test_date_variants_including_till_date_and_ordinal():
     assert jun_start.startswith('2018') and jun_end.startswith('2021')
     dec_start, dec_end = extract_date_range("Dec’21– Present")
     assert dec_start.startswith('2021') and dec_end == 'Present'
+    space_yy_start, space_yy_end = extract_date_range('Sep 21-Mar 22')
+    assert space_yy_start.startswith('2021') and space_yy_end.startswith('2022')
+    since_yy, since_yy_end = extract_date_range('Since Mar 22')
+    assert since_yy.startswith('2022') and since_yy_end == 'Present'
+    iso_space_start, iso_space_end = extract_date_range('2023-10 - 2025- 02')
+    assert iso_space_start.startswith('2023') and iso_space_end.startswith('2025')
+    typo_start, typo_end = extract_date_range('from 29th November 2023 to tll now')
+    assert typo_start.startswith('2023') and typo_end == 'Present'
 
 
 def test_section_aliases_are_semantic_not_sentences():

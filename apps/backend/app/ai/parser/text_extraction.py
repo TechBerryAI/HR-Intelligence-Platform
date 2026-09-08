@@ -223,10 +223,14 @@ def normalize_extracted_text(text: str) -> str:
     """
     Strip PDF/Word invisible characters that break name/header matching.
     Zero-width spaces after names (e.g. 'DHRUTI JADEJA\\u200b') are common.
+    NUL bytes from some PDF extractors must be removed here — the HTTP path
+    already stripped them before persist, so in-process parse must see the
+    same working text or experience rows diverge (Class D).
     """
     if not text:
         return ''
     t = _INVISIBLE_CHARS_RE.sub('', text)
+    t = t.replace('\x00', '')
     t = t.replace('\xa0', ' ').replace('\u202f', ' ')
     return t
 
