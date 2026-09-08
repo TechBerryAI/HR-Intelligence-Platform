@@ -13,6 +13,9 @@ from app.ai.parser.extraction_result import QUALITY_RANK, TextQuality
 MIN_TEXT_CHARS = 30
 PAGE_OCR_TEXT_THRESHOLD = 80
 PAGE_SPARSE_TEXT_WITH_IMAGES = 200
+# Full-page (or near-full-page) embedded images: always OCR, even if a thin
+# digital overlay contains resume tokens like "Experience".
+IMAGE_COVERAGE_OCR_THRESHOLD = 0.35
 
 _EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
 _PHONE_RE = re.compile(r'\b[6-9]\d{9}\b|\+\d[\d\s\-()]{8,}\d')
@@ -70,6 +73,7 @@ def classify_text_quality(
     image_count: int = 0,
     page_threshold: int = PAGE_OCR_TEXT_THRESHOLD,
     sparse_with_images: int = PAGE_SPARSE_TEXT_WITH_IMAGES,
+    image_coverage: float = 0.0,
 ) -> TextQuality:
     """Classify extracted text as GOOD, WEAK, GARBAGE, or EMPTY."""
     t = (text or '').strip()
@@ -90,6 +94,10 @@ def classify_text_quality(
         and not has_token
     ):
         return TextQuality.GARBAGE
+
+    # Overlay on a scanned page: a few resume tokens must not look GOOD.
+    if image_coverage >= IMAGE_COVERAGE_OCR_THRESHOLD and len(t) < 400:
+        return TextQuality.WEAK
 
     # Short but clearly a resume/contact page — do not OCR unnecessarily.
     if has_token and ratio >= 0.35:

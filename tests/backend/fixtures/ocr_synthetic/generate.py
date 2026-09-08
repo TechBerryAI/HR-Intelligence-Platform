@@ -103,3 +103,30 @@ def image_heavy_pdf_bytes() -> bytes:
     data = doc.tobytes()
     doc.close()
     return data
+
+
+def overlay_scanned_pdf_bytes() -> bytes:
+    """Full-page scan plus a thin digital overlay (the classic OCR-skip trap)."""
+    import fitz
+
+    png = render_text_png(SYNTHETIC_RESUME)
+    doc = fitz.open()
+    page = doc.new_page(width=612, height=792)
+    page.insert_image(page.rect, stream=png)
+    page.insert_text((72, 40), 'Experience\nCurriculum Vitae')
+    data = doc.tobytes()
+    doc.close()
+    return data
+
+
+def oversized_page_pdf_bytes() -> bytes:
+    """Photo-sized MediaBox that would explode pixmap size without OCR_MAX_SIDE."""
+    import fitz
+
+    png = render_text_png(SYNTHETIC_RESUME, size=(1700, 2200))
+    doc = fitz.open()
+    page = doc.new_page(width=4000, height=6000)
+    page.insert_image(page.rect, stream=png)
+    data = doc.tobytes()
+    doc.close()
+    return data

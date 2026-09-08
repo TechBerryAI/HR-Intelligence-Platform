@@ -37,6 +37,7 @@ from app.ai.parser.extraction_result import (
     TextQuality,
 )
 from app.ai.parser.text_quality import (
+    IMAGE_COVERAGE_OCR_THRESHOLD,
     MIN_TEXT_CHARS,
     PAGE_OCR_TEXT_THRESHOLD,
     classify_text_quality,
@@ -67,6 +68,8 @@ OCR_DPI = max(72, int(os.getenv('OCR_DPI', '250')))
 OCR_DPI_FAST = max(72, int(os.getenv('OCR_DPI_FAST', os.getenv('HCIP_OCR_DPI_START', '180'))))
 # Bound concurrent RapidOCR/Tesseract inference (bulk workers stay parallel for digital I/O).
 OCR_MAX_CONCURRENT = max(1, int(os.getenv('OCR_MAX_CONCURRENT', '1')))
+# Cap rendered / OCR image long side so RapidOCR is not fed 6k–10k px rasters.
+OCR_MAX_SIDE = max(720, int(os.getenv('OCR_MAX_SIDE', '2800')))
 RESUME_LAYOUT_ENABLED = os.getenv('RESUME_LAYOUT_ENABLED', 'true').lower() in (
     '1',
     'true',
@@ -156,11 +159,12 @@ def should_retry_high_dpi_extract(
     quality = classify_text_quality(raw_text)
     if text_length >= MIN_TEXT_CHARS and quality == TextQuality.GOOD:
         return False
+    # WEAK PDFs (thin OCR, overlay+scan) still benefit from a 300 DPI pass.
+    if quality == TextQuality.WEAK:
+        return True
     garbage = quality in (TextQuality.GARBAGE, TextQuality.EMPTY) or looks_like_garbage_extract(
         raw_text
     )
-    if text_length >= MIN_TEXT_CHARS and quality == TextQuality.WEAK:
-        return bool(extract_failed or garbage)
     return bool(extract_failed or not raw_text or text_length < MIN_TEXT_CHARS or garbage)
 
 
@@ -238,6 +242,11 @@ class OcrAttempt:
     text: str = ''
     engine: str = ''
     confidence: float | None = None
+
+
+_last_ocr_attempt: contextvars.ContextVar[OcrAttempt | None] = contextvars.ContextVar(
+    'last_ocr_attempt', default=None
+)
 
 
 def _tesseract_available() -> bool:
@@ -345,7 +354,10 @@ def _get_rapidocr_engine() -> Any:
 
     with _rapidocr_lock:
         if _rapidocr_engine is None:
-            _rapidocr_engine = RapidOCR()
+            try:
+                _rapidocr_engine = RapidOCR(use_angle_cls=True)
+            except TypeError:
+                _rapidocr_engine = RapidOCR()
         return _rapidocr_engine
 
 
@@ -355,6 +367,63 @@ def run_rapidocr_inference(arr: Any) -> Any:
     with _ocr_inference_sema:
         result, _ = engine(arr)
     return result
+
+
+def _ocr_max_side() -> int:
+    return max(720, int(os.getenv('OCR_MAX_SIDE', str(OCR_MAX_SIDE))))
+
+
+def _maybe_downscale_image_bytes(image_bytes: bytes) -> bytes:
+    """Downscale so the long side is at most OCR_MAX_SIDE (RapidOCR empty on huge rasters)."""
+    if not image_bytes:
+        return image_bytes
+    try:
+        from PIL import Image
+
+        image = Image.open(io.BytesIO(image_bytes))
+        width, height = image.size
+        long_side = max(width, height)
+        cap = _ocr_max_side()
+        if long_side <= cap or long_side <= 0:
+            return image_bytes
+        scale = cap / float(long_side)
+        new_size = (max(1, int(width * scale)), max(1, int(height * scale)))
+        if image.mode not in ('RGB', 'L'):
+            image = image.convert('RGB')
+        try:
+            resample = Image.Resampling.LANCZOS
+        except AttributeError:
+            resample = Image.LANCZOS
+        resized = image.resize(new_size, resample)
+        buf = io.BytesIO()
+        resized.save(buf, format='PNG')
+        return buf.getvalue()
+    except Exception:
+        return image_bytes
+
+
+def _rotate_image_bytes(image_bytes: bytes, degrees: int) -> bytes:
+    from PIL import Image
+
+    image = Image.open(io.BytesIO(image_bytes))
+    if image.mode not in ('RGB', 'L'):
+        image = image.convert('RGB')
+    rotated = image.rotate(
+        degrees,
+        expand=True,
+        fillcolor=(255, 255, 255) if image.mode != 'L' else 255,
+    )
+    buf = io.BytesIO()
+    rotated.save(buf, format='PNG')
+    return buf.getvalue()
+
+
+def _ocr_text_is_weak(text: str) -> bool:
+    stripped = (text or '').strip()
+    if len(stripped) < MIN_TEXT_CHARS:
+        return True
+    quality = classify_text_quality(stripped)
+    return quality in (TextQuality.EMPTY, TextQuality.GARBAGE, TextQuality.WEAK)
 
 
 def _mean_ocr_confidence(detections: list | None) -> float | None:
@@ -371,14 +440,15 @@ def _mean_ocr_confidence(detections: list | None) -> float | None:
     return sum(scores) / len(scores)
 
 
-def _ocr_with_rapidocr(image_bytes: bytes) -> tuple[str, float | None]:
+def _ocr_with_rapidocr(image_bytes: bytes, *, preprocess: bool = True) -> tuple[str, float | None]:
     """OCR via RapidOCR (pip-installable, no system binary)."""
     import numpy as np
     from PIL import Image
 
     from app.ai.parser.layout.preprocess import preprocess_image_bytes
 
-    processed = preprocess_image_bytes(image_bytes)
+    processed = preprocess_image_bytes(image_bytes) if preprocess else image_bytes
+    processed = _maybe_downscale_image_bytes(processed)
     image = Image.open(io.BytesIO(processed))
     if image.mode not in ('RGB', 'L'):
         image = image.convert('RGB')
@@ -418,14 +488,17 @@ def _join_ocr_detections_reading_order(detections: list) -> str:
     return '\n'.join(text for _, text in rows).strip()
 
 
-def _ocr_with_tesseract(image_bytes: bytes, *, lang: str | None = None) -> str:
+def _ocr_with_tesseract(
+    image_bytes: bytes, *, lang: str | None = None, preprocess: bool = True
+) -> str:
     """OCR via system Tesseract + pytesseract (optional fallback)."""
     import pytesseract
     from PIL import Image
 
     from app.ai.parser.layout.preprocess import preprocess_image_bytes
 
-    processed = preprocess_image_bytes(image_bytes)
+    processed = preprocess_image_bytes(image_bytes) if preprocess else image_bytes
+    processed = _maybe_downscale_image_bytes(processed)
     image = Image.open(io.BytesIO(processed))
     if image.mode not in ('RGB', 'L'):
         image = image.convert('RGB')
@@ -470,6 +543,104 @@ def _ocr_attempt_plain(image_bytes: bytes, *, lang: str | None = None) -> OcrAtt
 def _ocr_image_bytes_plain(image_bytes: bytes, *, lang: str | None = None) -> str:
     """Run RapidOCR then Tesseract without layout structuring."""
     return _ocr_attempt_plain(image_bytes, lang=lang).text
+
+
+def _ocr_with_recovery(
+    image_bytes: bytes,
+    *,
+    lang: str | None = None,
+    skip_preprocessed: bool = False,
+) -> OcrAttempt:
+    """RapidOCR+preprocess → RapidOCR raw → Tesseract → 90/180/270 rotations."""
+    errors: list[str] = []
+    best = OcrAttempt()
+
+    def consider(attempt: OcrAttempt) -> bool:
+        nonlocal best
+        text = (attempt.text or '').strip()
+        if not text:
+            return False
+        attempt.text = text
+        _, _, src = prefer_better_text(
+            best.text,
+            classify_text_quality(best.text),
+            attempt.text,
+            classify_text_quality(attempt.text),
+            ocr_confidence=attempt.confidence,
+        )
+        if src == 'ocr' or not (best.text or '').strip():
+            best = attempt
+        elif len(text) > len(best.text or ''):
+            best = attempt
+        quality = classify_text_quality(best.text)
+        return quality == TextQuality.GOOD and len(best.text) >= MIN_TEXT_CHARS
+
+    if not skip_preprocessed:
+        try:
+            text, conf = _ocr_with_rapidocr(image_bytes, preprocess=True)
+            if consider(OcrAttempt(text=text, engine='rapidocr', confidence=conf)):
+                return best
+        except ImportError as exc:
+            errors.append(
+                f'RapidOCR not installed ({exc}). Run: pip install -r requirements.txt'
+            )
+        except Exception as exc:
+            errors.append(f'RapidOCR failed: {exc}')
+            logger.warning('RapidOCR failed, trying raw / Tesseract: %s', exc)
+
+    if _ocr_text_is_weak(best.text):
+        try:
+            text, conf = _ocr_with_rapidocr(image_bytes, preprocess=False)
+            if consider(OcrAttempt(text=text, engine='rapidocr_raw', confidence=conf)):
+                return best
+        except ImportError as exc:
+            errors.append(f'RapidOCR not installed ({exc})')
+        except Exception as exc:
+            errors.append(f'RapidOCR raw failed: {exc}')
+
+    if _ocr_text_is_weak(best.text) and _tesseract_available():
+        try:
+            text = _ocr_with_tesseract(image_bytes, lang=lang, preprocess=False)
+            if consider(OcrAttempt(text=text, engine='tesseract', confidence=None)):
+                return best
+        except Exception as exc:
+            errors.append(f'Tesseract failed: {exc}')
+
+    # Rotations only when we still lack usable text (not for every WEAK page).
+    needs_rotate = len((best.text or '').strip()) < MIN_TEXT_CHARS or classify_text_quality(
+        best.text
+    ) in (TextQuality.EMPTY, TextQuality.GARBAGE)
+    if needs_rotate:
+        for degrees in (90, 180, 270):
+            try:
+                rotated = _rotate_image_bytes(image_bytes, degrees)
+                text, conf = _ocr_with_rapidocr(rotated, preprocess=False)
+                if consider(
+                    OcrAttempt(text=text, engine=f'rotated_{degrees}', confidence=conf)
+                ):
+                    return best
+                if _tesseract_available() and _ocr_text_is_weak(text):
+                    ttext = _ocr_with_tesseract(rotated, lang=lang, preprocess=False)
+                    if consider(
+                        OcrAttempt(
+                            text=ttext,
+                            engine=f'tesseract_rotated_{degrees}',
+                            confidence=None,
+                        )
+                    ):
+                        return best
+            except Exception as exc:
+                errors.append(f'rotate_{degrees} failed: {type(exc).__name__}')
+                continue
+
+    if (best.text or '').strip():
+        return best
+
+    detail = '; '.join(errors) if errors else 'no OCR engine available'
+    raise ValueError(
+        f'OCR failed ({detail}). Install RapidOCR with Python 3.10–3.12 '
+        f'(pip install rapidocr-onnxruntime), or install system Tesseract as a fallback.'
+    )
 
 
 def _min_pool_gray(arr, max_side: int = 120):
@@ -575,20 +746,30 @@ def _ocr_image_bytes(image_bytes: bytes, *, lang: str | None = None) -> str:
             )
             if text and text.strip():
                 logger.debug('Layout OCR source=%s chars=%s', source, len(text))
+                _last_ocr_attempt.set(
+                    OcrAttempt(text=text.strip(), engine=source or 'rapidocr')
+                )
                 return text.strip()
-            # Layout already ran RapidOCR. A second plain pass on the same
-            # image is what made blank pages take ~12s each.
-            raise ValueError(
-                'OCR failed (RapidOCR returned empty text). Install RapidOCR with '
-                'Python 3.10–3.12 (pip install rapidocr-onnxruntime), or install '
-                'system Tesseract as a fallback.'
-            )
+            # Blank page: layout already ran RapidOCR. Do not spend 12s again.
+            if source == 'empty':
+                raise ValueError(
+                    'OCR failed (RapidOCR returned empty text). Install RapidOCR with '
+                    'Python 3.10–3.12 (pip install rapidocr-onnxruntime), or install '
+                    'system Tesseract as a fallback.'
+                )
+            # source == needs_recovery (ink but RapidOCR []): recovery ladder.
         except ValueError:
             raise
         except Exception as exc:
-            logger.warning('Layout OCR failed, falling back to plain OCR: %s', exc)
+            logger.warning('Layout OCR failed, falling back to recovery OCR: %s', exc)
 
-    return _ocr_image_bytes_plain(image_bytes, lang=lang)
+    attempt = _ocr_with_recovery(
+        image_bytes,
+        lang=lang,
+        skip_preprocessed=RESUME_LAYOUT_ENABLED,
+    )
+    _last_ocr_attempt.set(attempt)
+    return attempt.text
 
 
 def extract_text_from_image(file_data: bytes, filename: str = 'image.png') -> str:
@@ -604,12 +785,21 @@ def extract_text_from_image(file_data: bytes, filename: str = 'image.png') -> st
 
 
 def _render_page_png(page, dpi: int = OCR_DPI) -> bytes:
-    """Render a PyMuPDF page to PNG bytes."""
+    """Render a PyMuPDF page to PNG bytes, capped to OCR_MAX_SIDE, RGB."""
     import fitz
 
+    rect = page.rect
+    long_side_pts = max(float(rect.width or 0), float(rect.height or 0)) or 1.0
     zoom = dpi / 72.0
+    max_zoom = _ocr_max_side() / long_side_pts
+    if max_zoom > 0:
+        zoom = min(zoom, max_zoom)
     matrix = fitz.Matrix(zoom, zoom)
-    pix = page.get_pixmap(matrix=matrix, alpha=False)
+    kwargs: dict[str, Any] = {'matrix': matrix, 'alpha': False}
+    cs_rgb = getattr(fitz, 'csRGB', None)
+    if cs_rgb is not None:
+        kwargs['colorspace'] = cs_rgb
+    pix = page.get_pixmap(**kwargs)
     return pix.tobytes('png')
 
 
@@ -618,6 +808,49 @@ def _page_image_count(page) -> int:
         return len(page.get_images(full=True) or [])
     except Exception:
         return 0
+
+
+def _page_image_coverage(page) -> float:
+    """Fraction of the page covered by embedded images (0..1)."""
+    try:
+        rect = page.rect
+        page_area = abs(float(rect.width) * float(rect.height)) or 1.0
+        infos: list = []
+        getter = getattr(page, 'get_image_info', None)
+        if callable(getter):
+            try:
+                raw = getter()
+                infos = list(raw) if isinstance(raw, (list, tuple)) else []
+            except Exception:
+                infos = []
+        covered = 0.0
+        parsed = 0
+        for info in infos:
+            bbox = None
+            if isinstance(info, dict):
+                bbox = info.get('bbox')
+                if bbox is None and all(k in info for k in ('x0', 'y0', 'x1', 'y1')):
+                    bbox = (info['x0'], info['y0'], info['x1'], info['y1'])
+            else:
+                bbox = getattr(info, 'bbox', None)
+            if bbox is None or len(bbox) < 4:
+                continue
+            try:
+                x0, y0, x1, y1 = (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+            except (TypeError, ValueError):
+                continue
+            covered += abs((x1 - x0) * (y1 - y0))
+            parsed += 1
+        if parsed:
+            return min(1.0, covered / page_area)
+        # Infos existed but no bboxes — treat as a full-page scan.
+        if infos:
+            return 1.0
+        count = _page_image_count(page)
+        return 1.0 if count >= 1 else 0.0
+    except Exception:
+        count = _page_image_count(page)
+        return 1.0 if count >= 1 else 0.0
 
 
 def _combine_page_text(digital: str, table_text: str) -> str:
@@ -630,9 +863,14 @@ def _combine_page_text(digital: str, table_text: str) -> str:
 
 
 def _page_needs_ocr(page, digital_text: str) -> bool:
-    """True when digital text is not GOOD (thin, garbage, or image-sparse)."""
+    """True when digital text is not GOOD, or the page is image-heavy."""
     image_count = _page_image_count(page)
-    quality = classify_text_quality(digital_text, image_count=image_count)
+    coverage = _page_image_coverage(page)
+    quality = classify_text_quality(
+        digital_text, image_count=image_count, image_coverage=coverage
+    )
+    if coverage >= IMAGE_COVERAGE_OCR_THRESHOLD:
+        return True
     return quality_needs_ocr(quality)
 
 
@@ -665,24 +903,25 @@ def _ocr_one_pdf_page(
     fast_dpi: int,
     full_dpi: int,
     forced_dpi: int | None,
+    image_coverage: float = 0.0,
 ) -> PageExtractionResult:
     """Render + OCR a page, escalate DPI once if still weak, keep the better result."""
     combined_digital = _combine_page_text(digital, table_text)
     warnings: list[str] = []
     dpi_used = fast_dpi
+    high_coverage = image_coverage >= IMAGE_COVERAGE_OCR_THRESHOLD
 
     png = _render_page_png(page, dpi=fast_dpi)
     if not _png_has_ink(png):
-        if (
+        if high_coverage or (
             image_count > 0
             and len(digital) < PAGE_OCR_TEXT_THRESHOLD
             and forced_dpi is None
             and full_dpi > fast_dpi
         ):
             png = _render_page_png(page, dpi=full_dpi)
-            if _png_has_ink(png):
-                dpi_used = full_dpi
-            else:
+            dpi_used = full_dpi
+            if not _png_has_ink(png) and not high_coverage:
                 logger.warning(
                     'PDF page %s ink-skip but has %s images (digital=%s)',
                     page_number,
@@ -696,7 +935,7 @@ def _ocr_one_pdf_page(
                     fallback='ink_skip',
                     warnings=['ink_skip_with_images'],
                 )
-        else:
+        elif not high_coverage:
             if image_count > 0:
                 logger.warning(
                     'PDF page %s ink-skip but has %s images (digital=%s)',
@@ -719,7 +958,11 @@ def _ocr_one_pdf_page(
 
     def _run_ocr(png_bytes: bytes) -> OcrAttempt:
         try:
+            _last_ocr_attempt.set(None)
             text = _ocr_image_bytes(png_bytes)
+            stored = _last_ocr_attempt.get()
+            if stored is not None and (stored.text or '').strip():
+                return stored
             ok, detail = get_ocr_engine_status()
             return OcrAttempt(text=text or '', engine=detail if ok else '', confidence=None)
         except ValueError as ocr_err:
@@ -728,7 +971,11 @@ def _ocr_one_pdf_page(
             return OcrAttempt()
 
     attempt = _run_ocr(png)
-    ocr_quality = classify_text_quality(attempt.text, image_count=image_count)
+    if attempt.engine and attempt.engine not in ('rapidocr', ''):
+        warnings.append(f'ocr:{attempt.engine}')
+    ocr_quality = classify_text_quality(
+        attempt.text, image_count=image_count, image_coverage=image_coverage
+    )
     chosen_text, chosen_q, chosen_src = prefer_better_text(
         combined_digital,
         digital_quality,
@@ -745,10 +992,12 @@ def _ocr_one_pdf_page(
         and chosen_q != TextQuality.GOOD
     ):
         png = _render_page_png(page, dpi=full_dpi)
-        if _png_has_ink(png):
+        if _png_has_ink(png) or high_coverage:
             hi = _run_ocr(png)
             dpi_used = max(dpi_used, full_dpi)
-            hi_q = classify_text_quality(hi.text, image_count=image_count)
+            hi_q = classify_text_quality(
+                hi.text, image_count=image_count, image_coverage=image_coverage
+            )
             chosen_text, chosen_q, new_src = prefer_better_text(
                 chosen_text,
                 chosen_q,
@@ -759,6 +1008,8 @@ def _ocr_one_pdf_page(
             if new_src == 'ocr':
                 winning_is_ocr = True
                 attempt = hi
+                if hi.engine and hi.engine not in ('rapidocr', ''):
+                    warnings.append(f'ocr:{hi.engine}')
 
     used_ocr = winning_is_ocr and bool((attempt.text or '').strip())
     if used_ocr:
@@ -838,6 +1089,10 @@ def _finalize_pdf_result(
     ocr_pages = [p.page_number for p in page_results if p.used_ocr]
     engines = [p.ocr_engine for p in page_results if p.used_ocr and p.ocr_engine]
     ocr_engine = engines[0] if engines else ''
+    for p in page_results:
+        for w in p.warnings or []:
+            if w.startswith('ocr:') and w not in warnings:
+                warnings.append(w)
     quality = classify_text_quality(extracted)
     if fallback_reason:
         warnings = list(warnings) + ([fallback_reason] if fallback_reason else [])
@@ -886,10 +1141,16 @@ def extract_pdf_pymupdf_document(file_data: bytes, *, dpi: int | None = None) ->
             digital = (page.get_text('text') or '').strip()
             table_text = _extract_pdf_page_tables(page)
             image_count = _page_image_count(page)
+            image_coverage = _page_image_coverage(page)
             combined = _combine_page_text(digital, table_text)
-            digital_quality = classify_text_quality(combined, image_count=image_count)
+            digital_quality = classify_text_quality(
+                combined, image_count=image_count, image_coverage=image_coverage
+            )
 
-            if not quality_needs_ocr(digital_quality):
+            needs_ocr = image_coverage >= IMAGE_COVERAGE_OCR_THRESHOLD or quality_needs_ocr(
+                digital_quality
+            )
+            if not needs_ocr:
                 page_results.append(
                     _digital_page_result(page_num + 1, combined, digital_quality)
                 )
@@ -925,6 +1186,7 @@ def extract_pdf_pymupdf_document(file_data: bytes, *, dpi: int | None = None) ->
                     fast_dpi=fast_dpi,
                     full_dpi=full_dpi,
                     forced_dpi=forced_dpi,
+                    image_coverage=image_coverage,
                 )
                 max_dpi_used = max(max_dpi_used, pr.dpi or 0)
                 page_results.append(pr)
@@ -1258,9 +1520,15 @@ def _force_pdf_ocr(file_data: bytes, *, dpi: int = 300) -> str:
         for page_num in range(page_count):
             page = doc[page_num]
             png = _render_page_png(page, dpi=dpi)
-            ocr_text = _ocr_image_bytes(png)
-            if ocr_text and ocr_text.strip():
-                parts.append(ocr_text.strip())
+            coverage = _page_image_coverage(page)
+            if not _png_has_ink(png) and coverage < IMAGE_COVERAGE_OCR_THRESHOLD:
+                continue
+            try:
+                attempt = _ocr_with_recovery(png)
+            except ValueError:
+                continue
+            if attempt.text and attempt.text.strip():
+                parts.append(attempt.text.strip())
         return '\n\n'.join(parts).strip()
     finally:
         doc.close()
