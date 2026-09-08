@@ -16,10 +16,10 @@ jobs:
           python-version: "3.11"
       - name: Install backend dependencies
         run: |
-          pip install -r apps/backend/requirements.txt
+          pip install -r apps/backend/requirements.lock.txt
           pip install pytest
-      - name: Verify PyMuPDF (PDF roundtrip tests)
-        run: python -c "import fitz; print('PyMuPDF', fitz.version)"
+      - name: Verify PyMuPDF and RapidOCR
+        run: python -c "import fitz, rapidocr_onnxruntime; print('PyMuPDF+RapidOCR OK')"
       - name: Run unit tests
         env:
           # Unit/mock only — no live Postgres or Ollama required

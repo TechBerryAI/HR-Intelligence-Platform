@@ -115,6 +115,30 @@ class EnvValidator:
             return f"  ❌ REDIS_URL: Redis is not reachable ({safe_redis_error(exc)})"
 
     @classmethod
+    def rapidocr_production_guard(cls) -> str | None:
+        """Return an error line if production cannot use RapidOCR, else None.
+
+        Import-only (no engine construction, no Tesseract fallback). Python 3.13+
+        has no RapidOCR wheels; Tesseract-only is not a valid production start.
+        """
+        py = sys.version_info
+        if py >= (3, 13):
+            return (
+                "  ❌ OCR: production requires Python 3.11 (3.10–3.12 supported); "
+                f"got {py.major}.{py.minor}. RapidOCR wheels are not published for "
+                "Python 3.13+. Use Python 3.11 and pip install -r requirements.lock.txt"
+            )
+        try:
+            import rapidocr_onnxruntime  # noqa: F401  # type: ignore
+        except Exception as exc:
+            return (
+                "  ❌ OCR: RapidOCR is required in production "
+                f"(import rapidocr_onnxruntime failed: {exc}). "
+                "Use Python 3.11 and pip install -r requirements.lock.txt"
+            )
+        return None
+
+    @classmethod
     def validate(cls, strict: bool = False) -> Tuple[bool, List[str], List[str]]:
         errors = []
         warnings = []
@@ -188,6 +212,10 @@ class EnvValidator:
                 ping_err = cls._ping_redis(redis_url)
                 if ping_err:
                     errors.append(ping_err)
+
+            ocr_err = cls.rapidocr_production_guard()
+            if ocr_err:
+                errors.append(ocr_err)
         else:
             if not jwt_secret or jwt_secret in _PLACEHOLDER_JWT or len(jwt_secret) < 32:
                 warnings.append(

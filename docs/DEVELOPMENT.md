@@ -66,7 +66,7 @@ pip install -r requirements.txt
 pytest
 ```
 
-Scanned PDF / image resumes need **RapidOCR** (`rapidocr-onnxruntime` in `requirements.txt`; production **Python 3.11** recommended, 3.10–3.12 supported). Tesseract is an optional fallback. Python **3.13+** skips RapidOCR wheels — the API still runs, but scanned extraction is **degraded** unless system Tesseract is installed. Startup logs `[OCR] status=ok|degraded|unavailable`; `GET /health?deps=1` reports the same `ocr` check. `/ready` does not require OCR (digital PDF/DOCX still parse).
+Scanned PDF / image resumes need **RapidOCR** (`rapidocr-onnxruntime` in `requirements.txt`; **Python 3.11** required, 3.10–3.12 supported). Tesseract is an optional extract-time fallback **after** RapidOCR is installed — not a substitute for a missing engine. `node start.js` **fails closed** on Python **3.13+** or if RapidOCR cannot be imported (recreate `apps/backend/venv` with 3.11). Production startup (`EnvValidator` / Gunicorn) uses the same RapidOCR fail-closed rule. If you start `wsgi.py` with `FLASK_DEBUG=true` and skip `start.js`, logs still show `[OCR] status=ok|degraded|unavailable` and continue. `GET /health?deps=1` reports the same `ocr` check. `/ready` does not require OCR (digital PDF/DOCX still parse).
 
 PDF digital text uses **PyMuPDF as the primary extractor**. **pdfplumber** is an automatic secondary engine used only when PyMuPDF output is unusable (thin, garbage, broken layout, or table-like). There is no env flag to enable or disable it. See [DOCUMENT_INTELLIGENCE.md](DOCUMENT_INTELLIGENCE.md#pdf-text-extraction).
 ## Common workflows
