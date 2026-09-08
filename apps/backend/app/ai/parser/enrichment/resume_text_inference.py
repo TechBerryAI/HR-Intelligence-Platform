@@ -23,7 +23,9 @@ SKILL_SECTION_STOP = (
 SKILL_SECTION_PATTERN = re.compile(
     r'(?i)(?:^|\n)\s*(?:\*\*)?(?:'
     r'technical\s+proficiency|technical\s+expertise|technical\s+knowledge|'
-    r'technical\s+skills?|technicalskill|soft\s+skills?|'
+    r'technical\s+skills?(?:\s*(?:and|&)\s*tools?)?|technicalskill|soft\s+skills?|'
+    r'professional\s+skills?|relevant\s+skills?|additional\s+skills?|'
+    r'knowledge\s*(?:and|&)\s*skills?|skills?\s+highlights?|'
     r'core\s+skills?|key\s+skills?|skill\s*sets?|skills?\s*sets?|'
     r'skills?\s+and\s+abilities|skills?\s+&\s+abilities|'
     r'tech\s+stack|programming\s+languages?|'
@@ -135,7 +137,7 @@ SECTION_HEADERS = frozenset({
     'hobbies', 'areas of strength', 'work summary', 'worksummary',
     'personal summary', 'personalsummary',
     'experience summary', 'experiencesummary',
-    'other technical skills', 'skillset',
+    'other technical skills', 'skillset', 'professional skills', 'relevant skills',
     'declaration', 'permanent address', 'present address', 'correspondence address',
     'current address', 'residential address',
     'profile summary', 'professional summary', 'professional objective',
@@ -265,10 +267,11 @@ _JOB_BULLET_INSTITUTION = re.compile(
 )
 _TECH_SINGLE_TOKEN = frozenset({
     'html', 'css', 'html5', 'css3', 'sql', 'java', 'python', 'javascript', 'typescript', 'react',
-    'angular', 'nodejs', 'docker', 'kubernetes', 'aws', 'azure', 'linux', 'git',
+    'angular', 'nodejs', 'docker', 'kubernetes', 'aws', 'azure', 'gcp', 'linux', 'git',
     'c++', 'c#', '.net', '.net core', 'mongodb', 'mysql', 'oracle', 'redis', 'kafka',
     'powerpoint', 'excel', 'outlook', 'word', 'sharepoint', 'tableau', 'powerbi',
     'agile', 'multi-threading', 'data structure',
+    'terraform', 'ansible', 'helm', 'jenkins', 'tomcat', 'weblogic', 'scripting',
 })
 _SKILL_CRUMB_TOKENS = frozenset({
     'set', 'tools', 'technologies', 'technology', 'skills', 'skill', 'expertise',
@@ -277,6 +280,7 @@ _SKILL_CRUMB_TOKENS = frozenset({
     'certification', 'certifications', 'certified', 'fundamentals',
     'university/board', '% of marks', 'configure', 'configuration',
     'databases', 'database', 'frameworks', 'operating systems', 'operating system',
+    'based', 'basic', 'advanced', 'intermediate',
 })
 # Role / product tokens that contaminate names derived from filenames.
 _FILENAME_NAME_NOISE = frozenset({
@@ -543,7 +547,12 @@ _SKILLS_PROSE_TRANSITION = re.compile(
 _SKILL_CATEGORY_PREFIX = re.compile(
     r'(?i)^(?:os|operating\s+systems?|databases?|languages?|tools?|'
     r'frameworks?|technologies?|special\s+software|software|'
-    r'(?:technical|key|core|soft)\s+skills?)\s*:\s*(.*)$'
+    r'cloud\s+platforms?|monitoring(?:\s+tools?)?|scripting|'
+    r'(?:technical|key|core|soft|professional|relevant)\s+skills?)\s*:\s*(.*)$'
+)
+_SKILL_PROFICIENCY_DASH = re.compile(
+    r'(?i)^(.{2,40}?)\s+[–—-]\s+(?:proficient|skilled|knowledge|advanced|'
+    r'expert|working\s+knowledge)\b'
 )
 _SKILL_REGION_HEADING = re.compile(
     r'(?i)^(?:(?:technical|key|core|soft)\s+)?skills?'
@@ -633,6 +642,15 @@ def is_plausible_skill_item(item: str | None) -> bool:
     if skill_item_looks_like_prose(s):
         return False
     if is_section_header_line(s):
+        return False
+    if re.fullmatch(
+        r'(?i)(?:(?:programming|spoken)\s+)?languages?|operating\s+systems?|'
+        r'databases?(?:\s*tools?)?|frameworks?|tools?|technologies?|'
+        r'cloud\s+platforms?|scripting',
+        s.rstrip(':').strip(),
+    ):
+        return False
+    if re.match(r'.{2,40}:\s*$', s):
         return False
     if is_date_range_only_line(s):
         return False
@@ -1595,14 +1613,14 @@ def is_contact_or_reference_line(line: str | None) -> bool:
 
 # Structural contact labels — never Role/Company/Skill/Degree content.
 _CONTACT_FIELD_LABEL = (
-    r'(?:e[\-\s]?mail|email|mail|phone|mobile|mob\.?|tel(?:ephone)?|contact|'
+    r'(?:e[\-\s]?mail|email|mail|phone|mobile|mob(?:ile|\.?no)?\.?|tel(?:ephone)?|contact|'
     r'place|location|address|linkedin|website|github|url)'
 )
 _LABELED_CONTACT_LINE_RE = re.compile(
-    rf'(?i)^{_CONTACT_FIELD_LABEL}\s*[:\-–—]'
+    rf'(?i)^{_CONTACT_FIELD_LABEL}\s*[:\-–—;.]'
 )
 _INLINE_CONTACT_LABEL_RE = re.compile(
-    rf'(?i)\s+{_CONTACT_FIELD_LABEL}\s*[:\-–—]'
+    rf'(?i)\s+{_CONTACT_FIELD_LABEL}\s*[:\-–—;.]'
 )
 # PDF two-column glue: "AdministratorE-mail:" / "NamePlace:" — capital starts a new label.
 # Must not split "Workplace:" (lowercase "place" inside a word).
@@ -1682,7 +1700,11 @@ def experience_lacks_employment_evidence(
 
 
 _DURATION_ONLY_COMPANY = re.compile(
-    r'(?i)^(?:\d+(?:\.\d+)?\s*(?:years?|yrs?|months?|mos?\.?)(?:\s+\d+\s*(?:years?|yrs?|months?|mos?\.?))*)\s*$'
+    r'(?i)^(?:'
+    r'(?:\d+(?:\.\d+)?\+?\s*(?:years?|yrs?|months?|mos?\.?)'
+    r'(?:\s+\d+\s*(?:years?|yrs?|months?|mos?\.?))*)'
+    r'(?:\s*\([^)]{0,32}\))?'
+    r')\s*$'
 )
 _SKILL_AS_COMPANY = re.compile(
     r'(?i)^(?:'
@@ -1693,7 +1715,12 @@ _SKILL_AS_COMPANY = re.compile(
     r'data\s+transformation\s+services|replication|sharding|indexing|'
     r'aws\s+redshift|azure\s+synapse(?:\s+analytics)?|'
     r'roles?\s+and\s+highlights|award\)?|'
-    r'postgresql\s+administration|mongodb\s+administration'
+    r'postgresql\s+administration|mongodb\s+administration|'
+    r'mysql\s+database(?:\s+administration)?|'
+    r'linux\s+administration|rhel\s+linux|windows\s+server|'
+    r'oracle\s+weblogic(?:\s+server)?|middleware\s+administration|'
+    r'patching(?:\s+windows)?|gcp|esxi|'
+    r'database\s+upgradation\.?'
     r')\.?$'
 )
 _FRESHER_OR_YEARS_ONLY_EXP = re.compile(
@@ -1727,7 +1754,11 @@ _NON_JOB_COMPANY_HEADER = re.compile(
     r'work\s+summary|career\s+summary|professional\s+summary|'
     r'technical\s+expert(?:ise|ies)?|technical\s+skills?|technicalskill|'
     r'soft\s+skills?|skills?(?:\s+and\s+abilities)?|'
-    r'duration|organization|organisation|project(?:s)?(?:\s+name)?|'
+    r'relevant\s+skills?|professional\s+skills?|'
+    r'total\s+work\s+experience|total\s+experience|'
+    r'work\s+experience\s+\d+|'
+    r'sales\s+and\s+marketing|roles?\s+(?:and|&)\s+responsibilit(?:y|ies)|'
+    r'duration|period(?:\s*/\s*duration)?|organization|organisation|project(?:s)?(?:\s+name)?|'
     r'recruitments?|onboarding|responsibilities|work\s+summary|'
     r'declaration|objective|profile|about\s+me'
     r')\s*:?\s*$'
@@ -1771,6 +1802,31 @@ def is_project_or_employment_meta_label(value: str | None) -> bool:
     return False
 
 
+_SPOKEN_LANGUAGE_NAMES = frozenset({
+    'english', 'hindi', 'marathi', 'tamil', 'telugu', 'kannada', 'gujarati',
+    'bengali', 'urdu', 'punjabi', 'malayalam', 'odia', 'oriya', 'french',
+    'german', 'spanish', 'japanese', 'korean', 'chinese', 'arabic', 'sanskrit',
+    'konkani', 'tulu', 'assamese', 'odia, hindi, english',
+})
+_SKILL_LEVEL_PAREN = re.compile(
+    r'(?i)\(\s*(?:basic|beginner|intermediate|advanced|expert|proficient|'
+    r'exposure|working\s+knowledge)\s*\)'
+)
+
+
+def looks_like_spoken_language_line(value: str | None) -> bool:
+    """True for Known Language / Hindi, English style identity lines — not jobs."""
+    raw = (value or '').strip()
+    if not raw:
+        return False
+    if re.match(r'(?i)^(?:known\s+)?languages?(?:\s+known)?\s*[:\-–—]', raw):
+        return True
+    parts = [p.strip(' .') for p in re.split(r'(?:,|/|\band\b|\|)', raw.lower()) if p.strip(' .')]
+    if not parts:
+        return False
+    return all(p in _SPOKEN_LANGUAGE_NAMES for p in parts)
+
+
 def looks_like_skill_or_duration_company(value: str) -> bool:
     """True when a company field is a skill, duration, or header crumb — not an employer."""
     raw = (value or '').strip()
@@ -1783,27 +1839,32 @@ def looks_like_skill_or_duration_company(value: str) -> bool:
             return True
     if raw in {'|', '-', '–', '—', '/', '\\'} or set(raw) <= {'|', '-', '–', '—', '/', '\\', '.', ' '}:
         return True
-    if re.match(r'(?i)^(?:total\s+)?experience$', raw):
+    if re.match(r'(?i)^(?:total\s+)?(?:work\s+)?experience$', raw):
         return True
-    if re.match(r'(?i)^(?:duration|organization|organisation)\s*:?\s*$', raw):
+    if re.match(r'(?i)^\(\s*\+?\d{1,3}\s*\)$', raw):
+        return True
+    if re.match(r'(?i)^(?:duration|period(?:\s*/\s*duration)?|organization|organisation)\s*:?\s*$', raw):
         return True
     if re.match(
         r'(?i)^(?:successfully|working\s+knowledge|good\s+knowledge|'
-        r'extensive\s+experience|configured|creating)\b',
+        r'knowledge\s+about|extensive\s+experience|configured|creating)\b',
         raw,
     ):
         return True
     if raw.lower() in {
         'english', 'hindi', 'marathi', 'tamil', 'telugu', 'kannada', 'gujarati',
-        'bengali', 'urdu', 'punjabi', 'malayalam', 'odia', 'french', 'german',
+        'bengali', 'urdu', 'punjabi', 'malayalam', 'odia', 'oriya', 'french', 'german',
         'spanish', 'japanese', 'korean', 'chinese',
     }:
+        return True
+    if looks_like_spoken_language_line(raw):
         return True
     if re.search(r'(?i)\b(?:nagar|road|cross|street|colony|layout)\b', raw) and not _ORG_EMPLOYMENT_CUE_RE.search(raw):
         return True
     if re.match(r'(?i)^in\s+[A-Za-z]{2,16}$', raw) and not _ORG_EMPLOYMENT_CUE_RE.search(raw):
         return True
     s = raw.strip(':-–—|.').strip()
+    s = _SKILL_LEVEL_PAREN.sub('', s).strip()
     if not s:
         return False
     if _NON_JOB_COMPANY_HEADER.match(s) or _NON_JOB_COMPANY_HEADER.match(raw):
@@ -1825,6 +1886,28 @@ def looks_like_skill_or_duration_company(value: str) -> bool:
     if _SKILL_AS_COMPANY.match(s):
         return True
     if s.lower() in _TECH_SINGLE_TOKEN:
+        return True
+    parts = [p.strip() for p in re.split(r'(?i)\s+(?:and|&)\s+|,\s*', s) if p.strip()]
+    if (
+        len(parts) >= 2
+        and not _ORG_EMPLOYMENT_CUE_RE.search(s)
+        and all(
+            p.lower() in _TECH_SINGLE_TOKEN or _SKILL_AS_COMPANY.match(p)
+            for p in parts
+        )
+    ):
+        return True
+    tokens = [t for t in re.split(r'[^A-Za-z0-9.+#]+', s.lower()) if t]
+    if (
+        1 <= len(tokens) <= 4
+        and not _ORG_EMPLOYMENT_CUE_RE.search(s)
+        and all(
+            t in _TECH_SINGLE_TOKEN
+            or t in _SKILL_CRUMB_TOKENS
+            or _SKILL_AS_COMPANY.match(t)
+            for t in tokens
+        )
+    ):
         return True
     return False
 
@@ -2268,9 +2351,10 @@ def extract_skills_from_text(
         for line in text.split('\n'):
             stripped = line.strip()
             if re.match(
-                r'(?i)^(?:technical\s+)?skills?\s*:?\s*$|^(?:core|key|soft)\s+skills?\s*:?\s*$|'
+                r'(?i)^(?:technical\s+)?skills?\s*:?\s*$|^(?:core|key|soft|professional|relevant|additional)\s+skills?\s*:?\s*$|'
                 r'^technicalskill\s*:?\s*$|'
                 r'^skill\s*sets?\s*:?\s*$|^skills?\s*sets?\s*:?\s*$|'
+                r'^knowledge\s*(?:and|&)\s*skills?\s*:?\s*$|'
                 r'^technical\s+(?:proficiency|expertise|knowledge)\s*:?\s*$|'
                 r'^tools?\s*:?\s*$|^technologies?\s*:?\s*$|^tech\s+stack\s*:?\s*$|^competencies?\s*:?\s*$',
                 stripped,
@@ -2313,6 +2397,67 @@ def extract_skills_from_text(
                 if len(after) > 1 and after[1].strip():
                     skills.extend(split_list_items(after[1]))
                     break
+
+    if not skills:
+        for line in text.split('\n'):
+            stripped = line.strip()
+            cat = _SKILL_CATEGORY_PREFIX.match(re.sub(r'^[\s•·\-\*●]+', '', stripped))
+            if cat and (cat.group(1) or '').strip():
+                skills.extend(split_list_items(cat.group(1)))
+            dash = _SKILL_PROFICIENCY_DASH.match(re.sub(r'^[\s•·\-\*●]+', '', stripped))
+            if dash:
+                left = dash.group(1).strip()
+                if 1 <= len(left.split()) <= 6 and is_plausible_skill_item(left):
+                    skills.append(left)
+        skills = [s for s in skills if is_plausible_skill_item(s)]
+
+    if not skills:
+        has_skills_heading = bool(
+            re.search(
+                r'(?im)^.{0,40}\b(?:(?:technical|professional|relevant|core|key)\s+)?skills?\b',
+                text,
+            )
+        )
+        if has_skills_heading:
+            run: list[str] = []
+            best: list[str] = []
+            for line in text.split('\n'):
+                item = re.sub(r'^[\s•·\-\*●]+', '', line.strip()).strip()
+                if not item:
+                    if len(run) >= 4:
+                        best = run if len(run) > len(best) else best
+                    run = []
+                    continue
+                if is_section_header_line(item) or looks_like_spoken_language_line(item):
+                    if len(run) >= 4:
+                        best = run if len(run) > len(best) else best
+                    run = []
+                    continue
+                if extract_date_range_from_line(item)[0]:
+                    if len(run) >= 4:
+                        best = run if len(run) > len(best) else best
+                    run = []
+                    continue
+                if re.search(r'(?i)\b(?:years?|months?|yrs?)\b', item) and re.search(r'\d', item):
+                    if len(run) >= 4:
+                        best = run if len(run) > len(best) else best
+                    run = []
+                    continue
+                if _JOB_TITLE_CUE.search(item) and not _SKILL_CATEGORY_PREFIX.match(item):
+                    if len(run) >= 4:
+                        best = run if len(run) > len(best) else best
+                    run = []
+                    continue
+                if _is_skill_token_or_category_line(item) and is_plausible_skill_item(item):
+                    run.append(item)
+                    continue
+                if len(run) >= 4:
+                    best = run if len(run) > len(best) else best
+                run = []
+            if len(run) >= 4:
+                best = run if len(run) > len(best) else best
+            if len(best) >= 4:
+                skills.extend(best)
 
     if not skills and allow_unlabeled_lists:
         # Document-wide recovery: compact comma/pipe tech lists without a Skills heading

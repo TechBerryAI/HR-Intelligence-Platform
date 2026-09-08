@@ -16,7 +16,10 @@ _EXP_HEADER_PREFIX = re.compile(
     r'(?i)^(internship|internships|internship\s+experience|industrial\s+trainings?|'
     r'summer\s+internship|trainings?|apprenticeship|internship\s*/\s*training|'
     r'career\s+timeline|employment\s+details|employment\s+history|'
-    r'professional\s+history|organisational\s+experience|organizational\s+experience|'
+    r'work\s+experience|professional\s+history|professional\s+background|'
+    r'professional\s+experience|career\s+experience|'
+    r'current\s+experience|previous\s+experience|'
+    r'organisational\s+experience|organizational\s+experience|'
     r'details\s+of\s+experience|experience\s+and\s+projects?)'
 )
 
@@ -42,6 +45,11 @@ _HEADER_ALIASES = {
     'career timeline': 'Experience',
     'career history': 'Experience',
     'professional history': 'Experience',
+    'professional background': 'Experience',
+    'career experience': 'Experience',
+    'current experience': 'Experience',
+    'previous experience': 'Experience',
+    'professional experience and accomplishments': 'Experience',
     'organisational experience': 'Experience',
     'organizational experience': 'Experience',
     'details of experience': 'Experience',
@@ -60,8 +68,16 @@ _HEADER_ALIASES = {
     'apprenticeship': 'Experience',
     'apprenticeships': 'Experience',
     'technical skills': 'Skills',
+    'professional skills': 'Skills',
+    'relevant skills': 'Skills',
     'core skills': 'Skills',
     'key skills': 'Skills',
+    'additional skills': 'Skills',
+    'skills highlights': 'Skills',
+    'knowledge and skills': 'Skills',
+    'knowledge skills': 'Skills',
+    'technical skills and tools': 'Skills',
+    'technical skills tools': 'Skills',
     'skills and abilities': 'Skills',
     'skills & abilities': 'Skills',
     'technical proficiency': 'Skills',
@@ -364,6 +380,12 @@ def split_glued_heading_line(line: str) -> tuple[str | None, str]:
             rest = body[idx:]
         elif nxt.isdigit() or nxt in '•·●:：-–—':
             rest = body[idx:].lstrip(' :：-–—')
+        elif nxt.isspace():
+            # ``Experience  : Acme Ltd 2023 - Present`` / ``Skills : Python``
+            after = body[idx:].lstrip()
+            if after[:1] not in ':：':
+                continue
+            rest = after.lstrip(' :：-–—')
         else:
             continue
         if not rest:

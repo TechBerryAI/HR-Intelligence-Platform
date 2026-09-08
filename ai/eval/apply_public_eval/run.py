@@ -57,7 +57,9 @@ def _inprocess_form(path: Path, raw: str) -> dict:
     from app.ai.document_intelligence.mapping.resume_form import map_candidate_to_form
     from app.ai.document_intelligence.pipeline import parse_resume_from_working_text
     from app.ai.document_intelligence.resume_preprocess import prepare_resume_working_text
+    from app.ai.parser.engine.hardware import apply_hardware_env
 
+    apply_hardware_env()
     data = path.read_bytes()
     working = prepare_resume_working_text(raw, file_data=data)
     profile, coverage, *_rest = parse_resume_from_working_text(
@@ -69,7 +71,7 @@ def _inprocess_form(path: Path, raw: str) -> dict:
     return form.to_autofill_dict()
 
 
-def _post_public(api: str, path: Path, timeout: int = 120) -> tuple[int, dict]:
+def _post_public(api: str, path: Path, timeout: int = 180) -> tuple[int, dict]:
     boundary = '----ApplyEvalBoundary7f3a'
     data = path.read_bytes()
     filename = path.name.replace('"', '')
@@ -111,6 +113,10 @@ def _post_public(api: str, path: Path, timeout: int = 120) -> tuple[int, dict]:
         except json.JSONDecodeError:
             payload = {'status': 'error', 'error': raw[:500]}
         return exc.code, payload
+    except TimeoutError:
+        return 598, {'status': 'error', 'error': 'timeout'}
+    except urllib.error.URLError as exc:
+        return 598, {'status': 'error', 'error': str(exc)[:500]}
 
 
 def _post_with_retry(api: str, path: Path) -> tuple[int, dict]:
@@ -367,8 +373,23 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = args.out.resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     cases: list[dict] = []
+    checkpoint = out_dir / 'cases.json'
+    done: set[str] = set()
+    if checkpoint.is_file():
+        try:
+            prior = json.loads(checkpoint.read_text(encoding='utf-8'))
+        except json.JSONDecodeError:
+            prior = []
+        if isinstance(prior, list):
+            cases = [c for c in prior if isinstance(c, dict) and c.get('file')]
+            done = {c['file'] for c in cases}
+            if done:
+                print(f'Resuming: {len(done)} already scored in {checkpoint}')
 
     for i, path in enumerate(sample, 1):
+        if path.name in done:
+            print(f'[{i}/{len(sample)}] {path.name} (skip, checkpoint)', flush=True)
+            continue
         print(f'[{i}/{len(sample)}] {path.name}', flush=True)
         raw = _extract(path)
         inproc = {}
@@ -411,6 +432,10 @@ def main(argv: list[str] | None = None) -> int:
             'evaluation': evaluation,
         }
         cases.append(rec)
+        checkpoint.write_text(
+            json.dumps(cases, indent=2, ensure_ascii=False),
+            encoding='utf-8',
+        )
         time.sleep(0.3)
 
     summary = aggregate(cases)

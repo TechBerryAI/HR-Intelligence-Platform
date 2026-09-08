@@ -715,16 +715,18 @@ def sanitize_experience_row(exp: ExperienceEntry) -> ExperienceEntry:
     company_ok, _ = validate_company(company) if company else (False, '')
     role_ok, _ = validate_role(role) if role else (False, '')
 
-    # Detect swap: role looks like org, company looks like title
+    # Detect swap: company looks like a title and role does not
     if company and role and not company_was_meta:
         company_looks_role = bool(_JOB_TITLE_CUE_RE.search(company))
+        role_looks_title = bool(_JOB_TITLE_CUE_RE.search(role))
         role_looks_company = bool(
             re.search(
-                r'(?i)\b(?:inc|llc|ltd|corp|solutions|technologies|labs|systems|pvt)\b',
+                r'(?i)\b(?:inc|llc|ltd|corp|solutions|technologies|labs|systems|pvt|'
+                r'infotech|consult(?:ing|ancy)?)\b',
                 role,
             )
-        ) and not _JOB_TITLE_CUE_RE.search(role)
-        if company_looks_role and role_looks_company:
+        ) and not role_looks_title
+        if company_looks_role and (role_looks_company or not role_looks_title):
             company, role = role, company
             company_ok, role_ok = True, True
 

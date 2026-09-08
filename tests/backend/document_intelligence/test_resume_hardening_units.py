@@ -77,6 +77,12 @@ def test_date_variants_including_till_date_and_ordinal():
     paren_start, paren_end = extract_date_range('(Jan 2020 – Present)')
     assert paren_start.startswith('2020') and paren_end == 'Present'
     assert extract_date_range('SQL Server 2019') == ('', '')
+    apos_start, apos_end = extract_date_range("Aug'20 – Till date")
+    assert apos_start.startswith('2020') and apos_end == 'Present'
+    jun_start, jun_end = extract_date_range("Jun'18-Sep'21")
+    assert jun_start.startswith('2018') and jun_end.startswith('2021')
+    dec_start, dec_end = extract_date_range("Dec’21– Present")
+    assert dec_start.startswith('2021') and dec_end == 'Present'
 
 
 def test_section_aliases_are_semantic_not_sentences():

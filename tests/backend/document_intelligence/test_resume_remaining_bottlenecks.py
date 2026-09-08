@@ -118,6 +118,8 @@ def test_language_line_is_not_a_job():
     assert 'english' not in companies
     assert 'hindi' not in companies
     assert looks_like_skill_or_duration_company('English') is True
+    assert looks_like_skill_or_duration_company('JavaScript and React') is True
+    assert looks_like_skill_or_duration_company('Northwind Ltd') is False
 
 
 def test_duration_only_line_is_not_a_job():

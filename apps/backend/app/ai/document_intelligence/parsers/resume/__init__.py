@@ -84,7 +84,9 @@ _DASH_ROLE_COMPANY_DATES = re.compile(
 )
 _EXP_META_LINE = re.compile(
     r'(?i)^(?:'
-    r'responsibilities|duties|key\s+achievements|achievements|'
+    r'(?:key\s+)?responsibilities|duties(?:\s+and\s+responsibilities)?|'
+    r'job\s+description|work\s+description|role\s+(?:description|summary)|'
+    r'key\s+achievements|achievements|'
     r'client\s*name\s*/?\s*projects?|projects?|'
     r'environment|technologies?\s+used|'
     r'project\s+title|project\s+name|learnings?|key\s+learnings?|'
@@ -93,7 +95,8 @@ _EXP_META_LINE = re.compile(
 )
 # Whole-line labels that must never become a company/role.
 _BARE_DUTY_HEADER = re.compile(
-    r'(?i)^(?:responsibilities|duties(?:\s+and\s+responsibilities)?|'
+    r'(?i)^(?:(?:key\s+)?responsibilities|duties(?:\s+and\s+responsibilities)?|'
+    r'job\s+description|work\s+description|role\s+(?:description|summary)|'
     r'key\s+achievements|achievements(?:\s*/\s*tasks)?|'
     r'learnings?|key\s+learnings?|conclusion|takeaways?|'
     r'project\s+title|project\s+name|'
@@ -135,12 +138,45 @@ _PROJECT_BLOCK_HEADING = re.compile(
     r'(?i)^(?:key\s+)?projects?\s*(?:#|no\.?\s*|number\s+)?\s*\d+\b'
 )
 _EMPLOYMENT_DURATION_LABEL = re.compile(
-    r'(?i)^(?:duration|period|tenure|timeline|dates?)\s*[:\-–—]\s*(.+)$'
+    r'(?i)^(?:duration|period|tenure|timeline|dates?|period\s*/\s*duration)\s*[:\-–—]\s*(.+)$'
+)
+_LABELED_EMPLOYER_LINE = re.compile(
+    r'(?i)^(?:(?:current|previous|former|past|last)\s+)?'
+    r'(?:payroll\s+|consulting\s+|vendor\s+)?'
+    r'(?:name\s+of\s+(?:the\s+)?)?'
+    r'(?:company(?:\s+name)?|employer|organization|organisation)'
+    r'(?:[\'’]s)?(?:\s+name)?\s*[:\-–—]\s*(.+)$'
+)
+_LABELED_CLIENT_LINE = re.compile(
+    r'(?i)^(?:(?:end\s+)?clients?(?:\s+name)?|client\s+company|'
+    r'client\s+side|client\s+organization|client\s+organisation)\s*[:\-–—]\s*(.+)$'
+)
+_PAREN_CLIENT = re.compile(
+    r'(?i)^(.+?)\s*\(\s*(?:end\s+)?clients?\s*[:\-–—]\s*(.+?)\s*\)\s*$'
+)
+_INLINE_SLASH_CLIENT = re.compile(
+    r'(?i)^(.+?)\s*/\s*(?:end\s+)?clients?\s*[:\-–—]\s*(.+)$'
+)
+_DESC_EMPLOYER_LABEL = re.compile(
+    r'(?i)(?:^|[•\n])\s*(?:payroll\s+company|(?:current|past|previous|former)\s+employer|'
+    r'(?:name\s+of\s+(?:the\s+)?)?(?:company(?:\s+name)?|employer))\s*[:\-–—]\s*'
+    r'([^\n•]+)'
+)
+_EXPERIENCE_PREFIX_COMPANY = re.compile(
+    r'(?i)^(?:work\s+)?experience\s*[:\-–—]\s*(.+)$'
+)
+_ROLE_YEARS_TENURE = re.compile(
+    r'(?i)^(.+?)\s*[:\-–—]\s*(\d+(?:\.\d+)?\+?\s*(?:years?|yrs?|year)\b.*)$'
+)
+_DATE_CARRIER_PREFIX = re.compile(
+    r'(?i)^(?:(?:current|previous|former|past|last)\s+)?'
+    r'(?:clients?|duration|period|tenure|timeline|dates?|location)\s*[:\-–—]\s*'
 )
 _LABELED_DUTY_LINE = re.compile(
     r'(?i)^(?:professional\s+development|leadership(?:\s+and\s+teamwork)?|'
     r'project\s+development(?:\s*(?:and|&)\s*execution)?|'
-    r'achievements?(?:\s*/\s*tasks)?|responsibilities|duties|'
+    r'achievements?(?:\s*/\s*tasks)?|(?:key\s+)?responsibilities|duties|'
+    r'job\s+description|work\s+description|'
     r'teamwork|project\s+title|project\s+name|learnings?|conclusion)\s*:\s+\S'
 )
 _TRAINING_ONLY_COMPANY = re.compile(
@@ -169,7 +205,8 @@ _CITY_LIKE = re.compile(
     r')$'
 )
 _DATE_ATOM_LINE = (
-    r'(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+    r'(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
+    r'(?:\s+(?:19|20)\d{2}|\s*[\'’]\s*\d{2})'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:19|20)\d{2})'
 )
@@ -228,14 +265,16 @@ _DATE_RANGE_STRIP = re.compile(
     r'(?i)\(?\s*(?:'
     r'(?:from\s+)?'
     r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\s+)?'
-    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
+    r'(?:\s+(?:19|20)\d{2}|\s*[\'’]\s*\d{2})'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:19|20)\d{2}'
     r')(?:'
     r'\s*(?:[-–—]|to|until|till(?!\s*date))\s*'
     r'(?:'
     r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\s+)?'
-    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
+    r'(?:\s+(?:19|20)\d{2}|\s*[\'’]\s*\d{2})'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:19|20)\d{2}|Present|Current|Now|Till\s*Date|Tilldate|Ongoing|Pursuing'
     r')'
@@ -1668,8 +1707,10 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
 
 
 _LABELED_SKILL_LINE_RE = re.compile(
-    r'(?im)^(?:\*\*)?(?:(?:other\s+)?(?:technical|key|core|soft)\s+)?'
-    r'(?:skills?|skill\s*sets?|technologies|tech\s+stack|tools?|competencies)'
+    r'(?im)^(?:\*\*)?(?:(?:other\s+)?(?:technical|key|core|soft|professional|relevant)\s+)?'
+    r'(?:skills?|skill\s*sets?|technologies|tech\s+stack|tools?|competencies|'
+    r'databases?|operating\s+systems?|cloud\s+platforms?|monitoring(?:\s+tools?)?|'
+    r'scripting|frameworks?)'
     r'(?:\*\*)?\s*:\s*(.+)$'
 )
 
@@ -1691,6 +1732,7 @@ def _labeled_skill_values(full_text: str) -> list[str]:
 
 def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
     from app.ai.document_intelligence.bullets import split_inline_bullets
+    from app.ai.parser.enrichment.resume_text_inference import skill_item_looks_like_prose
 
     raw = split_inline_bullets(section_text or '').strip()
     identity = (extract_name_from_text(full_text) or '').strip().lower() if full_text else ''
@@ -1716,6 +1758,8 @@ def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
         '',
         raw,
     ).strip()
+    if re.fullmatch(r'(?i)s|set|skills?', raw):
+        raw = ''
 
     filtered_lines: list[str] = []
     for ln in raw.splitlines():
@@ -1726,10 +1770,21 @@ def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
             continue
         if re.match(r'(?i)^(?:signature|declaration|date)\s*:?\s*$', s):
             continue
+        if re.match(r'.{2,40}:\s*$', s):
+            continue
         if identity and s.lower() == identity:
             continue
         if identity_matches_person(s.strip('() '), identity_names):
             continue
+        cat = re.match(
+            r'^(.{2,40}?)\s*:\s+(.+)$',
+            s,
+        )
+        if cat and skill_item_looks_like_prose(cat.group(2).strip()):
+            left = cat.group(1).strip()
+            if 1 <= len(left.split()) <= 5 and not is_labeled_contact_metadata(left):
+                filtered_lines.append(left)
+                continue
         filtered_lines.append(ln)
     raw = '\n'.join(filtered_lines).strip()
     from app.ai.parser.enrichment.resume_text_inference import clip_skills_section_at_prose
@@ -1744,8 +1799,10 @@ def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
             return None
         if re.fullmatch(
             r'(?i)(?:(?:technical\s+)?skills?|technical\s+skills?|skill\s*sets?|'
-            r'databases?(?:\s*tools?)?|languages?|operating\s*systems?|tools?|os|'
-            r'frameworks?|technologies?|software|special\s+software)',
+            r'databases?(?:\s*tools?)?|(?:programming\s+|spoken\s+)?languages?|'
+            r'operating\s*systems?|tools?|os|'
+            r'frameworks?|technologies?|software|special\s+software|'
+            r'cloud\s+platforms?|scripting)',
             s,
         ):
             return None
@@ -1762,14 +1819,7 @@ def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
             return None
         return SkillEntry(name=s, canonical=s)
 
-    has_skills_heading = bool(
-        re.search(
-            r'(?im)^(?:\*\*)?(?:(?:technical|key|core|soft)\s+)?skills?\b|'
-            r'^technical\s+(?:proficiency|expertise|knowledge)\b',
-            full_text or '',
-        )
-    )
-    if not raw and full_text and not has_skills_heading:
+    if not raw and full_text:
         from app.ai.parser.enrichment.resume_text_inference import extract_skills_from_text
 
         recovered = [
@@ -1777,7 +1827,8 @@ def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
             for s in extract_skills_from_text(full_text, allow_unlabeled_lists=False)
             if (entry := _accepted(s))
         ]
-        return recovered
+        if recovered:
+            return recovered
     items = filter_skill_items(split_list_items(raw), max_items=40)
     out: list[SkillEntry] = []
     seen: set[str] = set()
@@ -1794,7 +1845,7 @@ def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
     # Never harvest duty prose, Place/Location, or identity lines.
     if full_text:
         extras = _labeled_skill_values(full_text)
-        if not extras and not out and not has_skills_heading:
+        if not extras and not out:
             from app.ai.parser.enrichment.resume_text_inference import extract_skills_from_text
 
             extras = extract_skills_from_text(full_text, allow_unlabeled_lists=False)
@@ -1802,6 +1853,22 @@ def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
             entry = _accepted(s)
             if not entry:
                 continue
+            key = entry.name.strip().lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(entry)
+            if len(out) >= 40:
+                break
+    if not out and full_text:
+        from app.ai.parser.enrichment.resume_text_inference import extract_skills_from_text
+
+        recovered = [
+            entry
+            for s in extract_skills_from_text(full_text, allow_unlabeled_lists=False)
+            if (entry := _accepted(s))
+        ]
+        for entry in recovered:
             key = entry.name.strip().lower()
             if key in seen:
                 continue
@@ -1950,11 +2017,16 @@ def _looks_like_job_location_line(text: str) -> bool:
 
 
 def _split_employer_city_line(text: str) -> tuple[str, str] | None:
-    """``Employer Name, City`` — not a location-only line."""
+    """``Employer Name, City`` / ``Employer Name | City`` — not a location-only line."""
     s = (text or '').strip()
-    if ',' not in s:
+    sep = None
+    if '|' in s and s.count('|') == 1:
+        sep = '|'
+    elif ',' in s:
+        sep = ','
+    if sep is None:
         return None
-    left, right = s.split(',', 1)
+    left, right = s.split(sep, 1)
     left, right = left.strip(), right.strip()
     if not left or not right or len(left.split()) > 6:
         return None
@@ -1967,6 +2039,76 @@ def _split_employer_city_line(text: str) -> tuple[str, str] | None:
     if is_section_header_line(left):
         return None
     return left, right
+
+
+def _is_employment_date_carrier(text: str) -> bool:
+    """True when a line's job is to carry dates (Tenure:/Client:/date-only)."""
+    s = re.sub(r'^[\s•·\-\*●]+', '', (text or '').strip())
+    if not s:
+        return False
+    start, _end = extract_date_range(s)
+    if not start:
+        return False
+    leftover = _DATE_RANGE_STRIP.sub('', s).strip(' \t|-–—,()')
+    leftover = _DATE_CARRIER_PREFIX.sub('', leftover).strip(' \t|-–—,():')
+    if not leftover or leftover.lower() in {
+        'present', 'current', 'now', 'ongoing', 'till date', 'tilldate',
+    }:
+        return True
+    if _EMPLOYMENT_DURATION_LABEL.match(s) or _DATE_CARRIER_PREFIX.match(s):
+        return True
+    if is_project_or_employment_meta_label(s):
+        return True
+    return False
+
+
+def _looks_like_org_header(text: str) -> bool:
+    s = (text or '').strip()
+    if not s:
+        return False
+    return bool(
+        re.search(
+            r'(?i)\b(?:pvt\.?|ltd\.?|llc|inc|llp|corp|limited|private|'
+            r'technologies|solutions|labs|systems|infotech|consult(?:ing|ancy)?|'
+            r'services|enterprises|industries|holdings|group)\b',
+            s,
+        )
+    )
+
+
+def _classify_company_vs_role(left: str, right: str) -> tuple[str, str]:
+    """Map two header fragments to (company, role) without assuming order."""
+    a, b = (left or '').strip(), (right or '').strip()
+    if not a:
+        return b, ''
+    if not b:
+        return a, ''
+    a_title = bool(_has_job_title_cue(a) or re.search(r'(?i)\bintern\b', a))
+    b_title = bool(_has_job_title_cue(b) or re.search(r'(?i)\bintern\b', b))
+    a_org = _looks_like_org_header(a) or (
+        _looks_like_company_line(a) and not a_title
+    )
+    b_org = _looks_like_org_header(b) or (
+        _looks_like_company_line(b) and not b_title
+    )
+    if a_title and not b_title:
+        return b, a
+    if b_title and not a_title:
+        return a, b
+    if a_org and b_title:
+        return a, b
+    if b_org and a_title:
+        return b, a
+    if a_org and not b_org:
+        return a, b
+    if b_org and not a_org:
+        return b, a
+    if a.isupper() and not b.isupper() and len(a.split()) <= 6:
+        return a, b
+    if b.isupper() and not a.isupper() and len(b.split()) <= 6:
+        return b, a
+    # Ambiguous two-part pipe: prefer Company | Role (Naukri / tables)
+    return a, b
 
 
 def _looks_like_company_line(text: str, *, identity_names: set[str] | None = None) -> bool:
@@ -2088,9 +2230,15 @@ _EMPLOYMENT_WITH_AS = re.compile(
     r'(?i)^(?:currently\s+)?(?:working|worked)\s+(?:with|at)\s+'
     r'(.+?)(?:\s*,\s*([^,]+?))?\s+as\s+(?:an?\s+)?(.+?)$'
 )
+_EMPLOYMENT_WITH_ORG_AS = re.compile(
+    r'(?i)^(?:with|at)\s+(.+?)(?:\s*,\s*([A-Za-z][A-Za-z .]{1,28}))?\s+as\s+(?:an?\s+)?(.+)$'
+)
 _EMPLOYMENT_AS_FOR = re.compile(
     r'(?i)^(?:currently\s+)?(?:working|worked)\s+as\s+(?:an?\s+)?'
     r'(.+?)\s+for\s+(.+?)$'
+)
+_EMPLOYMENT_ORG_AS_ROLE = re.compile(
+    r'(?i)^(.+?),\s*([A-Za-z][A-Za-z .]{1,28})\s+as\s+(?:an?\s+)?(.+?)$'
 )
 
 
@@ -2124,6 +2272,7 @@ def _parse_employment_sentence(
         leftover,
     ).strip(' \t|-–—,')
     leftover = re.sub(r'(?i)\s+\bfrom\s*$', '', leftover).strip(' \t|-–—,')
+    leftover = leftover.lstrip(':').strip()
     if not leftover:
         return None
 
@@ -2132,6 +2281,7 @@ def _parse_employment_sentence(
     loc = ''
     with_as = _EMPLOYMENT_WITH_AS.match(leftover)
     as_for = _EMPLOYMENT_AS_FOR.match(leftover)
+    with_org_as = _EMPLOYMENT_WITH_ORG_AS.match(leftover)
     if with_as:
         company = (with_as.group(1) or '').strip(' ,')
         maybe_loc = (with_as.group(2) or '').strip(' ,')
@@ -2158,23 +2308,47 @@ def _parse_employment_sentence(
             right = right.strip()
             if right and (_CITY_LIKE.match(right) or _looks_like_job_location_line(right)):
                 company, loc = left.strip(), right
+    elif with_org_as:
+        company = (with_org_as.group(1) or '').strip(' ,')
+        maybe_loc = (with_org_as.group(2) or '').strip(' ,')
+        role = (with_org_as.group(3) or '').strip(' ,.')
+        if maybe_loc and (_CITY_LIKE.match(maybe_loc) or _looks_like_job_location_line(maybe_loc)):
+            loc = maybe_loc
     else:
-        since_m = re.match(
-            r'(?i)^(.{3,60}?)\s+(?:in\s+[A-Za-z][A-Za-z .]{1,32}\s+)?since\s+'
-            r'((?:19|20)\d{2})\b',
-            leftover,
-        )
-        if since_m:
-            maybe_role = since_m.group(1).strip(' ,')
-            year = since_m.group(2)
-            if _looks_like_role_only_line(maybe_role) or _has_job_title_cue(maybe_role):
-                if not start:
-                    start = year
-                role = maybe_role
+        org_as = _EMPLOYMENT_ORG_AS_ROLE.match(leftover)
+        if org_as:
+            maybe_co = (org_as.group(1) or '').strip(' ,')
+            maybe_loc = (org_as.group(2) or '').strip(' ,')
+            maybe_role = (org_as.group(3) or '').strip(' ,.')
+            if (
+                (_has_job_title_cue(maybe_role) or is_plausible_job_title(maybe_role))
+                and (
+                    re.search(r'(?i)\b(?:pvt|ltd|llc|inc|corp|limited|private)\b', maybe_co)
+                    or _looks_like_company_line(maybe_co, identity_names=identity_names)
+                )
+            ):
+                company, role = maybe_co, maybe_role
+                if _CITY_LIKE.match(maybe_loc) or _looks_like_job_location_line(maybe_loc):
+                    loc = maybe_loc
+            else:
+                org_as = None
+        if not org_as:
+            since_m = re.match(
+                r'(?i)^(.{3,60}?)\s+(?:in\s+[A-Za-z][A-Za-z .]{1,32}\s+)?since\s+'
+                r'((?:19|20)\d{2})\b',
+                leftover,
+            )
+            if since_m:
+                maybe_role = since_m.group(1).strip(' ,')
+                year = since_m.group(2)
+                if _looks_like_role_only_line(maybe_role) or _has_job_title_cue(maybe_role):
+                    if not start:
+                        start = year
+                    role = maybe_role
+                else:
+                    return None
             else:
                 return None
-        else:
-            return None
 
     if identity_is_employer_value(company, identity_names):
         company = ''
@@ -2207,6 +2381,9 @@ def _is_bullet_or_duty_line(line: str) -> bool:
     if raw[:1] in '•·*-●▪▸►' or raw.startswith(('●', '•', '', '')):
         return True
     stripped = re.sub(r'^[\s•·\-\*●▪▸►]+', '', raw).strip()
+    from app.ai.document_intelligence.bullets import strip_bullet_prefix
+
+    stripped = strip_bullet_prefix(stripped) or stripped
     if _EXP_META_LINE.match(stripped) or _BARE_DUTY_HEADER.match(stripped):
         return True
     if _DUTY_VERB_START.match(stripped):
@@ -2343,8 +2520,11 @@ def _employment_wrap_continuation(prev: str, nxt: str) -> bool:
 
 _BARE_EMPLOYMENT_LABEL = re.compile(
     r'(?i)^(company(?:\s+name)?|employer|organization(?:[\'’]s)?\s*name|'
-    r'organisation(?:[\'’]s)?\s*name|client(?:\s+name)?|role|title|'
-    r'designation|position|duration|period|tenure|dates?)\s*$'
+    r'organisation(?:[\'’]s)?\s*name|name\s+of\s+(?:the\s+)?company|'
+    r'client(?:\s+name)?|client\s+company|end\s+client|role|title|'
+    r'designation|position|duration|period|tenure|dates?|period\s*/\s*duration|'
+    r'(?:current|previous|former|past|last)\s+employer|'
+    r'payroll\s+company|consulting\s+company)\s*$'
 )
 _COLON_VALUE_LINE = re.compile(r'^[:\-–—]\s*(.+)$')
 
@@ -2582,6 +2762,38 @@ def _parse_experience_line(
         return None
     if is_contact_or_reference_line(stripped) or looks_like_contact_person_line(stripped):
         return None
+    if is_labeled_contact_metadata(stripped):
+        return None
+    labeled_co = _LABELED_EMPLOYER_LINE.match(stripped)
+    if not labeled_co:
+        prefixed = _EXPERIENCE_PREFIX_COMPANY.match(stripped)
+        if prefixed:
+            labeled_co = prefixed
+    if _LABELED_CLIENT_LINE.match(stripped):
+        return None
+    start, end = extract_date_range(stripped)
+    is_current = bool(end and re.match(r'(?i)^(present|current|now|till\s*date|ongoing|pursuing)$', end))
+    if is_current:
+        end = ''
+    if re.search(r'(?i)\bcurrently\s+working\b', stripped):
+        is_current = True
+    if labeled_co:
+        company = re.sub(r'(?i)\(\s*currently\s+working\s*\)', '', labeled_co.group(1)).strip(' ,')
+        paren = _PAREN_CLIENT.match(company)
+        if paren:
+            company = paren.group(1).strip(' ,')
+        if looks_like_education_as_experience_row(company, ''):
+            return None
+        if is_plausible_person_name(company) and not _looks_like_company_line(
+            company, identity_names=identity_names
+        ):
+            return None
+        return ExperienceEntry(
+            company=company[:200],
+            start=start,
+            end=end,
+            is_current=is_current,
+        )
     pair = _split_employer_city_line(stripped)
     if pair:
         start, end = extract_date_range(stripped)
@@ -2611,37 +2823,17 @@ def _parse_experience_line(
         return None
     if is_labeled_contact_metadata(stripped):
         return None
+    from app.ai.parser.enrichment.resume_text_inference import looks_like_spoken_language_line
+
+    if looks_like_spoken_language_line(stripped):
+        return None
     if _is_project_like_experience(stripped):
         return None
 
-    labeled_co = re.match(
-        r'(?i)^(company|employer|organization|organisation)(?:[\'’]s)?(?:\s+name)?\s*:\s*(.+)$',
-        stripped,
-    )
     labeled_role = re.match(
         r'(?i)^(role|title|designation|position|job\s+title)\s*:\s*(.+)$',
         stripped,
     )
-    start, end = extract_date_range(stripped)
-    is_current = bool(end and re.match(r'(?i)^(present|current|now|till\s*date|ongoing|pursuing)$', end))
-    if is_current:
-        end = ''
-    if re.search(r'(?i)\bcurrently\s+working\b', stripped):
-        is_current = True
-    if labeled_co:
-        company = re.sub(r'(?i)\(\s*currently\s+working\s*\)', '', labeled_co.group(2)).strip(' ,')
-        if looks_like_education_as_experience_row(company, ''):
-            return None
-        if is_plausible_person_name(company) and not _looks_like_company_line(
-            company, identity_names=identity_names
-        ):
-            return None
-        return ExperienceEntry(
-            company=company[:200],
-            start=start,
-            end=end,
-            is_current=is_current,
-        )
     if labeled_role:
         role_val = labeled_role.group(2).strip()[:200]
         if looks_like_education_as_experience_row('', role_val):
@@ -2652,6 +2844,47 @@ def _parse_experience_line(
             end=end,
             is_current=is_current,
         )
+    years_tenure = _ROLE_YEARS_TENURE.match(stripped)
+    if years_tenure:
+        role_val = years_tenure.group(1).strip(' ,|-–—')
+        if (
+            role_val
+            and not _DUTY_VERB_START.match(role_val)
+            and (
+                _has_job_title_cue(role_val)
+                or is_plausible_job_title(role_val)
+                or re.search(r'(?i)\bintern\b', role_val)
+            )
+            and not looks_like_education_as_experience_row('', role_val)
+        ):
+            return ExperienceEntry(
+                role=role_val[:200],
+                start=start,
+                end=end,
+                is_current=is_current,
+            )
+
+    paren_client = _PAREN_CLIENT.match(stripped)
+    if paren_client:
+        company = stripped
+        if not looks_like_education_as_experience_row(paren_client.group(1).strip(' ,'), ''):
+            return ExperienceEntry(
+                company=company[:200],
+                start=start,
+                end=end,
+                is_current=is_current,
+            )
+    slash_client = _INLINE_SLASH_CLIENT.match(stripped)
+    if slash_client:
+        company = slash_client.group(1).strip(' ,-–—')
+        company = re.sub(r'(?i)\s*[-–—]\s*[A-Za-z .]{2,24}$', '', company).strip()
+        if company and not looks_like_education_as_experience_row(company, ''):
+            return ExperienceEntry(
+                company=company[:200],
+                start=start,
+                end=end,
+                is_current=is_current,
+            )
 
     if looks_like_skill_or_duration_company(stripped):
         return None
@@ -2839,28 +3072,33 @@ def _parse_experience_line(
                 location=city[:120],
             )
 
-    # Gold / common: Role | Company | Dates
+    # Two or three fragments: Role | Company | Dates  OR  Company | Role | Dates
     pipe = _PIPE_EXP.match(stripped)
     if pipe:
-        role = pipe.group(1).strip()
-        company = pipe.group(2).strip()
+        left, mid, date_blob = (
+            pipe.group(1).strip(),
+            pipe.group(2).strip(),
+            pipe.group(3).strip(),
+        )
         # Reject date tokens mistaken for Role | Company (e.g. 07/2025 – 10/2025 | Remote)
-        if extract_date_range(role)[0] or extract_date_range(company)[0]:
-            role = ''
+        if extract_date_range(left)[0] or extract_date_range(mid)[0]:
+            left, mid = '', ''
         if not start:
-            start, end2 = extract_date_range(pipe.group(3))
+            start, end2 = extract_date_range(date_blob)
             if end2:
                 is_current = bool(re.match(r'(?i)^(present|current|now)$', end2))
                 end = '' if is_current else end2
-        if role and not _DUTY_VERB_START.match(role) and (
-            is_plausible_job_title(role) or len(role.split()) <= 8
-        ):
+        if left and mid and not _DUTY_VERB_START.match(left) and not _DUTY_VERB_START.match(mid):
             loc = ''
-            if _CITY_LIKE.match(company):
-                loc, company = company, ''
+            if _CITY_LIKE.match(mid):
+                loc, company, role = mid, left, ''
+                if _has_job_title_cue(left):
+                    company, role = '', left
+            else:
+                company, role = _classify_company_vs_role(left, mid)
             return ExperienceEntry(
-                company=company,
-                role=role,
+                company=company[:200],
+                role=role[:200],
                 start=start,
                 end=end,
                 is_current=is_current,
@@ -2881,14 +3119,10 @@ def _parse_experience_line(
             if leftover and _CITY_LIKE.match(leftover):
                 loc, leftover = leftover, ''
             if leftover:
-                role_left = (
-                    _looks_like_role_only_line(left)
-                    or _has_job_title_cue(left)
-                    or bool(re.search(r'(?i)\bintern\b', left))
-                )
+                company, role = _classify_company_vs_role(left, leftover)
                 return ExperienceEntry(
-                    company=(leftover if role_left else left)[:200],
-                    role=(left if role_left else leftover)[:200],
+                    company=company[:200],
+                    role=role[:200],
                     start=r_start,
                     end=end,
                     is_current=is_current,
@@ -2927,13 +3161,25 @@ def _parse_experience_line(
                     location=right[:120],
                 )
             if (
-                (is_plausible_job_title(left) or re.search(r'(?i)\bintern\b', left))
-                and not _DUTY_VERB_START.match(left)
-                and len(left.split()) <= 8
+                not _DUTY_VERB_START.match(left)
+                and not _DUTY_VERB_START.match(right)
+                and len(left.split()) <= 10
+                and len(right.split()) <= 10
+                and (
+                    _has_job_title_cue(left)
+                    or _has_job_title_cue(right)
+                    or re.search(r'(?i)\bintern\b', left)
+                    or re.search(r'(?i)\bintern\b', right)
+                    or _looks_like_org_header(left)
+                    or _looks_like_org_header(right)
+                    or _looks_like_company_line(left)
+                    or _looks_like_company_line(right)
+                )
             ):
+                company, role = _classify_company_vs_role(left, right)
                 return ExperienceEntry(
-                    company=right[:200],
-                    role=left[:200],
+                    company=company[:200],
+                    role=role[:200],
                     start=start,
                     end=end,
                     is_current=is_current,
@@ -2941,6 +3187,16 @@ def _parse_experience_line(
 
     # Role at Company
     line_wo = _strip_date_range(stripped) if start else stripped
+    loc_wo = (line_wo or '').strip(' |-–—,()')
+    if start and loc_wo and (
+        _CITY_LIKE.match(loc_wo) or _looks_like_job_location_line(loc_wo)
+    ) and not _has_job_title_cue(loc_wo):
+        return ExperienceEntry(
+            start=start,
+            end=end,
+            is_current=is_current,
+            location=loc_wo[:120],
+        )
     at_m = _AT_EXP.match(line_wo)
     if at_m:
         role, company = at_m.group(1).strip(), at_m.group(2).strip(' ,')
@@ -3188,6 +3444,77 @@ def _prefix_tenure_signals(full_text: str) -> list[dict[str, Any]]:
     return signals
 
 
+def _headline_role_from_text(text: str) -> str:
+    """Single job-title line above the first section — not a duty or employer."""
+    from app.ai.parser.layout.heuristic import normalize_section_header
+
+    found: list[str] = []
+    for raw in (text or '').splitlines():
+        ln = re.sub(r'^[\s•·\-\*●]+', '', (raw or '').strip())
+        if not ln:
+            continue
+        canon = normalize_section_header(ln)
+        if canon in {
+            'Experience', 'Education', 'Skills', 'Summary',
+            'Projects', 'Certifications', 'Objective',
+        }:
+            break
+        if is_section_header_line(ln) or is_document_title_line(ln):
+            continue
+        if is_labeled_contact_metadata(ln) or is_contact_or_reference_line(ln):
+            continue
+        if is_plausible_person_name(ln) or looks_like_phone_token(ln) or looks_like_email_or_url(ln):
+            continue
+        peeled = peel_inline_contact(ln)
+        left = re.split(r'\s*[|]\s*', peeled, maxsplit=1)[0].strip()
+        if not left or extract_date_range(left)[0]:
+            continue
+        if len(left.split()) > 6:
+            continue
+        if _DUTY_VERB_START.match(left) or _looks_like_company_line(left):
+            continue
+        if _looks_like_role_only_line(left) or _has_job_title_cue(left):
+            found.append(left)
+        if len(found) > 2:
+            break
+    uniq = list(dict.fromkeys(found))
+    if len(uniq) == 1:
+        return uniq[0][:200]
+    return ''
+
+
+def _attach_headline_role_from_text(
+    entries: list[ExperienceEntry],
+    full_text: str,
+) -> list[ExperienceEntry]:
+    """Attach a unique banner title to the first roleless employer."""
+    if not entries or not full_text:
+        return entries
+    if any(
+        _has_job_title_cue(e.role or '')
+        and (e.company or '').strip()
+        and (
+            _looks_like_company_line(e.company or '')
+            or _looks_like_org_header(e.company or '')
+        )
+        and not looks_like_skill_or_duration_company(e.company or '')
+        for e in entries
+    ):
+        return entries
+    title = _headline_role_from_text(full_text)
+    if not title:
+        return entries
+    out = list(entries)
+    for i, e in enumerate(out):
+        if (e.role or '').strip() or not (e.company or '').strip():
+            continue
+        if looks_like_skill_or_duration_company(e.company or ''):
+            continue
+        out[i] = e.model_copy(update={'role': title})
+        break
+    return out
+
+
 def _attach_prefix_tenures(
     entries: list[ExperienceEntry],
     full_text: str,
@@ -3294,6 +3621,522 @@ def _attach_orphan_dates_to_entries(
                 used.add(j)
                 break
     return out
+
+
+def _split_client_annotation(company: str) -> tuple[str, str]:
+    """Return (employer, client) when the org string labels a Client."""
+    raw = (company or '').strip()
+    if not raw:
+        return '', ''
+    paren = _PAREN_CLIENT.match(raw)
+    if paren:
+        return paren.group(1).strip(' ,'), paren.group(2).strip(' ,')
+    slash = _INLINE_SLASH_CLIENT.match(raw)
+    if slash:
+        employer = slash.group(1).strip(' ,-–—')
+        employer = re.sub(r'(?i)\s*[-–—]\s*[A-Za-z .]{2,24}$', '', employer).strip()
+        return employer, slash.group(2).strip(' ,')
+    return raw, ''
+
+
+def _client_name_in_entry(name: str, entry: ExperienceEntry) -> bool:
+    """True when `name` is explicitly labeled as a client of this job."""
+    needle = (name or '').strip()
+    if len(needle) < 4:
+        return False
+    blob = f'{entry.company or ""} {entry.description or ""} {entry.role or ""}'
+    if re.search(
+        rf'(?i)\(\s*(?:end\s+)?clients?\s*[:\-–—]\s*.*{re.escape(needle)}',
+        blob,
+    ):
+        return True
+    if re.search(
+        rf'(?i)(?:^|[•\n/\s])(?:end\s+)?clients?(?:\s+(?:name|company|side|organization|organisation))?\s*[:\-–—]\s*.*{re.escape(needle)}',
+        blob,
+    ):
+        return True
+    return False
+
+
+def _employer_beside_labeled_client(text: str, client_name: str = '') -> str:
+    """Recover the org that sits beside an explicit Client annotation."""
+    blob = (text or '').strip()
+    if not blob:
+        return ''
+    for line in blob.splitlines():
+        s = re.sub(r'^[\s•·\-\*●]+', '', line.strip())
+        emp, cli = _split_client_annotation(s)
+        if emp and cli:
+            if not client_name or client_name.strip().lower() in cli.lower():
+                return emp
+        slash = _INLINE_SLASH_CLIENT.match(s)
+        if slash:
+            emp = slash.group(1).strip(' ,-–—')
+            emp = re.sub(r'(?i)\s*[-–—]\s*[A-Za-z .]{2,24}$', '', emp).strip()
+            if emp:
+                return emp
+    m = re.search(
+        r'(?i)([A-Z][A-Za-z0-9&.\' -]{2,50}?)\s*\(\s*(?:end\s+)?clients?\s*[:\-–—]',
+        blob,
+    )
+    if m:
+        return m.group(1).strip(' ,-–—')
+    return ''
+
+
+def _recover_company_from_description(entry: ExperienceEntry) -> str:
+    desc = (entry.description or '').strip()
+    if not desc:
+        return ''
+    labeled = _DESC_EMPLOYER_LABEL.search(desc)
+    if labeled:
+        val = labeled.group(1).strip().strip(' .,;')
+        val = re.split(r'\s+[•·]\s+', val)[0].strip()
+        if val and not looks_like_skill_or_duration_company(val):
+            emp, _cli = _split_client_annotation(val)
+            return (emp or val)[:200]
+    beside = _employer_beside_labeled_client(desc)
+    if beside and not looks_like_skill_or_duration_company(beside):
+        return beside[:200]
+    first = re.sub(r'^[\s•·\-\*●]+', '', desc.splitlines()[0]).strip()
+    emp, cli = _split_client_annotation(first)
+    if emp and cli:
+        return emp[:200]
+    pair = _split_employer_city_line(first)
+    if pair:
+        return pair[0][:200]
+    if _looks_like_org_header(first) or re.search(
+        r'(?i)\b(?:pvt\.?|ltd\.?|llc|inc|llp|limited|private)\b',
+        first,
+    ):
+        left = re.split(r'\s+[-–—]\s+', first, maxsplit=1)[0].strip()
+        left = left.split('|')[0].strip()
+        if left and not looks_like_skill_or_duration_company(left):
+            return left[:200]
+    return ''
+
+
+def _peel_header_dates(entry: ExperienceEntry) -> ExperienceEntry:
+    """Move dates embedded in company/role into start/end; keep leftover identity."""
+    role = (entry.role or '').strip()
+    company = (entry.company or '').strip()
+    start, end, is_current = entry.start, entry.end, entry.is_current
+    updates: dict[str, str | bool] = {}
+    for field in ('company', 'role'):
+        raw = company if field == 'company' else role
+        if not raw:
+            continue
+        d_start, d_end = extract_date_range(raw)
+        if not d_start:
+            continue
+        leftover = _strip_date_range(raw).strip(' \t|-–—,():')
+        leftover = re.sub(r'(?i)^\s*(?:with|at)\s+', '', leftover).strip()
+        if not start:
+            updates['start'] = d_start
+            start = d_start
+        if d_end and not end and not is_current:
+            is_cur = bool(re.match(
+                r'(?i)^(present|current|now|till\s*date|ongoing|pursuing)$',
+                d_end,
+            ))
+            updates['end'] = '' if is_cur else d_end
+            updates['is_current'] = bool(is_current or is_cur)
+            is_current = bool(updates['is_current'])
+            end = updates['end']
+        if leftover != raw:
+            updates[field] = leftover[:200]
+            if field == 'company':
+                company = leftover
+            else:
+                role = leftover
+    if updates:
+        return entry.model_copy(update=updates)
+    return entry
+
+
+def _split_role_embedded_company(role: str, company: str) -> tuple[str, str]:
+    """``Role : Org`` / ``Role – Org Pvt Ltd`` when company is empty."""
+    r, c = (role or '').strip(), (company or '').strip()
+    if c or not r:
+        return r, c
+    m = re.match(r'^(.+?)\s*[:\-–—]\s*(.+)$', r)
+    if not m:
+        return r, c
+    left, right = m.group(1).strip(), m.group(2).strip()
+    if (
+        (_has_job_title_cue(left) or is_plausible_job_title(left))
+        and not _has_job_title_cue(right)
+        and (
+            _looks_like_org_header(right)
+            or _looks_like_company_line(right)
+            or len(right.split()) <= 6
+        )
+        and not looks_like_skill_or_duration_company(right)
+    ):
+        return left[:200], right[:200]
+    return r, c
+
+
+def _company_fields_overlap(left: str, right: str) -> bool:
+    a, b = (left or '').strip().lower(), (right or '').strip().lower()
+    if not a or not b:
+        return True
+    if a == b:
+        return True
+    if len(a) >= 4 and a in b:
+        return True
+    if len(b) >= 4 and b in a:
+        return True
+    return False
+
+
+def _company_mentioned_in_entry(company: str, entry: ExperienceEntry) -> bool:
+    co = (company or '').strip().lower()
+    if len(co) < 4:
+        return False
+    blob = f'{entry.company or ""} {entry.description or ""} {entry.role or ""}'.lower()
+    return co in blob
+
+
+def _description_looks_like_duties(desc: str) -> bool:
+    text = (desc or '').strip()
+    if not text:
+        return False
+    if text[:1] in '•·*●':
+        return True
+    if _DUTY_VERB_START.match(text):
+        return True
+    return bool(
+        re.search(
+            r'(?i)\b(?:developed|managed|administered|configured|implemented|responsible)\b',
+            text,
+        )
+    )
+
+
+def _pending_desc_is_preamble_noise(lines: list[str]) -> bool:
+    """True when leftover lines are contact/summary, not a duty block."""
+    if not lines:
+        return True
+    for raw in lines:
+        s = re.sub(r'^[\s•·\-\*●]+', '', (raw or '').strip())
+        if not s:
+            continue
+        if (raw or '').lstrip()[:1] in '•·*●▪▸►':
+            return False
+        if _DUTY_VERB_START.match(s):
+            return False
+        if _BARE_DUTY_HEADER.match(s) or _LABELED_DUTY_LINE.match(s):
+            return False
+    return True
+
+
+def _is_roleless_company_row(entry: ExperienceEntry) -> bool:
+    return bool((entry.company or '').strip() and not (entry.role or '').strip())
+
+
+def _is_complete_experience_row(entry: ExperienceEntry) -> bool:
+    role = (entry.role or '').strip()
+    company = (entry.company or '').strip()
+    if not role or not company:
+        return False
+    if looks_like_skill_or_duration_company(company) or looks_like_skill_or_duration_company(role):
+        return False
+    if _CITY_LIKE.match(role) or _looks_like_job_location_line(role):
+        return False
+    if not (_looks_like_company_line(company) or _looks_like_org_header(company)):
+        return False
+    return bool(
+        _has_job_title_cue(role)
+        or is_plausible_job_title(role)
+        or re.search(r'(?i)\bintern\b', role)
+    )
+
+
+def _is_weak_experience_row(entry: ExperienceEntry) -> bool:
+    role = (entry.role or '').strip()
+    company = (entry.company or '').strip()
+    desc = (entry.description or '').strip()
+    if company and looks_like_skill_or_duration_company(company) and not role:
+        return True
+    if company and not role and not _description_looks_like_duties(desc):
+        return True
+    if role and looks_like_skill_or_duration_company(role) and not company:
+        return True
+    return False
+
+
+def _is_strong_experience_row(entry: ExperienceEntry) -> bool:
+    role = (entry.role or '').strip()
+    company = (entry.company or '').strip()
+    desc = (entry.description or '').strip()
+    if company and looks_like_skill_or_duration_company(company):
+        company = ''
+    if role and looks_like_skill_or_duration_company(role):
+        role = ''
+    if not role:
+        return False
+    if role and company:
+        return True
+    if role and (entry.start or _description_looks_like_duties(desc)):
+        return True
+    return False
+
+
+def _merge_experience_pair(cur: ExperienceEntry, nxt: ExperienceEntry) -> ExperienceEntry:
+    cur_role, nxt_role = (cur.role or '').strip(), (nxt.role or '').strip()
+    cur_co, nxt_co = (cur.company or '').strip(), (nxt.company or '').strip()
+    cur_emp, _cur_cli = _split_client_annotation(cur_co)
+    nxt_emp, _nxt_cli = _split_client_annotation(nxt_co)
+    cur_co = cur_emp or cur_co
+    nxt_co = nxt_emp or nxt_co
+    strong_nxt = _is_strong_experience_row(nxt)
+    strong_cur = _is_strong_experience_row(cur)
+    beside_cur = _employer_beside_labeled_client(
+        f'{nxt.company or ""} {nxt.description or ""}', cur_co
+    )
+    beside_nxt = _employer_beside_labeled_client(
+        f'{cur.company or ""} {cur.description or ""}', nxt_co
+    )
+    if beside_cur:
+        nxt_co = nxt_co or beside_cur
+    if beside_nxt:
+        cur_co = cur_co or beside_nxt
+    if cur_co and nxt_co and _client_name_in_entry(cur_co, nxt) and nxt_co:
+        company = nxt_co
+    elif nxt_co and cur_co and _client_name_in_entry(nxt_co, cur) and cur_co:
+        company = cur_co
+    elif strong_nxt and nxt_co:
+        company = nxt_co
+    elif strong_cur and cur_co:
+        company = cur_co
+    else:
+        company = nxt_co or cur_co
+        if cur_co and nxt_co and len(cur_co) > len(company):
+            company = cur_co
+    if strong_nxt and nxt.start:
+        start, end, is_current = nxt.start, nxt.end, nxt.is_current
+        if not end and not is_current:
+            end = cur.end
+            is_current = cur.is_current
+    else:
+        start = cur.start or nxt.start
+        end = cur.end or nxt.end
+        is_current = cur.is_current or nxt.is_current
+    desc = (cur.description or nxt.description or '').strip()
+    if (nxt.description or '').strip() and len((nxt.description or '').strip()) > len(desc):
+        desc = (nxt.description or '').strip()
+    return cur.model_copy(
+        update={
+            'company': (company or '')[:200],
+            'role': (nxt_role or cur_role)[:200],
+            'start': start,
+            'end': end,
+            'is_current': is_current,
+            'location': ((cur.location or nxt.location) or '')[:120],
+            'description': desc[:2000],
+        }
+    )
+
+
+def _experience_rows_complement(cur: ExperienceEntry, nxt: ExperienceEntry) -> bool:
+    cur_role, nxt_role = (cur.role or '').strip(), (nxt.role or '').strip()
+    cur_co, nxt_co = (cur.company or '').strip(), (nxt.company or '').strip()
+    if cur_role and nxt_role and cur_role.lower() != nxt_role.lower():
+        return False
+    if looks_like_skill_or_duration_company(cur_co) or looks_like_skill_or_duration_company(nxt_co):
+        return False
+    dates_conflict = bool(cur.start and nxt.start and cur.start != nxt.start)
+    weak_cur = bool(cur_co and not cur_role)
+    weak_nxt = bool(nxt_co and not nxt_role)
+    client_pair = False
+    if cur_co and nxt_co:
+        if _client_name_in_entry(cur_co, nxt) or _client_name_in_entry(nxt_co, cur):
+            client_pair = True
+        else:
+            beside = _employer_beside_labeled_client(
+                f'{nxt.company or ""} {nxt.description or ""}', cur_co
+            ) or _employer_beside_labeled_client(
+                f'{cur.company or ""} {cur.description or ""}', nxt_co
+            )
+            if beside:
+                client_pair = True
+    if client_pair:
+        return True
+    if cur_role and not cur_co and nxt_co:
+        if (not nxt_role or nxt_role.lower() == cur_role.lower()) and not dates_conflict:
+            return True
+    if nxt_role and not nxt_co and cur_co:
+        if (not cur_role or cur_role.lower() == nxt_role.lower()) and not dates_conflict:
+            return True
+    if weak_cur and _is_strong_experience_row(nxt):
+        if _company_mentioned_in_entry(cur_co, nxt):
+            return True
+        if cur_co and nxt_co and _company_fields_overlap(cur_co, nxt_co):
+            return True
+        if not nxt_co and not dates_conflict:
+            return True
+    if weak_nxt and _is_strong_experience_row(cur):
+        if _company_mentioned_in_entry(nxt_co, cur):
+            return True
+        if cur_co and nxt_co and _company_fields_overlap(cur_co, nxt_co):
+            return True
+        if not cur_co and not dates_conflict:
+            return True
+    if dates_conflict:
+        return False
+    if not cur_role and nxt_role and _company_fields_overlap(cur_co, nxt_co):
+        return True
+    if cur_role and not nxt_role and _company_fields_overlap(cur_co, nxt_co):
+        return True
+    return False
+
+
+def _absorb_weak_experience_rows(rows: list[ExperienceEntry]) -> list[ExperienceEntry]:
+    """Attach company/tenure metadata to a compatible job; drop leftover stubs."""
+    if len(rows) < 2:
+        return rows
+    merged: list[ExperienceEntry] = []
+    i = 0
+    while i < len(rows):
+        cur = rows[i]
+        nxt = rows[i + 1] if i + 1 < len(rows) else None
+        if nxt is not None and _experience_rows_complement(cur, nxt):
+            merged.append(_merge_experience_pair(cur, nxt))
+            i += 2
+            continue
+        merged.append(cur)
+        i += 1
+    strong_idx = [i for i, e in enumerate(merged) if _is_strong_experience_row(e)]
+    if not strong_idx:
+        return merged
+    drop: set[int] = set()
+    for i, e in enumerate(merged):
+        if i in strong_idx:
+            continue
+        if not (_is_weak_experience_row(e) or _is_roleless_company_row(e)):
+            continue
+        for si in strong_idx:
+            if i in drop:
+                break
+            s = merged[si]
+            if _experience_rows_complement(e, s) or _company_mentioned_in_entry(e.company or '', s):
+                merged[si] = _merge_experience_pair(s, e)
+                drop.add(i)
+                break
+    kept = [e for i, e in enumerate(merged) if i not in drop]
+    if any(_is_strong_experience_row(e) for e in kept):
+        kept = [e for e in kept if not _is_weak_experience_row(e)]
+    return kept or merged
+
+
+def _finalize_experience_entries(entries: list[ExperienceEntry]) -> list[ExperienceEntry]:
+    """Swap inverted headers, attach trailing duty/date stubs, keep strong rows first."""
+    if not entries:
+        return entries
+    fixed: list[ExperienceEntry] = []
+    for e in entries:
+        e = _peel_header_dates(e)
+        role, company = (e.role or '').strip(), (e.company or '').strip()
+        prefixed = _EXPERIENCE_PREFIX_COMPANY.match(company)
+        if prefixed:
+            company = prefixed.group(1).strip()
+            emp, _cli = _split_client_annotation(company)
+            company = emp or company
+            e = e.model_copy(update={'company': company[:200]})
+        role, company = _split_role_embedded_company(role, company)
+        if role != (e.role or '').strip() or company != (e.company or '').strip():
+            e = e.model_copy(update={'role': role[:200], 'company': company[:200]})
+        if not company:
+            recovered = _recover_company_from_description(e)
+            if recovered:
+                company = recovered
+                e = e.model_copy(update={'company': company[:200]})
+        if company and looks_like_skill_or_duration_company(company):
+            if not role:
+                continue
+            e = e.model_copy(update={'company': ''})
+            company = ''
+        if role and company:
+            if _has_job_title_cue(company) and not _has_job_title_cue(role):
+                e = e.model_copy(update={'company': role[:200], 'role': company[:200]})
+        fixed.append(e)
+    merged: list[ExperienceEntry] = []
+    i = 0
+    while i < len(fixed):
+        cur = fixed[i]
+        nxt = fixed[i + 1] if i + 1 < len(fixed) else None
+        if nxt is not None:
+            nxt_header = bool((nxt.role or '').strip() or (nxt.company or '').strip())
+            nxt_desc = (nxt.description or '').strip()
+            cur_desc = (cur.description or '').strip()
+            if not nxt_header and nxt_desc and not cur_desc:
+                cur = cur.model_copy(update={'description': nxt_desc[:2000]})
+                merged.append(cur)
+                i += 2
+                continue
+            if (
+                not nxt_header
+                and (nxt.start or '').strip()
+                and not (cur.start or '').strip()
+            ):
+                cur = cur.model_copy(
+                    update={
+                        'start': nxt.start,
+                        'end': cur.end or nxt.end,
+                        'is_current': cur.is_current or nxt.is_current,
+                    }
+                )
+                if nxt_desc and not cur_desc:
+                    cur = cur.model_copy(update={'description': nxt_desc[:2000]})
+                merged.append(cur)
+                i += 2
+                continue
+            if _experience_rows_complement(cur, nxt):
+                merged.append(_merge_experience_pair(cur, nxt))
+                i += 2
+                continue
+        merged.append(cur)
+        i += 1
+    merged = _absorb_weak_experience_rows(merged)
+    peeled: list[ExperienceEntry] = []
+    for e in merged:
+        emp, _cli = _split_client_annotation(e.company or '')
+        if emp and emp != (e.company or '').strip():
+            e = e.model_copy(update={'company': emp[:200]})
+        peeled.append(e)
+    merged = peeled
+    complete: list[ExperienceEntry] = []
+    partial: list[ExperienceEntry] = []
+    dated: list[ExperienceEntry] = []
+    for e in merged:
+        if not (e.role or e.company or e.start or e.is_current):
+            continue
+        if _is_complete_experience_row(e):
+            complete.append(e)
+        elif e.role or e.company:
+            partial.append(e)
+        else:
+            dated.append(e)
+    ordered = complete + partial + dated
+    deduped: list[ExperienceEntry] = []
+    for e in ordered:
+        if deduped:
+            prev = deduped[-1]
+            same = (
+                (e.company or '').strip().lower() == (prev.company or '').strip().lower()
+                and (e.role or '').strip().lower() == (prev.role or '').strip().lower()
+                and (e.start or '') == (prev.start or '')
+            )
+            if same:
+                if (e.description or '').strip() and not (prev.description or '').strip():
+                    deduped[-1] = e
+                continue
+            if _experience_rows_complement(prev, e):
+                deduped[-1] = _merge_experience_pair(prev, e)
+                continue
+        deduped.append(e)
+    return deduped
 
 
 def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceEntry]:
@@ -3518,25 +4361,34 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
         from app.ai.document_intelligence.bullets import is_bullet_line as _is_bul
 
         if _is_bul(line):
-            probe = _parse_experience_line(line, identity_names=identity_names)
-            jobbish = bool(
-                probe
-                and (probe.role or probe.company)
-                and probe.start
+            peeled = re.sub(r'^[\s•·\-\*●]+', '', line.strip())
+            labeled_job = bool(
+                _LABELED_EMPLOYER_LINE.match(peeled)
+                or _EMPLOYMENT_DURATION_LABEL.match(peeled)
+                or _is_employment_date_carrier(peeled)
             )
-            if not jobbish:
-                if pending_jobs:
-                    peeled = re.sub(r'^[\s•·\-\*●]+', '', line.strip())
-                    leftover = _DATE_RANGE_STRIP.sub('', peeled).strip(' \t|-–—,()')
-                    if extract_date_range(peeled)[0] and (
-                        not leftover
-                        or leftover.lower() in {'present', 'current', 'now', 'ongoing'}
-                        or len(leftover.split()) <= 1
-                    ):
-                        if _attach_duration_to_pending(peeled):
-                            continue
-                    pending_desc.append(line)
-                continue
+            if labeled_job:
+                line = peeled
+                header_probe = peeled
+            else:
+                probe = _parse_experience_line(line, identity_names=identity_names)
+                jobbish = bool(
+                    probe
+                    and (probe.role or probe.company)
+                    and probe.start
+                )
+                if not jobbish:
+                    if pending_jobs:
+                        leftover = _DATE_RANGE_STRIP.sub('', peeled).strip(' \t|-–—,()')
+                        if extract_date_range(peeled)[0] and (
+                            not leftover
+                            or leftover.lower() in {'present', 'current', 'now', 'ongoing'}
+                            or len(leftover.split()) <= 1
+                        ):
+                            if _attach_duration_to_pending(peeled):
+                                continue
+                        pending_desc.append(line)
+                    continue
         duration_m = _EMPLOYMENT_DURATION_LABEL.match(header_probe)
         if duration_m and not in_project_block:
             blob = duration_m.group(1) or header_probe
@@ -3611,6 +4463,27 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
                     }
                 )
                 continue
+            # Date-only pending + company-only header → one metadata object
+            if (
+                pending_jobs
+                and not pending_desc
+                and not (pending_jobs[-1].role or '').strip()
+                and not (pending_jobs[-1].company or '').strip()
+                and (pending_jobs[-1].start or '').strip()
+                and (entry.company or '').strip()
+                and not (entry.role or '').strip()
+            ):
+                prev = pending_jobs[-1]
+                pending_jobs[-1] = prev.model_copy(
+                    update={
+                        'company': entry.company.strip()[:200],
+                        'start': prev.start or entry.start,
+                        'end': prev.end or entry.end,
+                        'is_current': prev.is_current or entry.is_current,
+                        'location': (prev.location or entry.location or '')[:120],
+                    }
+                )
+                continue
             # Role header then company / Company|Dates on next line
             if (
                 pending_jobs
@@ -3634,11 +4507,14 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
             # Company / Company|Dates stub then role title on next line
             if (
                 pending_jobs
-                and not pending_desc
                 and not (pending_jobs[-1].role or '').strip()
                 and (pending_jobs[-1].company or '').strip()
                 and (entry.role or '').strip()
                 and not (entry.company or '').strip()
+                and (
+                    not pending_desc
+                    or _pending_desc_is_preamble_noise(pending_desc)
+                )
             ):
                 prev = pending_jobs[-1]
                 pending_jobs[-1] = prev.model_copy(
@@ -3653,7 +4529,10 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
                 continue
             if (
                 pending_jobs
-                and not pending_desc
+                and (
+                    not pending_desc
+                    or _pending_desc_is_preamble_noise(pending_desc)
+                )
                 and not (pending_jobs[-1].role or '').strip()
                 and (entry.role or entry.company)
                 and (
@@ -3675,9 +4554,24 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
                     }
                 )
                 continue
-            # New header after duties → close previous block(s)
             if pending_jobs and pending_desc:
                 _flush_pending()
+            elif (
+                pending_jobs
+                and not pending_desc
+                and _is_weak_experience_row(pending_jobs[-1])
+                and _is_strong_experience_row(entry)
+                and _experience_rows_complement(pending_jobs[-1], entry)
+            ):
+                pending_jobs[-1] = _merge_experience_pair(pending_jobs[-1], entry)
+                continue
+            if (
+                pending_jobs
+                and (entry.company or '').strip()
+                and _experience_rows_complement(pending_jobs[-1], entry)
+            ):
+                pending_jobs[-1] = _merge_experience_pair(pending_jobs[-1], entry)
+                continue
             pending_jobs.append(entry)
             continue
         stripped = re.sub(r'^[\s•·\-\*●]+', '', line.strip())
@@ -3690,6 +4584,8 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
             if _attach_duration_to_pending(duration_m.group(1) or stripped):
                 continue
         if _EXP_META_LINE.match(stripped) or _LABELED_DUTY_LINE.match(stripped):
+            if _is_employment_date_carrier(stripped) and _attach_duration_to_pending(stripped):
+                continue
             if pending_jobs:
                 pending_desc.append(line)
             continue
@@ -3697,10 +4593,12 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
             in_contact_block = True
             continue
         leftover = _DATE_RANGE_STRIP.sub('', stripped).strip(' \t|-–—,()')
-        if extract_date_range(stripped)[0] and (
-            not leftover
-            or leftover.lower() in {'present', 'current', 'now', 'ongoing', 'till date'}
-            or len(leftover.split()) <= 1
+        if _is_employment_date_carrier(stripped) or (
+            extract_date_range(stripped)[0] and (
+                not leftover
+                or leftover.lower() in {'present', 'current', 'now', 'ongoing', 'till date'}
+                or len(leftover.split()) <= 1
+            )
         ):
             if _attach_duration_to_pending(stripped):
                 continue
@@ -3781,7 +4679,8 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
         elif company and (e.description or '').strip():
             cleaned.append(e)
     stacked = _coalesce_stacked_experience_entries(cleaned)
-    return _attach_prefix_tenures(stacked, full_text)
+    stacked = _attach_headline_role_from_text(stacked, full_text)
+    return _attach_prefix_tenures(_finalize_experience_entries(stacked), full_text)
 
 
 def parse_summary(section_text: str, full_text: str = '') -> str:
@@ -4174,7 +5073,7 @@ def _merge_internships_listed_under_education(
     experience: list[ExperienceEntry],
     edu_text: str,
 ) -> list[ExperienceEntry]:
-    """Fresher CVs often put internships under Education. Keep them as jobs."""
+    """Jobs (including internships) sometimes sit under Education after a degree list."""
     if not (edu_text or '').strip():
         return experience
     extra = parse_experience(edu_text, '')
@@ -4185,14 +5084,19 @@ def _merge_internships_listed_under_education(
     out = list(experience)
     for e in extra:
         blob = f'{e.role or ""} {e.company or ""}'
-        if not _INTERNISH_ROLE_RE.search(blob):
+        internish = bool(_INTERNISH_ROLE_RE.search(blob))
+        if not internish and not _is_strong_experience_row(e):
+            continue
+        if is_non_job_experience_record(e):
             continue
         key = ((e.role or '').strip().lower(), (e.company or '').strip().lower())
         if key in seen or not (e.role or e.company):
             continue
         seen.add(key)
         out.append(e)
-    return out
+    if out is experience or out == experience:
+        return experience
+    return _finalize_experience_entries(out)
 
 
 _CONTACT_TENURE_TAIL = re.compile(
@@ -4222,7 +5126,8 @@ def _split_glued_contact_tenure_lines(text: str) -> str:
 
 
 _LABELED_EMPLOYMENT_LINE = re.compile(
-    r'(?i)^(?:company(?:\s+name)?|employer|'
+    r'(?i)^(?:(?:current|previous|former|past|last)\s+)?'
+    r'(?:(?:work\s+)?experience|company(?:\s+name)?|employer|'
     r'organization(?:[\'’]s)?(?:\s+name)?|'
     r'organisation(?:[\'’]s)?(?:\s+name)?|'
     r'role|title|'
@@ -4235,8 +5140,10 @@ def _keeps_adjacent_employment_line(text: str) -> bool:
     if not s or is_section_header_line(s):
         return False
     if is_project_or_employment_meta_label(s):
-        return False
+        return _is_employment_date_carrier(s)
     if _LABELED_EMPLOYMENT_LINE.match(s) or _parse_unheaded_employment_row(s):
+        return True
+    if _LABELED_EMPLOYER_LINE.match(s) or _is_employment_date_carrier(s):
         return True
     if extract_date_range(s)[0]:
         return True
@@ -4303,27 +5210,48 @@ def _keep_credible_jobs(jobs: list[ExperienceEntry]) -> list[ExperienceEntry]:
     return kept
 
 
+def _blob_has_employment_evidence(blob: str) -> bool:
+    """True when a misplaced span looks like employment, not a skill list."""
+    text = (blob or '').strip()
+    if len(text) < 24:
+        return False
+    has_title = bool(_JOB_TITLE_CUE.search(text) or re.search(r'(?i)\bas\s+(?:a\s+)?[A-Z]', text))
+    has_org = bool(
+        any(_LABELED_EMPLOYER_LINE.match(ln.strip()) for ln in text.splitlines())
+        or re.search(r'(?i)\b(?:pvt\.?|ltd\.?|llc|llp|inc\.?|limited|private)\b', text)
+    )
+    has_date = False
+    for line in text.splitlines()[:80]:
+        if extract_date_range(line)[0]:
+            has_date = True
+            break
+    return bool((has_title and has_org) or (has_title and has_date) or (has_org and has_date))
+
+
 def _recover_jobs_from_unlabeled_preamble(
     experience: list[ExperienceEntry],
     sections: list[SectionSpan],
     preamble: str,
     full_text: str = '',
 ) -> list[ExperienceEntry]:
-    """When Experience is missing, recover structural jobs from misplaced blocks.
-
-    Uses the same ``parse_experience`` parser on labeled/table windows only.
-    Never invents fields from duty prose.
-    """
-    if experience:
+    """When Experience is missing or only metadata stubs, recover structural jobs."""
+    if experience and any(_is_strong_experience_row(e) for e in experience):
         return experience
     misplaced: list[str] = []
     for span in sections or []:
         label = (getattr(span, 'label', '') or '').strip().lower()
+        if 'project' in label:
+            continue
         if label in {
-            'languages', 'skills', 'education', 'declaration', 'unclassified',
-            'summary', 'objective', 'preamble',
+            'languages', 'education', 'declaration',
         }:
-            blob = (span.text or '').strip()
+            continue
+        blob = (span.text or '').strip()
+        if blob and blob not in misplaced and _blob_has_employment_evidence(blob):
+            misplaced.append(blob)
+        elif label in {
+            'skills', 'unclassified', 'summary', 'objective', 'preamble',
+        }:
             if blob and blob not in misplaced:
                 misplaced.append(blob)
     structural = _structural_employment_window('\n'.join(misplaced))
@@ -4331,10 +5259,18 @@ def _recover_jobs_from_unlabeled_preamble(
         extra = _structural_employment_window(full_text)
         if extra:
             structural = f'{structural}\n{extra}'.strip()
+    recovered: list[ExperienceEntry] = []
     if structural:
-        kept = _keep_credible_jobs(parse_experience('Experience\n' + structural, full_text or ''))
-        if kept:
-            return kept
+        recovered = _keep_credible_jobs(parse_experience('Experience\n' + structural, full_text or ''))
+    if not recovered:
+        for blob in misplaced:
+            if not _blob_has_employment_evidence(blob):
+                continue
+            kept = _keep_credible_jobs(parse_experience('Experience\n' + blob, full_text or ''))
+            for job in kept:
+                recovered.append(job)
+    if recovered:
+        return _finalize_experience_entries(list(experience or []) + recovered)
     parts: list[str] = []
     if (preamble or '').strip():
         parts.append(preamble)
@@ -4452,6 +5388,8 @@ def parse_resume_from_sections(
         sections,
         'Skills',
         'Technical Skills',
+        'Professional Skills',
+        'Relevant Skills',
         'Technical Proficiency',
         'Technical Expertise',
         'Technical Knowledge',
@@ -4464,6 +5402,11 @@ def parse_resume_from_sections(
         'Computer Skills',
         'IT Skills',
         'Software Skills',
+        'Additional Skills',
+        'Skills Highlights',
+        'Knowledge and Skills',
+        'Knowledge & Skills',
+        'Technical Skills and Tools',
         'Skill Set',
         'Skillset',
         'Other Technical Skills',

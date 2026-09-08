@@ -122,6 +122,7 @@ def _experience_section_text(text: str) -> str:
         pass
     m = re.search(
         r'(?ims)(?:^|\n)\s*(?:\*\*)?(?:work\s*experience|professional\s*experience|'
+        r'professional\s+background|career\s+experience|current\s+experience|'
         r'technical\s+experience|experience|employment|work\s+history|internships?|'
         r'internship\s+experience|'
         r'industrial\s+trainings?|summer\s+internship|internship\s*/\s*training[^\n]*|'
@@ -436,14 +437,7 @@ def recover_resume_profile_gaps(
 
     # Skills: never harvest the full document when a Skills section already produced items
     skills = list(data.get('skills') or [])
-    has_skills_heading = bool(
-        re.search(
-            r'(?im)^(?:\*\*)?(?:(?:technical|key|core|soft)\s+)?skills?\b|'
-            r'^technical\s+(?:proficiency|expertise|knowledge)\b',
-            text or '',
-        )
-    )
-    if not skills and not has_skills_heading:
+    if not skills:
         from app.ai.document_intelligence.validation.engine import validate_skill_item
         from app.ai.parser.enrichment.resume_text_inference import extract_skills_from_text
 
