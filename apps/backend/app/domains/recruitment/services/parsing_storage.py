@@ -467,7 +467,7 @@ def _cache_model_acceptable(model_version: str | None, document_type: str = 'res
     if env_tag:
         return env_tag.lower() in mv.lower()
     default = (
-        'canonical-v8-exp-layout'
+        'canonical-v9-exp-date-rail'
         if document_type == 'resume'
         else 'canonical-v6-jd-coverage'
     )

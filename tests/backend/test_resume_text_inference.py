@@ -176,7 +176,7 @@ AWS Solutions Architect - Amazon
     assert "AWS" in name
 
 
-def test_extract_experience_with_dates():
+def test_extract_experience_role_at_company_date_range():
     text = """
 Experience
 Software Engineer at Acme, Jan 2020 - Present
@@ -186,8 +186,28 @@ Education
 """
     exps = extract_experience_from_text(text)
     assert exps
-    assert exps[0]["from"]
+    assert exps[0]["title"] == "Software Engineer"
+    assert "Acme" in exps[0]["company"]
+    assert exps[0]["from"].startswith("2020")
     assert exps[0]["to"] == "Present"
+    assert "mumbai" not in (exps[0]["company"] or "").lower()
+
+
+def test_extract_experience_from_to_current_and_empty_company_ok():
+    text = """
+Experience
+Middleware Administrator
+July 2022 to till date
+Managed environments.
+
+Education
+"""
+    exps = extract_experience_from_text(text)
+    assert exps
+    assert "administrator" in (exps[0]["title"] or "").lower()
+    assert exps[0]["from"]
+    assert (exps[0]["to"] or "").lower() in ("present", "till date") or exps[0]["to"] == "Present"
+
 
 
 def test_extract_experience_skips_objective_prose_as_title():
@@ -335,10 +355,32 @@ def test_city_and_labels_rejected_as_person_names():
     assert is_plausible_person_name("Ashutosh Kosta")
     assert name_from_resume_filename("ABHISHEK KUMAR.pdf") == "Abhishek Kumar"
     assert name_from_resume_filename("Naukri_AnushkaGohil4y_0m.pdf") == "Anushka Gohil"
+    assert name_from_resume_filename("Naukri_AnushkaGohil[4y_0m] - Copy.pdf") == "Anushka Gohil"
+    assert name_from_resume_filename("Naukri_AkshayDas[2y_7m].pdf") == "Akshay Das"
+    assert "Copy" not in name_from_resume_filename(
+        "Naukri_ABRARRAFIKKUMBHARLIKAR[3y_5m] - Copy.pdf"
+    )
     assert "Ashish" in name_from_resume_filename("Naukri_AshishAdityaTripathi.pdf")
     assert name_from_resume_filename("Naukri_AshutoshKosta.pdf") == "Ashutosh Kosta"
     assert name_from_resume_filename("Naukri_Aparnamishra.pdf") == "Aparna Mishra"
     assert name_from_resume_filename("Naukri_AshokKumarRM.pdf") == "Ashok Kumar RM"
+
+
+def test_parse_source_filename_keeps_naukri_tenure_brackets():
+    from werkzeug.utils import secure_filename
+
+    from app.ai.parser.enrichment.resume_text_inference import name_from_resume_filename
+    from app.domains.recruitment.api.parsing import _parse_source_filename
+
+    original = "Naukri_AkshayDas[2y_7m].pdf"
+    copy_name = "Naukri_AnushkaGohil[4y_0m] - Copy.pdf"
+    assert _parse_source_filename(original) == original
+    assert _parse_source_filename(r"C:\\uploads\\" + copy_name) == copy_name
+    assert "[" not in secure_filename(original)
+    assert name_from_resume_filename(original) == name_from_resume_filename(
+        _parse_source_filename(original)
+    )
+    assert "Copy" not in name_from_resume_filename(copy_name)
 
 
 def test_parse_personal_prefers_filename_over_role_label():

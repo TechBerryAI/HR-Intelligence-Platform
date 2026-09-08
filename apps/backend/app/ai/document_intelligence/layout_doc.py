@@ -195,6 +195,328 @@ def from_pdf_bytes(file_data: bytes, *, max_pages: int = 40) -> LayoutDocument |
     )
 
 
+_SIDEBAR_CUE = re.compile(
+    r'(?i)\b(?:skills?|languages?|tools?|databases?|contact|phone|email|'
+    r'mobile|linkedin|hobbies|strengths|personal\s+details)\b'
+)
+_MAIN_CUE = re.compile(
+    r'(?i)\b(?:experience|education|company|employer|organization|duration|'
+    r'responsibilities|currently\s+working|worked\s+with|bachelor|university)\b'
+)
+_DATE_TOKEN_RE = re.compile(
+    r'(?i)(?:'
+    r'(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+    r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+    r'|(?:19|20)\d{2}'
+    r'|present|current|now|ongoing|till\s*date'
+    r')'
+)
+_RAIL_TITLE_NOISE = re.compile(
+    r'(?i)\b(?:engineer|developer|manager|analyst|intern|experience|education|'
+    r'skills|python|javascript|summary|project)\b'
+)
+_RAIL_ORG_NOISE = re.compile(
+    r'(?i)\b(?:pvt|ltd|llc|inc|university|college|limited)\b'
+)
+
+
+def _line_width(ln: LayoutLine) -> float:
+    if not ln.bbox:
+        return 0.0
+    return max(0.0, ln.bbox[2] - ln.bbox[0])
+
+
+def _column_score(lines: list[LayoutLine], cue: re.Pattern[str]) -> float:
+    if not lines:
+        return 0.0
+    hits = sum(1 for ln in lines if cue.search(ln.text or ''))
+    return hits / max(len(lines), 1)
+
+
+def _is_date_range_line(text: str) -> bool:
+    """True for a compact employment/education date or date-range line."""
+    s = (text or '').strip()
+    if not s or len(s) > 80:
+        return False
+    if not _DATE_TOKEN_RE.search(s):
+        return False
+    leftover = _DATE_TOKEN_RE.sub(' ', s)
+    leftover = re.sub(r'[-–—to/(),.|]+', ' ', leftover)
+    leftover = ' '.join(leftover.split())
+    return len(leftover.split()) <= 3
+
+
+def _is_job_headerish_line(text: str) -> bool:
+    s = (text or '').strip()
+    if not s or _is_date_range_line(s):
+        return False
+    if s[:1] in '•·*-●' or (s[:1].isdigit() and '.' in s[:3]):
+        return False
+    words = s.split()
+    if not (1 <= len(words) <= 8) or s.endswith('.'):
+        return False
+    return True
+
+
+def _count_adjacent_job_dates(text: str) -> int:
+    """How often a short header sits next to a date range (good reading order)."""
+    lines = [ln.strip() for ln in (text or '').splitlines() if ln.strip()]
+    n = 0
+    for i in range(len(lines) - 1):
+        a, b = lines[i], lines[i + 1]
+        if _is_job_headerish_line(a) and _is_date_range_line(b):
+            n += 1
+        elif _is_date_range_line(a) and _is_job_headerish_line(b):
+            n += 1
+    return n
+
+
+def _is_date_location_rail_line(text: str) -> bool:
+    """Dates or short locations that sit in a right-hand employment rail."""
+    s = (text or '').strip()
+    if not s or len(s) > 70 or s[:1] in '•·*-●':
+        return False
+    if _is_date_range_line(s):
+        return True
+    words = s.split()
+    if not (1 <= len(words) <= 5) or s.endswith('.'):
+        return False
+    if _RAIL_TITLE_NOISE.search(s) or _RAIL_ORG_NOISE.search(s):
+        return False
+    if ',' in s:
+        return True
+    return bool(
+        s[:1].isupper()
+        and all((not w[:1].isalpha()) or w[:1].isupper() for w in words)
+    )
+
+
+_SKILLS_HEADING_LINE = re.compile(
+    r'(?i)^(?:(?:technical|key|core|soft|professional|relevant|other)\s+)?'
+    r'(?:skills?|languages?|certifications?|competencies)\s*:?\s*$'
+)
+
+
+def _column_has_skills_heading(col: list[LayoutLine]) -> bool:
+    return any(_SKILLS_HEADING_LINE.match((ln.text or '').strip()) for ln in col)
+
+
+def _column_is_date_location_rail(col: list[LayoutLine]) -> bool:
+    """True when a column is mostly dates/cities, not a skills-only sidebar."""
+    if len(col) < 3:
+        return False
+    hits = sum(1 for ln in col if _is_date_location_rail_line(ln.text or ''))
+    date_hits = sum(1 for ln in col if _is_date_range_line(ln.text or ''))
+    bullets = sum(
+        1
+        for ln in col
+        if (ln.text or '').lstrip()[:1] in '•·*-●' or len(ln.text or '') > 90
+    )
+    skillish = sum(
+        1
+        for ln in col
+        if _SIDEBAR_CUE.search(ln.text or '') and len((ln.text or '').split()) <= 5
+    )
+    # A skills/languages column with a few year tokens is not an employment rail.
+    if skillish >= 2 and date_hits < 3:
+        return False
+    if _column_has_skills_heading(col) and date_hits < 3:
+        return False
+    return (
+        date_hits >= 3
+        and hits / len(col) >= 0.45
+        and bullets <= max(1, int(len(col) * 0.25))
+    )
+
+
+def _interleave_date_rail(
+    header: list[LayoutLine],
+    main: list[LayoutLine],
+    rail: list[LayoutLine],
+) -> list[str]:
+    """Pair same-Y date/location rail lines with the experience column.
+
+    Leftover sidebar text (skills, languages, contact) stays after the main
+    column instead of being woven into job bodies.
+    """
+
+    def _sort_col(col: list[LayoutLine]) -> list[LayoutLine]:
+        return sorted(col, key=lambda ln: (ln.bbox[1] if ln.bbox else 0.0, ln.bbox[0] if ln.bbox else 0.0))
+
+    main_s = _sort_col(main)
+    rail_s = _sort_col(rail)
+    date_lines = [ln for ln in rail_s if _is_date_location_rail_line(ln.text or '')]
+    other_lines = [ln for ln in rail_s if not _is_date_location_rail_line(ln.text or '')]
+    used: set[int] = set()
+    out: list[str] = []
+    out.extend(ln.text for ln in _sort_col(header))
+    if header:
+        out.append('')
+    for ln in main_s:
+        out.append(ln.text)
+        if not ln.bbox:
+            continue
+        y = ln.bbox[1]
+        for i, rl in enumerate(date_lines):
+            if i in used or not rl.bbox:
+                continue
+            if abs(rl.bbox[1] - y) <= 16:
+                out.append(rl.text)
+                used.add(i)
+    leftover_dates = [date_lines[i] for i in range(len(date_lines)) if i not in used]
+    for ln in leftover_dates:
+        out.append(ln.text)
+    if other_lines:
+        out.append('')
+        out.extend(ln.text for ln in other_lines)
+    return out
+
+
+def _reconstruct_page_regions(rows: list[LayoutLine]) -> list[str]:
+    """HEADER → MAIN → SIDEBAR when geometry supports it; else reading order."""
+    boxed = [ln for ln in rows if ln.bbox]
+    if len(boxed) < 8:
+        return [ln.text for ln in rows]
+    min_x = min(ln.bbox[0] for ln in boxed)
+    max_x = max(ln.bbox[2] for ln in boxed)
+    min_y = min(ln.bbox[1] for ln in boxed)
+    max_y = max(ln.bbox[3] for ln in boxed)
+    width = max_x - min_x
+    height = max_y - min_y
+    if width < 200 or height < 80:
+        return [ln.text for ln in rows]
+
+    header_cut = min_y + height * 0.18
+    sizes = [ln.font_size or 0.0 for ln in boxed if ln.font_size]
+    median_size = sorted(sizes)[len(sizes) // 2] if sizes else 0.0
+    header: list[LayoutLine] = []
+    body: list[LayoutLine] = []
+    for ln in boxed:
+        y0 = ln.bbox[1]
+        span_w = _line_width(ln)
+        large = bool(ln.font_size and median_size and ln.font_size >= median_size * 1.25)
+        fullish = span_w >= width * 0.55
+        if y0 <= header_cut and (fullish or large or span_w >= width * 0.35):
+            header.append(ln)
+        else:
+            body.append(ln)
+    if len(header) < 2:
+        body = boxed
+        header = []
+
+    work = body or boxed
+    xs = sorted((ln.bbox[0] + ln.bbox[2]) / 2.0 for ln in work)
+    if len(xs) < 6:
+        ordered = sorted(boxed, key=lambda ln: (ln.bbox[1], ln.bbox[0]))
+        return [ln.text for ln in ordered]
+    gaps = [(xs[i + 1] - xs[i], (xs[i] + xs[i + 1]) / 2.0) for i in range(len(xs) - 1)]
+    gap, gutter = max(gaps, key=lambda g: g[0])
+    if gap < max(36.0, width * 0.10):
+        ordered = sorted(boxed, key=lambda ln: (ln.bbox[1], ln.bbox[0]))
+        return [ln.text for ln in ordered]
+
+    left = [ln for ln in work if (ln.bbox[0] + ln.bbox[2]) / 2.0 < gutter]
+    right = [ln for ln in work if (ln.bbox[0] + ln.bbox[2]) / 2.0 >= gutter]
+    if len(left) < 3 or len(right) < 3:
+        ordered = sorted(boxed, key=lambda ln: (ln.bbox[1], ln.bbox[0]))
+        return [ln.text for ln in ordered]
+
+    def _sort_col(col: list[LayoutLine]) -> list[LayoutLine]:
+        return sorted(col, key=lambda ln: (ln.bbox[1], ln.bbox[0]))
+
+    # Date/location rail: pair same-Y dates with the experience column.
+    # Do not y-sort the whole page — that weaves skills/contact sidebars into jobs.
+    left_rail = _column_is_date_location_rail(left)
+    right_rail = _column_is_date_location_rail(right)
+    if left_rail and not right_rail:
+        return _interleave_date_rail(header, right, left)
+    if right_rail and not left_rail:
+        return _interleave_date_rail(header, left, right)
+    if left_rail and right_rail:
+        out: list[str] = []
+        out.extend(ln.text for ln in _sort_col(header))
+        if header:
+            out.append('')
+        out.extend(ln.text for ln in sorted(work, key=lambda ln: (ln.bbox[1], ln.bbox[0])))
+        return out
+
+    def _col_width(col: list[LayoutLine]) -> float:
+        return max(ln.bbox[2] for ln in col) - min(ln.bbox[0] for ln in col)
+
+    left_w, right_w = _col_width(left), _col_width(right)
+    left_sidebar = left_w < right_w * 0.62
+    right_sidebar = right_w < left_w * 0.62
+    if left_sidebar and not right_sidebar:
+        sidebar, main = left, right
+    elif right_sidebar and not left_sidebar:
+        sidebar, main = right, left
+    else:
+        left_side = _column_score(left, _SIDEBAR_CUE) - _column_score(left, _MAIN_CUE)
+        right_side = _column_score(right, _SIDEBAR_CUE) - _column_score(right, _MAIN_CUE)
+        if left_side >= right_side:
+            sidebar, main = left, right
+        else:
+            sidebar, main = right, left
+
+    out: list[str] = []
+    out.extend(ln.text for ln in _sort_col(header))
+    if header:
+        out.append('')
+    out.extend(ln.text for ln in _sort_col(main))
+    out.append('')
+    out.extend(ln.text for ln in _sort_col(sidebar))
+    return out
+
+
+def _skills_heading_count(text: str) -> int:
+    return sum(
+        1
+        for ln in (text or '').splitlines()
+        if _SKILLS_HEADING_LINE.match(ln.strip())
+    )
+
+
+def maybe_reorder_two_column(extracted_text: str, file_data: bytes | None) -> str | None:
+    """HEADER / MAIN / SIDEBAR reading order when PDF boxes show regions.
+
+    Uses gutter + column width + content cues. Does not bisect at page midpoint.
+    """
+    if not file_data:
+        return None
+    doc = from_pdf_bytes(file_data)
+    if not doc or not doc.lines:
+        return None
+    boxed = [ln for ln in doc.lines if ln.bbox and (ln.text or '').strip()]
+    if len(boxed) < 8:
+        return None
+    page_groups: dict[int, list[LayoutLine]] = {}
+    for ln in boxed:
+        page_groups.setdefault(ln.page, []).append(ln)
+    out: list[str] = []
+    for page in sorted(page_groups):
+        out.extend(_reconstruct_page_regions(page_groups[page]))
+        out.append('')
+    text = '\n'.join(out).strip()
+    if len(text) < max(30, int(len(extracted_text or '') * 0.45)):
+        return None
+    # Keep the original extract when it already pairs job headers with dates
+    # and reconstruction would detach them (common Naukri/Harvard date rails).
+    orig_adj = _count_adjacent_job_dates(extracted_text or '')
+    new_adj = _count_adjacent_job_dates(text)
+    # If the extract already pairs short headers with dates, leave it alone.
+    # Reconstruction can invent extra pairs while destroying experience bodies.
+    if orig_adj >= 2:
+        return None
+    if new_adj <= orig_adj:
+        return None
+    # Never destroy a Skills/Languages sidebar just to create more date pairs.
+    orig_skills = _skills_heading_count(extracted_text or '')
+    new_skills = _skills_heading_count(text)
+    if orig_skills and new_skills < orig_skills:
+        return None
+    return text
+
+
 def normalize_extracted_resume_text(
     text: str,
     *,

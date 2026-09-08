@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { uploadAndParseJDStream, takeJDFormDTO, validateFileForParsing, startParseClock, reportClientParseTiming } from '@/core/api/parsingApi.js';
-import { hintForStage, isPipelineComplete, overlayCatchupMs, overlayStepIndex, progressPctForStage, createStageClock, userFacingParseMessage } from '@/shared/utils/parsePipelineProgress.js';
+import { hintForStage, isPipelineComplete, overlayCatchupMs, overlayGroupMsFromSpans, progressPctForStage, createStageClock, userFacingParseMessage } from '@/shared/utils/parsePipelineProgress.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion } from 'framer-motion';
 import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiZap } from 'react-icons/fi';
@@ -88,19 +88,7 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
           lastStage = ev.stage;
           setStageLabel(ev.stage);
           setStageMessage(hintForStage(ev.stage, ev.message));
-          const g = overlayStepIndex('jd', ev.stage);
-          const ms = Number(ev.duration_ms ?? ev.detail?.duration_ms);
-          if (
-            g >= 0 &&
-            Number.isFinite(ms) &&
-            ['completed', 'failed', 'skipped'].includes(String(ev.status || '').toLowerCase())
-          ) {
-            setOverlayGroupMs((prev) => {
-              const next = [...prev];
-              next[g] = (Number(next[g]) || 0) + ms;
-              return next;
-            });
-          }
+          setOverlayGroupMs(overlayGroupMsFromSpans('jd', stageClock.getSpans()));
         }
         const pct = progressPctForStage('jd', ev?.stage);
         if (pct != null) setProgressPct((prev) => Math.max(prev ?? 0, pct));

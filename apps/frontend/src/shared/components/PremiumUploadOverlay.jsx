@@ -46,9 +46,23 @@ export default function PremiumUploadOverlay({
 
   const [liveMs, setLiveMs] = useState(0)
   const [elapsedMs, setElapsedMs] = useState(0)
+  const [committedMs, setCommittedMs] = useState([0, 0, 0, 0])
   const liveStartRef = useRef(0)
   const liveIdxRef = useRef(-1)
   const overlayOpenedAt = useRef(0)
+  const committedRef = useRef([0, 0, 0, 0])
+  const liveMsRef = useRef(0)
+
+  const commitStep = (idx, ms) => {
+    if (idx < 0 || idx >= 4) return
+    const nextMs = Math.max(0, Number(ms) || 0)
+    if (nextMs <= 0) return
+    if ((committedRef.current[idx] || 0) >= nextMs) return
+    const next = [...committedRef.current]
+    next[idx] = nextMs
+    committedRef.current = next
+    setCommittedMs(next)
+  }
 
   useEffect(() => {
     if (!isVisible) {
@@ -56,8 +70,11 @@ export default function PremiumUploadOverlay({
       targetStepRef.current = 0;
       setLiveMs(0)
       setElapsedMs(0)
+      setCommittedMs([0, 0, 0, 0])
       liveStartRef.current = 0
       liveIdxRef.current = -1
+      liveMsRef.current = 0
+      committedRef.current = [0, 0, 0, 0]
       overlayOpenedAt.current = 0
       return;
     }
@@ -67,12 +84,15 @@ export default function PremiumUploadOverlay({
     const mapped = overlayStepIndex(type, stageLabel);
     if (mapped >= 0) {
       if (mapped !== liveIdxRef.current) {
+        if (liveIdxRef.current >= 0) {
+          commitStep(liveIdxRef.current, liveMsRef.current)
+        }
         liveIdxRef.current = mapped
         liveStartRef.current = performance.now()
+        liveMsRef.current = 0
         setLiveMs(0)
       }
       targetStepRef.current = Math.max(targetStepRef.current, mapped);
-      setCurrentStep((prev) => Math.max(prev, mapped))
     } else if (typeof stageIndex === 'number' && stageIndex >= 0) {
       targetStepRef.current = Math.max(
         targetStepRef.current,
@@ -81,6 +101,7 @@ export default function PremiumUploadOverlay({
     }
     if (progressPct != null && progressPct >= 100) {
       targetStepRef.current = steps.length - 1;
+      commitStep(liveIdxRef.current, liveMsRef.current)
     }
   }, [isVisible, stageLabel, stageIndex, type, steps.length, progressPct]);
 
@@ -90,7 +111,9 @@ export default function PremiumUploadOverlay({
     if (!overlayOpenedAt.current) overlayOpenedAt.current = performance.now()
     const tick = setInterval(() => {
       const now = performance.now()
-      setLiveMs(now - (liveStartRef.current || now))
+      const running = now - (liveStartRef.current || now)
+      liveMsRef.current = running
+      setLiveMs(running)
       setElapsedMs(now - (overlayOpenedAt.current || now))
       setCurrentStep((prev) => {
         const target = Math.min(targetStepRef.current, steps.length - 1);
@@ -390,10 +413,13 @@ export default function PremiumUploadOverlay({
                   }}
                 >
                   {(() => {
-                    const recorded = Array.isArray(stepMs) ? Number(stepMs[index]) : 0
-                    if (isActive) return formatStepMs(liveMs)
-                    if (isCompleted && recorded > 0) return formatStepMs(recorded)
-                    return isCompleted ? formatStepMs(recorded || 0) : ''
+                    const recorded = Math.max(
+                      Array.isArray(stepMs) ? Number(stepMs[index]) || 0 : 0,
+                      Number(committedMs[index]) || 0,
+                    )
+                    if (isActive) return formatStepMs(Math.max(recorded, liveMs))
+                    if (isCompleted) return formatStepMs(recorded)
+                    return ''
                   })()}
                 </span>
 

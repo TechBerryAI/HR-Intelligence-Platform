@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FiX, FiUser, FiMail, FiPhone, FiMapPin, FiBriefcase, FiLink, FiGlobe, FiEye } from 'react-icons/fi'
 import ResumeUploadWithParsing from '@/shared/components/ResumeUploadWithParsing.jsx'
+import JobDescriptionView from '@/shared/components/JobDescriptionView.jsx'
 import MonthYearPicker from '@/shared/components/MonthYearPicker.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
@@ -366,6 +367,14 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
               className="flex min-h-0 flex-1 flex-col"
             >
             <div id="apply-job-form-scroll" className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-5 space-y-6">
+              <details className="rounded-xl border border-[var(--ei-border-primary)] bg-[var(--ei-surface-input)]/40 px-4 py-3">
+                <summary className="cursor-pointer text-sm font-semibold text-[var(--ei-text-primary)]">
+                  About this role
+                </summary>
+                <div className="mt-3 max-h-56 overflow-y-auto pr-1">
+                  <JobDescriptionView description={job.description || ''} />
+                </div>
+              </details>
               <div data-apply-field="resume">
                 <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-2">
                   Resume (AI autofill) <span className="text-[#FF6B81]">*</span>
@@ -373,6 +382,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                 <ResumeUploadWithParsing
                   publicMode
                   currentFileName={form.resumeFileName}
+                  resumeFile={form.resumeFile}
                   onFileSelect={(file) => {
                     setParseError('')
                     setForm((p) => ({ ...p, resumeFile: file, resumeFileName: file.name, _parsedId: null }))
@@ -656,9 +666,12 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                       )}
                       <div className="sm:col-span-2">
                         <PremiumInput
+                          as="textarea"
                           label="Description"
                           value={exp.description || ''}
                           onChange={(e) => updateList('experiences', i, 'description', e.target.value)}
+                          rows={4}
+                          className="min-h-[6rem] resize-y"
                         />
                       </div>
                       {(form.experiences || []).length > 1 && (

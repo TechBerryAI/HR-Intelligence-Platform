@@ -304,6 +304,8 @@ apps/backend/data/bulk_exports/
 # Local resume / JD corpora (large PII — keep on disk, never push)
 /Resumes/
 /resumes/
+/resume testing/
+/resume_testing/
 /JDs/
 /JD/
 /jds/
@@ -335,6 +337,7 @@ validation-report*.log
 *.field-accuracy*.json
 /tmp-*/
 /scratch/
+_forensic_tmp/
 
 # Word lock / temp files
 ~$*

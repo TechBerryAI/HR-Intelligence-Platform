@@ -8,12 +8,13 @@ import {
   startParseClock,
   reportClientParseTiming,
 } from '@/core/api/parsingApi.js';
-import { hintForStage, isPipelineComplete, overlayCatchupMs, overlayStepIndex, progressPctForStage, createStageClock, userFacingParseMessage } from '@/shared/utils/parsePipelineProgress.js';
+import { hintForStage, isPipelineComplete, overlayCatchupMs, overlayGroupMsFromSpans, progressPctForStage, createStageClock, userFacingParseMessage } from '@/shared/utils/parsePipelineProgress.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiExternalLink, FiTrash2 } from 'react-icons/fi';
+import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiEye, FiTrash2 } from 'react-icons/fi';
 import { tokenService } from '@/core/auth/tokenService.js';
 import { useTheme } from '@/core/context/ThemeContext.jsx';
+import ResumeFilePreviewModal from './ResumeFilePreviewModal.jsx';
 
 function humanizeParseError(raw) {
   const detail = extractParseErrorMessage(raw, '').trim();
@@ -44,12 +45,15 @@ export default function ResumeUploadWithParsing({
   onFileSelect,
   onParseComplete,
   currentFileName,
+  resumeFile,
   onRemove,
   onOpenResume,
   onParseError,
   publicMode = false,
 }) {
   const [isUploading, setIsUploading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [parseError, setParseError] = useState('');
   const [parseSuccess, setParseSuccess] = useState('');
   const [confidence, setConfidence] = useState(null);
@@ -98,7 +102,22 @@ export default function ResumeUploadWithParsing({
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    setSelectedFile(null);
+    setPreviewOpen(false);
     onRemove?.();
+  };
+
+  const previewFile = resumeFile instanceof File ? resumeFile : selectedFile;
+  const canPreview = Boolean(previewFile) || typeof onOpenResume === 'function';
+
+  const handleViewResume = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (previewFile) {
+      setPreviewOpen(true);
+      return;
+    }
+    onOpenResume?.();
   };
 
   const processFile = async (file) => {
@@ -122,6 +141,7 @@ export default function ResumeUploadWithParsing({
       return;
     }
 
+    setSelectedFile(file);
     if (onFileSelect) {
       onFileSelect(file);
     }
@@ -142,19 +162,7 @@ export default function ResumeUploadWithParsing({
           lastStage = ev.stage;
           setStageLabel(ev.stage);
           setStageMessage(hintForStage(ev.stage, ev.message));
-          const g = overlayStepIndex('resume', ev.stage);
-          const ms = Number(ev.duration_ms ?? ev.detail?.duration_ms);
-          if (
-            g >= 0 &&
-            Number.isFinite(ms) &&
-            ['completed', 'failed', 'skipped'].includes(String(ev.status || '').toLowerCase())
-          ) {
-            setOverlayGroupMs((prev) => {
-              const next = [...prev];
-              next[g] = (Number(next[g]) || 0) + ms;
-              return next;
-            });
-          }
+          setOverlayGroupMs(overlayGroupMsFromSpans('resume', stageClock.getSpans()));
         }
         const pct = progressPctForStage('resume', ev?.stage);
         if (pct != null) setProgressPct((prev) => Math.max(prev ?? 0, pct));
@@ -264,6 +272,8 @@ export default function ResumeUploadWithParsing({
         onParseError?.(message);
         // Clear selected file so Apply doesn't look successful without a parsedId
         if (fileInputRef.current) fileInputRef.current.value = '';
+        setSelectedFile(null);
+        setPreviewOpen(false);
         onRemove?.();
       }
       console.error('Resume parsing error:', error);
@@ -292,7 +302,7 @@ export default function ResumeUploadWithParsing({
       <div className="space-y-4">
         <AnimatePresence mode="wait">
           {hasResume ? (
-            /* Resume present: show only file card with Open and Remove */
+            /* Resume present: file card with View and Remove */
             <motion.div
               key="resume-card"
               initial={{ opacity: 0, y: 10 }}
@@ -321,18 +331,20 @@ export default function ResumeUploadWithParsing({
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {onOpenResume && (
+                {canPreview && (
                   <button
                     type="button"
-                    onClick={(e) => { e.preventDefault(); onOpenResume(); }}
+                    onClick={handleViewResume}
+                    aria-label="View resume"
+                    title="View resume"
                     className={
                       light
-                        ? 'inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors border border-slate-200'
-                        : 'inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-zinc-200 text-sm font-medium transition-colors border border-zinc-600'
+                        ? 'inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors border border-slate-200'
+                        : 'inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-zinc-200 text-sm font-medium transition-colors border border-zinc-600'
                     }
                   >
-                    <FiExternalLink className="w-4 h-4" />
-                    View resume
+                    <FiEye className="w-4 h-4" />
+                    <span className="hidden sm:inline">View</span>
                   </button>
                 )}
                 <button
@@ -493,6 +505,13 @@ export default function ResumeUploadWithParsing({
         )}
 
       </div>
+
+      <ResumeFilePreviewModal
+        open={previewOpen}
+        file={previewFile}
+        fileName={currentFileName}
+        onClose={() => setPreviewOpen(false)}
+      />
     </>
   );
 }
