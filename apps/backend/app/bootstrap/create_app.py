@@ -70,6 +70,13 @@ def create_app() -> Flask:
     except Exception as exc:
         print(f"[AI] hardware profile apply skipped: {exc}")
 
+    try:
+        from app.ai.parser.text_extraction import log_ocr_readiness
+
+        log_ocr_readiness()
+    except Exception as exc:
+        print(f"[OCR] readiness probe skipped: {exc}")
+
     from app.domains.identity.models import init_models  # noqa: E402
 
     app = Flask(__name__)
@@ -331,6 +338,14 @@ def create_app() -> Flask:
         except Exception:
             return 'unreachable'
 
+    def _check_ocr() -> str:
+        try:
+            from app.ai.parser.text_extraction import ocr_health_status
+
+            return ocr_health_status()
+        except Exception:
+            return 'unavailable'
+
     @app.route('/health', methods=['GET'])
     def health():
         """
@@ -354,6 +369,7 @@ def create_app() -> Flask:
                 'redis': redis_status(),
                 'ollama': _check_ollama(),
                 'bulk_parser': _check_bulk_parser(),
+                'ocr': _check_ocr(),
             }
             body['checks'] = checks
             body['bulk_parser'] = checks['bulk_parser']

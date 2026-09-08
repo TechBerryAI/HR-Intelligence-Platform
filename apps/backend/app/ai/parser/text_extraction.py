@@ -10,17 +10,40 @@ optional system Tesseract is a secondary fallback. Optional PARSING_API is last 
 """
 from __future__ import annotations
 
+import contextvars
 import io
 import logging
 import os
 import re
 import shutil
+import sys
 import threading
+from dataclasses import dataclass
 from typing import Any
 
 import requests
 from docx import Document
 
+from app.ai.parser.extraction_result import (
+    STATUS_FAILED,
+    STATUS_OCR_FAILED,
+    STATUS_OCR_RECOVERED,
+    STATUS_OCR_UNAVAILABLE,
+    STATUS_OCR_WEAK,
+    STATUS_OK,
+    QUALITY_RANK,
+    ExtractionResult,
+    PageExtractionResult,
+    TextQuality,
+)
+from app.ai.parser.text_quality import (
+    MIN_TEXT_CHARS,
+    PAGE_OCR_TEXT_THRESHOLD,
+    classify_text_quality,
+    looks_like_garbage_extract,
+    prefer_better_text,
+    quality_needs_ocr,
+)
 from app.core.timing import timing
 
 logger = logging.getLogger(__name__)
@@ -42,16 +65,8 @@ OCR_DPI = max(72, int(os.getenv('OCR_DPI', '250')))
 # Try a lower DPI first for speed; escalate when OCR text is thin.
 # HCIP_OCR_DPI_START is set by the CPU/GPU hardware profile when OCR_DPI_FAST is unset.
 OCR_DPI_FAST = max(72, int(os.getenv('OCR_DPI_FAST', os.getenv('HCIP_OCR_DPI_START', '180'))))
-MIN_TEXT_CHARS = 30
-# Last PDF/image extract max DPI (pipeline uses this to skip a second 300 DPI pass).
-_LAST_EXTRACT_MAX_DPI = 0
-# Last PDF engine used by extract_text_from_pdf (pymupdf | pdfplumber | pypdf2).
-_LAST_PDF_EXTRACTOR = ''
-_LAST_PDF_FALLBACK_REASON = ''
-# Per-page digital text below this triggers OCR.
-PAGE_OCR_TEXT_THRESHOLD = 80
-# If digital text is below this and page has images, prefer OCR.
-PAGE_SPARSE_TEXT_WITH_IMAGES = 200
+# Bound concurrent RapidOCR/Tesseract inference (bulk workers stay parallel for digital I/O).
+OCR_MAX_CONCURRENT = max(1, int(os.getenv('OCR_MAX_CONCURRENT', '1')))
 RESUME_LAYOUT_ENABLED = os.getenv('RESUME_LAYOUT_ENABLED', 'true').lower() in (
     '1',
     'true',
@@ -84,36 +99,35 @@ def _ocr_dpi_fast() -> int:
 
 
 def last_extract_max_dpi() -> int:
-    """Max DPI used by the most recent extract_text() call (0 if none / digital-only)."""
-    return int(_LAST_EXTRACT_MAX_DPI or 0)
+    """Deprecated. Process-global DPI is no longer recorded; always returns 0.
+
+    Callers must pass ExtractionResult.final_dpi into should_retry_high_dpi_extract.
+    """
+    return 0
+
+
+_pdf_extractor: contextvars.ContextVar[str] = contextvars.ContextVar('pdf_extractor', default='')
+_pdf_fallback_reason: contextvars.ContextVar[str] = contextvars.ContextVar(
+    'pdf_fallback_reason', default=''
+)
+_pymupdf_document: contextvars.ContextVar[ExtractionResult | None] = contextvars.ContextVar(
+    'pymupdf_document', default=None
+)
 
 
 def last_pdf_extractor() -> str:
-    """Engine that produced the most recent extract_text_from_pdf() result."""
-    return _LAST_PDF_EXTRACTOR
+    """Extractor chosen for the current thread's latest extract_text_from_pdf()."""
+    return _pdf_extractor.get()
 
 
 def last_pdf_fallback_reason() -> str:
-    """Why pdfplumber was considered (empty when PyMuPDF was used as-is)."""
-    return _LAST_PDF_FALLBACK_REASON
+    """Why pdfplumber was considered for the current thread's latest PDF extract."""
+    return _pdf_fallback_reason.get()
 
 
-def looks_like_garbage_extract(s: str, *, min_chars: int | None = None) -> bool:
-    """Narrow heuristic: enough chars but almost no signal (bad OCR / junk text layer)."""
-    floor = MIN_TEXT_CHARS if min_chars is None else min_chars
-    t = (s or '').strip()
-    if len(t) < floor:
-        return True
-    if len(t) > 400:
-        return False
-    alnum = sum(1 for c in t if c.isalnum())
-    ratio = alnum / max(len(t), 1)
-    has_token = bool(
-        re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', t)
-        or re.search(r'\b[6-9]\d{9}\b|\+\d[\d\s\-()]{8,}\d', t)
-        or re.search(r'(?i)\b(?:experience|education|skills|summary)\b', t)
-    )
-    return ratio < 0.35 and not has_token
+def _remember_pdf_choice(source: str, reason: str = '') -> None:
+    _pdf_extractor.set(source)
+    _pdf_fallback_reason.set(reason)
 
 
 _SCAN_EXTS = frozenset({'pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp'})
@@ -130,13 +144,23 @@ def should_retry_high_dpi_extract(
     ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
     if ext not in _SCAN_EXTS:
         return False
-    dpi = last_extract_max_dpi() if max_dpi_used is None else int(max_dpi_used or 0)
+    if ext in IMAGE_EXTENSIONS:
+        # Raster bytes do not change with a DPI argument.
+        return False
+    if not ocr_engines_available():
+        return False
+    dpi = 0 if max_dpi_used is None else int(max_dpi_used or 0)
     if dpi >= 300:
         return False
     text_length = len((raw_text or '').strip())
-    garbage = looks_like_garbage_extract(raw_text)
-    if text_length >= MIN_TEXT_CHARS and not garbage:
+    quality = classify_text_quality(raw_text)
+    if text_length >= MIN_TEXT_CHARS and quality == TextQuality.GOOD:
         return False
+    garbage = quality in (TextQuality.GARBAGE, TextQuality.EMPTY) or looks_like_garbage_extract(
+        raw_text
+    )
+    if text_length >= MIN_TEXT_CHARS and quality == TextQuality.WEAK:
+        return bool(extract_failed or garbage)
     return bool(extract_failed or not raw_text or text_length < MIN_TEXT_CHARS or garbage)
 
 
@@ -204,8 +228,16 @@ def normalize_extracted_text(text: str) -> str:
 
 _rapidocr_engine: Any = None
 _rapidocr_lock = threading.Lock()
+_ocr_inference_sema = threading.Semaphore(OCR_MAX_CONCURRENT)
 # Cached probe: (available, engine_name_or_reason)
 _ocr_engine_status: tuple[bool, str] | None = None
+
+
+@dataclass
+class OcrAttempt:
+    text: str = ''
+    engine: str = ''
+    confidence: float | None = None
 
 
 def _tesseract_available() -> bool:
@@ -270,6 +302,40 @@ def ocr_unavailable_reason() -> str:
     return detail
 
 
+def ocr_health_status() -> str:
+    """ok | degraded | unavailable — for /health?deps=1 (does not fail /ready)."""
+    if not OCR_ENABLED:
+        return 'unavailable'
+    ok, detail = get_ocr_engine_status()
+    if not ok:
+        return 'unavailable'
+    if detail == 'rapidocr':
+        return 'ok'
+    return 'degraded'
+
+
+def log_ocr_readiness() -> None:
+    """Log OCR engine availability at process startup. Never logs document text."""
+    ok, detail = get_ocr_engine_status()
+    health = ocr_health_status()
+    py = f'{sys.version_info.major}.{sys.version_info.minor}'
+    extra = ''
+    if sys.version_info >= (3, 13) and detail != 'rapidocr':
+        extra = (
+            ' Python 3.13+ has no RapidOCR wheels; use Python 3.11/3.12 for pip RapidOCR '
+            'or install system Tesseract.'
+        )
+    msg = (
+        f'[OCR] status={health} engine={detail} python={py} '
+        f'enabled={str(OCR_ENABLED).lower()}.{extra}'
+    )
+    if health == 'ok':
+        logger.info(msg)
+    else:
+        logger.warning(msg)
+    print(msg)
+
+
 def _get_rapidocr_engine() -> Any:
     """Lazy-load RapidOCR once (shared by extract + layout detections)."""
     global _rapidocr_engine
@@ -283,7 +349,29 @@ def _get_rapidocr_engine() -> Any:
         return _rapidocr_engine
 
 
-def _ocr_with_rapidocr(image_bytes: bytes) -> str:
+def run_rapidocr_inference(arr: Any) -> Any:
+    """Run RapidOCR on a numpy image under the shared inference semaphore."""
+    engine = _get_rapidocr_engine()
+    with _ocr_inference_sema:
+        result, _ = engine(arr)
+    return result
+
+
+def _mean_ocr_confidence(detections: list | None) -> float | None:
+    scores: list[float] = []
+    for item in detections or []:
+        if not isinstance(item, (list, tuple)) or len(item) < 3:
+            continue
+        try:
+            scores.append(float(item[2]))
+        except (TypeError, ValueError):
+            continue
+    if not scores:
+        return None
+    return sum(scores) / len(scores)
+
+
+def _ocr_with_rapidocr(image_bytes: bytes) -> tuple[str, float | None]:
     """OCR via RapidOCR (pip-installable, no system binary)."""
     import numpy as np
     from PIL import Image
@@ -295,11 +383,10 @@ def _ocr_with_rapidocr(image_bytes: bytes) -> str:
     if image.mode not in ('RGB', 'L'):
         image = image.convert('RGB')
     arr = np.array(image)
-    engine = _get_rapidocr_engine()
-    result, _ = engine(arr)
+    result = run_rapidocr_inference(arr)
     if not result:
-        return ''
-    return _join_ocr_detections_reading_order(result)
+        return '', None
+    return _join_ocr_detections_reading_order(result), _mean_ocr_confidence(result)
 
 
 def _box_sort_key(box: Any) -> tuple[float, float]:
@@ -342,18 +429,19 @@ def _ocr_with_tesseract(image_bytes: bytes, *, lang: str | None = None) -> str:
     image = Image.open(io.BytesIO(processed))
     if image.mode not in ('RGB', 'L'):
         image = image.convert('RGB')
-    text = pytesseract.image_to_string(image, lang=lang or OCR_LANG)
+    with _ocr_inference_sema:
+        text = pytesseract.image_to_string(image, lang=lang or OCR_LANG)
     return (text or '').strip()
 
 
-def _ocr_image_bytes_plain(image_bytes: bytes, *, lang: str | None = None) -> str:
+def _ocr_attempt_plain(image_bytes: bytes, *, lang: str | None = None) -> OcrAttempt:
     """Run RapidOCR then Tesseract without layout structuring."""
     errors: list[str] = []
 
     try:
-        text = _ocr_with_rapidocr(image_bytes)
+        text, conf = _ocr_with_rapidocr(image_bytes)
         if text:
-            return text
+            return OcrAttempt(text=text, engine='rapidocr', confidence=conf)
         errors.append('RapidOCR returned empty text')
     except ImportError as exc:
         errors.append(
@@ -367,7 +455,7 @@ def _ocr_image_bytes_plain(image_bytes: bytes, *, lang: str | None = None) -> st
         try:
             text = _ocr_with_tesseract(image_bytes, lang=lang)
             if text:
-                return text
+                return OcrAttempt(text=text, engine='tesseract', confidence=None)
             errors.append('Tesseract returned empty text')
         except Exception as exc:
             errors.append(f'Tesseract failed: {exc}')
@@ -379,33 +467,82 @@ def _ocr_image_bytes_plain(image_bytes: bytes, *, lang: str | None = None) -> st
     )
 
 
+def _ocr_image_bytes_plain(image_bytes: bytes, *, lang: str | None = None) -> str:
+    """Run RapidOCR then Tesseract without layout structuring."""
+    return _ocr_attempt_plain(image_bytes, lang=lang).text
+
+
+def _min_pool_gray(arr, max_side: int = 120):
+    """Min-pool grayscale so thin/light strokes survive downsampling."""
+    import numpy as np
+
+    if arr.ndim != 2 or arr.size == 0:
+        return arr
+    height, width = int(arr.shape[0]), int(arr.shape[1])
+    long_side = max(height, width)
+    if long_side <= max_side:
+        return arr
+    block_h = max(1, int(np.ceil(height / max_side)))
+    block_w = max(1, int(np.ceil(width / max_side)))
+    cropped_h = (height // block_h) * block_h
+    cropped_w = (width // block_w) * block_w
+    if cropped_h <= 0 or cropped_w <= 0:
+        return arr
+    cropped = arr[:cropped_h, :cropped_w]
+    return cropped.reshape(
+        cropped_h // block_h, block_h, cropped_w // block_w, block_w
+    ).min(axis=(1, 3))
+
+
 def _png_has_ink(image_bytes: bytes) -> bool:
-    """True when a rendered page has enough contrast to be worth OCR.
+    """True when a rendered page has enough visual content to be worth OCR.
 
     Blank / near-white pages still cost 10–15s of RapidOCR today. Detecting
     them after the cheap render (~100ms) does not skip Extract / Layout stages.
+
+    Dense dark ink uses the legacy 0.2% threshold on a min-pooled grid.
+    Sparse/light scans (thin strokes, luma often 200–240) are kept when
+    paper-relative cells show line-like occupancy rather than isolated specks.
     """
     if not image_bytes or len(image_bytes) < 64:
         return False
     try:
+        import numpy as np
         from PIL import Image
 
         image = Image.open(io.BytesIO(image_bytes))
         gray = image.convert('L')
-        gray.thumbnail((240, 240))
-        extrema = gray.getextrema()
-        if extrema is None:
+        arr = np.asarray(gray, dtype=np.uint8)
+        if arr.size == 0:
             return False
-        lo, hi = int(extrema[0]), int(extrema[1])
+        lo, hi = int(arr.min()), int(arr.max())
         if hi - lo < 12:
             return False
-        hist = gray.histogram()
-        pixels = gray.size[0] * gray.size[1]
+
+        pooled = _min_pool_gray(arr, max_side=120)
+        pixels = int(pooled.size)
         if pixels <= 0:
             return False
-        # Ink: darker than light-gray. Blank scans are almost all 240–255.
-        dark = sum(hist[:200])
-        return dark > pixels * 0.002
+
+        # Fast path: clearly-dark cells (legacy 0.2% cutoff).
+        dark = int((pooled < 200).sum())
+        if dark > pixels * 0.002:
+            return True
+
+        paper = int(pooled.max())
+        ink_cut = max(0, paper - 12)
+        content = pooled <= ink_cut
+        content_count = int(content.sum())
+        if content_count <= 0:
+            return False
+
+        occupied_rows = int((content.sum(axis=1) >= 3).sum())
+        occupied_cols = int((content.sum(axis=0) >= 3).sum())
+        content_ratio = content_count / pixels
+        # Sparse/light structured content: spread like text lines, not specks.
+        if occupied_rows >= 4 and occupied_cols >= 6 and content_ratio >= 0.0005:
+            return True
+        return False
     except Exception:
         return True
 
@@ -483,39 +620,254 @@ def _page_image_count(page) -> int:
         return 0
 
 
+def _combine_page_text(digital: str, table_text: str) -> str:
+    bits: list[str] = []
+    if digital:
+        bits.append(digital)
+    if table_text:
+        _dedupe_append(bits, table_text)
+    return '\n\n'.join(bits).strip()
+
+
 def _page_needs_ocr(page, digital_text: str) -> bool:
-    """True when digital text is thin, garbage, or the page is image-heavy with sparse text."""
-    text_len = len((digital_text or '').strip())
+    """True when digital text is not GOOD (thin, garbage, or image-sparse)."""
     image_count = _page_image_count(page)
-
-    if text_len < PAGE_OCR_TEXT_THRESHOLD:
-        return True
-    if image_count > 0 and text_len < PAGE_SPARSE_TEXT_WITH_IMAGES:
-        return True
-    # Large image count with modest text often means scanned page + junk text layer
-    if image_count >= 3 and text_len < 400:
-        return True
-    if image_count > 0 and looks_like_garbage_extract(digital_text):
-        return True
-    return False
+    quality = classify_text_quality(digital_text, image_count=image_count)
+    return quality_needs_ocr(quality)
 
 
-def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -> str:
-    """
-    Extract text from PDF via PyMuPDF, with per-page OCR when needed.
-    """
+def _digital_page_result(
+    page_number: int,
+    text: str,
+    quality: TextQuality,
+    *,
+    fallback: str = '',
+    warnings: list[str] | None = None,
+) -> PageExtractionResult:
+    return PageExtractionResult(
+        page_number=page_number,
+        source='digital',
+        text=text,
+        quality=quality,
+        fallback=fallback,
+        warnings=list(warnings or []),
+    )
+
+
+def _ocr_one_pdf_page(
+    page,
+    *,
+    page_number: int,
+    digital: str,
+    table_text: str,
+    digital_quality: TextQuality,
+    image_count: int,
+    fast_dpi: int,
+    full_dpi: int,
+    forced_dpi: int | None,
+) -> PageExtractionResult:
+    """Render + OCR a page, escalate DPI once if still weak, keep the better result."""
+    combined_digital = _combine_page_text(digital, table_text)
+    warnings: list[str] = []
+    dpi_used = fast_dpi
+
+    png = _render_page_png(page, dpi=fast_dpi)
+    if not _png_has_ink(png):
+        if (
+            image_count > 0
+            and len(digital) < PAGE_OCR_TEXT_THRESHOLD
+            and forced_dpi is None
+            and full_dpi > fast_dpi
+        ):
+            png = _render_page_png(page, dpi=full_dpi)
+            if _png_has_ink(png):
+                dpi_used = full_dpi
+            else:
+                logger.warning(
+                    'PDF page %s ink-skip but has %s images (digital=%s)',
+                    page_number,
+                    image_count,
+                    len(digital),
+                )
+                return _digital_page_result(
+                    page_number,
+                    combined_digital,
+                    digital_quality,
+                    fallback='ink_skip',
+                    warnings=['ink_skip_with_images'],
+                )
+        else:
+            if image_count > 0:
+                logger.warning(
+                    'PDF page %s ink-skip but has %s images (digital=%s)',
+                    page_number,
+                    image_count,
+                    len(digital),
+                )
+            else:
+                logger.info(
+                    'PDF page %s has no ink; skipping OCR (digital=%s)',
+                    page_number,
+                    len(digital),
+                )
+            return _digital_page_result(
+                page_number,
+                combined_digital,
+                digital_quality,
+                fallback='ink_skip',
+            )
+
+    def _run_ocr(png_bytes: bytes) -> OcrAttempt:
+        try:
+            text = _ocr_image_bytes(png_bytes)
+            ok, detail = get_ocr_engine_status()
+            return OcrAttempt(text=text or '', engine=detail if ok else '', confidence=None)
+        except ValueError as ocr_err:
+            logger.warning('OCR failed for PDF page %s: %s', page_number, ocr_err)
+            warnings.append(f'ocr_failed:{type(ocr_err).__name__}')
+            return OcrAttempt()
+
+    attempt = _run_ocr(png)
+    ocr_quality = classify_text_quality(attempt.text, image_count=image_count)
+    chosen_text, chosen_q, chosen_src = prefer_better_text(
+        combined_digital,
+        digital_quality,
+        attempt.text,
+        ocr_quality,
+        ocr_confidence=attempt.confidence,
+    )
+    winning_is_ocr = chosen_src == 'ocr'
+
+    if (
+        forced_dpi is None
+        and full_dpi > fast_dpi
+        and dpi_used < full_dpi
+        and chosen_q != TextQuality.GOOD
+    ):
+        png = _render_page_png(page, dpi=full_dpi)
+        if _png_has_ink(png):
+            hi = _run_ocr(png)
+            dpi_used = max(dpi_used, full_dpi)
+            hi_q = classify_text_quality(hi.text, image_count=image_count)
+            chosen_text, chosen_q, new_src = prefer_better_text(
+                chosen_text,
+                chosen_q,
+                hi.text,
+                hi_q,
+                ocr_confidence=hi.confidence,
+            )
+            if new_src == 'ocr':
+                winning_is_ocr = True
+                attempt = hi
+
+    used_ocr = winning_is_ocr and bool((attempt.text or '').strip())
+    if used_ocr:
+        page_text = chosen_text
+        if table_text:
+            bits = [page_text]
+            _dedupe_append(bits, table_text)
+            page_text = '\n\n'.join(bits).strip()
+        source = 'ocr'
+        engine = attempt.engine
+    else:
+        page_text = combined_digital
+        source = 'digital'
+        engine = ''
+
+    return PageExtractionResult(
+        page_number=page_number,
+        source=source,
+        text=page_text,
+        used_ocr=used_ocr,
+        ocr_engine=engine,
+        ocr_confidence=attempt.confidence if used_ocr else None,
+        dpi=dpi_used if used_ocr or chosen_q != TextQuality.GOOD else 0,
+        quality=chosen_q,
+        fallback='' if used_ocr else (warnings[0] if warnings else ''),
+        warnings=warnings,
+    )
+
+
+def _apply_pdf_layout_enhance(extracted: str) -> str:
+    if not ((RESUME_LAYOUT_ENABLED or JD_LAYOUT_ENABLED) and extracted):
+        return extracted
+    try:
+        from app.ai.parser.layout.detector import (
+            enhance_jd_text,
+            enhance_resume_text,
+            is_jd_layout_enabled,
+        )
+
+        if is_jd_layout_enabled():
+            structured = enhance_jd_text(extracted)
+        else:
+            structured = enhance_resume_text(extracted)
+        if structured and len(structured.strip()) >= MIN_TEXT_CHARS:
+            return structured
+    except Exception as exc:
+        logger.debug('layout enhance skipped: %s', exc)
+    return extracted
+
+
+def _result_status(result: ExtractionResult) -> str:
+    if result.quality == TextQuality.EMPTY and not (result.text or '').strip():
+        if any('ocr_unavailable' in (w or '') for w in result.warnings):
+            return STATUS_OCR_UNAVAILABLE
+        if result.used_ocr:
+            return STATUS_OCR_FAILED
+        return STATUS_FAILED
+    if result.used_ocr:
+        if result.quality == TextQuality.GOOD:
+            return STATUS_OCR_RECOVERED
+        return STATUS_OCR_WEAK
+    return STATUS_OK
+
+
+def _finalize_pdf_result(
+    page_results: list[PageExtractionResult],
+    *,
+    source: str,
+    initial_dpi: int,
+    final_dpi: int,
+    warnings: list[str],
+    fallback_reason: str = '',
+) -> ExtractionResult:
+    text_parts = [p.text for p in page_results if (p.text or '').strip()]
+    extracted = _apply_pdf_layout_enhance('\n\n'.join(text_parts).strip())
+    extracted = normalize_extracted_text(extracted)
+    ocr_pages = [p.page_number for p in page_results if p.used_ocr]
+    engines = [p.ocr_engine for p in page_results if p.used_ocr and p.ocr_engine]
+    ocr_engine = engines[0] if engines else ''
+    quality = classify_text_quality(extracted)
+    if fallback_reason:
+        warnings = list(warnings) + ([fallback_reason] if fallback_reason else [])
+    result = ExtractionResult(
+        text=extracted,
+        source=source,
+        used_ocr=bool(ocr_pages),
+        ocr_engine=ocr_engine,
+        ocr_pages=ocr_pages,
+        initial_dpi=initial_dpi,
+        final_dpi=final_dpi,
+        quality=quality,
+        warnings=warnings,
+        page_results=page_results,
+        page_count=len(page_results),
+    )
+    result.status = _result_status(result)
+    return result
+
+
+def extract_pdf_pymupdf_document(file_data: bytes, *, dpi: int | None = None) -> ExtractionResult:
+    """PyMuPDF extract with per-page OCR. Returns ExtractionResult (may be empty)."""
     try:
         import fitz  # PyMuPDF
     except ImportError as exc:
         raise ValueError('PyMuPDF (pymupdf) is not installed') from exc
 
-    # Explicit dpi from caller wins; otherwise adaptive fast → full
     forced_dpi = max(72, int(dpi)) if dpi is not None else None
     fast_dpi = forced_dpi or max(72, min(_ocr_dpi_fast(), OCR_DPI))
     full_dpi = forced_dpi or OCR_DPI
-
-    global _LAST_EXTRACT_MAX_DPI
-    _LAST_EXTRACT_MAX_DPI = max(int(_LAST_EXTRACT_MAX_DPI or 0), fast_dpi)
 
     doc = fitz.open(stream=file_data, filetype='pdf')
     try:
@@ -523,179 +875,96 @@ def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -
         if PDF_MAX_PAGES:
             page_count = min(page_count, PDF_MAX_PAGES)
 
-        text_parts: list[str] = []
-        used_ocr = False
-        max_dpi_used = fast_dpi
+        page_results: list[PageExtractionResult] = []
+        max_dpi_used = 0
         ocr_ok = OCR_ENABLED and ocr_engines_available()
         ocr_skip_logged = False
+        warnings: list[str] = []
 
         for page_num in range(page_count):
             page = doc[page_num]
             digital = (page.get_text('text') or '').strip()
             table_text = _extract_pdf_page_tables(page)
+            image_count = _page_image_count(page)
+            combined = _combine_page_text(digital, table_text)
+            digital_quality = classify_text_quality(combined, image_count=image_count)
 
-            if _page_needs_ocr(page, digital):
-                if ocr_ok:
-                    try:
-                        png = _render_page_png(page, dpi=fast_dpi)
-                        image_count = _page_image_count(page)
-                        if not _png_has_ink(png):
-                            # Faint scans can fail the fast-DPI thumb; one full-DPI recheck.
-                            if (
-                                image_count > 0
-                                and len(digital) < PAGE_OCR_TEXT_THRESHOLD
-                                and forced_dpi is None
-                                and full_dpi > fast_dpi
-                            ):
-                                png = _render_page_png(page, dpi=full_dpi)
-                                if _png_has_ink(png):
-                                    max_dpi_used = max(max_dpi_used, full_dpi)
-                                else:
-                                    logger.warning(
-                                        'PDF page %s ink-skip but has %s images (digital=%s)',
-                                        page_num + 1,
-                                        image_count,
-                                        len(digital),
-                                    )
-                                    page_bits = []
-                                    if digital:
-                                        page_bits.append(digital)
-                                    if table_text:
-                                        _dedupe_append(page_bits, table_text)
-                                    if page_bits:
-                                        text_parts.append('\n\n'.join(page_bits))
-                                    continue
-                            else:
-                                if image_count > 0:
-                                    logger.warning(
-                                        'PDF page %s ink-skip but has %s images (digital=%s)',
-                                        page_num + 1,
-                                        image_count,
-                                        len(digital),
-                                    )
-                                else:
-                                    logger.info(
-                                        'PDF page %s has no ink; skipping OCR (digital=%s)',
-                                        page_num + 1,
-                                        len(digital),
-                                    )
-                                page_bits = []
-                                if digital:
-                                    page_bits.append(digital)
-                                if table_text:
-                                    _dedupe_append(page_bits, table_text)
-                                if page_bits:
-                                    text_parts.append('\n\n'.join(page_bits))
-                                continue
-                        ocr_text = ''
-                        try:
-                            ocr_text = _ocr_image_bytes(png)
-                        except ValueError as ocr_err:
-                            logger.warning(
-                                'OCR failed for PDF page %s: %s', page_num + 1, ocr_err
-                            )
-                        ocr_len = len((ocr_text or '').strip())
-                        # Escalate DPI when the fast pass was thin, or empty on a
-                        # page that still has ink (scanned page RapidOCR missed).
-                        if (
-                            forced_dpi is None
-                            and full_dpi > fast_dpi
-                            and ocr_len < PAGE_OCR_TEXT_THRESHOLD
-                        ):
-                            png = _render_page_png(page, dpi=full_dpi)
-                            if _png_has_ink(png):
-                                try:
-                                    ocr_text = _ocr_image_bytes(png)
-                                    max_dpi_used = max(max_dpi_used, full_dpi)
-                                except ValueError as ocr_err:
-                                    logger.warning(
-                                        'OCR failed for PDF page %s at %sdpi: %s',
-                                        page_num + 1,
-                                        full_dpi,
-                                        ocr_err,
-                                    )
-                        page_bits: list[str] = []
-                        if ocr_text:
-                            page_bits.append(ocr_text)
-                            used_ocr = True
-                        elif digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
-                            page_bits.append(digital)
-                        if table_text:
-                            _dedupe_append(page_bits, table_text)
-                        if page_bits:
-                            text_parts.append('\n\n'.join(page_bits))
-                        continue
-                    except ValueError as ocr_err:
-                        logger.warning(
-                            'OCR failed for PDF page %s: %s', page_num + 1, ocr_err
-                        )
-                        # If engines disappeared mid-run, stop trying OCR on later pages
-                        if not ocr_engines_available():
-                            ocr_ok = False
-                        page_bits = []
-                        if digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
-                            page_bits.append(digital)
-                        if table_text:
-                            _dedupe_append(page_bits, table_text)
-                        if page_bits:
-                            text_parts.append('\n\n'.join(page_bits))
-                        continue
-                else:
-                    if OCR_ENABLED and not ocr_skip_logged:
-                        logger.warning(
-                            'OCR engines unavailable — skipping per-page OCR for this PDF (%s)',
-                            ocr_unavailable_reason(),
-                        )
-                        ocr_skip_logged = True
-                    page_bits = []
-                    if digital and len(digital) >= PAGE_OCR_TEXT_THRESHOLD:
-                        page_bits.append(digital)
-                    elif digital:
-                        # Keep whatever digital text exists; better than minutes of failed OCR
-                        page_bits.append(digital)
-                    if table_text:
-                        _dedupe_append(page_bits, table_text)
-                    if page_bits:
-                        text_parts.append('\n\n'.join(page_bits))
-            else:
-                page_bits = []
-                if digital:
-                    page_bits.append(digital)
-                if table_text:
-                    _dedupe_append(page_bits, table_text)
-                if page_bits:
-                    text_parts.append('\n\n'.join(page_bits))
+            if not quality_needs_ocr(digital_quality):
+                page_results.append(
+                    _digital_page_result(page_num + 1, combined, digital_quality)
+                )
+                continue
 
-        extracted = '\n\n'.join(text_parts).strip()
-        # Structure headers when resume or JD layout is enabled
-        if (RESUME_LAYOUT_ENABLED or JD_LAYOUT_ENABLED) and extracted:
+            if not ocr_ok:
+                if OCR_ENABLED and not ocr_skip_logged:
+                    reason = ocr_unavailable_reason()
+                    logger.warning(
+                        'OCR engines unavailable — skipping per-page OCR for this PDF (%s)',
+                        reason,
+                    )
+                    warnings.append(f'ocr_unavailable:{reason}')
+                    ocr_skip_logged = True
+                page_results.append(
+                    _digital_page_result(
+                        page_num + 1,
+                        combined,
+                        digital_quality,
+                        fallback='ocr_unavailable',
+                    )
+                )
+                continue
+
             try:
-                from app.ai.parser.layout.detector import enhance_jd_text, enhance_resume_text, is_jd_layout_enabled
+                pr = _ocr_one_pdf_page(
+                    page,
+                    page_number=page_num + 1,
+                    digital=digital,
+                    table_text=table_text,
+                    digital_quality=digital_quality,
+                    image_count=image_count,
+                    fast_dpi=fast_dpi,
+                    full_dpi=full_dpi,
+                    forced_dpi=forced_dpi,
+                )
+                max_dpi_used = max(max_dpi_used, pr.dpi or 0)
+                page_results.append(pr)
+            except ValueError as ocr_err:
+                logger.warning('OCR failed for PDF page %s: %s', page_num + 1, ocr_err)
+                if not ocr_engines_available():
+                    ocr_ok = False
+                    warnings.append(f'ocr_unavailable:{ocr_unavailable_reason()}')
+                page_results.append(
+                    _digital_page_result(
+                        page_num + 1,
+                        combined,
+                        digital_quality,
+                        fallback='ocr_failed',
+                    )
+                )
 
-                if is_jd_layout_enabled():
-                    structured = enhance_jd_text(extracted)
-                else:
-                    structured = enhance_resume_text(extracted)
-                if structured and len(structured.strip()) >= MIN_TEXT_CHARS:
-                    extracted = structured
-            except Exception as exc:
-                logger.debug('layout enhance skipped: %s', exc)
-
-        if len(extracted) < MIN_TEXT_CHARS:
-            raise ValueError(
-                'Insufficient text extracted - PDF may be image-based or corrupted'
-            )
-        if used_ocr:
-            logger.info(
-                'Extracted %s characters from PDF (%s pages, OCR used, dpi=%s)',
-                len(extracted),
-                page_count,
-                max_dpi_used,
-            )
-        _LAST_EXTRACT_MAX_DPI = max(int(_LAST_EXTRACT_MAX_DPI or 0), max_dpi_used)
-        return extracted
+        result = _finalize_pdf_result(
+            page_results,
+            source='pymupdf',
+            initial_dpi=fast_dpi if any(p.used_ocr for p in page_results) else 0,
+            final_dpi=max_dpi_used,
+            warnings=warnings,
+        )
+        return result
     finally:
         doc.close()
+
+
+def extract_text_from_pdf_pymupdf(file_data: bytes, *, dpi: int | None = None) -> str:
+    """
+    Extract text from PDF via PyMuPDF, with per-page OCR when needed.
+    """
+    result = extract_pdf_pymupdf_document(file_data, dpi=dpi)
+    _pymupdf_document.set(result)
+    if len((result.text or '').strip()) < MIN_TEXT_CHARS:
+        raise ValueError(
+            'Insufficient text extracted - PDF may be image-based or corrupted'
+        )
+    return result.text
 
 
 def extract_text_from_pdf_pypdf2(file_data: bytes) -> str:
@@ -770,37 +1039,60 @@ def _is_pymupdf_missing(exc: BaseException) -> bool:
     return 'pymupdf' in msg.lower() or 'PyMuPDF' in msg
 
 
-def _set_last_pdf_extractor(name: str, reason: str = '') -> None:
-    global _LAST_PDF_EXTRACTOR, _LAST_PDF_FALLBACK_REASON
-    _LAST_PDF_EXTRACTOR = name
-    _LAST_PDF_FALLBACK_REASON = reason
+def log_extraction_summary(result: ExtractionResult, *, ext: str, retry_count: int = 0) -> None:
+    """Structured extract log without candidate PII (no text, email, phone, address)."""
+    quality = result.quality.value if isinstance(result.quality, TextQuality) else result.quality
+    logger.info(
+        'extract ext=%s pages=%s ocr_pages=%s ocr_engine=%s initial_dpi=%s final_dpi=%s '
+        'quality=%s source=%s status=%s retries=%s warnings=%s',
+        ext,
+        result.page_count,
+        len(result.ocr_pages),
+        result.ocr_engine or '-',
+        result.initial_dpi,
+        result.final_dpi,
+        quality,
+        result.source or '-',
+        result.status,
+        retry_count or result.retry_count,
+        ';'.join(result.warnings[:8]) or '-',
+    )
 
 
-def _try_pypdf2_fallback(file_data: bytes) -> str:
-    text = extract_text_from_pdf_pypdf2(file_data)
-    _set_last_pdf_extractor('pypdf2')
-    return text
-
-
-def extract_text_from_pdf(file_data: bytes, *, dpi: int | None = None) -> str:
-    """Extract text from PDF: PyMuPDF (+OCR) → [pdfplumber if needed] → PyPDF2 → raise."""
-    _set_last_pdf_extractor('')
-    pymupdf_text: str | None = None
+def extract_pdf_document(file_data: bytes, *, dpi: int | None = None) -> ExtractionResult:
+    """Extract PDF into a request-local ExtractionResult (PyMuPDF + OCR → pdfplumber → PyPDF2)."""
+    _remember_pdf_choice('')
+    _pymupdf_document.set(None)
+    pymupdf_result: ExtractionResult | None = None
     pymupdf_error: BaseException | None = None
     unexpected = False
 
     try:
-        pymupdf_text = extract_text_from_pdf_pymupdf(file_data, dpi=dpi)
+        text = extract_text_from_pdf_pymupdf(file_data, dpi=dpi)
+        stored = _pymupdf_document.get()
+        if stored is not None and (stored.text or '') == (text or ''):
+            pymupdf_result = stored
+        else:
+            pymupdf_result = ExtractionResult(
+                text=text or '',
+                source='pymupdf',
+                quality=classify_text_quality(text or ''),
+            )
+            pymupdf_result.status = _result_status(pymupdf_result)
     except ValueError as e:
         pymupdf_error = e
+        stored = _pymupdf_document.get()
+        if stored is not None:
+            pymupdf_result = stored
         if _is_pymupdf_missing(e):
             logger.warning('PyMuPDF unavailable, falling back to PyPDF2: %s', e)
-        # Insufficient-text and other ValueErrors keep the existing raise path
-        # unless pdfplumber produces a better result below.
     except Exception as e:
         pymupdf_error = e
         unexpected = True
         logger.warning('PyMuPDF extraction error, trying PyPDF2: %s', e)
+
+    pymupdf_text = (pymupdf_result.text if pymupdf_result else None)
+    used_ocr = bool(pymupdf_result and pymupdf_result.used_ocr)
 
     plumber_text = None
     plumber_reason = ''
@@ -811,9 +1103,9 @@ def extract_text_from_pdf(file_data: bytes, *, dpi: int | None = None) -> str:
             file_data,
             pymupdf_text=pymupdf_text,
             pymupdf_error=pymupdf_error,
+            used_ocr=used_ocr,
         )
     except Exception as exc:
-        # pdfplumber must never break the existing pipeline.
         logger.warning(
             'pdfplumber orchestration failed; ignoring: %s',
             type(exc).__name__,
@@ -821,24 +1113,46 @@ def extract_text_from_pdf(file_data: bytes, *, dpi: int | None = None) -> str:
         plumber_text = None
 
     if plumber_text:
-        _set_last_pdf_extractor('pdfplumber', plumber_reason)
-        return plumber_text
-
-    if pymupdf_text:
-        _set_last_pdf_extractor('pymupdf', plumber_reason)
-        logger.debug(
-            'PDF extractor selected=pymupdf chars=%s fallback_reason=%s',
-            len(pymupdf_text),
-            plumber_reason or 'none',
+        quality = classify_text_quality(plumber_text)
+        result = ExtractionResult(
+            text=normalize_extracted_text(plumber_text),
+            source='pdfplumber',
+            used_ocr=False,
+            quality=quality,
+            warnings=[plumber_reason] if plumber_reason else [],
+            page_count=pymupdf_result.page_count if pymupdf_result else 0,
+            initial_dpi=pymupdf_result.initial_dpi if pymupdf_result else 0,
+            final_dpi=pymupdf_result.final_dpi if pymupdf_result else 0,
         )
-        return pymupdf_text
+        result.status = _result_status(result)
+        _remember_pdf_choice('pdfplumber', plumber_reason)
+        return result
+
+    if pymupdf_result and (pymupdf_result.text or '').strip():
+        if plumber_reason:
+            pymupdf_result.warnings.append(plumber_reason)
+        pymupdf_result.source = pymupdf_result.source or 'pymupdf'
+        _remember_pdf_choice('pymupdf', plumber_reason)
+        return pymupdf_result
 
     if pymupdf_error is None:
+        if pymupdf_result is not None:
+            _remember_pdf_choice('pymupdf', plumber_reason)
+            return pymupdf_result
         raise ValueError('Failed to extract text from PDF')
 
     if unexpected or _is_pymupdf_missing(pymupdf_error):
         try:
-            return _try_pypdf2_fallback(file_data)
+            text = extract_text_from_pdf_pypdf2(file_data)
+            quality = classify_text_quality(text)
+            result = ExtractionResult(
+                text=normalize_extracted_text(text),
+                source='pypdf2',
+                quality=quality,
+            )
+            result.status = _result_status(result)
+            _remember_pdf_choice('pypdf2')
+            return result
         except Exception:
             if unexpected:
                 raise ValueError(
@@ -846,7 +1160,20 @@ def extract_text_from_pdf(file_data: bytes, *, dpi: int | None = None) -> str:
                 ) from pymupdf_error
             raise
 
+    if pymupdf_result is not None:
+        _remember_pdf_choice('pymupdf', plumber_reason)
+        return pymupdf_result
     raise pymupdf_error
+
+
+def extract_text_from_pdf(file_data: bytes, *, dpi: int | None = None) -> str:
+    """Extract text from PDF: PyMuPDF (+OCR) → [pdfplumber if needed] → PyPDF2 → raise."""
+    result = extract_pdf_document(file_data, dpi=dpi)
+    if len((result.text or '').strip()) < MIN_TEXT_CHARS:
+        raise ValueError(
+            'Insufficient text extracted - PDF may be image-based or corrupted'
+        )
+    return result.text
 
 
 def extract_text_from_docx(file_data: bytes) -> str:
@@ -940,23 +1267,47 @@ def _force_pdf_ocr(file_data: bytes, *, dpi: int = 300) -> str:
 
 
 @timing
-def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> str:
+def extract_document(file_data: bytes, filename: str, *, dpi: int | None = None) -> ExtractionResult:
     """
-    Extract text from file based on extension.
-    Tries local extraction (with OCR) first, falls back to parsing API for PDFs.
-    Optional dpi overrides PDF OCR render resolution (e.g. bulk retry at 300).
-    """
-    global _LAST_EXTRACT_MAX_DPI
-    _LAST_EXTRACT_MAX_DPI = max(72, int(dpi)) if dpi is not None else 0
+    Extract text and request-local metadata from a file.
 
+    OCR is a text-acquisition layer only. Callers must pass result.text into the
+    existing layout → sections → parsers pipeline.
+    """
     ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+    result = ExtractionResult(source=ext)
 
     if ext in IMAGE_EXTENSIONS:
-        text = extract_text_from_image(file_data, filename)
-        _LAST_EXTRACT_MAX_DPI = max(int(_LAST_EXTRACT_MAX_DPI or 0), OCR_DPI)
+        try:
+            text = extract_text_from_image(file_data, filename)
+            result = ExtractionResult(
+                text=text,
+                source='image',
+                used_ocr=True,
+                ocr_engine=(get_ocr_engine_status()[1] if ocr_engines_available() else ''),
+                ocr_pages=[1],
+                initial_dpi=0,
+                final_dpi=0,
+                quality=classify_text_quality(text),
+                page_count=1,
+                status=STATUS_OCR_RECOVERED,
+            )
+        except ValueError as exc:
+            msg = str(exc)
+            unavailable = 'unavailable' in msg.lower() or 'OCR_ENABLED' in msg
+            result = ExtractionResult(
+                text='',
+                source='image',
+                used_ocr=True,
+                quality=TextQuality.EMPTY,
+                status=STATUS_OCR_UNAVAILABLE if unavailable else STATUS_OCR_FAILED,
+                warnings=[type(exc).__name__],
+                page_count=1,
+            )
+            raise
     elif ext == 'pdf':
         try:
-            text = extract_text_from_pdf(file_data, dpi=dpi)
+            result = extract_pdf_document(file_data, dpi=dpi)
         except ValueError as e:
             error_msg = str(e)
             if 'Insufficient text' in error_msg or 'Failed to extract' in error_msg or 'OCR' in error_msg:
@@ -965,6 +1316,12 @@ def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> 
                 logger.info('Local PDF extraction failed, trying parsing API fallback...')
                 try:
                     text = extract_text_from_pdf_via_api(file_data, filename)
+                    result = ExtractionResult(
+                        text=text,
+                        source='api',
+                        quality=classify_text_quality(text),
+                    )
+                    result.status = _result_status(result)
                 except Exception as api_error:
                     raise ValueError(
                         f'Local extraction failed: {error_msg}. '
@@ -972,34 +1329,74 @@ def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> 
                     ) from api_error
             else:
                 raise
-        # Empty digital layer / failed OCR → force full-page OCR (only when engines exist)
-        if len((text or '').strip()) < MIN_TEXT_CHARS:
+        quality = result.quality
+        if quality in (TextQuality.EMPTY, TextQuality.GARBAGE) or len(
+            (result.text or '').strip()
+        ) < MIN_TEXT_CHARS:
             if ocr_engines_available():
                 try:
-                    forced = _force_pdf_ocr(file_data, dpi=max(dpi or 0, 300))
-                    _LAST_EXTRACT_MAX_DPI = max(int(_LAST_EXTRACT_MAX_DPI or 0), max(dpi or 0, 300))
+                    force_dpi = max(dpi or 0, 300)
+                    forced = _force_pdf_ocr(file_data, dpi=force_dpi)
                     if len(forced) >= MIN_TEXT_CHARS:
-                        text = forced
+                        forced_q = classify_text_quality(forced)
+                        if QUALITY_RANK[forced_q] >= QUALITY_RANK[quality]:
+                            ok, detail = get_ocr_engine_status()
+                            result.text = forced
+                            result.used_ocr = True
+                            result.ocr_engine = detail if ok else result.ocr_engine
+                            result.final_dpi = max(result.final_dpi, force_dpi)
+                            result.quality = forced_q
+                            result.source = result.source or 'pymupdf'
+                            result.warnings.append('force_pdf_ocr')
+                            result.status = _result_status(result)
                 except Exception as force_err:
-                    logger.warning('Force PDF OCR failed: %s', force_err)
+                    logger.warning('Force PDF OCR failed: %s', type(force_err).__name__)
+                    result.warnings.append('force_pdf_ocr_failed')
             else:
-                logger.warning(
-                    'Skipping force PDF OCR — %s',
-                    ocr_unavailable_reason(),
-                )
+                logger.warning('Skipping force PDF OCR — %s', ocr_unavailable_reason())
+                result.warnings.append(f'ocr_unavailable:{ocr_unavailable_reason()}')
+                if result.status == STATUS_OK and not (result.text or '').strip():
+                    result.status = STATUS_OCR_UNAVAILABLE
     elif ext == 'doc':
         raise ValueError('Legacy .doc format is not supported. Please use DOCX or PDF.')
     elif ext == 'docx':
         text = extract_text_from_docx(file_data)
+        result = ExtractionResult(
+            text=text,
+            source='docx',
+            quality=classify_text_quality(text),
+            status=STATUS_OK,
+        )
     else:
         raise ValueError(f'Unsupported file type: {ext}')
 
-    if RESUME_LAYOUT_ENABLED and text and ext != 'pdf':
-        # PDF path already enhances inside pymupdf extractor
+    if RESUME_LAYOUT_ENABLED and result.text and ext != 'pdf':
         try:
             from app.ai.parser.layout.detector import enhance_resume_text
 
-            text = enhance_resume_text(text)
+            enhanced = enhance_resume_text(result.text)
+            if enhanced:
+                result.text = enhanced
         except Exception as exc:
             logger.debug('enhance_resume_text skipped: %s', exc)
-    return normalize_extracted_text(text or '')
+
+    result.text = normalize_extracted_text(result.text or '')
+    result.quality = classify_text_quality(result.text)
+    result.status = _result_status(result)
+    log_extraction_summary(result, ext=ext or 'unknown')
+    if len(result.text.strip()) < MIN_TEXT_CHARS:
+        raise ValueError(
+            'Insufficient text extracted - PDF may be image-based or corrupted'
+            if ext == 'pdf'
+            else f'Could not extract sufficient text from document'
+        )
+    return result
+
+
+def extract_text(file_data: bytes, filename: str, *, dpi: int | None = None) -> str:
+    """
+    Extract text from file based on extension.
+    Tries local extraction (with OCR) first, falls back to parsing API for PDFs.
+    Optional dpi overrides PDF OCR render resolution (e.g. bulk retry at 300).
+    """
+    return extract_document(file_data, filename, dpi=dpi).text
