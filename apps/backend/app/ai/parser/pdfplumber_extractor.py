@@ -764,6 +764,7 @@ def maybe_use_pdfplumber(
     *,
     pymupdf_text: str | None,
     pymupdf_error: BaseException | None = None,
+    used_ocr: bool = False,
 ) -> tuple[str | None, str]:
     """
     Automatic secondary-extractor entry.
@@ -771,6 +772,15 @@ def maybe_use_pdfplumber(
     Returns (text_or_none, reason). text is set only when pdfplumber ran and
     beat (or replaced a missing) PyMuPDF result. Never raises.
     """
+    from app.ai.parser.text_extraction import MIN_TEXT_CHARS
+
+    if used_ocr and pymupdf_text and len(pymupdf_text.strip()) >= MIN_TEXT_CHARS:
+        logger.info(
+            'PDF extractor keeping pymupdf (OCR-backed) chars=%s',
+            len(pymupdf_text.strip()),
+        )
+        return None, 'ocr_backed_pymupdf'
+
     reason = fallback_reason(pymupdf_text, pymupdf_error)
     if not reason:
         return None, ''

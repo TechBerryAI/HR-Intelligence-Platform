@@ -60,7 +60,7 @@ Primary model: **hardware-adaptive** when `OLLAMA_MODEL` is unset (`gpu_high`→
 
 `node start.js` now:
 1. Installs backend deps from `requirements.txt` (includes **RapidOCR** via `rapidocr-onnxruntime`, pymupdf, Pillow)
-2. Verifies OCR Python imports
+2. **Fails closed** unless RapidOCR imports (Python 3.11; 3.10–3.12 supported). Python 3.13+ cannot continue.
 3. Health-checks `OLLAMA_HOST` (default `http://192.168.1.200:11434`). Pulls the selected model onto that host (local `ollama serve` only when the host is loopback)
 4. Normalizes `OLLAMA_HOST` (also accepts legacy `OLLAMA_BASE_URL`) — does not rewrite keys already present in `.env`
 
@@ -88,7 +88,7 @@ pytest tests/test_resume_ollama_smoke.py -v -m integration
 
 OCR env knobs (optional): `OCR_ENABLED=true`, `OCR_DPI=250`, `PDF_MAX_PAGES=0`.
 PDF extraction: PyMuPDF is primary; pdfplumber is an automatic fallback for poor/table/layout extracts (no env switch).
-System Tesseract is optional; RapidOCR from requirements is the primary OCR engine.
+System Tesseract is optional at extract time after RapidOCR is installed; it is not a substitute for RapidOCR. RapidOCR from requirements is the primary OCR engine.
 
 ## Related documentation
 

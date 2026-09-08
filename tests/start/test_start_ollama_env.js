@@ -67,4 +67,11 @@ const helperNoDump = start.hardwareHelperEnv(
 assert.strictEqual(helperNoDump.HCIP_HARDWARE_PROFILE, 'cpu');
 assert.ok(!helperNoDump.POSTGRES_PASSWORD);
 
+assert.strictEqual(start.pythonSupportsRapidOCR(3, 10), true);
+assert.strictEqual(start.pythonSupportsRapidOCR(3, 11), true);
+assert.strictEqual(start.pythonSupportsRapidOCR(3, 12), true);
+assert.strictEqual(start.pythonSupportsRapidOCR(3, 13), false);
+assert.strictEqual(start.pythonSupportsRapidOCR(3, 9), false);
+assert.strictEqual(start.pythonSupportsRapidOCR(2, 7), false);
+
 console.log('test_start_ollama_env.js ok');

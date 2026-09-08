@@ -74,7 +74,8 @@ def ocr_image_with_layout(
 
     ocr_fn: callable(image_bytes) -> str  (typically RapidOCR path)
 
-    Returns (text, source) where source is 'doclayout' | 'opencv_blocks' | 'heuristic_ocr' | 'plain_ocr'.
+    Returns (text, source) where source is 'doclayout' | 'opencv_blocks' |
+    'heuristic_ocr' | 'plain_ocr' | 'needs_recovery' | 'empty'.
     """
     processed = preprocess_image_bytes(image_bytes)
     if for_jd is True:
@@ -101,14 +102,16 @@ def ocr_image_with_layout(
 
     # RapidOCR found nothing. One OpenCV block pass only when the page still has ink
     # (blank pages used to cost ~12s). Engine failure (None) still falls through.
-    if detections is None or (
-        detections == [] and _layout_image_has_ink(image_bytes)
-    ):
+    has_ink = detections is None or _layout_image_has_ink(image_bytes)
+    if detections is None or (detections == [] and has_ink):
         blocks = _opencv_then_ocr(processed, ocr_fn)
         if blocks.strip():
             return structure_text_by_headers(blocks), 'opencv_blocks'
         if detections is None:
             return (ocr_fn(processed) or '', 'plain_ocr')
+        # Detections were [] but the page has ink — caller must run Tesseract /
+        # raw RapidOCR / rotation recovery on the original PNG.
+        return ('', 'needs_recovery')
 
     return ('', 'empty')
 
@@ -127,7 +130,7 @@ def _rapidocr_detections(image_bytes: bytes) -> list | None:
     try:
         import numpy as np
         from PIL import Image
-        from app.ai.parser.text_extraction import _get_rapidocr_engine
+        from app.ai.parser.text_extraction import run_rapidocr_inference
     except ImportError:
         return None
 
@@ -136,8 +139,7 @@ def _rapidocr_detections(image_bytes: bytes) -> list | None:
         if image.mode not in ('RGB', 'L'):
             image = image.convert('RGB')
         arr = np.array(image)
-        engine = _get_rapidocr_engine()
-        result, _ = engine(arr)
+        result = run_rapidocr_inference(arr)
         return result or []
     except Exception as exc:
         logger.debug('RapidOCR detections failed: %s', exc)

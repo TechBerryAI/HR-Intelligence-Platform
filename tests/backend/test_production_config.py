@@ -1,10 +1,28 @@
 """Production fail-closed configuration (no live app import)."""
 from __future__ import annotations
 
+import builtins
+import sys
+
 import pytest
 
 from app.config.env_validator import EnvValidator
 from app.core.auth import _resolve_jwt_secret
+
+_REAL_RAPIDOCR_GUARD = EnvValidator.rapidocr_production_guard.__func__
+
+
+def _fake_version_info(major: int, minor: int):
+    class _Info(tuple):
+        @property
+        def major(self):
+            return self[0]
+
+        @property
+        def minor(self):
+            return self[1]
+
+    return _Info((major, minor, 0))
 
 
 def _prod_base(monkeypatch):
@@ -19,6 +37,11 @@ def _prod_base(monkeypatch):
     monkeypatch.delenv('GUNICORN_WORKERS', raising=False)
     monkeypatch.delenv('N8N_WEBHOOK_URL', raising=False)
     monkeypatch.delenv('SERVER_SOFTWARE', raising=False)
+    monkeypatch.setattr(
+        EnvValidator,
+        'rapidocr_production_guard',
+        classmethod(lambda cls: None),
+    )
 
 
 def test_production_ok_without_redis_single_worker(monkeypatch):
@@ -190,3 +213,39 @@ def test_n8n_secret_required_when_webhook_set(monkeypatch):
     ok, errors, _ = EnvValidator.validate()
     assert not ok
     assert any('N8N_CALLBACK_SECRET' in e for e in errors)
+
+
+def test_production_requires_rapidocr(monkeypatch):
+    _prod_base(monkeypatch)
+    monkeypatch.setattr(
+        EnvValidator,
+        'rapidocr_production_guard',
+        classmethod(_REAL_RAPIDOCR_GUARD),
+    )
+
+    monkeypatch.setattr(sys, 'version_info', _fake_version_info(3, 13))
+    ok, errors, _ = EnvValidator.validate()
+    assert not ok
+    assert any('OCR' in e and '3.13' in e and 'RapidOCR' in e for e in errors)
+
+    monkeypatch.setattr(sys, 'version_info', _fake_version_info(3, 11))
+    real_import = builtins.__import__
+
+    def _block_rapidocr(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == 'rapidocr_onnxruntime':
+            raise ImportError("No module named 'rapidocr_onnxruntime'")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, '__import__', _block_rapidocr)
+    ok, errors, _ = EnvValidator.validate()
+    assert not ok
+    assert any('RapidOCR is required in production' in e for e in errors)
+
+    monkeypatch.setattr(
+        EnvValidator,
+        'rapidocr_production_guard',
+        classmethod(lambda cls: None),
+    )
+    ok, errors, _ = EnvValidator.validate()
+    assert ok, errors
+
