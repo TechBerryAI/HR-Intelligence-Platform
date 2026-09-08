@@ -62,6 +62,27 @@ def test_empty_rapidocr_with_ink_runs_opencv_once():
     assert calls == []
 
 
+def test_empty_rapidocr_with_ink_opencv_empty_needs_recovery():
+    import io
+    from PIL import Image, ImageDraw
+
+    img = Image.new('RGB', (200, 200), (255, 255, 255))
+    ImageDraw.Draw(img).rectangle((20, 20, 180, 180), fill=(10, 10, 10))
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    ink = buf.getvalue()
+
+    with patch.object(det, 'preprocess_image_bytes', return_value=ink), \
+         patch.object(det, 'is_layout_enabled', return_value=True), \
+         patch.object(det, 'is_jd_layout_enabled', return_value=True), \
+         patch.object(det, '_rapidocr_detections', return_value=[]), \
+         patch.object(det, '_opencv_then_ocr', return_value=''):
+        text, source = det.ocr_image_with_layout(ink, ocr_fn=lambda _b: 'should-not-win')
+
+    assert text == ''
+    assert source == 'needs_recovery'
+
+
 def test_engine_failure_still_tries_block_ocr():
     def ocr_fn(_blob):
         return 'from-plain'

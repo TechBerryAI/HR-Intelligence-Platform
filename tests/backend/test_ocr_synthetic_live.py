@@ -20,6 +20,8 @@ from generate import (  # noqa: E402
     digital_pdf_bytes,
     image_heavy_pdf_bytes,
     mixed_pdf_bytes,
+    overlay_scanned_pdf_bytes,
+    oversized_page_pdf_bytes,
     render_text_png,
     scanned_pdf_bytes,
 )
@@ -78,6 +80,9 @@ def test_live_low_contrast_and_rotated(require_ocr):
     if faint_result is not None:
         assert len(faint_result.text) >= 10 or faint_result.used_ocr
     assert rotated_result.used_ocr is True
+    low = rotated_result.text.lower()
+    assert 'alex' in low or 'experience' in low or 'example' in low
+    assert len(rotated_result.text) >= te.MIN_TEXT_CHARS
 
 
 @pytest.mark.ocr
@@ -105,3 +110,21 @@ def test_live_ocr_text_reaches_section_detection(require_ocr):
     labels = [s.label for s in sections]
     assert sections
     assert any(label in labels for label in ('Experience', 'Education', 'Skills', 'Header', 'Unknown'))
+
+
+@pytest.mark.ocr
+def test_live_overlay_scanned_pdf_recovers_body(require_ocr):
+    result = te.extract_document(overlay_scanned_pdf_bytes(), 'overlay.pdf')
+    assert result.used_ocr is True
+    low = result.text.lower()
+    assert 'alex' in low or 'example' in low or 'python' in low
+    assert len(result.text) >= te.MIN_TEXT_CHARS
+
+
+@pytest.mark.ocr
+def test_live_oversized_page_still_extracts(require_ocr):
+    result = te.extract_document(oversized_page_pdf_bytes(), 'oversize.pdf')
+    assert result.used_ocr is True
+    assert len(result.text) >= te.MIN_TEXT_CHARS
+    low = result.text.lower()
+    assert 'alex' in low or 'experience' in low or 'example' in low

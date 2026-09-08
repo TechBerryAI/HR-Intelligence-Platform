@@ -74,3 +74,15 @@ def test_prefer_good_digital_over_weak_ocr():
     assert source == 'digital'
     assert quality is TextQuality.GOOD
     assert text == digital.strip()
+
+
+def test_overlay_with_high_image_coverage_is_weak():
+    overlay = 'Experience\nCurriculum Vitae'
+    assert classify_text_quality(overlay) is TextQuality.GOOD
+    assert classify_text_quality(overlay, image_coverage=0.9) is TextQuality.WEAK
+
+
+def test_long_digital_stays_good_even_with_image_coverage():
+    body = 'Experience at Example Corp developing Python services. ' * 8
+    assert len(body.strip()) > 400
+    assert classify_text_quality(body, image_coverage=0.9) is TextQuality.GOOD

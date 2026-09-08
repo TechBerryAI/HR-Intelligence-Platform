@@ -310,12 +310,14 @@ def test_page_needs_ocr_on_garbage_digital_with_images():
 
 def test_should_retry_high_dpi_skips_good_text_and_already_300():
     good = "Jane Doe jane@example.com Experience Python SQL education skills " + ("x" * 20)
+    weak = "a few words on a scanned page here"
     with patch.object(te, "ocr_engines_available", return_value=True):
         assert te.should_retry_high_dpi_extract("scan.pdf", good, max_dpi_used=180) is False
         assert te.should_retry_high_dpi_extract("scan.pdf", "", extract_failed=True, max_dpi_used=180) is True
         assert te.should_retry_high_dpi_extract("scan.pdf", "", extract_failed=True, max_dpi_used=300) is False
         assert te.should_retry_high_dpi_extract("note.docx", "", extract_failed=True, max_dpi_used=180) is False
         assert te.should_retry_high_dpi_extract("photo.png", "", extract_failed=True, max_dpi_used=180) is False
+        assert te.should_retry_high_dpi_extract("scan.pdf", weak, max_dpi_used=180) is True
     with patch.object(te, "ocr_engines_available", return_value=False):
         assert te.should_retry_high_dpi_extract("scan.pdf", "", extract_failed=True, max_dpi_used=180) is False
 
@@ -353,10 +355,31 @@ def test_ocr_layout_empty_does_not_call_plain_again():
              "app.ai.parser.layout.detector.ocr_image_with_layout",
              return_value=("", "empty"),
          ), \
-         patch.object(te, "_ocr_image_bytes_plain") as plain:
+         patch.object(te, "_ocr_image_bytes_plain") as plain, \
+         patch.object(te, "_ocr_with_recovery") as recovery:
         with pytest.raises(ValueError, match="empty"):
             te._ocr_image_bytes(b"png")
         plain.assert_not_called()
+        recovery.assert_not_called()
+
+
+def test_ocr_layout_needs_recovery_runs_tesseract_ladder():
+    recovered = "Recovered tesseract resume text " + ("x" * 20)
+    with patch.object(te, "OCR_ENABLED", True), \
+         patch.object(te, "RESUME_LAYOUT_ENABLED", True), \
+         patch.object(te, "ocr_engines_available", return_value=True), \
+         patch(
+             "app.ai.parser.layout.detector.ocr_image_with_layout",
+             return_value=("", "needs_recovery"),
+         ), \
+         patch.object(
+             te,
+             "_ocr_with_recovery",
+             return_value=te.OcrAttempt(text=recovered, engine="tesseract"),
+         ) as recovery:
+        out = te._ocr_image_bytes(_ink_png_bytes())
+    recovery.assert_called_once()
+    assert "Recovered tesseract" in out
 
 
 def test_extract_text_docx_still_works():
@@ -588,3 +611,124 @@ def test_extract_document_image_uses_ocr():
     assert result.used_ocr is True
     assert result.source == "image"
     assert "Image resume" in result.text
+
+
+def test_overlay_full_page_image_is_ocrd():
+    """Thin digital overlay with resume tokens must not skip OCR on a scanned page."""
+    overlay = "Experience\nCurriculum Vitae"
+    page = MagicMock()
+    page.get_text.return_value = overlay
+    page.get_images.return_value = [("img",)]
+    page.get_image_info.return_value = [{"bbox": (0, 0, 612, 792)}]
+    page.rect.width = 612
+    page.rect.height = 792
+    page.find_tables.side_effect = Exception("no tables")
+    assert te._page_needs_ocr(page, overlay) is True
+
+    fake_fitz = _pdf_doc_from_pages([page])
+    ocr_text = "Alex Example scanned overlay recovery Experience education " + ("y" * 20)
+    with patch.dict(sys.modules, {"fitz": fake_fitz}), \
+         patch.object(te, "_render_page_png", return_value=_ink_png_bytes()), \
+         patch.object(te, "_ocr_image_bytes", return_value=ocr_text) as ocr, \
+         patch.object(te, "ocr_engines_available", return_value=True), \
+         patch.object(te, "OCR_ENABLED", True), \
+         patch.object(te, "_extract_pdf_page_tables", return_value=""):
+        result = te.extract_pdf_pymupdf_document(b"%PDF-fake")
+    ocr.assert_called()
+    assert result.used_ocr is True
+    assert "scanned overlay" in result.text
+
+
+def test_render_page_png_caps_long_side():
+    page = MagicMock()
+    page.rect.width = 4000
+    page.rect.height = 6000
+    pix = MagicMock()
+    pix.tobytes.return_value = b"png"
+    page.get_pixmap.return_value = pix
+    captured = {}
+
+    def fake_matrix(z1, z2=None):
+        captured["zoom"] = z1
+        return "matrix"
+
+    fake_fitz = MagicMock()
+    fake_fitz.Matrix = fake_matrix
+    fake_fitz.csRGB = object()
+    with patch.dict(sys.modules, {"fitz": fake_fitz}):
+        te._render_page_png(page, dpi=250)
+    assert captured["zoom"] <= te._ocr_max_side() / 6000 + 1e-9
+    assert captured["zoom"] < 250 / 72.0
+    kwargs = page.get_pixmap.call_args.kwargs
+    assert kwargs.get("alpha") is False
+    assert "colorspace" in kwargs
+
+
+def test_force_pdf_ocr_uses_recovery_not_layout_raise():
+    page = MagicMock()
+    page.rect.width = 612
+    page.rect.height = 792
+    page.get_images.return_value = [("img",)]
+    page.get_image_info.return_value = [{"bbox": (0, 0, 612, 792)}]
+    fake_fitz = _pdf_doc_from_pages([page])
+    recovered = "Force recovery resume Experience education skills " + ("z" * 20)
+    with patch.dict(sys.modules, {"fitz": fake_fitz}), \
+         patch.object(te, "_render_page_png", return_value=_ink_png_bytes()), \
+         patch.object(
+             te,
+             "_ocr_with_recovery",
+             return_value=te.OcrAttempt(text=recovered, engine="rapidocr_raw"),
+         ) as recovery, \
+         patch.object(te, "_ocr_image_bytes") as layout_path, \
+         patch.object(te, "ocr_engines_available", return_value=True):
+        out = te._force_pdf_ocr(b"%PDF-fake", dpi=300)
+    recovery.assert_called()
+    layout_path.assert_not_called()
+    assert "Force recovery" in out
+
+
+def test_ocr_recovery_raw_after_empty_preprocessed():
+    with patch.object(te, "_ocr_with_rapidocr", side_effect=[("", None), ("Raw recovered resume text " + ("q" * 20), 0.9)]), \
+         patch.object(te, "_tesseract_available", return_value=False):
+        attempt = te._ocr_with_recovery(b"png", skip_preprocessed=False)
+    assert attempt.engine == "rapidocr_raw"
+    assert "Raw recovered" in attempt.text
+
+
+def test_ocr_recovery_rotates_when_upright_empty():
+    def fake_rapidocr(image_bytes, *, preprocess=True):
+        if image_bytes == b"rot90":
+            return ("Rotated recovered resume Experience education " + ("x" * 20), 0.85)
+        return ("", None)
+
+    with patch.object(te, "_ocr_with_rapidocr", side_effect=fake_rapidocr), \
+         patch.object(te, "_tesseract_available", return_value=False), \
+         patch.object(te, "_rotate_image_bytes", side_effect=lambda _b, deg: f"rot{deg}".encode()):
+        attempt = te._ocr_with_recovery(b"upright")
+    assert attempt.engine == "rotated_90"
+    assert "Rotated recovered" in attempt.text
+
+
+def test_high_coverage_page_not_ink_skipped():
+    page = MagicMock()
+    page.get_text.return_value = ""
+    page.get_images.return_value = [("img",)]
+    page.get_image_info.return_value = [{"bbox": (0, 0, 612, 792)}]
+    page.rect.width = 612
+    page.rect.height = 792
+    fake_fitz = _pdf_doc_from_pages([page])
+    with patch.dict(sys.modules, {"fitz": fake_fitz}), \
+         patch.object(te, "_render_page_png", return_value=_white_png_bytes()), \
+         patch.object(te, "_png_has_ink", return_value=False), \
+         patch.object(
+             te,
+             "_ocr_image_bytes",
+             return_value="Coverage scan resume Experience education " + ("y" * 20),
+         ) as ocr, \
+         patch.object(te, "ocr_engines_available", return_value=True), \
+         patch.object(te, "OCR_ENABLED", True), \
+         patch.object(te, "_extract_pdf_page_tables", return_value=""):
+        result = te.extract_pdf_pymupdf_document(b"%PDF-fake")
+    ocr.assert_called()
+    assert result.used_ocr is True
+    assert "Coverage scan" in result.text
