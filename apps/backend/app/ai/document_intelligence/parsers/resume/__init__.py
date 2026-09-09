@@ -5201,24 +5201,32 @@ def parse_experience(section_text: str, full_text: str = '') -> list[ExperienceE
 
 
 def parse_summary(section_text: str, full_text: str = '') -> str:
-    """Prefer section body when valid; else section-aware full-text extraction."""
+    """Prefer full-text section-aware extraction; section body only when clearly better."""
     from app.ai.parser.enrichment.resume_text_inference import (
         SUMMARY_HEADING_PRIORITY,
         _normalize_summary_body,
         is_section_header_line,
     )
 
+    full = extract_summary_from_text(full_text) if full_text else ''
+    if full and is_valid_summary(full):
+        return full
+
     raw = (section_text or '').strip()
     if raw:
         compact = ' '.join(raw.split()).strip().rstrip(':').strip()
+        # Heading-only section blobs are not summaries
         if compact.lower() in SUMMARY_HEADING_PRIORITY or is_section_header_line(compact):
-            return ''
+            return full if is_valid_summary(full) else ''
         cleaned = _normalize_summary_body(raw, max_len=2000)
-        if is_valid_summary(cleaned):
+        if (
+            cleaned
+            and is_valid_summary(cleaned)
+            and len(cleaned) >= 80
+            and not re.match(r'(?i)^(?:responsibilit|roles?\s+and)', cleaned)
+        ):
             return cleaned
-        if compact.lower() in SUMMARY_HEADING_PRIORITY or is_section_header_line(compact):
-            return ''
-    return extract_summary_from_text(full_text)
+    return full if is_valid_summary(full) else ''
 
 
 _CERT_HEADING_LINE = re.compile(
@@ -6108,13 +6116,27 @@ def parse_resume_from_sections(
             # Require substantial unlabeled prose — not a name/contact crumb
             if len(candidate) < 40:
                 continue
+            if not re.search(
+                r'(?i)\b(?:seeking|years?|professional|skilled|dedicated|motivated|'
+                r'aspiring|objective|experience\s+as|proficient|graduate)\b',
+                candidate,
+            ):
+                continue
             if is_valid_summary(candidate):
                 summary = candidate
                 break
         if not summary:
             # Single-block preamble (no blank lines) still may hold intro prose
             candidate = _normalize_summary_body(preamble, max_len=2000)
-            if len(candidate) >= 40 and is_valid_summary(candidate):
+            if (
+                len(candidate) >= 40
+                and is_valid_summary(candidate)
+                and re.search(
+                    r'(?i)\b(?:seeking|years?|professional|skilled|dedicated|motivated|'
+                    r'aspiring|objective|experience\s+as|proficient|graduate)\b',
+                    candidate,
+                )
+            ):
                 summary = candidate
     # Keep personal.summary only when validated; scrub contact bleed when possible
     personal_summary = ''
