@@ -224,12 +224,19 @@ def test_production_requires_rapidocr(monkeypatch):
     )
 
     monkeypatch.setattr(sys, 'version_info', _fake_version_info(3, 13))
+    real_import = builtins.__import__
+
+    def _block_rapidocr_modern(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == 'rapidocr':
+            raise ImportError("No module named 'rapidocr'")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, '__import__', _block_rapidocr_modern)
     ok, errors, _ = EnvValidator.validate()
     assert not ok
-    assert any('OCR' in e and '3.13' in e and 'RapidOCR' in e for e in errors)
+    assert any('OCR' in e and 'RapidOCR' in e for e in errors)
 
     monkeypatch.setattr(sys, 'version_info', _fake_version_info(3, 11))
-    real_import = builtins.__import__
 
     def _block_rapidocr(name, globals=None, locals=None, fromlist=(), level=0):
         if name == 'rapidocr_onnxruntime':

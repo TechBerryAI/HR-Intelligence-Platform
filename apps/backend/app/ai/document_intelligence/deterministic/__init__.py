@@ -376,6 +376,7 @@ def extract_simple_location(text: str) -> str:
         extract_location_from_text,
         heal_location_candidate,
         is_plausible_location_value,
+        is_plausible_person_name,
     )
 
     loc = extract_location_from_text(text or '')
@@ -392,14 +393,14 @@ def extract_simple_location(text: str) -> str:
         if candidate and is_plausible_location_value(candidate):
             return candidate
         if candidate and '@' not in candidate and 'http' not in candidate.lower():
-            from app.ai.parser.enrichment.resume_text_inference import known_location_cities
+            from app.ai.parser.enrichment.resume_text_inference import (
+                canonicalize_location_city,
+                known_location_cities,
+            )
+            import re as _re
 
             for city in known_location_cities():
-                if city.lower() in candidate.lower():
-                    from app.ai.parser.enrichment.resume_text_inference import (
-                        canonicalize_location_city,
-                    )
-
+                if _re.search(rf'(?i)\b{_re.escape(city)}\b', candidate):
                     return canonicalize_location_city(city)
     # Pipe-header city before phone/email
     m_pipe = re.search(
@@ -429,7 +430,15 @@ def extract_simple_location(text: str) -> str:
     }
     section_hdr = re.compile(
         r'(?i)^(?:education|experience|skills|summary|objective|projects|'
-        r'certifications|internship|work\s+history)\b'
+        r'certifications|internship|work\s+history|professional\s+experience|'
+        r'employment|career)\b'
+    )
+    # Stop before job blocks when CV has no Experience header (duty bullets / Designation)
+    job_block = re.compile(
+        r'(?i)^(?:designation|client|company|employer|organization|organisation|'
+        r'role|responsibilit|job\s+title)\s*[:\-]|'
+        r'(?:pvt\.?\s*ltd|private\s+limited|llc|inc\.?)\b|'
+        r'^\s*[•·▪◦‣●\-–—\*]\s*'
     )
     for line in (text or '').splitlines()[:20]:
         s = line.strip().strip(',')
@@ -437,7 +446,15 @@ def extract_simple_location(text: str) -> str:
             continue
         if section_hdr.match(s):
             break
+        if job_block.search(s):
+            break
         if re.match(r'^\+?\d', s):
+            continue
+        # Skip labeled contact rows (Name:/Email:/Phone:) — not places
+        if re.match(r'(?i)^(name|email|phone|mobile|contact|linkedin|github)\b', s):
+            continue
+        # Header name lines (candidate name alone) are not locations
+        if is_plausible_person_name(s) and len(s.split()) >= 2 and ',' not in s:
             continue
         healed = heal_location_candidate(s)
         if healed and is_plausible_location_value(healed):

@@ -141,6 +141,119 @@ def test_location_rejects_section_headers():
     assert is_plausible_location_value('Mumbai')
 
 
+def test_location_rejects_duty_bullets_and_name_bleed():
+    """Experience duties / person names must never become Current Location."""
+    from app.ai.document_intelligence.deterministic import extract_simple_location
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_location_value
+
+    assert not is_plausible_location_value('Jdk upgradation')
+    assert not is_plausible_location_value('Sangam chauhan')
+    assert not is_plausible_location_value('WebLogic Installation')
+    # City substring must not accept a person name (Kalyan ⊂ Kalyani)
+    assert not is_plausible_location_value('Kalyani Borse')
+    assert not is_plausible_location_value('Puneet Sharma')
+    assert not is_plausible_location_value('Name                       :      Kalyani Borse')
+    assert not is_plausible_location_value('Pandaga Kalyani')
+    # Place name Kalyani (WB) is a real city — distinct from person "Kalyani Borse"
+    assert is_plausible_location_value('Kalyani')
+    assert is_plausible_location_value('Kalyani, West Bengal')
+    assert is_plausible_location_value('Navi Mumbai')
+    assert is_plausible_location_value('Thane, Mumbai')
+    assert is_plausible_location_value('Kalyan')
+    assert not is_plausible_location_value('Rahul')
+
+    gawale = """Curriculum Vitae
+Name: HRISHIKESH JITENDRA GAWALE
+Email: h.gawale@yahoo.com
+Contact Number: 9987822843
+
+Eidiko Systems Integrators Private Limited. NOV 09 2023 TO Present Date )
+Designation: Software Engineer 20
+CLIENT: YES BANK PVT LTD.
+• WebLogic Installation CLI & GUI Method linux & Windows server
+• Jdk upgradation
+• Deployment Jboss & Weblogic Tomcate Application
+"""
+    assert extract_simple_location(gawale) == ''
+
+    name_as_loc = """Kalyani Borse
+Email: borsekalya@gmail.com
+Phone: 7387781062
+PROFESSIONAL SUMMARY
+Having 2+ years of experience as Database Administrator.
+Experience
+DBA
+"""
+    assert extract_simple_location(name_as_loc) == ''
+
+    biodata_name = """Personal Details
+Name                       :      Kalyani Borse
+Address                    : # Row house no-04, Sakora
+Email: a@b.com
+Experience
+DBA
+"""
+    assert extract_simple_location(biodata_name) == ''
+
+    kalyani_city = """Priya Sharma
+Location: Kalyani
+Email: priya@example.com
+Summary
+Software engineer based in Kalyani.
+Experience
+Developer
+"""
+    assert extract_simple_location(kalyani_city) == 'Kalyani'
+
+    kalyani_bare = """Priya Sharma
+Kalyani
+Email: priya@example.com
+Experience
+Developer
+"""
+    assert extract_simple_location(kalyani_bare) == 'Kalyani'
+
+
+def test_summary_continues_past_false_experience_stop():
+    from app.ai.parser.enrichment.resume_text_inference import extract_summary_details
+
+    text = """HRUSHIKESH S PANDIT
+Summary
+Skilled Middleware Engineer with 2.5 years of
+corporate
+Experience
+and
+proven
+expertise
+in
+optimizing IT operations and ensuring the stability and
+performance of critical applications and systems.
+Skills
+Weblogic
+"""
+    details = extract_summary_details(text)
+    assert details['validation'] == 'passed'
+    assert 'optimizing IT operations' in details['value']
+    assert len(details['value']) > 100
+
+    wordy = """E JANARDHAN
+Summary
+Having
+around
+3.3
+years
+of
+Experience
+in
+Application development and Maintenance/Support projects using SQL.
+Education
+Btech
+"""
+    details2 = extract_summary_details(wordy)
+    assert 'Application development' in details2['value']
+    assert not details2['value'].rstrip().endswith(' of')
+
+
 def test_personal_profile_heading_extracts_summary():
     text = """ANUJ CHAFLE
 Pune
