@@ -616,7 +616,7 @@ Terminal: `Rejected`, `Withdrawn`, `Hired`
 | Interview | Offer, Rejected, Shortlisted |
 | Offer | Hired, Rejected |
 
-**Backend:** `can_transition()` enforced on PATCH; `interview_trigger.py` fires after Shortlisted
+**Backend:** `can_transition()` enforced on PATCH; shortlist notifies via `interview_scheduling_service.on_shortlisted`
 
 **Data:** `applications`
 
@@ -940,6 +940,7 @@ Quick map from URL to flow numbers:
 
 | Topic | Document |
 |-------|----------|
+| Workflows & business logic map | [WORKFLOWS.md](WORKFLOWS.md) |
 | Parse pipeline internals | [AI.md](AI.md#document-intelligence) |
 | Interview + Calendar env vars | [DEVELOPMENT.md](DEVELOPMENT.md#operational-workflows) |
 | Media file layout | [OPERATIONS.md](OPERATIONS.md) |

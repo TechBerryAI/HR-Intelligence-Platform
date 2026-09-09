@@ -10,6 +10,7 @@ Single entry point for HR Intelligence Platform docs. Prefer live code when docs
 |-------------|-----------|
 | **External team / career page integration** | [external/Techberry_Careers_API.md](external/Techberry_Careers_API.md) · [GUIDE.md](GUIDE.md#career-page-integration) |
 | **Engineer onboarding (full app map)** | [GUIDE.md](GUIDE.md) |
+| **Workflows & business logic** | [WORKFLOWS.md](WORKFLOWS.md) |
 | **Engineer (local setup + production)** | [DEVELOPMENT.md](DEVELOPMENT.md) · root [README.md](../README.md) |
 | **End user / trainer** | [user-manual/](user-manual/README.md) (Word/PDF) |
 | **Media storage & backups** | [OPERATIONS.md](OPERATIONS.md) |
@@ -23,6 +24,7 @@ Single entry point for HR Intelligence Platform docs. Prefer live code when docs
 docs/
   README.md           ← you are here
   GUIDE.md            ← app architecture, flows, API, data model, integrations
+  WORKFLOWS.md        ← workflows & business logic map (funnel, ATS, status machine)
   DEVELOPMENT.md      ← setup, workflows, production release, troubleshooting
   OPERATIONS.md       ← media storage + backup/restore
   AI.md               ← document intelligence, AI features, pipeline, ADRs

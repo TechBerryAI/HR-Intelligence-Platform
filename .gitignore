@@ -339,6 +339,14 @@ validation-report*.log
 /scratch/
 _forensic_tmp/
 
+# Local QA / pytest capture dumps (never commit)
+.qa-*.txt
+.qa-*.log
+
+# JD parse eval runner outputs (keep apps/data/jd_parse_eval/run_eval.py)
+apps/data/jd_parse_eval/*.json
+apps/data/jd_parse_eval/report.md
+
 # Word lock / temp files
 ~$*
 **/~$*
