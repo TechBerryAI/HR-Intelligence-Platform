@@ -32,6 +32,7 @@ class AIPerformanceProfile:
     bulk_workers: int
     ocr_dpi_start: int
     enable_doclayout: bool
+    ocr_max_concurrent: int = 1
     max_tokens_resume_jd: int = DEFAULT_MAX_TOKENS_RESUME_JD
 
 
@@ -43,6 +44,7 @@ PERFORMANCE_PROFILES: dict[str, AIPerformanceProfile] = {
         bulk_workers=8,
         ocr_dpi_start=200,
         enable_doclayout=True,
+        ocr_max_concurrent=4,
     ),
     'gpu_mid': AIPerformanceProfile(
         name='gpu_mid',
@@ -51,6 +53,7 @@ PERFORMANCE_PROFILES: dict[str, AIPerformanceProfile] = {
         bulk_workers=4,
         ocr_dpi_start=180,
         enable_doclayout=True,
+        ocr_max_concurrent=3,
     ),
     'unknown': AIPerformanceProfile(
         name='unknown',
@@ -59,6 +62,7 @@ PERFORMANCE_PROFILES: dict[str, AIPerformanceProfile] = {
         bulk_workers=4,
         ocr_dpi_start=180,
         enable_doclayout=True,
+        ocr_max_concurrent=3,
     ),
     'cpu': AIPerformanceProfile(
         name='cpu',
@@ -67,6 +71,7 @@ PERFORMANCE_PROFILES: dict[str, AIPerformanceProfile] = {
         bulk_workers=2,
         ocr_dpi_start=150,
         enable_doclayout=False,
+        ocr_max_concurrent=2,
     ),
 }
 
@@ -81,6 +86,7 @@ class HardwareProfile:
     bulk_workers: int
     ocr_dpi_start: int
     enable_doclayout: bool
+    ocr_max_concurrent: int
     preferred_model_hint: str
     vram_mb: int
     cpu_count: int
@@ -244,6 +250,9 @@ def detect_hardware_profile() -> HardwareProfile:
         bulk_workers=_env_int('BULK_PARSE_MAX_WORKERS', defaults.bulk_workers, lo=1, hi=24),
         ocr_dpi_start=defaults.ocr_dpi_start,
         enable_doclayout=enable_doclayout,
+        ocr_max_concurrent=_env_int(
+            'OCR_MAX_CONCURRENT', defaults.ocr_max_concurrent, lo=1, hi=8
+        ),
         preferred_model_hint=preferred,
         vram_mb=vram,
         cpu_count=cpus,
@@ -290,6 +299,8 @@ def apply_hardware_env(profile: Optional[HardwareProfile] = None) -> HardwarePro
             os.environ['BULK_PARSE_MAX_WORKERS'] = str(profile.bulk_workers)
         if 'HCIP_OCR_DPI_START' not in os.environ:
             os.environ['HCIP_OCR_DPI_START'] = str(profile.ocr_dpi_start)
+        if 'OCR_MAX_CONCURRENT' not in os.environ:
+            os.environ['OCR_MAX_CONCURRENT'] = str(profile.ocr_max_concurrent)
         if 'HCIP_ENABLE_DOCLAYOUT' not in os.environ:
             os.environ['HCIP_ENABLE_DOCLAYOUT'] = 'true' if profile.enable_doclayout else 'false'
         if 'RESUME_LAYOUT_ENABLED' not in os.environ:

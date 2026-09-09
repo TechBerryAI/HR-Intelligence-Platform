@@ -9,6 +9,27 @@ logger = logging.getLogger(__name__)
 
 OCR_PREPROCESS = os.getenv('OCR_PREPROCESS', 'true').lower() in ('1', 'true', 'yes')
 
+_cv2_threads_capped = False
+
+
+def _cap_cv2_threads(cv2: Any) -> None:
+    """
+    Cap OpenCV's internal thread pool once per process.
+
+    With OCR_MAX_CONCURRENT > 1 several preprocess calls run in parallel;
+    letting each use every core oversubscribes the CPU.
+    """
+    global _cv2_threads_capped
+    if _cv2_threads_capped:
+        return
+    try:
+        cpus = os.cpu_count() or 1
+        slots = max(1, int(os.getenv('OCR_MAX_CONCURRENT', '1')))
+        cv2.setNumThreads(max(1, cpus // slots))
+    except Exception:
+        pass
+    _cv2_threads_capped = True
+
 
 def preprocess_image_bytes(image_bytes: bytes) -> bytes:
     """
@@ -26,6 +47,8 @@ def preprocess_image_bytes(image_bytes: bytes) -> bytes:
         logger.debug('opencv-python-headless not installed; skipping OCR preprocess')
         return image_bytes
 
+    _cap_cv2_threads(cv2)
+
     try:
         arr = np.frombuffer(image_bytes, dtype=np.uint8)
         img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
@@ -33,7 +56,9 @@ def preprocess_image_bytes(image_bytes: bytes) -> bytes:
             return image_bytes
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        gray = cv2.fastNlMeansDenoising(gray, None, h=10, templateWindowSize=7, searchWindowSize=21)
+        # medianBlur removes salt-and-pepper scan noise at a tiny fraction of the
+        # cost of fastNlMeansDenoising (which took seconds per 200+ DPI page).
+        gray = cv2.medianBlur(gray, 3)
         gray = _deskew(gray)
         binary = cv2.adaptiveThreshold(
             gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, 11

@@ -796,7 +796,11 @@ def _run_resume(
     raw_file_id = raw_file_record['id']
     _emit(parse_job_id, 'persist_raw', 'completed', on_stage=on_stage)
 
-    from app.ai.parser.text_extraction import extract_document, should_retry_high_dpi_extract
+    from app.ai.parser.text_extraction import (
+        extract_document,
+        retry_extract_high_dpi,
+        should_retry_high_dpi_extract,
+    )
 
     # Time text and layout separately (layout must not include extract_text wall time)
     _emit(parse_job_id, 'text', 'started', on_stage=on_stage)
@@ -825,7 +829,9 @@ def _run_resume(
     )
     if needs_dpi_retry:
         try:
-            extract_result = extract_document(file_data, filename, dpi=300)
+            extract_result = retry_extract_high_dpi(
+                file_data, filename, extract_result, dpi=300
+            )
             raw_text = extract_result.text or ''
             if raw_text and '\x00' in raw_text:
                 raw_text = raw_text.replace('\x00', '')

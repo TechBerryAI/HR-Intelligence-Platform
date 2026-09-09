@@ -40,6 +40,7 @@ from app.ai.parser.text_quality import (
     IMAGE_COVERAGE_OCR_THRESHOLD,
     MIN_TEXT_CHARS,
     PAGE_OCR_TEXT_THRESHOLD,
+    STRONG_DIGITAL_PAGE_CHARS,
     classify_text_quality,
     looks_like_garbage_extract,
     prefer_better_text,
@@ -265,7 +266,21 @@ def normalize_extracted_text(text: str) -> str:
 
 _rapidocr_engine: Any = None
 _rapidocr_lock = threading.Lock()
-_ocr_inference_sema = threading.Semaphore(OCR_MAX_CONCURRENT)
+# Lazily sized so the hardware profile (apply_hardware_env) can set
+# OCR_MAX_CONCURRENT after this module is imported but before first OCR.
+_ocr_inference_sema: threading.Semaphore | None = None
+_ocr_sema_lock = threading.Lock()
+
+
+def _get_ocr_inference_sema() -> threading.Semaphore:
+    """Shared OCR inference semaphore, sized from env on first use."""
+    global _ocr_inference_sema
+    if _ocr_inference_sema is None:
+        with _ocr_sema_lock:
+            if _ocr_inference_sema is None:
+                limit = max(1, int(os.getenv('OCR_MAX_CONCURRENT', str(OCR_MAX_CONCURRENT))))
+                _ocr_inference_sema = threading.Semaphore(limit)
+    return _ocr_inference_sema
 # Cached probe: (available, engine_name_or_reason)
 _ocr_engine_status: tuple[bool, str] | None = None
 
@@ -378,6 +393,24 @@ def log_ocr_readiness() -> None:
     print(msg)
 
 
+def _ocr_intra_op_threads() -> int:
+    """
+    ONNX intra-op threads per OCR inference.
+
+    Splits CPU cores across OCR_MAX_CONCURRENT slots so concurrent OCR does not
+    oversubscribe the machine (N slots x all-cores threads).
+    """
+    raw = (os.getenv('OCR_INTRA_OP_THREADS') or '').strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    cpus = os.cpu_count() or 1
+    slots = max(1, int(os.getenv('OCR_MAX_CONCURRENT', str(OCR_MAX_CONCURRENT))))
+    return max(1, cpus // slots)
+
+
 def _get_rapidocr_engine() -> Any:
     """Lazy-load RapidOCR once (shared by extract + layout detections)."""
     global _rapidocr_engine
@@ -387,9 +420,22 @@ def _get_rapidocr_engine() -> Any:
 
     with _rapidocr_lock:
         if _rapidocr_engine is None:
-            try:
-                _rapidocr_engine = RapidOCR(use_angle_cls=True)
-            except TypeError:
+            threads = _ocr_intra_op_threads()
+            for kwargs in (
+                {
+                    'use_angle_cls': True,
+                    'intra_op_num_threads': threads,
+                    'inter_op_num_threads': 1,
+                },
+                {'use_angle_cls': True},
+                {},
+            ):
+                try:
+                    _rapidocr_engine = RapidOCR(**kwargs)
+                    break
+                except (TypeError, ValueError, KeyError):
+                    continue
+            if _rapidocr_engine is None:
                 _rapidocr_engine = RapidOCR()
         return _rapidocr_engine
 
@@ -397,7 +443,7 @@ def _get_rapidocr_engine() -> Any:
 def run_rapidocr_inference(arr: Any) -> Any:
     """Run RapidOCR on a numpy image under the shared inference semaphore."""
     engine = _get_rapidocr_engine()
-    with _ocr_inference_sema:
+    with _get_ocr_inference_sema():
         result, _ = engine(arr)
     return result
 
@@ -535,7 +581,7 @@ def _ocr_with_tesseract(
     image = Image.open(io.BytesIO(processed))
     if image.mode not in ('RGB', 'L'):
         image = image.convert('RGB')
-    with _ocr_inference_sema:
+    with _get_ocr_inference_sema():
         text = pytesseract.image_to_string(image, lang=lang or OCR_LANG)
     return (text or '').strip()
 
@@ -895,6 +941,21 @@ def _combine_page_text(digital: str, table_text: str) -> str:
     return '\n\n'.join(bits).strip()
 
 
+def _needs_page_ocr(quality: TextQuality, text: str, image_coverage: float) -> bool:
+    """
+    True when a PDF page should be OCRed.
+
+    Not-GOOD digital text always OCRs. High image coverage forces OCR too,
+    unless the digital layer is GOOD *and* long enough to be trusted (styled
+    resumes with photos/backgrounds — OCR there is pure waste).
+    """
+    if quality_needs_ocr(quality):
+        return True
+    if image_coverage < IMAGE_COVERAGE_OCR_THRESHOLD:
+        return False
+    return len((text or '').strip()) < STRONG_DIGITAL_PAGE_CHARS
+
+
 def _page_needs_ocr(page, digital_text: str) -> bool:
     """True when digital text is not GOOD, or the page is image-heavy."""
     image_count = _page_image_count(page)
@@ -902,9 +963,7 @@ def _page_needs_ocr(page, digital_text: str) -> bool:
     quality = classify_text_quality(
         digital_text, image_count=image_count, image_coverage=coverage
     )
-    if coverage >= IMAGE_COVERAGE_OCR_THRESHOLD:
-        return True
-    return quality_needs_ocr(quality)
+    return _needs_page_ocr(quality, digital_text, coverage)
 
 
 def _digital_page_result(
@@ -1146,8 +1205,18 @@ def _finalize_pdf_result(
     return result
 
 
-def extract_pdf_pymupdf_document(file_data: bytes, *, dpi: int | None = None) -> ExtractionResult:
-    """PyMuPDF extract with per-page OCR. Returns ExtractionResult (may be empty)."""
+def extract_pdf_pymupdf_document(
+    file_data: bytes,
+    *,
+    dpi: int | None = None,
+    reuse_pages: dict[int, PageExtractionResult] | None = None,
+) -> ExtractionResult:
+    """
+    PyMuPDF extract with per-page OCR. Returns ExtractionResult (may be empty).
+
+    reuse_pages maps 1-based page numbers to prior PageExtractionResults that
+    should be kept as-is (high-DPI retries only re-process the weak pages).
+    """
     try:
         import fitz  # PyMuPDF
     except ImportError as exc:
@@ -1170,6 +1239,11 @@ def extract_pdf_pymupdf_document(file_data: bytes, *, dpi: int | None = None) ->
         warnings: list[str] = []
 
         for page_num in range(page_count):
+            kept = (reuse_pages or {}).get(page_num + 1)
+            if kept is not None:
+                page_results.append(kept)
+                max_dpi_used = max(max_dpi_used, kept.dpi or 0)
+                continue
             page = doc[page_num]
             digital = (page.get_text('text') or '').strip()
             table_text = _extract_pdf_page_tables(page)
@@ -1180,9 +1254,7 @@ def extract_pdf_pymupdf_document(file_data: bytes, *, dpi: int | None = None) ->
                 combined, image_count=image_count, image_coverage=image_coverage
             )
 
-            needs_ocr = image_coverage >= IMAGE_COVERAGE_OCR_THRESHOLD or quality_needs_ocr(
-                digital_quality
-            )
+            needs_ocr = _needs_page_ocr(digital_quality, combined, image_coverage)
             if not needs_ocr:
                 page_results.append(
                     _digital_page_result(page_num + 1, combined, digital_quality)
@@ -1738,6 +1810,55 @@ def extract_document(file_data: bytes, filename: str, *, dpi: int | None = None)
             'Insufficient text extracted - PDF may be image-based or corrupted'
             if ext == 'pdf'
             else f'Could not extract sufficient text from document'
+        )
+    return result
+
+
+def retry_extract_high_dpi(
+    file_data: bytes,
+    filename: str,
+    prior: ExtractionResult | None,
+    *,
+    dpi: int = 300,
+) -> ExtractionResult:
+    """
+    High-DPI retry that re-processes only the pages that were not GOOD.
+
+    Pages the first pass already extracted as GOOD are reused verbatim, so a
+    10-page resume with one scanned page re-renders/OCRs one page, not ten.
+    Falls back to a full extract_document(dpi=...) when prior per-page results
+    are unavailable (non-PyMuPDF source, extract exception, non-PDF input).
+    """
+    ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+    keep: dict[int, PageExtractionResult] = {}
+    if ext == 'pdf' and prior is not None and prior.page_results:
+        keep = {
+            p.page_number: p
+            for p in prior.page_results
+            if p.quality == TextQuality.GOOD and (p.text or '').strip()
+        }
+    total_pages = len(prior.page_results) if prior is not None else 0
+    if not keep or len(keep) >= total_pages:
+        # Nothing reusable (or nothing to redo): plain full-document retry.
+        return extract_document(file_data, filename, dpi=dpi)
+
+    try:
+        result = extract_pdf_pymupdf_document(file_data, dpi=dpi, reuse_pages=keep)
+    except Exception as exc:
+        logger.warning(
+            'Selective high-DPI retry failed (%s); falling back to full retry',
+            type(exc).__name__,
+        )
+        return extract_document(file_data, filename, dpi=dpi)
+
+    result.text = normalize_extracted_text(result.text or '')
+    result.quality = classify_text_quality(result.text)
+    result.status = _result_status(result)
+    result.retry_count = (prior.retry_count if prior is not None else 0) + 1
+    log_extraction_summary(result, ext='pdf')
+    if len(result.text.strip()) < MIN_TEXT_CHARS:
+        raise ValueError(
+            'Insufficient text extracted - PDF may be image-based or corrupted'
         )
     return result
 
