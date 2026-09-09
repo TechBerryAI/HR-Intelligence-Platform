@@ -404,7 +404,13 @@ def map_candidate_to_form(
     # --- Experience rows ---
     experience_rows: list[ExperienceFormRow] = []
     for exp in profile.experience:
-        if not (exp.company or exp.role or exp.start):
+        if not (
+            exp.company
+            or exp.role
+            or exp.start
+            or exp.end
+            or exp.is_current
+        ):
             continue
         experience_rows.append(
             ExperienceFormRow(

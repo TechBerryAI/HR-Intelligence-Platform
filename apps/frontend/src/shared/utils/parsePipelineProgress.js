@@ -73,6 +73,18 @@ export function overlayStepIndex(type, stage) {
   return overlayStepsFor(type).findIndex((s) => (s.stages || []).includes(stage));
 }
 
+/** Sum stage spans into the four overlay step buckets. */
+export function overlayGroupMsFromSpans(type, spans) {
+  const groups = [0, 0, 0, 0];
+  for (const span of spans || []) {
+    const g = overlayStepIndex(type, span?.key);
+    if (g < 0) continue;
+    const ms = Number(span?.duration_ms);
+    if (Number.isFinite(ms) && ms > 0) groups[g] += ms;
+  }
+  return groups;
+}
+
 export function progressPctForStage(type, stage) {
   const order = type === 'jd' ? JD_STAGE_ORDER : RESUME_STAGE_ORDER;
   const idx = order.indexOf(stage);

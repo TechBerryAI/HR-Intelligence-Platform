@@ -68,6 +68,29 @@ def test_date_variants_including_till_date_and_ordinal():
     assert extract_date_range('Jan 2023 - Ongoing')[1] == 'Present'
     start, _ = extract_date_range('10th May 2024 - Present')
     assert start.startswith('2024')
+    since_start, since_end = extract_date_range('Since 2021')
+    assert since_start == '2021' and since_end == 'Present'
+    from_start, from_end = extract_date_range('from March 2020 to till date')
+    assert from_start.startswith('2020') and from_end == 'Present'
+    till_start, till_end = extract_date_range('Apr 2021 till date')
+    assert till_start.startswith('2021') and till_end == 'Present'
+    paren_start, paren_end = extract_date_range('(Jan 2020 – Present)')
+    assert paren_start.startswith('2020') and paren_end == 'Present'
+    assert extract_date_range('SQL Server 2019') == ('', '')
+    apos_start, apos_end = extract_date_range("Aug'20 – Till date")
+    assert apos_start.startswith('2020') and apos_end == 'Present'
+    jun_start, jun_end = extract_date_range("Jun'18-Sep'21")
+    assert jun_start.startswith('2018') and jun_end.startswith('2021')
+    dec_start, dec_end = extract_date_range("Dec’21– Present")
+    assert dec_start.startswith('2021') and dec_end == 'Present'
+    space_yy_start, space_yy_end = extract_date_range('Sep 21-Mar 22')
+    assert space_yy_start.startswith('2021') and space_yy_end.startswith('2022')
+    since_yy, since_yy_end = extract_date_range('Since Mar 22')
+    assert since_yy.startswith('2022') and since_yy_end == 'Present'
+    iso_space_start, iso_space_end = extract_date_range('2023-10 - 2025- 02')
+    assert iso_space_start.startswith('2023') and iso_space_end.startswith('2025')
+    typo_start, typo_end = extract_date_range('from 29th November 2023 to tll now')
+    assert typo_start.startswith('2023') and typo_end == 'Present'
 
 
 def test_section_aliases_are_semantic_not_sentences():

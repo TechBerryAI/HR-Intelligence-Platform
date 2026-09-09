@@ -27,21 +27,38 @@ _MONTH_MAP = {
     'oct': '10', 'october': '10', 'nov': '11', 'november': '11',
     'dec': '12', 'december': '12',
 }
+_MONTH_NAME = r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
+# Indian/Naukri resumes often write Aug'20 / Dec’21 / Sep 21 instead of Aug 2020.
+_MONTH_APOS_YEAR = rf'{_MONTH_NAME}\s*[\'’]\s*\d{{2}}'
+_MONTH_SPACE_YY = rf'{_MONTH_NAME}\s+\d{{2}}(?!\d)'
 _DATE_ATOM = (
     r'(?:'
-    r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\s+)?'
-    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+    r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?[\s\-]+)?'
+    rf'{_MONTH_NAME}[\s\-]+(?:19|20)\d{{2}}'
+    rf'|{_MONTH_APOS_YEAR}'
+    rf'|{_MONTH_SPACE_YY}'
     r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
     r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
-    r'|(?:19|20)\d{2}(?:[/\-](?:0?[1-9]|1[0-2]))?'
+    r'|(?:19|20)\d{2}(?:\s*[/\-]\s*(?:0?[1-9]|1[0-2]))?'
     r')'
 )
-_PRESENT_ATOM = r'(?:Present|Current|Now|Till\s*Date|Tilldate|Ongoing|Pursuing|Still(?:\s+Date)?)'
-_DATE_RANGE_RE = re.compile(
-    rf'(?i)\b({_DATE_ATOM})\s*(?:[-–—]|to)\s*({_DATE_ATOM}|{_PRESENT_ATOM})\b'
+_PRESENT_ATOM = (
+    r'(?:Present|Current|Now|Currently|'
+    r'Till\s*(?:Date|Present|Now)|Tilldate|'
+    r'T[il]l\s+now|'
+    r'To\s+Date|Ongoing|Pursuing|Still(?:\s+Date)?)'
 )
+_DATE_RANGE_RE = re.compile(
+    rf'(?i)\b(?:from\s+)?({_DATE_ATOM})\s*(?:[-–—]|to|until|till(?!\s*date))\s*'
+    rf'({_DATE_ATOM}|{_PRESENT_ATOM})\b'
+)
+_TILL_DATE_RANGE_RE = re.compile(
+    rf'(?i)\b(?:from\s+)?({_DATE_ATOM})\s+till\s*date\b'
+)
+_SINCE_RE = re.compile(rf'(?i)\bsince\s+({_DATE_ATOM})\b')
 _PRESENT_TOKEN_RE = re.compile(
-    r'(?i)^(present|current|now|till\s*date|tilldate|ongoing|pursuing|still(?:\s+date)?)$'
+    r'(?i)^(present|current|now|currently|till\s*(?:date|present|now)|tilldate|'
+    r't[il]l\s+now|to\s+date|ongoing|pursuing|still(?:\s+date)?)$'
 )
 
 
@@ -115,7 +132,8 @@ def extract_phone(text: str) -> str:
 
     # Prefer labeled lines, then header, then whole document
     m2 = re.search(
-        r'(?i)(?:phone|mobile|mob|cell|tel|contact(?:\s*no)?)\s*[:.\-–—]?\s*([+\d][\d\s().-]{7,}\d)',
+        r'(?i)(?:phone|mobile|mob|cell|tel|contact)'
+        r'(?:\s*(?:no\.?|number|num))?\s*[:.\-–—]?\s*([+\d][\d\s().-]{7,}\d)',
         text,
     )
     if m2:
@@ -229,8 +247,8 @@ def normalize_month_token(token: str) -> str:
     if m_dmy:
         return f'{m_dmy.group(3)}-{int(m_dmy.group(2)):02d}'
     m_ord = re.match(
-        r'(?i)^(0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?\s+'
-        r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+'
+        r'(?i)^(0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?[\s\-]+'
+        r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?[\s\-]+'
         r'((?:19|20)\d{2})$',
         t,
     )
@@ -244,10 +262,28 @@ def normalize_month_token(token: str) -> str:
     if m:
         mon = _MONTH_MAP.get(m.group(1).lower()[:3], '01')
         return f'{m.group(2)}-{mon}'
+    m_apos = re.match(
+        r'(?i)^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*[\'’]\s*(\d{2})$',
+        t,
+    )
+    if m_apos:
+        yy = int(m_apos.group(2))
+        year = 2000 + yy if yy < 80 else 1900 + yy
+        mon = _MONTH_MAP.get(m_apos.group(1).lower()[:3], '01')
+        return f'{year}-{mon}'
+    m_space_yy = re.match(
+        r'(?i)^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+(\d{2})$',
+        t,
+    )
+    if m_space_yy:
+        yy = int(m_space_yy.group(2))
+        year = 2000 + yy if yy < 80 else 1900 + yy
+        mon = _MONTH_MAP.get(m_space_yy.group(1).lower()[:3], '01')
+        return f'{year}-{mon}'
     m2 = re.match(r'^(0?[1-9]|1[0-2])[/\-]((?:19|20)\d{2})$', t)
     if m2:
         return f'{m2.group(2)}-{int(m2.group(1)):02d}'
-    m3 = re.match(r'^((?:19|20)\d{2})(?:[/\-](0?[1-9]|1[0-2]))?$', t)
+    m3 = re.match(r'^((?:19|20)\d{2})(?:\s*[/\-]\s*(0?[1-9]|1[0-2]))?$', t)
     if m3:
         if m3.group(2):
             return f'{m3.group(1)}-{int(m3.group(2)):02d}'
@@ -255,11 +291,84 @@ def normalize_month_token(token: str) -> str:
     return t
 
 
-def extract_date_range(line: str) -> Tuple[str, str]:
-    m = _DATE_RANGE_RE.search(line or '')
-    if not m:
+_DATE_ATOM_RE = re.compile(rf'(?i)\b({_DATE_ATOM})\b')
+
+_EDU_MONTH = (
+    r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
+)
+_EDU_YEAR_PHRASE_RE = re.compile(
+    r'(?i)(?:^|[,;|\s]+)'
+    r'(?:'
+    r'(?:in\s+the\s+year|in\s+year|year\s+of\s+passing|graduation\s+year|'
+    r'passed(?:\s+out)?(?:\s+in)?)\s*:?\s*'
+    r'|in\s+'
+    r')'
+    r'((?:' + _EDU_MONTH + r'\s+)?(?:19|20)\d{2})'
+    r'\.?\s*$'
+)
+_EDU_TRAILING_MONTH_YEAR_RE = re.compile(
+    r'(?i)(?:[,;|\s]+|(?<=\s))(?:in\s+)?'
+    r'(' + _EDU_MONTH + r'\s+(?:19|20)\d{2})\b\.?\s*$'
+)
+_EDU_TRAILING_YEAR_RE = re.compile(
+    r'(?i)\s*[|/\-–—,]*\s*((?:19|20)\d{2})\s*\.?\s*$'
+)
+
+
+def peel_education_date_phrase(text: str) -> Tuple[str, str]:
+    """Strip a trailing education date phrase; keep the institution/degree core.
+
+    Handles: May 2016, 2016, in 2016, in the year 2016, year of passing 2016,
+    passed in 2016, graduation year: 2016.
+
+    Does not treat "University of Example" as a date boundary — a year is required.
+    """
+    s = (text or '').strip()
+    if not s:
         return '', ''
-    return normalize_month_token(m.group(1)), normalize_month_token(m.group(2))
+    year = ''
+    m = _EDU_TRAILING_MONTH_YEAR_RE.search(s)
+    if m:
+        year = normalize_month_token(m.group(1))
+        s = s[: m.start()].strip(' \t|-–—,')
+    else:
+        m = _EDU_YEAR_PHRASE_RE.search(s)
+        if m:
+            token = m.group(1)
+            year = normalize_month_token(token) if re.search(r'[A-Za-z]', token) else token
+            s = s[: m.start()].strip(' \t|-–—,')
+        else:
+            m = _EDU_TRAILING_YEAR_RE.search(s)
+            if m:
+                year = m.group(1)
+                s = s[: m.start()].strip(' \t|-–—,')
+    s = re.sub(r'(?i)\s+\bin\b\s*$', '', s).strip(' \t|-–—,.')
+    return s, year
+
+
+def extract_date_range(line: str) -> Tuple[str, str]:
+    s = (line or '').strip()
+    if s.startswith('(') and s.endswith(')') and len(s) > 2:
+        s = s[1:-1].strip()
+    m = _DATE_RANGE_RE.search(s)
+    if not m:
+        inner = re.search(r'\(([^)]{6,80})\)', s)
+        if inner:
+            m = _DATE_RANGE_RE.search(inner.group(1))
+    if m:
+        return normalize_month_token(m.group(1)), normalize_month_token(m.group(2))
+    m_till = _TILL_DATE_RANGE_RE.search(s)
+    if m_till:
+        return normalize_month_token(m_till.group(1)), 'Present'
+    m_since = _SINCE_RE.search(s)
+    if m_since and not re.search(r'(?i)\b(?:server|sql|windows|oracle|version)\b', s):
+        return normalize_month_token(m_since.group(1)), 'Present'
+    if _PRESENT_TOKEN_RE.match(s):
+        return '', 'Present'
+    m1 = _DATE_ATOM_RE.search(s)
+    if m1 and not re.search(r'(?i)\b(?:server|sql|windows|oracle|version)\b', s):
+        return normalize_month_token(m1.group(1)), ''
+    return '', ''
 
 
 def extract_simple_location(text: str) -> str:

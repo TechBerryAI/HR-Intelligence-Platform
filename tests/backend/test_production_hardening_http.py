@@ -152,6 +152,42 @@ def test_public_parse_413_after_read(monkeypatch):
     assert res.status_code == 413
 
 
+def test_read_upload_bytes_caps_at_max_plus_one():
+    from app.domains.recruitment.api.parsing import MAX_FILE_SIZE, _read_upload_bytes
+
+    class _Src:
+        def read(self, n=-1):
+            assert n == MAX_FILE_SIZE + 1
+            return b'x' * n
+
+    data = _read_upload_bytes(_Src())
+    assert len(data) == MAX_FILE_SIZE + 1
+
+
+def test_public_parse_errors_omit_pid(monkeypatch):
+    from app.domains.recruitment.api import parsing as parsing_mod
+
+    monkeypatch.setattr(parsing_mod, '_public_parse_rate_limited', lambda *_a, **_k: False)
+    app = Flask(__name__)
+    app.register_blueprint(parsing_mod.parsing_bp, url_prefix='/api')
+    res = app.test_client().post('/api/parse/resume/public')
+    assert res.status_code == 400
+    body = res.get_json() or {}
+    assert 'pid' not in body
+    assert body.get('error') == 'No file provided'
+
+
+def test_resume_extract_error_body_is_generic():
+    from app.ai.document_intelligence import pipeline as pipeline_mod
+
+    src = inspect.getsource(pipeline_mod._run_resume)
+    assert 'Text extraction failed: {str(extract_err)}' not in src
+    assert 'Text extraction failed: {retry_err}' not in src
+    assert "error': 'Could not extract sufficient text from document'" in src or (
+        'Could not extract sufficient text from document' in src
+    )
+
+
 def test_otp_rate_limited(monkeypatch):
     monkeypatch.setattr(
         'app.domains.identity.api.hr_auth.shared_store.rate_limit_hit',

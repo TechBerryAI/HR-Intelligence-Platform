@@ -48,6 +48,9 @@ def test_name_rejects_resume_title():
     ok, reason = validate_person_name('Professional Summary')
     assert not ok
     assert 'title' in reason or 'name' in reason
+    assert validate_person_name('Overview')[0] is False
+    assert validate_person_name('Professional Objective')[0] is False
+    assert validate_person_name('Jordan Hale')[0] is True
 
 
 def test_institution_rejects_month():
