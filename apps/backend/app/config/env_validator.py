@@ -118,16 +118,22 @@ class EnvValidator:
     def rapidocr_production_guard(cls) -> str | None:
         """Return an error line if production cannot use RapidOCR, else None.
 
-        Import-only (no engine construction, no Tesseract fallback). Python 3.13+
-        has no RapidOCR wheels; Tesseract-only is not a valid production start.
+        Import-only (no engine construction, no Tesseract fallback).
+        Python 3.10–3.12: rapidocr_onnxruntime.
+        Python 3.13+: rapidocr (+ onnxruntime).
         """
         py = sys.version_info
         if py >= (3, 13):
-            return (
-                "  ❌ OCR: production requires Python 3.11 (3.10–3.12 supported); "
-                f"got {py.major}.{py.minor}. RapidOCR wheels are not published for "
-                "Python 3.13+. Use Python 3.11 and pip install -r requirements.lock.txt"
-            )
+            try:
+                import rapidocr  # noqa: F401  # type: ignore
+            except Exception as exc:
+                return (
+                    "  ❌ OCR: RapidOCR is required in production on Python 3.13+ "
+                    f"(import rapidocr failed: {exc}). "
+                    "pip install rapidocr onnxruntime, or use Python 3.11/3.12 "
+                    "with rapidocr-onnxruntime"
+                )
+            return None
         try:
             import rapidocr_onnxruntime  # noqa: F401  # type: ignore
         except Exception as exc:

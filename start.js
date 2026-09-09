@@ -68,22 +68,27 @@ function checkCriticalSource() {
   process.exit(1);
 }
 
-/** RapidOCR wheels exist for Python 3.10–3.12 only (not 3.13+). */
-function pythonSupportsRapidOCR(major, minor) {
+/** Legacy rapidocr-onnxruntime wheels: Python 3.10–3.12 only. */
+function pythonSupportsLegacyRapidOCR(major, minor) {
   return major === 3 && minor >= 10 && minor < 13;
 }
 
-function rapidocrPythonRequiredMessage(version) {
+/** Any supported OCR path (legacy package, or rapidocr 3.x on 3.13+). */
+function pythonSupportsRapidOCR(major, minor) {
+  return major === 3 && minor >= 10;
+}
+
+function rapidocrPythonHint(version) {
   return (
-    `Python ${version} cannot run RapidOCR (no wheels for 3.13+). ` +
-    'Use Python 3.11 (3.10–3.12 supported) and recreate apps/backend/venv.'
+    `Python ${version}: use rapidocr+onnxruntime on 3.13+, ` +
+    'or rapidocr-onnxruntime on 3.10–3.12 (see requirements.txt).'
   );
 }
 
 function warnOrFailPythonVersion(major, minor) {
   if (major < 3 || (major === 3 && minor < 10)) {
     log(
-      `Python ${major}.${minor} is below the supported range (3.10–3.12). ` +
+      `Python ${major}.${minor} is below the supported range (3.10+). ` +
         'Type hints like str | None will crash the backend. Install Python 3.10+ ' +
         'and recreate apps/backend/venv, or continue only if all modules use ' +
         '`from __future__ import annotations`.',
@@ -91,9 +96,12 @@ function warnOrFailPythonVersion(major, minor) {
     );
     return;
   }
-  if (!pythonSupportsRapidOCR(major, minor)) {
-    log(rapidocrPythonRequiredMessage(`${major}.${minor}`), 'err');
-    process.exit(1);
+  if (!pythonSupportsLegacyRapidOCR(major, minor)) {
+    log(
+      `Python ${major}.${minor} — RapidOCR via rapidocr+onnxruntime (3.13+ path). ` +
+        rapidocrPythonHint(`${major}.${minor}`),
+      'warn'
+    );
   }
 }
 
@@ -357,11 +365,21 @@ async function setupBackend() {
   );
   const venvVersion = (venvPy.stdout || '').trim() || 'unknown';
   const venvParts = /^(\d+)\.(\d+)$/.exec(venvVersion);
-  if (venvParts && !pythonSupportsRapidOCR(Number(venvParts[1]), Number(venvParts[2]))) {
-    log(rapidocrPythonRequiredMessage(venvVersion), 'err');
+  const major = venvParts ? Number(venvParts[1]) : 0;
+  const minor = venvParts ? Number(venvParts[2]) : 0;
+  const legacyRapid = pythonSupportsLegacyRapidOCR(major, minor);
+  const py313Plus = major === 3 && minor >= 13;
+  if (venvParts && !pythonSupportsRapidOCR(major, minor)) {
+    log(`Unsupported Python ${venvVersion} for backend (need 3.10+).`, 'err');
     process.exit(1);
   }
-  log('Installing backend dependencies from requirements.txt (includes OCR: pymupdf, Pillow, RapidOCR)...');
+  log(
+    legacyRapid
+      ? 'Installing backend dependencies from requirements.txt (includes OCR: pymupdf, Pillow, RapidOCR)...'
+      : py313Plus
+        ? 'Installing backend dependencies from requirements.txt (includes OCR: pymupdf, Pillow, rapidocr+onnxruntime)...'
+        : 'Installing backend dependencies from requirements.txt...'
+  );
   await runCmd(VENV_PYTHON, ['-m', 'pip', 'install', '-r', 'requirements.txt', '-q'], BACKEND_DIR);
   log('Verifying OCR packages import...');
   const verifyCore = spawnSync(
@@ -378,20 +396,34 @@ async function setupBackend() {
 
   const verifyRapid = spawnSync(
     VENV_PYTHON,
-    ['-c', "import rapidocr_onnxruntime; print('RapidOCR OK')"],
+    [
+      '-c',
+      "ok=False\n"
+        + "try:\n"
+        + " import rapidocr_onnxruntime; ok=True; print('RapidOCR OK (rapidocr_onnxruntime)')\n"
+        + "except Exception:\n"
+        + " pass\n"
+        + "if not ok:\n"
+        + " try:\n"
+        + "  import rapidocr; import onnxruntime; ok=True; print('RapidOCR OK (rapidocr)')\n"
+        + " except Exception as e:\n"
+        + "  raise SystemExit('RapidOCR import failed: '+str(e))\n",
+    ],
     { cwd: BACKEND_DIR, encoding: 'utf8' }
   );
   if (verifyRapid.status !== 0) {
     log(
       `RapidOCR import failed on Python ${venvVersion}. ` +
-        'Use Python 3.11 (3.10–3.12 supported), recreate apps/backend/venv, ' +
-        'and pip install -r requirements.txt. Do not continue without RapidOCR.',
-      'err'
+        (py313Plus
+          ? 'pip install rapidocr onnxruntime (or recreate venv after updating requirements.txt).'
+          : 'Use Python 3.11–3.12 and pip install -r requirements.txt.') +
+        ' Scanned PDFs will fail without OCR — continuing API setup.',
+      'warn'
     );
     if (verifyRapid.stderr) process.stderr.write(verifyRapid.stderr);
-    process.exit(1);
+  } else if (verifyRapid.stdout) {
+    process.stdout.write(verifyRapid.stdout.trim() + '\n');
   }
-  if (verifyRapid.stdout) process.stdout.write(verifyRapid.stdout.trim() + '\n');
   log('Backend setup complete');
 }
 
@@ -853,6 +885,7 @@ module.exports = {
   openBrowser,
   onExit,
   pythonSupportsRapidOCR,
+  pythonSupportsLegacyRapidOCR,
   BACKEND_PORT,
   FRONTEND_PORT,
   BROWSER_URL,

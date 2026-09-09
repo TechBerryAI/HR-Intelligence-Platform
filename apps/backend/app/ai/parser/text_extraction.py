@@ -263,7 +263,8 @@ def get_ocr_engine_status() -> tuple[bool, str]:
     """
     Return (available, detail). Probes once per process.
 
-    available=True when RapidOCR import works or system Tesseract + pytesseract exist.
+    available=True when RapidOCR (legacy or rapidocr 3.x) works, or system
+    Tesseract + pytesseract exist.
     """
     global _ocr_engine_status
     if _ocr_engine_status is not None:
@@ -279,7 +280,16 @@ def get_ocr_engine_status() -> tuple[bool, str]:
     except ImportError:
         pass
     except Exception as exc:
-        logger.debug('RapidOCR probe failed: %s', exc)
+        logger.debug('rapidocr_onnxruntime probe failed: %s', exc)
+    try:
+        import rapidocr  # noqa: F401  # type: ignore
+
+        _ocr_engine_status = (True, 'rapidocr')
+        return _ocr_engine_status
+    except ImportError:
+        pass
+    except Exception as exc:
+        logger.debug('rapidocr probe failed: %s', exc)
     if _tesseract_available():
         try:
             import pytesseract  # noqa: F401
@@ -295,7 +305,7 @@ def get_ocr_engine_status() -> tuple[bool, str]:
     _ocr_engine_status = (
         False,
         'RapidOCR not installed and Tesseract unavailable '
-        '(pip install rapidocr-onnxruntime, or install system Tesseract)',
+        '(pip install rapidocr onnxruntime, or install system Tesseract)',
     )
     return _ocr_engine_status
 
@@ -331,8 +341,8 @@ def log_ocr_readiness() -> None:
     extra = ''
     if sys.version_info >= (3, 13) and detail != 'rapidocr':
         extra = (
-            ' Python 3.13+ has no RapidOCR wheels; use Python 3.11/3.12 for pip RapidOCR '
-            'or install system Tesseract.'
+            ' On Python 3.13+ install: pip install rapidocr onnxruntime '
+            '(or use system Tesseract / Python 3.12).'
         )
     msg = (
         f'[OCR] status={health} engine={detail} python={py} '
@@ -350,23 +360,67 @@ def _get_rapidocr_engine() -> Any:
     global _rapidocr_engine
     if _rapidocr_engine is not None:
         return _rapidocr_engine
-    from rapidocr_onnxruntime import RapidOCR  # type: ignore
-
     with _rapidocr_lock:
-        if _rapidocr_engine is None:
-            try:
-                _rapidocr_engine = RapidOCR(use_angle_cls=True)
-            except TypeError:
-                _rapidocr_engine = RapidOCR()
+        if _rapidocr_engine is not None:
+            return _rapidocr_engine
+        # Prefer legacy package on 3.10–3.12; rapidocr 3.x works on 3.13+.
+        RapidOCR = None
+        flavor = ''
+        try:
+            from rapidocr_onnxruntime import RapidOCR as _LegacyRapidOCR  # type: ignore
+
+            RapidOCR = _LegacyRapidOCR
+            flavor = 'rapidocr_onnxruntime'
+        except Exception:
+            from rapidocr import RapidOCR as _ModernRapidOCR  # type: ignore
+
+            RapidOCR = _ModernRapidOCR
+            flavor = 'rapidocr'
+        try:
+            _rapidocr_engine = RapidOCR(use_angle_cls=True)
+        except TypeError:
+            _rapidocr_engine = RapidOCR()
+        setattr(_rapidocr_engine, '_hcip_flavor', flavor)
         return _rapidocr_engine
+
+
+def _normalize_rapidocr_detections(raw: Any) -> list:
+    """
+    Normalize RapidOCR outputs to a list of [box, text, score] rows.
+
+    Supports:
+      - rapidocr_onnxruntime: (detections, elapse) or detections list
+      - rapidocr 3.x: RapidOCROutput with .boxes / .txts / .scores
+    """
+    if raw is None:
+        return []
+    txts = getattr(raw, 'txts', None)
+    if txts is not None:
+        boxes = getattr(raw, 'boxes', None)
+        scores = getattr(raw, 'scores', None)
+        out: list = []
+        for i, text in enumerate(txts or ()):
+            if text is None or not str(text).strip():
+                continue
+            box = boxes[i] if boxes is not None and i < len(boxes) else None
+            score = scores[i] if scores is not None and i < len(scores) else None
+            out.append([box, str(text).strip(), score])
+        return out
+    if isinstance(raw, tuple) and len(raw) >= 1:
+        raw = raw[0]
+    if not raw:
+        return []
+    if isinstance(raw, list):
+        return raw
+    return []
 
 
 def run_rapidocr_inference(arr: Any) -> Any:
     """Run RapidOCR on a numpy image under the shared inference semaphore."""
     engine = _get_rapidocr_engine()
     with _ocr_inference_sema:
-        result, _ = engine(arr)
-    return result
+        raw = engine(arr)
+    return _normalize_rapidocr_detections(raw)
 
 
 def _ocr_max_side() -> int:

@@ -54,8 +54,14 @@ EXCEL_HEADERS = [
     'Certifications',
     'Total Experience Years',
     'ParseStatus',
+    'ParseScore',
     'ParseNotes',
 ]
+
+_PARSE_STATUS_OK = 'OK'
+_PARSE_STATUS_PARTIAL_MID = 'PARTIAL - 50-79%'
+_PARSE_STATUS_PARTIAL_LOW = 'PARTIAL - BELOW 50%'
+_PARSE_STATUS_FAILED = 'failed'
 FIELD_TRACE_HEADERS = [
     'Filename',
     'Field',
@@ -1129,7 +1135,8 @@ def _flatten_toon(
         'Education': '; '.join(edu_parts)[:3000],
         'Certifications': ', '.join(cert_strs)[:2000],
         'Total Experience Years': years_out,
-        'ParseStatus': 'ok',
+        'ParseStatus': _PARSE_STATUS_OK,
+        'ParseScore': '',
         'ParseNotes': '',
     }
     row['_field_trace'] = _build_field_trace(
@@ -1246,6 +1253,60 @@ _COVERAGE_GAP_LABELS = {
 }
 
 
+def _resume_excel_completeness_score(row: dict) -> int:
+    """0–100 how filled the Excel resume row is (used for ParseStatus / ParseScore)."""
+    if not isinstance(row, dict):
+        return 0
+    weighted = (
+        ('Name', 15, 2),
+        ('Email', 15, 3),
+        ('Phone', 15, 7),
+        ('Current Location', 10, 2),
+        ('Summary', 15, 40),
+        ('Skills', 10, 8),
+        ('Experience', 15, 20),
+        ('Education', 5, 8),
+    )
+    score = 0
+    for col, weight, min_len in weighted:
+        val = str(row.get(col) or '').strip()
+        if not val:
+            continue
+        if len(val) < min_len:
+            score += max(1, weight // 2)
+        else:
+            score += weight
+    return int(min(100, max(0, score)))
+
+
+def _parse_status_from_score(score: int) -> str:
+    """
+    if score >= 80: OK
+    else if score >= 50: PARTIAL - 50-79%
+    else: PARTIAL - BELOW 50%
+    """
+    if score >= 80:
+        return _PARSE_STATUS_OK
+    if score >= 50:
+        return _PARSE_STATUS_PARTIAL_MID
+    return _PARSE_STATUS_PARTIAL_LOW
+
+
+def _is_acceptable_bulk_parse_status(status: str) -> bool:
+    """True for OK / partial tiers (not failed)."""
+    s = (status or '').strip()
+    if not s:
+        return False
+    low = s.lower()
+    if low == 'failed':
+        return False
+    return (
+        s in (_PARSE_STATUS_OK, _PARSE_STATUS_PARTIAL_MID, _PARSE_STATUS_PARTIAL_LOW)
+        or low in ('ok', 'partial')
+        or low.startswith('partial')
+    )
+
+
 def _coverage_gaps_from_form(form_dto) -> list[str]:
     """Named core coverage gaps from ApplicationFormDTO (JD-parity honesty)."""
     if form_dto is None:
@@ -1272,10 +1333,20 @@ def _apply_coverage_parse_honesty(
     parse_status: str,
     note_bits: list[str],
 ) -> str:
-    """Mark partial + ParseNotes when coverage still has named gaps or ungrounded cells."""
+    """
+    Set ParseScore + clear ParseStatus tiers from completeness.
+
+    Coverage/trace gaps stay in ParseNotes. Score drives the visible status:
+      >=80 → OK | >=50 → PARTIAL - 50-79% | else → PARTIAL - BELOW 50%
+    """
+    if (parse_status or '').strip().lower() == 'failed':
+        row['ParseStatus'] = _PARSE_STATUS_FAILED
+        row['ParseScore'] = '0%'
+        row['ParseNotes'] = '; '.join(note_bits)[:2000]
+        return _PARSE_STATUS_FAILED
+
     gaps = _coverage_gaps_from_form(form_dto)
     if gaps:
-        parse_status = 'partial'
         labels = [_COVERAGE_GAP_LABELS.get(g, g) for g in gaps]
         note_bits.append('coverage_gaps=' + ','.join(labels))
     weak_verdicts = []
@@ -1285,9 +1356,20 @@ def _apply_coverage_parse_honesty(
         if verdict in ('weak_missing', 'weak_ungrounded') and field in _TRACE_CORE_FIELDS:
             weak_verdicts.append(f'{field}:{verdict}')
     if weak_verdicts:
-        parse_status = 'partial'
         note_bits.append('trace_weak=' + ','.join(weak_verdicts[:8]))
+
+    score = _resume_excel_completeness_score(row)
+    # Soft penalty when coverage/trace still flags core gaps (keeps near-full rows honest)
+    if gaps:
+        score = max(0, score - 5 * min(len(gaps), 4))
+    if weak_verdicts:
+        score = max(0, score - 3 * min(len(weak_verdicts), 4))
+    score = int(min(100, max(0, score)))
+
+    parse_status = _parse_status_from_score(score)
+    note_bits.append(f'completeness={score}')
     row['ParseStatus'] = parse_status
+    row['ParseScore'] = f'{score}%'
     row['ParseNotes'] = '; '.join(note_bits)[:2000]
     return parse_status
 
@@ -1344,7 +1426,8 @@ def _failed_excel_row(filename: str, *, code: str, message: str) -> dict:
         'Education': '',
         'Certifications': '',
         'Total Experience Years': '',
-        'ParseStatus': 'failed',
+        'ParseStatus': _PARSE_STATUS_FAILED,
+        'ParseScore': '0%',
         'ParseNotes': note,
         '_field_trace': [],
     }
@@ -1616,7 +1699,7 @@ def _process_one_file_inner(
                                 row,
                                 False,
                                 f"Processing: {filename} (engine:{source})",
-                                parse_status if parse_status in ("ok", "partial") else "ok",
+                                parse_status if _is_acceptable_bulk_parse_status(parse_status) else _PARSE_STATUS_OK,
                             )
             except Exception as det_err:
                 print(f"[local_bulk_parser] engine det path failed for {filename}: {det_err}")
@@ -1712,7 +1795,7 @@ def _process_one_file_inner(
                         row,
                         False,
                         f"Processing: {filename} (engine:{source})",
-                        parse_status if parse_status in ("ok", "partial") else "ok",
+                        parse_status if _is_acceptable_bulk_parse_status(parse_status) else _PARSE_STATUS_OK,
                     )
                 last_err = notes or "validation failed"
                 toon = None
