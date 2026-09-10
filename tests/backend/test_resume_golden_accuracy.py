@@ -179,4 +179,6 @@ def test_bulk_coverage_honesty_helper():
     assert _parse_status_from_score(85) == _PARSE_STATUS_OK
     assert _parse_status_from_score(65) == _PARSE_STATUS_PARTIAL_MID
     assert _parse_status_from_score(40) == _PARSE_STATUS_PARTIAL_LOW
+    assert _PARSE_STATUS_PARTIAL_MID == 'PARTIAL'
+    assert _PARSE_STATUS_PARTIAL_LOW == 'WEAK'
     assert _resume_excel_completeness_score(row) >= 50

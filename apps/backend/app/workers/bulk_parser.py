@@ -59,9 +59,12 @@ EXCEL_HEADERS = [
 ]
 
 _PARSE_STATUS_OK = 'OK'
-_PARSE_STATUS_PARTIAL_MID = 'PARTIAL - 50-79%'
-_PARSE_STATUS_PARTIAL_LOW = 'PARTIAL - BELOW 50%'
+_PARSE_STATUS_PARTIAL = 'PARTIAL'
+_PARSE_STATUS_WEAK = 'WEAK'
 _PARSE_STATUS_FAILED = 'failed'
+# Back-compat aliases for older tests / notes
+_PARSE_STATUS_PARTIAL_MID = _PARSE_STATUS_PARTIAL
+_PARSE_STATUS_PARTIAL_LOW = _PARSE_STATUS_WEAK
 FIELD_TRACE_HEADERS = [
     'Filename',
     'Field',
@@ -565,19 +568,88 @@ def _normalize_email(email: Any) -> str:
 
 
 def _cert_to_str(c: Any) -> str:
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_cert_name
+
     if isinstance(c, dict):
         name = _as_text(c.get('name'))
         issuer = _as_text(c.get('issuer'))
+        if name and not is_plausible_cert_name(name):
+            return ''
         if name and issuer:
             return f'{name} ({issuer})'
-        return name or issuer or _as_text(c)
-    return _as_text(c)
+        return name or issuer or ''
+    text = _as_text(c)
+    if text and not is_plausible_cert_name(text):
+        return ''
+    return text
+
+
+def _filter_excel_cert_strs(cert_strs: list[str]) -> list[str]:
+    """Drop CV-dump leftovers that still slipped past cert validation."""
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_cert_name
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for c in cert_strs:
+        s = _as_text(c)
+        if not s or not is_plausible_cert_name(s.split(' (')[0].strip()):
+            continue
+        if re.search(
+            r'(?i)(?:\bphone\b|\bmobile\b|\be-?mail\b|@|linkedin|permanent\s+address|'
+            r'job\s+objective|seeking\s+assignments|willing\s+to\s+work|'
+            r'sensitivity\s+label|curriculum\s+vitae)',
+            s,
+        ):
+            continue
+        if len(s) > 160:
+            continue
+        key = re.sub(r'\s+', ' ', s.lower()).strip(' .,')
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(s)
+    # If still looks like a pasted resume header block, clear entirely
+    joined = ', '.join(out)
+    if len(joined) > 600 and (
+        joined.count('@') >= 1
+        or len(re.findall(r'(?i)\b(?:phone|mobile|email|contact)\b', joined)) >= 2
+    ):
+        return [c for c in out if is_plausible_cert_name(c) and len(c) < 80][:8]
+    return out[:20]
 
 
 def _skill_to_str(s: Any) -> str:
     if isinstance(s, dict):
         return _as_text(s.get('name') or s.get('skill') or s)
     return _as_text(s)
+
+
+def _scrub_experience_description(desc: str) -> str:
+    """Drop empty Title:/Duration: stubs and address bleed from experience text."""
+    from app.ai.parser.enrichment.resume_text_inference import _EMPTY_EXP_LABEL_RE
+
+    s = _as_text(desc)
+    if not s:
+        return ''
+    s = _EMPTY_EXP_LABEL_RE.sub('', s)
+    s = re.sub(r'(?i)\b(?:permanent|residential|current)\s+address\s*:\s*[^;|]{0,160}', '', s)
+    # Education institution bleed parked as Organization: University
+    s = re.sub(
+        r'(?i)\borgani[sz]ation\s*:\s*[^;|]{0,120}\b(?:university|college|institute)\b[^;|]{0,80}',
+        '',
+        s,
+    )
+    s = re.sub(r'\s{2,}', ' ', s).strip(' ;|,-')
+    # Drop glyph-only leftovers
+    if re.fullmatch(r'[\s•·\-\*]+', s or ''):
+        return ''
+    return s
+
+
+def _truncate_excel_summary(summary: str, max_len: int = 2000) -> str:
+    from app.ai.parser.enrichment.resume_text_inference import _truncate_summary_at_boundary
+
+    return _truncate_summary_at_boundary(_as_text(summary), max_len)
 
 
 def _form_get(form: Any, *names: str, default: Any = None) -> Any:
@@ -823,43 +895,78 @@ def _exp_dicts_from_form(form: Any) -> list[dict]:
 
 
 def _format_experience_chunks(exp_dicts: list[dict]) -> list[str]:
-    exp_parts = []
+    from app.ai.parser.enrichment.resume_text_inference import (
+        has_credible_employment_evidence,
+        is_non_job_experience_record,
+        is_plausible_job_title,
+    )
+
+    exp_parts: list[str] = []
+    seen_headers: set[str] = set()
     for e in exp_dicts:
+        if not isinstance(e, dict):
+            continue
+        if is_non_job_experience_record(e):
+            continue
         title = _as_text(e.get('title') or e.get('role'))
         company = _as_text(e.get('company'))
         fr = _as_text(e.get('from') or e.get('start'))
         to = _as_text(e.get('to') or e.get('end'))
+        desc = _scrub_experience_description(_as_text(e.get('description')))
+        # Credible jobs OR unlabeled date+duty rows (remote contract layouts)
+        if title or company:
+            if not has_credible_employment_evidence(e):
+                continue
+        elif not ((fr or to) and desc):
+            continue
+        if title and not is_plausible_job_title(title):
+            continue
+        # Company-only skill crumbs without a real employer cue
+        if not title and company and not re.search(
+            r'(?i)\b(?:pvt\.?\s*ltd|ltd|inc|llc|corp|technologies|solutions|'
+            r'systems|labs?|university|college|institute|company|pvt)\b',
+            company,
+        ):
+            continue
         if (e.get('is_current') or str(to).lower() in ('present', 'current', 'now')) and not to:
             to = 'Present'
-        desc = _as_text(e.get('description'))
+        # Clamp absurd future end years in Excel text too
+        if re.match(r'^(20[3-9]\d)', to or ''):
+            to = 'Present'
         if not title and not company:
             if (fr or to) and desc:
                 loc = _as_text(e.get('location'))
-                chunk = f'({fr}-{to})'.strip()
-                if loc:
-                    chunk = f'{chunk} {loc}'
-                exp_parts.append(f'{chunk}: {desc[:400]}')
+                date_bit = f'{fr} – {to}'.strip(' –') if (fr or to) else ''
+                lines = [x for x in (date_bit, loc, desc[:400]) if x]
+                exp_parts.append('\n'.join(lines))
             continue
         if re.match(r'(?i)^(india|pune|mumbai|remote)$', title) and re.match(
             r'(?i)^(india|pune|mumbai|remote)$', company or 'x'
         ):
             continue
-        if title and company:
-            chunk = f'{title} at {company}'
-        elif title:
-            chunk = title
-        else:
-            chunk = company
+        header_key = f'{title}|{company}'.lower()
+        if header_key in seen_headers:
+            continue
+        seen_headers.add(header_key)
+        # Expected-style multi-line job block (Role / Company / dates / duties)
+        date_bit = ''
         if fr or to:
-            chunk = f'{chunk} ({fr}-{to})'.strip()
+            date_bit = f'{fr} – {to}'.strip(' –')
+        lines = [x for x in (title, company, date_bit) if x]
         if desc:
-            chunk = f'{chunk}: {desc[:400]}'
-        if chunk and chunk not in ('at ()', '()'):
+            lines.append(desc[:400])
+        chunk = '\n'.join(lines)
+        if chunk:
             exp_parts.append(chunk)
     return exp_parts
 
 
 def _format_education_chunks_from_form(form: Any) -> list[str]:
+    from app.ai.document_intelligence.validation.engine import (
+        _EDU_HEADING_TOKENS,
+        is_keepable_education_form_row,
+    )
+
     form_edu = _form_get(form, 'education', default=None)
     if not form_edu:
         return []
@@ -875,11 +982,20 @@ def _format_education_chunks_from_form(form: Any) -> list[str]:
             year = _as_text(e.get('endMonth') or e.get('startMonth') or e.get('to'))
         else:
             continue
+        if degree.lower() in _EDU_HEADING_TOKENS or inst.lower() in _EDU_HEADING_TOKENS:
+            continue
+        if not is_keepable_education_form_row(degree, inst):
+            continue
+        # Date-only / project-meta crumbs
+        if re.match(r'(?i)^from\s+\w+', degree):
+            continue
+        if re.match(r'(?i)^(?:platform|technologies?|tools?)\s+used\b', degree):
+            continue
         chunk = degree
         if inst:
-            chunk = f'{chunk} - {inst}' if chunk else inst
+            chunk = f'{chunk} | {inst}' if chunk else inst
         if year:
-            chunk = f'{chunk} [{year}]' if chunk else year
+            chunk = f'{chunk} | {year}' if chunk else year
         if chunk:
             edu_parts.append(chunk)
     return edu_parts
@@ -1005,6 +1121,12 @@ def _flatten_toon(
 
     use_form = form is not None
     pref_fallback = False
+    exp_dicts: list[dict] = []
+    exp_parts: list[str] = []
+    edu_parts: list[str] = []
+    cert_strs: list[str] = []
+    years_out: Any = ''
+    skill_strs: list[str] = []
 
     if use_form:
         name = _as_text(_form_get(form, 'fullName', default='')) or _as_text(person.get('name'))
@@ -1032,9 +1154,9 @@ def _flatten_toon(
         elif not preferred_location and current_location:
             preferred_location = current_location
             pref_fallback = True
-        summary = _as_text(
+        summary = _truncate_excel_summary(
             _form_get(form, 'summary', 'summaryText', default='') or toon.get('summary')
-        )[:2000]
+        )
         form_skills = _form_get(form, 'skillsList', default=None)
         if not form_skills:
             form_skills = _form_get(form, 'skills', default='')
@@ -1045,6 +1167,12 @@ def _flatten_toon(
         else:
             skill_strs = [_skill_to_str(s) for s in skills[:50] if s]
         skill_strs = [s for s in skill_strs if s]
+        try:
+            from app.ai.parser.enrichment.resume_text_inference import filter_skill_items
+
+            skill_strs = filter_skill_items(skill_strs)
+        except Exception:
+            pass
         exp_dicts = _exp_dicts_from_form(form)
         exp_parts = _format_experience_chunks(exp_dicts)
         edu_parts = _format_education_chunks_from_form(form)
@@ -1059,9 +1187,10 @@ def _flatten_toon(
                 elif isinstance(c, dict):
                     cert_strs.append(_cert_to_str(c))
             cert_strs = [c for c in cert_strs if c]
+            cert_strs = _filter_excel_cert_strs(cert_strs)
         else:
             cert_strs = [_cert_to_str(c) for c in certs[:30]]
-            cert_strs = [c for c in cert_strs if c]
+            cert_strs = _filter_excel_cert_strs(cert_strs)
         years_out = _years_from_form_or_toon(form, toon, exp_dicts, raw_text=raw_text)
     else:
         name = _as_text(person.get('name'))
@@ -1075,8 +1204,14 @@ def _flatten_toon(
         preferred_location = _as_text(person.get('preferred_location')) or current_location
         if preferred_location and current_location and preferred_location == current_location:
             pref_fallback = True
-        summary = _as_text(toon.get('summary'))[:2000]
+        summary = _truncate_excel_summary(toon.get('summary'))
         skill_strs = [_skill_to_str(s) for s in skills[:50]]
+        try:
+            from app.ai.parser.enrichment.resume_text_inference import filter_skill_items
+
+            skill_strs = filter_skill_items([s for s in skill_strs if s])
+        except Exception:
+            skill_strs = [s for s in skill_strs if s]
         skill_strs = [s for s in skill_strs if s]
         exp_dicts = []
         for e in exp[:25]:
@@ -1101,7 +1236,7 @@ def _flatten_toon(
             if chunk:
                 edu_parts.append(chunk)
         cert_strs = [_cert_to_str(c) for c in certs[:30]]
-        cert_strs = [c for c in cert_strs if c]
+        cert_strs = _filter_excel_cert_strs(cert_strs)
         years_out = _years_from_form_or_toon(None, toon, exp_dicts, raw_text=raw_text)
 
     # Refine person name: reject role/UI labels; prefer Naukri_/filename when needed
@@ -1120,6 +1255,42 @@ def _flatten_toon(
     except Exception:
         pass
 
+    # Excel safety: peel city from address when form/toon left location empty
+    if not current_location and raw_text:
+        try:
+            from app.ai.parser.enrichment.resume_text_inference import (
+                extract_location_from_text,
+                heal_location_candidate,
+                is_plausible_location_value,
+                peel_location_from_structured,
+            )
+
+            peeled = heal_location_candidate(extract_location_from_text(raw_text) or '')
+            if not peeled:
+                peeled = peel_location_from_structured(
+                    experience=exp_dicts or None,
+                    education=None,
+                    raw_text=raw_text,
+                )
+            if peeled and is_plausible_location_value(peeled):
+                current_location = peeled
+                if not preferred_location:
+                    preferred_location = peeled
+                    pref_fallback = True
+        except Exception:
+            pass
+
+    # Prefer prose years when dated jobs missing (expected Excel fills years often)
+    if years_out in (None, '') and raw_text:
+        try:
+            from app.ai.parser.enrichment.resume_text_inference import (
+                extract_total_experience_years_from_text,
+            )
+
+            years_out = extract_total_experience_years_from_text(raw_text) or ''
+        except Exception:
+            pass
+
     row = {
         'Filename': filename,
         'Name': name,
@@ -1131,9 +1302,10 @@ def _flatten_toon(
         'Preferred Location': preferred_location,
         'Summary': summary,
         'Skills': ', '.join(skill_strs)[:4000],
-        'Experience': '; '.join(exp_parts)[:8000],
-        'Education': '; '.join(edu_parts)[:3000],
-        'Certifications': ', '.join(cert_strs)[:2000],
+        # Newline-separated blocks match expected Excel readability
+        'Experience': '\n\n'.join(exp_parts)[:8000],
+        'Education': '\n'.join(edu_parts)[:3000],
+        'Certifications': '\n'.join(cert_strs)[:2000],
         'Total Experience Years': years_out,
         'ParseStatus': _PARSE_STATUS_OK,
         'ParseScore': '',
@@ -1281,19 +1453,20 @@ def _resume_excel_completeness_score(row: dict) -> int:
 
 def _parse_status_from_score(score: int) -> str:
     """
-    if score >= 80: OK
-    else if score >= 50: PARTIAL - 50-79%
-    else: PARTIAL - BELOW 50%
+    Match expected Excel tiers:
+      score >= 80 → OK
+      score >= 50 → PARTIAL
+      else → WEAK
     """
     if score >= 80:
         return _PARSE_STATUS_OK
     if score >= 50:
-        return _PARSE_STATUS_PARTIAL_MID
-    return _PARSE_STATUS_PARTIAL_LOW
+        return _PARSE_STATUS_PARTIAL
+    return _PARSE_STATUS_WEAK
 
 
 def _is_acceptable_bulk_parse_status(status: str) -> bool:
-    """True for OK / partial tiers (not failed)."""
+    """True for OK / partial / weak tiers (not failed)."""
     s = (status or '').strip()
     if not s:
         return False
@@ -1301,8 +1474,8 @@ def _is_acceptable_bulk_parse_status(status: str) -> bool:
     if low == 'failed':
         return False
     return (
-        s in (_PARSE_STATUS_OK, _PARSE_STATUS_PARTIAL_MID, _PARSE_STATUS_PARTIAL_LOW)
-        or low in ('ok', 'partial')
+        s in (_PARSE_STATUS_OK, _PARSE_STATUS_PARTIAL, _PARSE_STATUS_WEAK)
+        or low in ('ok', 'partial', 'weak')
         or low.startswith('partial')
     )
 
@@ -1336,8 +1509,9 @@ def _apply_coverage_parse_honesty(
     """
     Set ParseScore + clear ParseStatus tiers from completeness.
 
-    Coverage/trace gaps stay in ParseNotes. Score drives the visible status:
-      >=80 → OK | >=50 → PARTIAL - 50-79% | else → PARTIAL - BELOW 50%
+    Coverage/trace gaps stay in ParseNotes. Score drives the visible status
+    (same tiers as expected Excel export):
+      >=80 → OK | >=50 → PARTIAL | else → WEAK
     """
     if (parse_status or '').strip().lower() == 'failed':
         row['ParseStatus'] = _PARSE_STATUS_FAILED
@@ -1579,6 +1753,30 @@ def _process_one_file_inner(
                 last_extract_err = None
             except Exception as retry_err:
                 last_extract_err = str(retry_err)[:200]
+
+        # Last resort for scanned PDFs that still look empty/weak after DPI retry
+        try:
+            from app.ai.parser.text_quality import classify_text_quality
+            from app.ai.parser.extraction_result import TextQuality
+            from app.ai.parser.text_extraction import _force_pdf_ocr, ocr_engines_available
+
+            q = classify_text_quality(raw_text)
+            need_force = (
+                ext == 'pdf'
+                and ocr_engines_available()
+                and (
+                    not raw_text
+                    or len(raw_text.strip()) < max(BULK_MIN_TEXT_CHARS, 120)
+                    or q in (TextQuality.EMPTY, TextQuality.GARBAGE, TextQuality.WEAK)
+                )
+            )
+            if need_force:
+                forced = _force_pdf_ocr(data, dpi=BULK_OCR_RETRY_DPI)
+                if forced and len(forced.strip()) > len((raw_text or '').strip()):
+                    raw_text = forced
+                    last_extract_err = None
+        except Exception:
+            pass
 
         text_ms = (time.perf_counter() - t_text) * 1000.0
         if not raw_text or len(raw_text.strip()) < BULK_MIN_TEXT_CHARS:

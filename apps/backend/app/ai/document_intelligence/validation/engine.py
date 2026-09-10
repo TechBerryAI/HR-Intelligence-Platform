@@ -269,7 +269,30 @@ def is_grounded_education_row(degree: str, institution: str) -> bool:
 
 
 _EDU_HEADING_TOKENS = frozenset(
-    {'education', 'educational', 'qualification', 'qualifications', 'academics'}
+    {
+        'education',
+        'educational',
+        'qualification',
+        'qualifications',
+        'academics',
+        'diploma',
+        'diplomas',
+        'certificate',
+        'certificates',
+        'certifications',
+        'diploma/certificates',
+        'diploma / certificates',
+        'courses',
+        'course',
+        'course / degree',
+        'course/degree',
+        'college / university',
+        'college/university',
+        'academic details',
+        'educational qualifications',
+        'year of passing',
+        'aggregate',
+    }
 )
 
 

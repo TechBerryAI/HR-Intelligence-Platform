@@ -1733,9 +1733,12 @@ def extract_document(file_data: bytes, filename: str, *, dpi: int | None = None)
             else:
                 raise
         quality = result.quality
-        if quality in (TextQuality.EMPTY, TextQuality.GARBAGE) or len(
-            (result.text or '').strip()
-        ) < MIN_TEXT_CHARS:
+        weak_or_empty = quality in (
+            TextQuality.EMPTY,
+            TextQuality.GARBAGE,
+            TextQuality.WEAK,
+        ) or len((result.text or '').strip()) < MIN_TEXT_CHARS
+        if weak_or_empty:
             if ocr_engines_available():
                 try:
                     force_dpi = max(dpi or 0, 300)

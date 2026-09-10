@@ -1368,6 +1368,28 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
             break
         if is_section_header_line(stripped):
             continue
+        # Reject education-section banners mistaken for degrees
+        if stripped.lower().rstrip(':') in (
+            'diploma/certificates',
+            'diploma / certificates',
+            'diplomas',
+            'certificates',
+            'certifications',
+            'courses',
+            'course / degree',
+            'course/degree',
+            'college / university',
+            'college/university',
+            'year of passing',
+            'aggregate',
+        ):
+            continue
+        # Project tech lines leaking into education
+        if re.match(
+            r'(?i)^(?:platform\s+used|technologies?\s+used|tools?\s+used|environment)\s*:',
+            stripped,
+        ):
+            continue
         if is_biodata_or_address_line(stripped) or looks_like_email_or_url(stripped):
             continue
         if is_labeled_contact_metadata(stripped):
@@ -5268,6 +5290,8 @@ def _split_inline_cert_tokens(blob: str) -> list[CertificateEntry]:
 
 
 def parse_certifications(section_text: str, full_text: str = '') -> list[CertificateEntry]:
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_cert_name
+
     raw = (section_text or '').strip()
     lines = [ln.strip() for ln in raw.splitlines() if ln.strip()] if raw else []
     out: list[CertificateEntry] = []
@@ -5286,7 +5310,7 @@ def parse_certifications(section_text: str, full_text: str = '') -> list[Certifi
                 continue
             parts = re.split(r'\s+[-–—|]\s+|\s+from\s+|\s+by\s+', stripped, maxsplit=1, flags=re.I)
             name = parts[0].strip()
-            if len(name) < 3:
+            if len(name) < 3 or not is_plausible_cert_name(name):
                 continue
             out.append(
                 CertificateEntry(

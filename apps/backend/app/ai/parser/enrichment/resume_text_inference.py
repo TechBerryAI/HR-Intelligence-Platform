@@ -281,7 +281,27 @@ _SKILL_CRUMB_TOKENS = frozenset({
     'university/board', '% of marks', 'configure', 'configuration',
     'databases', 'database', 'frameworks', 'operating systems', 'operating system',
     'based', 'basic', 'advanced', 'intermediate',
+    'profile', 'snapshot', 'profile snapshot', 'professional snapshot',
+    'professional profile', 'personal profile', 'curriculum vitae', 'resume',
+    'et', 'doman', 'domain',  # OCR crumbs / section leftovers (not real skills)
 })
+_SHORT_SKILL_ALLOW = frozenset({
+    'c', 'r', 'go', 'js', 'ts', 'ui', 'ux', 'ai', 'ml', 'qa', 'hr', 'bi',
+    'c#', 'c++', 'vb', 'os', 'db', 'etl', 'api', 'sql', 'css', 'html', 'xml',
+    'aws', 'gcp', 'sap', 'erp', 'crm', 'seo', 'sem', 'cdn', 'ios', 'jvm',
+})
+_HOBBY_OR_INTEREST_RE = re.compile(
+    r'(?i)\b(?:'
+    r'hobb(?:y|ies)|interest(?:s)?|pastime|leisure|'
+    r'listening|singing|reading\s+books?|cooking|travell?ing|dancing|'
+    r'watching\s+(?:movies?|tv|series)|playing\s+(?:cricket|football|games?)|'
+    r'music|movies?|sports?'
+    r')\b'
+)
+_EMPTY_EXP_LABEL_RE = re.compile(
+    r'(?i)\b(?:title|duration|role|designation|organization|organisation|'
+    r'company|employer|period|location)\s*:\s*:?\s*(?=(?:[;|]|\n|$))'
+)
 # Role / product tokens that contaminate names derived from filenames.
 _FILENAME_NAME_NOISE = frozenset({
     'resume', 'cv', 'updated', 'dba', 'hr', 'mongo', 'mongodb', 'mysql',
@@ -354,6 +374,24 @@ def is_plausible_job_title(title: str | None) -> bool:
     if is_section_header_line(t):
         return False
     if is_biodata_or_address_line(t):
+        return False
+    # Hobbies / interests mistaken for employment headers
+    if _HOBBY_OR_INTEREST_RE.search(t) and not _JOB_TITLE_CUE.search(t):
+        return False
+    # Calendar crumbs mistaken for titles ("November 25")
+    if re.match(
+        r'(?i)^(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|'
+        r'aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)'
+        r'\.?\s+\d{1,2}\b',
+        t,
+    ):
+        return False
+    # Empty labeled stubs: "Title:", "Duration:"
+    if re.fullmatch(
+        r'(?i)(?:title|duration|role|designation|organization|organisation|'
+        r'company|employer|period)\s*:?\s*',
+        t,
+    ):
         return False
     # Lowercase lines are duty wrap / prose, not titles
     if t[0].islower():
@@ -640,9 +678,28 @@ def is_plausible_skill_item(item: str | None) -> bool:
     s = s.lstrip(':').strip()
     if not s or len(s) < 2:
         return False
+    # Tiny OCR crumbs like "ET" unless known short tech token
+    if len(s) <= 2 and s.lower() not in _SHORT_SKILL_ALLOW:
+        return False
     if skill_item_looks_like_prose(s):
         return False
     if is_section_header_line(s):
+        return False
+    if re.fullmatch(
+        r'(?i)(?:professional\s+)?(?:profile\s+)?snapshot|profile\s+summary|'
+        r'professional\s+profile|personal\s+profile|curriculum\s+vitae',
+        s.rstrip(':').strip(),
+    ):
+        return False
+    # ALL-CAPS multi-word section banners (PROFILE SNAPSHOT)
+    letters = [c for c in s if c.isalpha()]
+    if (
+        len(s.split()) >= 2
+        and letters
+        and (sum(1 for c in letters if c.isupper()) / len(letters)) >= 0.85
+        and not any(ch.isdigit() for ch in s)
+        and s.lower() not in _TECH_SINGLE_TOKEN
+    ):
         return False
     if re.fullmatch(
         r'(?i)(?:(?:programming|spoken)\s+)?languages?|operating\s+systems?|'
@@ -733,6 +790,33 @@ def is_plausible_skill_item(item: str | None) -> bool:
         return False
     # Leftover from "SKILL SET" header or category crumbs
     if s.lower() in _SKILL_CRUMB_TOKENS:
+        return False
+    # Glued biodata / education labels (DATEOFBIRTH, MARITALSTATUS, MumbaiUniversity)
+    if re.fullmatch(
+        r'(?i)(?:date\s*of\s*birth|dob|marital\s*status|nationality|gender|'
+        r'father(?:\'?s)?\s*name|mother(?:\'?s)?\s*name|permanent\s*address|'
+        r'dateofbirth|maritalstatus|mumbaiuniversity|puneuniversity)',
+        re.sub(r'\s+', '', s) if ' ' not in s else s,
+    ) or re.fullmatch(
+        r'(?i)(?:date\s*of\s*birth|dob|marital\s*status|nationality|gender|'
+        r'father(?:\'?s)?\s*name|mother(?:\'?s)?\s*name|permanent\s*address|'
+        r'platform|utilities|extramural\s+engagements?)',
+        s,
+    ):
+        return False
+    if re.fullmatch(r'(?i)(?:b\.?\s*com|b\.?\s*sc|b\.?\s*e|m\.?\s*com|mba|h\.?\s*s\.?\s*c|s\.?\s*s\.?\s*c)', s):
+        return False
+    # City / locality crumbs mistaken for skills
+    if re.search(
+        r'(?i)\((?:navi\s+)?(?:mumbai|pune|delhi|chennai|bangalore|bengaluru|hyderabad)\)',
+        s,
+    ) and len(s.split()) <= 5:
+        return False
+    if is_plausible_person_name(s) and s.lower() not in _TECH_SINGLE_TOKEN and not re.search(
+        r'(?i)(?:python|java|sql|aws|azure|react|\.net|linux|oracle|tensor|flow|'
+        r'docker|kubernetes|spring|hibernate|mongodb|postgres|redis|kafka)',
+        s,
+    ):
         return False
     if re.match(r'(?i)^(?:&|and)\s+(?:platforms?|tools?|abilities|technologies?)\b', s):
         return False
@@ -892,22 +976,103 @@ def is_institution_like(text: str | None) -> bool:
 def is_plausible_cert_name(name: str | None) -> bool:
     """Reject long prose / company blurbs without credential cues."""
     t = (name or '').strip()
+    t = re.sub(r'^[\s•·\-\*\uf0b7\uf020]+', '', t).strip()
     if not t or len(t) < 3:
         return False
     if is_section_header_line(t) or is_date_range_only_line(t):
         return False
+    # Contact / biodata / CV title dumps
+    if re.match(
+        r'(?i)^(?:curriculum[\s\-]?vitae|resume|contact(?:\s+number)?|e-?mail|'
+        r'phone|mobile|cell|name|permanent\s+address|address|profile\s+snapshot|'
+        r'professional\s+summary|objective|willing\s+to\s+work|from\s+(?:jan|feb|mar|'
+        r'apr|may|jun|jul|aug|sep|oct|nov|dec))\b',
+        t,
+    ):
+        return False
+    if looks_like_phone_token(t) or looks_like_email_or_url(t):
+        return False
+    if is_biodata_or_address_line(t):
+        return False
+    if is_plausible_person_name(t) and not _CERT_CUE.search(t):
+        return False
+    if re.search(
+        r'(?i)(?:course\s*/\s*degree|college\s*/\s*university|year\s+of\s+pass|'
+        r'aggregate|percentage|cgpa|board/university)',
+        t,
+    ):
+        return False
+    # Education degrees belong in Education, not Certifications
+    if re.match(
+        r'(?i)^(?:b\.?\s*e\.?|b\.?\s*tech|m\.?\s*tech|m\.?\s*e\.?|mba|mca|bca|'
+        r'b\.?\s*sc|m\.?\s*sc|b\.?\s*com|m\.?\s*com|ph\.?\s*d|diploma)\b',
+        t,
+    ) and not re.search(r'(?i)certif', t):
+        return False
+    # Skills / languages / hobbies
+    if re.search(
+        r'(?i)\b(?:html|css|jquery|javascript|english|hindi|marathi|'
+        r'writing|listening|singing|hobb(?:y|ies))\b',
+        t,
+    ) and not _CERT_CUE.search(t):
+        return False
     words = t.split()
     if len(words) > 12:
         return False
+    if len(words) >= 8 and t.endswith(('.', ',')) and not _CERT_CUE.search(t):
+        return False
     if _CERT_CUE.search(t):
-        return True
-    # Short Title-Case credential without cue (e.g. "PMP", "CompTIA A+")
-    if len(words) <= 8 and t[0].isupper():
-        # Reject company-only "Acme Corp: Web Developme" style without cue when > 4 words
-        # and contains a colon (often employer: description)
-        if ':' in t and not _CERT_CUE.search(t):
+        # Still reject bare section banners that contain "certificate(s)"
+        if re.fullmatch(
+            r'(?i)(?:diploma\s*/\s*)?certifications?|certificates?|diplomas?|'
+            r'diploma\s*/\s*certificates?',
+            t,
+        ):
+            return False
+        # Prose / objective lines that merely mention Oracle/AWS/Google
+        if re.match(
+            r'(?i)^(?:seeking|looking|willing|job\s+objective|career\s+objective|'
+            r'objective|summary|profile)\b',
+            t,
+        ):
+            return False
+        if re.search(r'(?i)\b(?:phone|mobile|e-?mail|contact)\s*:', t):
             return False
         return True
+    # Without credential cue: only short credential-like names (not tools/skills)
+    if len(words) <= 6 and t[0].isupper():
+        if ':' in t:
+            return False
+        if re.fullmatch(
+            r'(?i)year\s+of(?:\s+passing)?|passing|aggregate|board|'
+            r'job\s+objective|career\s+objective|objective',
+            t,
+        ):
+            return False
+        # Hardware / product skill crumbs (VFD & HMI, PLC, SCADA)
+        if re.search(
+            r'(?i)\b(?:vfd|plc|scada|hmi|ms\s+office|excel|word|powerpoint)\b',
+            t,
+        ):
+            return False
+        if re.search(
+            r'(?i)\b(?:professional|associate|fundamentals|practitioner|'
+            r'architect|scrum\s+master|solutions?\s+architect)\b',
+            t,
+        ):
+            return True
+        # Single uppercase token alone is usually a skill (RPA, JIRA), not a cert
+        if len(words) == 1:
+            return False
+        # Acronym-ish only when tokens are short (AWS CSA), not "JOB OBJECTIVE"
+        compact = re.sub(r'[^A-Za-z0-9+]', '', t)
+        if (
+            2 <= len(words) <= 3
+            and compact.isupper()
+            and 2 <= len(compact) <= 12
+            and all(len(w) <= 6 for w in words)
+        ):
+            return True
     return False
 
 
@@ -1268,10 +1433,32 @@ def compute_total_experience_years(experience: list[dict[str, Any]]) -> float | 
     """Approximate total years from experience date ranges (from/to, start/end, or description)."""
     if not experience:
         return None
+    from datetime import date as _date
+
+    current_year = _date.today().year
     total_months = 0
+    seen_roles: set[tuple[str, str]] = set()
     for exp in experience:
         if not isinstance(exp, dict):
             continue
+        if is_non_job_experience_record(exp):
+            continue
+        role_key = str(exp.get('role') or exp.get('title') or '').strip().lower()
+        company_key = str(exp.get('company') or '').strip().lower()
+        # Skip weak text rows; still allow pure dated spans (years-only evidence)
+        if (role_key or company_key) and not has_credible_employment_evidence(exp):
+            continue
+        # Normalize month-year vs year-only for dedupe
+        company_norm = re.sub(r'\s+', ' ', company_key)
+        dedupe_key = (role_key, company_norm)
+        if company_norm and dedupe_key in seen_roles:
+            continue
+        if company_norm and not role_key and ('', company_norm) in seen_roles:
+            continue
+        if company_norm:
+            seen_roles.add(dedupe_key)
+            if not role_key:
+                seen_roles.add(('', company_norm))
         start_tok = str(exp.get('from') or exp.get('start') or '').strip()
         end_tok = str(exp.get('to') or exp.get('end') or '').strip()
         blob = ' '.join(
@@ -1304,15 +1491,26 @@ def compute_total_experience_years(experience: list[dict[str, Any]]) -> float | 
             end = _parse_year_month(end_tok) if end_tok else None
         if not start or not end:
             years = exp.get('years')
-            if isinstance(years, (int, float)):
+            if isinstance(years, (int, float)) and 0 < float(years) <= 40:
                 total_months += int(float(years) * 12)
             continue
+        # Clamp absurd future end dates (OCR/table bleed like 2031)
+        if end[0] > current_year + 1:
+            end = (current_year, min(max(end[1], 1), 12))
+        if start[0] < 1970 or start[0] > current_year + 1:
+            continue
         months = (end[0] - start[0]) * 12 + (end[1] - start[1])
+        # Single role longer than ~40y is almost always a parse error
+        if months > 40 * 12:
+            continue
         if months > 0:
             total_months += months
     if total_months <= 0:
         return None
-    return round(total_months / 12.0, 1)
+    years_out = round(total_months / 12.0, 1)
+    if years_out > 40:
+        return 40.0
+    return years_out
 
 
 _PROSE_YEARS_RE = re.compile(
@@ -1352,17 +1550,23 @@ def merge_experience_years(
     date_years: float | None,
     prose_years: float | None,
 ) -> float | None:
-    """Prefer date-sum; use prose when dates missing; max when both consistent."""
+    """Merge dated spans with candidate-stated years."""
     if date_years is None and prose_years is None:
         return None
     if date_years is None:
         return prose_years
     if prose_years is None:
-        return date_years
-    # Consistent if within ~2 years; otherwise trust dated ranges
+        return min(date_years, 40.0) if date_years else date_years
     if abs(date_years - prose_years) <= 2.0:
         return max(date_years, prose_years)
-    return date_years
+    # Date sum wildly above stated years → OCR/table bleed; trust prose
+    if date_years > prose_years + 5.0:
+        return prose_years
+    # Prose higher than dated coverage → incomplete ranges; trust prose
+    if prose_years > date_years + 2.0:
+        return prose_years
+    # Mild disagreement → prefer dated spans
+    return min(date_years, 40.0)
 
 
 def heal_location_candidate(value: str) -> str:
@@ -1422,6 +1626,12 @@ def heal_location_candidate(value: str) -> str:
                 if _is_person_name_not_place(s):
                     return ''
                 return canonicalize_location_city(city)
+        # OCR spelling variants (Kandiwali → Kandivali)
+        for alias, canon in sorted(_LOCATION_ALIASES.items(), key=lambda x: -len(x[0])):
+            if re.search(rf'(?i)\b{re.escape(alias)}\b', s):
+                if _is_person_name_not_place(s):
+                    return ''
+                return canon
         return ''
     return canonicalize_location_city(s)
 
@@ -1435,7 +1645,7 @@ _HEADING_CORE_WORDS = frozenset({
     'internship', 'internships', 'training', 'trainings', 'apprenticeship',
     'biodata', 'overview', 'strengths', 'activities', 'licenses', 'courses',
     'academics', 'expertise', 'competencies', 'abilities', 'knowledge',
-    'resume', 'cv', 'vitae',
+    'resume', 'cv', 'vitae', 'snapshot',
 })
 _HEADING_CRUMB_WORDS = frozenset({
     'info', 'information', 'details', 'detail', 'section', 'known', 'set', 'sets',
@@ -2073,8 +2283,72 @@ def is_non_job_experience_record(row: Any) -> bool:
         role, company, start, end
     ):
         return True
+    # Calendar crumbs / empty stubs as titles
+    if role and not is_plausible_job_title(role) and not _JOB_TITLE_CUE.search(role):
+        # Keep real employers with weak role text, but drop calendar/hobby titles
+        if re.match(
+            r'(?i)^(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|'
+            r'aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)'
+            r'\.?\s+\d{1,2}\b',
+            role,
+        ) or _HOBBY_OR_INTEREST_RE.search(role):
+            return True
     if looks_like_contact_person_line(company) and experience_lacks_employment_evidence(
         role, company, start, end
+    ):
+        return True
+    # Hobbies / interests / permanent-address rows mistaken for jobs
+    hobby_blob = f'{role} {company}'
+    if _HOBBY_OR_INTEREST_RE.search(hobby_blob) and not _JOB_TITLE_CUE.search(hobby_blob):
+        return True
+    if re.search(r'(?i)\b(?:permanent\s+address|residential\s+address|current\s+address)\b', hobby_blob):
+        return True
+    # Training/course blocks mistaken for employers
+    if re.search(
+        r'(?i)\b(?:certification\s+course|training\s+course|online\s+course|'
+        r'certificate\s+course|workshop|bootcamp)\b',
+        hobby_blob,
+    ) and not re.search(
+        r'(?i)\b(?:pvt\.?\s*ltd|ltd|inc|llc|corp|technologies|solutions|systems|labs?)\b',
+        company,
+    ):
+        return True
+    # Section banners as employer (EDUCATION & CERTIFICATION)
+    if re.fullmatch(
+        r'(?i)(?:education|educational|qualification|qualifications|'
+        r'certifications?|certificates?|skills?|summary|objective)'
+        r'(?:\s*&\s*(?:education|certifications?|certificates?|training))?',
+        company or '',
+    ) or re.fullmatch(
+        r'(?i)(?:education|educational|qualification|qualifications|'
+        r'certifications?|certificates?|skills?|summary|objective)'
+        r'(?:\s*&\s*(?:education|certifications?|certificates?|training))?',
+        role or '',
+    ):
+        return True
+    # Skill / product tokens as employer with no role (VFD & HMI)
+    if not role and company and not _ORG_EMPLOYMENT_CUE_RE.search(company):
+        if re.search(
+            r'(?i)\b(?:vfd|plc|scada|hmi|html|css|python|java|sql)\b',
+            company,
+        ) or re.match(r'(?i)^indian\s+industry\)?', company):
+            return True
+        if len(company.split()) <= 3 and not re.search(
+            r'(?i)\b(?:pvt|ltd|inc|llc|corp|technologies|solutions|systems|labs?|university|college)\b',
+            company,
+        ):
+            return True
+    if is_biodata_or_address_line(role) or is_biodata_or_address_line(company):
+        return True
+    # Empty labeled employment stubs
+    if re.fullmatch(
+        r'(?i)(?:title|duration|role|designation|organization|organisation)\s*:?\s*',
+        role,
+    ):
+        return True
+    if re.fullmatch(
+        r'(?i)(?:title|duration|role|designation|organization|organisation)\s*:?\s*',
+        company,
     ):
         return True
     return False
@@ -2793,11 +3067,15 @@ def summary_rejection_reason(summary: str | None) -> str | None:
     digit_ratio = sum(ch.isdigit() for ch in s) / max(len(s), 1)
     if digit_ratio > 0.25 and len(alpha_words) < 10:
         return 'contact_information'
-    # Half-captured summary (word-per-line PDF cut mid-phrase)
-    if (
-        len(s) < _SUMMARY_INCOMPLETE_MIN_LEN
-        and _INCOMPLETE_SUMMARY_TAIL_RE.search(s)
-        and not re.search(r'[.!?]"?\s*$', s)
+    # Half-captured summary (word-per-line PDF cut mid-phrase / mid-gerund)
+    if not re.search(r'[.!?]"?\s*$', s) and (
+        _INCOMPLETE_SUMMARY_TAIL_RE.search(s)
+        or re.search(
+            r'(?i)\b(?:deploying|building|developing|creating|leading|managing|'
+            r'working|using|including|implementing|optimizing|driving|ensuring|'
+            r'delivering|providing|supporting)\s*$',
+            s,
+        )
     ):
         return 'incomplete_tail'
     if re.search(
@@ -2926,7 +3204,28 @@ def _normalize_summary_body(body: str, max_len: int = 2000) -> str:
         if bleed and bleed.start() >= 40:
             text = text[: bleed.start()].strip()
         text = ' '.join(text.split()).strip()
-    return text[:max_len]
+    return _truncate_summary_at_boundary(text, max_len)
+
+
+def _truncate_summary_at_boundary(text: str, max_len: int) -> str:
+    """Hard-cap summary without cutting mid-sentence when possible."""
+    t = (text or '').strip()
+    if not t or len(t) <= max_len:
+        return t
+    cut = t[:max_len]
+    # Prefer last completed sentence
+    best = -1
+    for sep in ('. ', '! ', '? ', '.\n', '!\n', '?\n'):
+        idx = cut.rfind(sep)
+        if idx > best:
+            best = idx
+    if best >= max(40, max_len // 3):
+        return cut[: best + 1].strip()
+    # Else last word boundary
+    sp = cut.rfind(' ')
+    if sp >= max(40, max_len // 3):
+        return cut[:sp].rstrip(' ,;:-').strip()
+    return cut.strip()
 
 
 def _heading_to_regex(heading: str) -> str:
@@ -3369,10 +3668,27 @@ def _extract_unlabeled_intro_summary(text: str, max_len: int = 2000) -> str:
         cleaned = re.sub(r'^[\s•·\-\*]+', '', line.strip())
         if not cleaned:
             if collected and len(' '.join(collected)) >= 80:
+                joined = ' '.join(collected)
+                # Blank line mid-sentence (DOCX wrap) — keep reading
+                if not re.search(r'[.!?]"?\s*$', joined) and (
+                    _INCOMPLETE_SUMMARY_TAIL_RE.search(joined)
+                    or re.search(
+                        r'(?i)\b(?:deploying|building|developing|creating|leading|'
+                        r'managing|working|using|including|implementing|optimizing|'
+                        r'driving|ensuring|delivering|providing|supporting)\s*$',
+                        joined,
+                    )
+                ):
+                    continue
                 break
             continue
         low = cleaned.lower().rstrip(':').strip()
         if low in SUMMARY_HEADING_PRIORITY:
+            if collected:
+                break
+            continue
+        # Split headings like "PROFESSIONAL" + blank + "Summary"
+        if re.fullmatch(r'(?i)(?:professional|personal|technical|career)', cleaned):
             if collected:
                 break
             continue
@@ -3561,6 +3877,12 @@ _LOCATION_ALIASES = {
     'calcutta': 'Kolkata',
     'madras': 'Chennai',
     'bhubaneshwar': 'Bhubaneswar',
+    'kandiwali': 'Kandivali',
+    'kandivali': 'Kandivali',
+    'kandivali east': 'Kandivali',
+    'kandiwali east': 'Kandivali',
+    'kandivali (east)': 'Kandivali',
+    'kandiwali (east)': 'Kandivali',
 }
 # Institute / university cues → city (only when structured peel needs it)
 _INSTITUTE_CITY_PEEL = (
