@@ -508,6 +508,13 @@ def parse_resume_from_working_text(
     t0 = _time.perf_counter()
     _emit(parse_job_id, 'sections', 'started', on_stage=on_stage)
     sections = detect_sections(text, 'resume')
+    recovery_report: dict | None = None
+    if os.environ.get('RESUME_SKIP_SECTION_RECOVERY', '').strip().lower() not in {
+        '1', 'true', 'yes', 'on',
+    }:
+        from app.ai.document_intelligence.section_recovery import recover_resume_sections
+
+        sections, recovery_report = recover_resume_sections(sections, text)
     record_pipeline_stage(
         'sections',
         'completed',
@@ -521,6 +528,10 @@ def parse_resume_from_working_text(
     profile = parse_resume_from_sections(
         sections, text, max_workers=workers, source_filename=source_filename or '',
     )
+    if recovery_report:
+        meta = dict(profile.field_meta or {})
+        meta['section_recovery'] = recovery_report
+        profile = profile.model_copy(update={'field_meta': meta})
     record_pipeline_stage(
         'deterministic',
         'completed',
@@ -532,6 +543,12 @@ def parse_resume_from_working_text(
     t0 = _time.perf_counter()
     _emit(parse_job_id, 'coverage', 'started', on_stage=on_stage)
     profile, coverage = recover_resume_profile_gaps(profile, text)
+    if os.environ.get('RESUME_SKIP_SEMANTIC_ASSOCIATION', '').strip().lower() not in {
+        '1', 'true', 'yes', 'on',
+    }:
+        from app.ai.document_intelligence.association import apply_semantic_association
+
+        profile = apply_semantic_association(profile, sections, text)
     record_pipeline_stage(
         'coverage',
         'completed',

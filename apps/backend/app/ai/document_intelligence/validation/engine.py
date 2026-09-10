@@ -28,7 +28,8 @@ _DEGREE_CUE_RE = re.compile(
     r'(?i)\b(?:'
     r'(?:bachelor|master|doctor)(?:\'?s)?s?|'
     r'diploma|doctorate|phd|'
-    r'b\.?\s*tech|m\.?\s*tech|b\.?\s*e\.?(?![a-z])|m\.?\s*e\.?(?![a-z])|'
+    r'b\.?\s*-?\s*tech|m\.?\s*-?\s*tech|btech|mtech|'
+    r'b\.?\s*e\.?(?![a-z])|m\.?\s*e\.?(?![a-z])|'
     r'b\.?\s*sc|m\.?\s*sc|bsc|msc|'
     r'b\.?\s*com|m\.?\s*com|bcom|mcom|'
     r'b\.?\s*s\.?(?![a-z])|m\.?\s*s\.?(?![a-z])|'
@@ -359,7 +360,14 @@ def validate_company(value: str) -> Tuple[bool, str]:
         return False, 'company_is_project_meta'
     if s[:1].islower():
         return False, 'company_is_fragment'
-    if re.match(r'(?i)^(?:and|or|the|for|with|based)\b', s):
+    if re.match(r'(?i)^(?:and|or|for|with|based)\b', s):
+        return False, 'company_is_fragment'
+    # "The Acme Pvt Ltd" is a valid employer; bare "The" / "The Team" is not.
+    if re.match(r'(?i)^the\b', s) and not re.search(
+        r'(?i)\b(?:pvt|ltd|llc|inc|corp|limited|private|technologies|solutions|'
+        r'infotech|infosys|systems|services|group|holdings|bank)\b',
+        s,
+    ):
         return False, 'company_is_fragment'
     if _INSTITUTION_AS_JOB_RE.search(s) and not _JOB_TITLE_CUE_RE.search(s):
         return False, 'company_is_institution'
