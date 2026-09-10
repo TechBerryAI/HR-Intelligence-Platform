@@ -1569,6 +1569,95 @@ def merge_experience_years(
     return min(date_years, 40.0)
 
 
+def peel_place_from_candidate_address(blob: str) -> str:
+    """Peel a place phrase from an explicit candidate address blob.
+
+    Handles Indian Dist./Tal./PIN forms and street lines that contain a known
+    city — without inventing places from employer/education prose.
+    """
+    raw = (blob or '').strip()
+    if not raw:
+        return ''
+    s = re.sub(
+        r'(?i)^(?:(?:permanent|present|current|residential|correspondence|mailing)\s+)?'
+        r'(?:address|location|city|based\s+in|residence|place)\s*[:\-–—]\s*',
+        '',
+        raw,
+    ).strip()
+    s = re.sub(r'^[\-–—•·]+\s*', '', s).strip()
+    if not s:
+        return ''
+
+    # Dist. City, State, PIN  /  Dist.-CITY (STATE)  /  City, State, PIN
+    m = re.search(
+        r'(?i)\b(?:dist\.?|district)\s*[:.\-]?\s*'
+        r'([A-Za-z][A-Za-z ]{1,30}?)\s*,\s*'
+        r'([A-Za-z][A-Za-z ]{1,40}?)\s*,?\s*(?:\d{5,6})?\s*$',
+        s,
+    )
+    if m:
+        city, region = m.group(1).strip(' ,'), m.group(2).strip(' ,')
+        cand = f'{city}, {region}'.strip(', ')
+        if is_plausible_location_value(cand):
+            return cand
+
+    m = re.search(
+        r'(?i)\b(?:dist\.?|district)\s*[:.\-]?\s*'
+        r'([A-Za-z][A-Za-z]{2,40})\s*(?:\(([^)]{1,40})\))?',
+        s,
+    )
+    if m:
+        city = m.group(1).strip(' ,.-')
+        region = (m.group(2) or '').strip(' ,.-')
+        # Normalize U.P. / U.P / UP-style state abbreviations loosely
+        region_l = re.sub(r'\.', '', region).lower()
+        if region_l in {'up', 'u p'} or 'uttar pradesh' in region_l:
+            region = 'Uttar Pradesh'
+        cand = f'{city}, {region}'.strip(', ') if region else city
+        if is_plausible_location_value(cand):
+            return cand
+        if city and not re.match(r'(?i)^(post|at|tal|pin)$', city):
+            # Unknown district name alone — keep when Dist. cue is present
+            return cand[:80]
+
+    m = re.search(
+        r'(?i)\b([A-Za-z][A-Za-z]{2,30})\s*,\s*'
+        r'([A-Za-z][A-Za-z ]{2,40})\s*,\s*\d{5,6}\s*$',
+        s,
+    )
+    if m:
+        city, region = m.group(1).strip(), m.group(2).strip()
+        cand = f'{city}, {region}'
+        if is_plausible_location_value(cand):
+            return cand
+        if region.lower() in _KNOWN_REGIONS:
+            return cand
+
+    # City – State / City, State (compact)
+    m = re.match(
+        r'^([A-Za-z][A-Za-z .]{1,35})\s*[–—\-?,/]\s*([A-Za-z][A-Za-z .]{1,35})$',
+        s,
+    )
+    if m:
+        cand = f'{m.group(1).strip()}, {m.group(2).strip()}'
+        if is_plausible_location_value(cand):
+            return cand
+
+    # Street / locality line containing a known city
+    if re.search(
+        r'(?i)\b(?:road|street|cross|nagar|colony|apartment|sector|flat|plot|'
+        r'at\.?\s*post|tal\.?|dist\.?|pin(?:code)?)\b',
+        s,
+    ):
+        for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+            if re.search(rf'(?i)\b{re.escape(city)}\b', s):
+                return canonicalize_location_city(city)
+
+    if is_plausible_location_value(s):
+        return s[:80]
+    return ''
+
+
 def heal_location_candidate(value: str) -> str:
     """Strip Company|City / phone⋄City bleed and return a city-like token when possible."""
     s = (value or '').strip()
@@ -1595,6 +1684,15 @@ def heal_location_candidate(value: str) -> str:
         '',
         s,
     ).strip()
+    # Permanent / present address blobs → structured peel before name heuristics
+    if re.search(
+        r'(?i)\b(?:permanent|present|current|residential)\s+address\b|'
+        r'\b(?:dist\.?|district|tal\.?|at\.?\s*post|pin(?:code)?)\b',
+        (value or ''),
+    ):
+        peeled = peel_place_from_candidate_address(value)
+        if peeled:
+            return peeled
     if _is_person_name_not_place(s):
         return ''
     # phone ⋄ City / +91…·City
@@ -1603,6 +1701,10 @@ def heal_location_candidate(value: str) -> str:
     if '|' in s:
         parts = [p.strip() for p in s.split('|') if p.strip()]
         for p in reversed(parts):
+            # Trailing City – State on contact pipes
+            trailing = peel_place_from_candidate_address(p)
+            if trailing:
+                return trailing
             healed = heal_location_candidate(p) if ('|' in p or '⋄' in p) else p
             if healed and is_plausible_location_value(healed):
                 return canonicalize_location_city(healed)
@@ -1610,12 +1712,21 @@ def heal_location_candidate(value: str) -> str:
                 if city.lower() == healed.lower() or city.lower() == p.lower():
                     return canonicalize_location_city(city)
         return ''
+    # Street address with known city (header sidebar)
+    if re.search(
+        r'(?i)\b(?:road|street|cross|nagar|colony|apartment|sector)\b',
+        s,
+    ):
+        peeled = peel_place_from_candidate_address(s)
+        if peeled:
+            return peeled
     # Prefer known city token from polluted strings (word-boundary only)
     if not is_plausible_location_value(s):
         if _is_person_name_not_place(s) or not _looks_like_location_phrase(s):
             # Still allow peeling from short address-like lines
             if not re.match(
-                r'(?i)^(?:address|location|city|based\s+in)\s*[:\-]?',
+                r'(?i)^(?:(?:permanent|present|current|residential)\s+)?'
+                r'(?:address|location|city|based\s+in)\s*[:\-]?',
                 (value or '').strip(),
             ) and (':' in s or len(s.split()) > 4):
                 return ''
@@ -4235,10 +4346,14 @@ def extract_location_from_text(text: str) -> str:
     header = text[:800]
     patterns = [
         # Require delimiter after label to avoid "…location … skills…" prose
-        r'(?i)(?:location|current\s*location|address|city|based\s+in|place|residing\s+(?:in|at))\s*[:\-–—]\s*([^\n]+)',
+        r'(?i)(?:(?:permanent|present|current|residential|correspondence|mailing)\s+)?'
+        r'(?:location|current\s*location|address|city|based\s+in|place|residence|'
+        r'residing\s+(?:in|at))\s*[:\-–—]\s*([^\n]+)',
         r'\b([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*),\s*([A-Z]{2})\b',
-        # Pipe header: City | phone | email
+        # Pipe header: City | phone | email  OR  email | phone | City – State
         r'(?im)^([A-Za-z][A-Za-z .,]{2,40})\s*[|•·]\s*(?:mobile|phone|tel|\+?\d)',
+        r'(?im)(?:[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}|(?:\+?\d[\d\s\-().]{7,}\d)|linkedin)'
+        r'[^\n|]*\|\s*([A-Za-z][A-Za-z .]{1,35}\s*[–—\-?,/]\s*[A-Za-z][A-Za-z .]{1,35})\s*$',
         # Emoji / pin style: 📍 Nagpur, Maharashtra, India
         r'(?:📍|📌)\s*([^\n]+)',
     ]
@@ -4250,9 +4365,44 @@ def extract_location_from_text(text: str) -> str:
             loc = f'{m.group(1)}, {m.group(2)}'
         else:
             loc = m.group(1).strip().strip('.,;:')
+        peeled = peel_place_from_candidate_address(loc)
+        if peeled and is_plausible_location_value(peeled):
+            return peeled
         cleaned = _clean_loc(loc)
         if cleaned and is_plausible_location_value(cleaned):
             return cleaned
+
+    # Full-document labeled permanent/present address (often below Experience)
+    m_perm = re.search(
+        r'(?im)^(?:\*\*)?(?:(?:permanent|present|current|residential|correspondence|mailing)\s+)?'
+        r'(?:address|location)\s*[:\-–—]\s*(.+?)\s*$',
+        text or '',
+    )
+    if m_perm:
+        peeled = peel_place_from_candidate_address(m_perm.group(0))
+        if peeled and is_plausible_location_value(peeled):
+            return peeled
+
+    # Street / locality line near contact header containing a known city
+    for line in (text or '').splitlines()[:30]:
+        s = line.strip()
+        if not s or len(s) > 120:
+            continue
+        if re.search(
+            r'(?i)\b(?:worked|working|company|employer|client|university|college)\b',
+            s,
+        ):
+            continue
+        if re.search(
+            r'(?i)\b(?:road|street|cross|nagar|colony|apartment|sector|flat|plot|'
+            r'dist\.?|district|tal\.?|at\.?\s*post)\b',
+            s,
+        ):
+            peeled = peel_place_from_candidate_address(s)
+            if peeled and is_plausible_location_value(peeled):
+                return peeled
+            if peeled:
+                return peeled[:80]
 
     # City, Region only when at least one side is a known city/region (header lines)
     m_cs = re.search(
@@ -4299,8 +4449,12 @@ def extract_location_from_text(text: str) -> str:
                     return cleaned if len(cleaned) <= 60 else canonicalize_location_city(city)
             continue
 
-    # Remote/Hybrid only from header/contact zone (not experience "Remote" job lines)
-    m_remote = re.search(r'(?i)\b(remote|hybrid|work\s+from\s+home|wfh)\b', header)
+    # Remote/Hybrid only when explicitly labeled as location/work mode in header
+    m_remote = re.search(
+        r'(?i)(?:location|based\s+in|work\s+(?:mode|location)|preferred\s+location)'
+        r'\s*[:\-–—]\s*(remote|hybrid|work\s+from\s+home|wfh)\b',
+        header,
+    )
     if m_remote:
         return m_remote.group(1).strip()
 

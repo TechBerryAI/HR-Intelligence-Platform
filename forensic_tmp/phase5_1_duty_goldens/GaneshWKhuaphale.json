@@ -1,0 +1,22 @@
+{
+  "_note": "Experience has employment prose only (Phase 5 correctly built two jobs). Project line outside Experience may belong to one tenure.",
+  "file": "Naukri_GaneshWKhuaphale[4y_2m].docx",
+  "experience": [
+    {
+      "company": "Wipro Technologies",
+      "role": "Middleware Administrator",
+      "start": "2019-07",
+      "end": "2021-08",
+      "duties": []
+    },
+    {
+      "company": "DXC Technology",
+      "role": "Middleware Administrator",
+      "start": "2021-11",
+      "is_current": true,
+      "duties": [
+        "Created and Configured Domain in WebLogic."
+      ]
+    }
+  ]
+}

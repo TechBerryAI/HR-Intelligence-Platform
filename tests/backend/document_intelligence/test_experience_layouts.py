@@ -1203,3 +1203,264 @@ def test_education_dates_stay_isolated_from_employment():
     assert 'abc' in (job.company or '').lower()
     assert not (job.start or '').startswith('2019')
     assert (job.end or '') != '2022'
+
+
+# --- Phase 5: experience record reconstruction (synthetic failure classes) ---
+
+
+def test_phase5_company_role_dates_order():
+    jobs = parse_experience(
+        'Experience\n'
+        'Northwind Technologies\n'
+        'Software Engineer\n'
+        'Jan 2020 - Mar 2022\n'
+        '• Built APIs for clients\n'
+    )
+    hit = _hit(jobs, company='northwind', role='software')
+    assert 'northwind' in (hit.company or '').lower()
+    assert 'engineer' in (hit.role or '').lower()
+    assert (hit.start or '').startswith('2020')
+    assert (hit.end or '').startswith('2022')
+
+
+def test_phase5_role_company_dates_order():
+    jobs = parse_experience(
+        'Experience\n'
+        'Software Engineer\n'
+        'Northwind Technologies\n'
+        'Jan 2020 - Mar 2022\n'
+        '• Built APIs for clients\n'
+    )
+    hit = _hit(jobs, company='northwind', role='software')
+    assert 'northwind' in (hit.company or '').lower()
+    assert 'engineer' in (hit.role or '').lower()
+
+
+def test_phase5_compact_one_line_role_company_dates():
+    jobs = parse_experience(
+        'Experience\n'
+        'Software Engineer | Northwind Technologies | 2020-2022\n'
+        '• Developed REST APIs\n'
+    )
+    hit = _hit(jobs, company='northwind', role='software')
+    assert 'northwind' in (hit.company or '').lower()
+    assert (hit.start or '').startswith('2020')
+
+
+def test_phase5_multiline_dates_split():
+    jobs = parse_experience(
+        'Experience\n'
+        'Northwind Technologies\n'
+        'Software Engineer\n'
+        'Jan 2020 -\n'
+        'Mar 2022\n'
+        '• Developed REST APIs\n'
+    )
+    hit = _hit(jobs, company='northwind', role='software')
+    assert (hit.start or '').startswith('2020')
+    assert (hit.end or '').startswith('2022')
+
+
+def test_phase5_multiple_consecutive_jobs_with_duties():
+    jobs = parse_experience(
+        'Experience\n'
+        'Working as a Senior Software Engineer with Wipro Technologies '
+        'from July-2019 to August-2021.\n'
+        'Developed customer APIs for banking clients.\n'
+        'Working as a Lead Consultant in DXC Technology '
+        'from September-2021 to Present.\n'
+        'Led cloud migration programs for enterprise clients.\n'
+    )
+    assert len(jobs) >= 2
+    companies = ' '.join((j.company or '').lower() for j in jobs)
+    assert 'wipro' in companies and 'dxc' in companies
+    assert any(j.is_current or not (j.end or '').strip() for j in jobs)
+
+
+def test_phase5_compact_numbered_experience_records():
+    jobs = parse_experience(
+        'Experience\n'
+        '1. Software Engineer : Techno Solutions (Jan 2020 - Dec 2021) '
+        'Developed REST APIs for clients.\n'
+        '2. Java Developer : Acme Soft (2018-2019) '
+        'Built backend services for clients.\n'
+    )
+    assert len(jobs) >= 2
+    roles = [(j.role or '') for j in jobs]
+    assert all(not r.strip().startswith(('1.', '2.')) for r in roles)
+    companies = ' '.join((j.company or '').lower() for j in jobs)
+    assert 'techno' in companies and 'acme' in companies
+
+
+def test_phase5_prose_work_as_in_single_token_employer():
+    jobs = parse_experience(
+        'Experience\n'
+        'Work as Software Developer in Infosys from Jan 2021 to Present\n'
+        'Built internal dashboards for operations teams.\n'
+    )
+    hit = _hit(jobs, company='infosys', role='software')
+    assert 'infosys' in (hit.company or '').lower()
+    assert 'developer' in (hit.role or '').lower()
+    assert (hit.start or '').startswith('2021')
+
+
+def test_phase5_experience_as_role_in_company_since():
+    jobs = parse_experience(
+        'Experience\n'
+        '2 yrs. experience as Oracle DBA in Perx Services, Thane. (Since may 2020)\n'
+        'Maintenance and Administration of Oracle 10g databases.\n'
+    )
+    hit = _hit(jobs, company='perx', role='dba')
+    assert 'perx' in (hit.company or '').lower()
+    assert 'dba' in (hit.role or '').lower()
+    assert (hit.start or '').startswith('2020')
+
+
+def test_phase5_company_starting_with_the_org_cue():
+    jobs = parse_experience(
+        'Experience\n'
+        'Working as an Oracle DBA in The Gesa Reliable Infosys Pvt. Ltd. '
+        'Since 5,Jan, 2021 present\n'
+        'Maintenance and Administration of Oracle database.\n'
+    )
+    hit = _hit(jobs, company='gesa', role='dba')
+    assert 'gesa' in (hit.company or '').lower()
+    assert (hit.start or '').startswith('2021')
+
+
+def test_phase5_parenthetical_numeric_dates_peeled_from_company():
+    jobs = parse_experience(
+        'Experience\n'
+        'Organization name - GROWTH ARROW (INTERN) (17-05-2021 – 17-07-2021)\n'
+        'PROFILE - EQUITY RESEARCH ANALYST\n'
+        'Generating daily equity market reports for clients.\n'
+    )
+    hit = _hit(jobs, company='growth', role='equity')
+    assert 'growth arrow' in (hit.company or '').lower()
+    assert '2021' not in (hit.company or '')
+    assert (hit.start or '').startswith('2021')
+    assert (hit.end or '').startswith('2021')
+
+
+def test_phase5_ambiguous_skills_must_not_become_jobs():
+    jobs = parse_experience(
+        'Experience\n'
+        'Python\n'
+        'AWS\n'
+        'Docker\n'
+        'Machine Learning\n'
+    )
+    assert jobs == []
+
+
+def test_phase5_non_org_workplace_phrase_must_not_invent_employer():
+    """Role + non-org workplace noun is not enough employment evidence."""
+    jobs = parse_experience(
+        'Experience\n'
+        'Oracle DBA\n'
+        '(24x7) Production Environment\n'
+        'Maintenance of databases.\n'
+    )
+    # Prefer zero rows over inventing a fake company from a workplace noun.
+    assert not any(
+        '24x7' in (j.company or '').lower() or 'production environment' in (j.company or '').lower()
+        for j in jobs
+    )
+
+
+def test_phase52_role_pipe_company_internship_with_nested_project_duties():
+    """Role | Company, Internship + dates + nested Project duties → one job."""
+    jobs = parse_experience(
+        'Experience\n'
+        'Full Stack Java Developer | Contoso Software IT Services, Internship\n'
+        '(09/2022) – (06/2023)\n'
+        '\n'
+        'Project 1 | E-Commerce Web Application\n'
+        '\n'
+        'Responsibility:\n'
+        '• Designed and implemented RESTful APIs using Spring Boot.\n'
+        '• Developed React-based dynamic UI components for checkout.\n'
+        '• Integrated MySQL database for order-related data.\n'
+    )
+    assert len(jobs) == 1
+    hit = jobs[0]
+    assert 'contoso' in (hit.company or '').lower()
+    assert 'internship' not in (hit.company or '').lower()
+    assert 'developer' in (hit.role or '').lower()
+    assert (hit.start or '').startswith('2022')
+    assert (hit.end or '').startswith('2023')
+    desc = (hit.description or '').lower()
+    assert 'designed' in desc and 'react' in desc
+    assert 'responsibility' not in (hit.role or '').lower()
+    assert 'responsibility' not in (hit.company or '').lower()
+
+
+def test_phase52_parenthesized_month_year_range():
+    from app.ai.document_intelligence.deterministic import extract_date_range
+
+    start, end = extract_date_range('(09/2022) – (06/2023)')
+    assert start.startswith('2022')
+    assert end.startswith('2023')
+
+
+def test_phase52_scorer_header_only_experience_is_na():
+    from ai.eval.apply_public_eval.score import evaluate_case, experience_has_duty_evidence
+
+    extract = (
+        'Pat Lee\npat@example.com\n'
+        'Experience\n'
+        'Graftronics Pvt Ltd | Dec 2013 - Dec 2016 | IT executive\n'
+        'Education\n'
+        'B.Tech\n'
+        'Skills\n'
+        'Developed tooling for internal use\n'
+    )
+    assert experience_has_duty_evidence(extract) is False
+    form = {
+        'fullName': 'Pat Lee',
+        'email': 'pat@example.com',
+        'experiences': [{
+            'company': 'Graftronics Pvt Ltd',
+            'role': 'IT executive',
+            'start': '2013-12',
+            'end': '2016-12',
+            'description': '',
+            'isCurrent': False,
+        }],
+        'education': [],
+        'skills': [],
+    }
+    ev = evaluate_case(form=form, extract=extract, http_status=200, inproc_form=form)
+    assert (ev.get('fields') or {}).get('description') == 'n/a'
+
+
+def test_phase52_scorer_experience_duties_missing_is_fail():
+    from ai.eval.apply_public_eval.score import evaluate_case, experience_has_duty_evidence
+
+    extract = (
+        'Pat Lee\npat@example.com\n'
+        'Experience\n'
+        'Software Engineer | Contoso Ltd\n'
+        'Jan 2020 - Dec 2021\n'
+        '• Designed REST APIs for checkout\n'
+        '• Developed React dashboards\n'
+        'Education\n'
+        'B.Tech\n'
+    )
+    assert experience_has_duty_evidence(extract) is True
+    form = {
+        'fullName': 'Pat Lee',
+        'email': 'pat@example.com',
+        'experiences': [{
+            'company': 'Contoso Ltd',
+            'role': 'Software Engineer',
+            'start': '2020-01',
+            'end': '2021-12',
+            'description': '',
+            'isCurrent': False,
+        }],
+        'education': [],
+        'skills': [],
+    }
+    ev = evaluate_case(form=form, extract=extract, http_status=200, inproc_form=form)
+    assert (ev.get('fields') or {}).get('description') == 'fail'

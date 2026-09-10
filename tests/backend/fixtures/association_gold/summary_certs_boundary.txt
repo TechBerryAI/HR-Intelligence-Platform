@@ -1,0 +1,26 @@
+Asha Nair
+asha.nair@example.com
+
+Summary
+Asha Nair
+Email: asha.nair@example.com
+Phone: +91 9988776655
+LinkedIn: linkedin.com/in/ashanair
+Mumbai
+
+Seeking a challenging role as a data analyst with strong SQL skills.
+
+Experience
+Helios Analytics
+Data Analyst
+Jan 2021 - Dec 2023
+Built dashboards for finance stakeholders.
+
+Skills
+SQL
+Python
+AWS
+
+Certifications
+AWS
+PMP

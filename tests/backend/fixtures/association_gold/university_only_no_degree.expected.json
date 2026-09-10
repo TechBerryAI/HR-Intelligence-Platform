@@ -1,0 +1,24 @@
+{
+  "education": [
+    {
+      "degree": "",
+      "institution": "ABC University",
+      "field_of_study": "",
+      "start_year": "",
+      "end_year": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Northwind Systems Pvt Ltd",
+      "role": "Linux Administrator",
+      "start_date": "2021-04",
+      "end_date": "Present",
+      "duties": ["Supported production hosts"]
+    }
+  ],
+  "skills": [],
+  "certifications": [],
+  "forbidden_certifications": ["Bachelor", "Bachelor's Degree"],
+  "summary": ""
+}

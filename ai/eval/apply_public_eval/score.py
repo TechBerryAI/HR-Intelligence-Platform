@@ -53,9 +53,16 @@ _COMPANY_CUE = re.compile(
     r'\b(?:pvt\.?\s*ltd|llc|inc\.?|llp|limited)\b|'
     r'\bat\s+[A-Z][A-Za-z0-9&.\' -]{2,40}',
 )
+# Do not match bare "me"/"be"/"ma"/"ba" (prose pronouns / words).
+# Require dotted abbreviations (B.E., M.A.) or full degree words / B-Tech forms.
 _DEGREE_CUE = re.compile(
-    r'(?i)\b(?:bachelor|master|b\.?\s*[ea]\.?|m\.?\s*[ea]\.?|b\.?\s*com|b\.?\s*sc|'
-    r'm\.?\s*sc|mba|phd|hsc|ssc|diploma|degree)\b',
+    r'(?i)(?:'
+    r'\b(?:bachelors?|masters?|doctorate|diploma|degree|phd|mba|hsc|ssc)\b|'
+    r'\bb\.?\s*-?\s*tech\b|\bm\.?\s*-?\s*tech\b|\bbtech\b|\bmtech\b|'
+    r'\bb\.?\s*com\b|\bm\.?\s*com\b|\bb\.?\s*sc\b|\bm\.?\s*sc\b|'
+    r'\bb\.\s*e\.?\b|\bm\.\s*e\.?\b|\bb\.\s*a\.?\b|\bm\.\s*a\.?\b|'
+    r'\bb\.e\b|\bm\.e\b|\bb\.a\b|\bm\.a\b'
+    r')',
 )
 _INST_CUE = re.compile(
     r'(?i)\b(?:university|college|institute|school|board)\b',
@@ -65,14 +72,43 @@ _SUMMARY_HEAD = re.compile(r'(?im)^.{0,40}\b(?:summary|objective|profile|synopsi
 _EMAIL = re.compile(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', re.I)
 _PHONE = re.compile(r'(?:\+91[\s-]?)?[6-9]\d{9}|\b\d{10}\b')
 _LINKEDIN = re.compile(r'(?i)linkedin\.com')
+# Legacy broad cue kept for diagnostics only — scoring uses
+# extract_has_candidate_location_evidence() (candidate-owned evidence).
 _LOC_CUE = re.compile(
     r'(?i)\b(?:location|address|city|mumbai|pune|bengaluru|bangalore|'
     r'hyderabad|delhi|chennai|noida|gurgaon|gurugram|kolkata|remote)\b',
+)
+_CANDIDATE_LOC_LABEL = re.compile(
+    r'(?i)(?:'
+    r'\b(?:(?:permanent|present|current|residential|correspondence|mailing)\s+address|'
+    r'current\s+location|native\s+place|home\s*town)\b|'
+    r'\b(?:location|address|city|residence|place)\s*[:\-–—]|'
+    r'\bbased\s+in\b\s*[:\-–—]?|\bresiding\s+(?:in|at)\b|\blives?\s+in\b'
+    r')'
+)
+_CONTACT_TRAILING_PLACE = re.compile(
+    r'(?i)(?:'
+    r'[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}'
+    r'|(?:\+?\d[\d\s\-().]{7,}\d)'
+    r'|linkedin'
+    r')'
+    r'[^\n|]*\|\s*'
+    r'([A-Za-z][A-Za-z .]{1,35})\s*[–—\-?,/]\s*'
+    r'([A-Za-z][A-Za-z .]{1,35})\s*$'
+)
+_STREET_ADDRESS_CUE = re.compile(
+    r'(?i)\b(?:road|street|cross\s+road|nagar|colony|apartment|sector|'
+    r'flat\s*no|plot\s*no|at\.?\s*post|tal\.?|dist\.?|district|pin(?:code)?)\b'
 )
 _CERT_HEAD = re.compile(r'(?im)^.{0,40}\b(?:certifications?|certificates?)\b')
 _DUTY_CUE = re.compile(
     r'(?i)\b(?:responsible for|developed|managed|implemented|supported|built|'
     r'designed|configured|maintained|administered)\b',
+)
+_EMPLOYMENT_PROSE_LINE = re.compile(
+    r'(?i)^(?:\d+(?:\.\d+)?\+?\s*(?:yrs?|years?)\.?\s+(?:of\s+)?)?'
+    r'(?:currently\s+)?'
+    r'(?:working|worked|work)\s+(?:as|for|with|at)\b'
 )
 _PROSE_SKILL = re.compile(
     r'(?i)\b(?:i am responsible|project description|secured a training|'
@@ -156,13 +192,68 @@ def slim_form(form: dict | None) -> dict[str, Any]:
     }
 
 
+def extract_has_candidate_location_evidence(extract: str) -> bool:
+    """True only for candidate-owned location/address evidence.
+
+    Employer / job / education / project cities and bare tech ``remote``
+    (e.g. ``Server Remote Utilities``) do not count. Empty Location with
+    only those cues → scorer ``n/a``, not a parser failure.
+    """
+    text = extract or ''
+    if not text.strip():
+        return False
+    # Labeled rows must carry a non-empty value (ignore bare "Place:" / "Location:")
+    for m in re.finditer(
+        r'(?im)^(?:\*\*)?(?:(?:permanent|present|current|residential|correspondence|mailing)\s+)?'
+        r'(?:location|address|city|residence|place)\s*[:\-–—]\s*(.*?)\s*$',
+        text,
+    ):
+        val = (m.group(1) or '').strip().strip('.,;')
+        if len(val) >= 2 and not re.match(r'(?i)^(date|name|signature)\b', val):
+            return True
+    if re.search(
+        r'(?i)\b(?:(?:permanent|present|current|residential|correspondence|mailing)\s+address|'
+        r'current\s+location|native\s+place|home\s*town)\b\s*[:\-–—]\s*\S',
+        text,
+    ):
+        return True
+    if re.search(
+        r'(?i)(?:location|based\s+in|work\s+(?:mode|location)|preferred\s+location)'
+        r'\s*[:\-–—]\s*(?:remote|hybrid|wfh|work\s+from\s+home)\b',
+        text,
+    ):
+        return True
+    if re.search(
+        r'(?i)\bbased\s+in\b\s*[:\-–—]?\s*[A-Za-z]|\bresiding\s+(?:in|at)\b\s+[A-Za-z]|'
+        r'\blives?\s+in\b\s+[A-Za-z]',
+        text,
+    ):
+        return True
+    header = '\n'.join(text.splitlines()[:30])
+    if _CONTACT_TRAILING_PLACE.search(header):
+        return True
+    for ln in header.splitlines():
+        s = ln.strip()
+        if not s or len(s) > 120:
+            continue
+        if re.search(r'(?i)\b(?:worked|working|company|employer|client|project|'
+                     r'university|college|institute|organization|organisation)\b', s):
+            continue
+        if _STREET_ADDRESS_CUE.search(s) and re.search(
+            r'(?i)\b[A-Z][a-zA-Z]{2,}(?:\s*,\s*[A-Z][a-zA-Z .]+)?\b',
+            s,
+        ):
+            return True
+    return False
+
+
 def source_support(extract: str) -> dict[str, bool]:
     text = extract or ''
     return {
         'name': bool(_EMAIL.search(text) or re.search(r'(?m)^[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+){1,3}\s*$', text[:800])),
         'email': bool(_EMAIL.search(text)),
         'phone': bool(_PHONE.search(text)),
-        'location': bool(_LOC_CUE.search(text)),
+        'location': extract_has_candidate_location_evidence(text),
         'linkedin': bool(_LINKEDIN.search(text)),
         'experience': bool(_JOB_TITLE.search(text) and _DATE_HINT.search(text)),
         'company': bool(_COMPANY_CUE.search(text)),
@@ -174,8 +265,77 @@ def source_support(extract: str) -> dict[str, bool]:
         'skills': bool(_SKILLS_HEAD.search(text)),
         'summary': bool(_SUMMARY_HEAD.search(text)),
         'certifications': bool(_CERT_HEAD.search(text)),
-        'description': bool(_DUTY_CUE.search(text)),
+        # Global cue kept for diagnostics; description scoring uses
+        # experience_has_duty_evidence() (Experience-section scoped).
+        'description': experience_has_duty_evidence(text),
     }
+
+
+def experience_section_text(extract: str) -> str:
+    """Return the Experience / Employment body from a resume extract, if any."""
+    text = extract or ''
+    lines = text.splitlines()
+    start = None
+    for i, ln in enumerate(lines):
+        probe = ln.strip().rstrip(':').strip()
+        if not probe:
+            continue
+        if re.match(
+            r'(?i)^(?:professional\s+)?(?:work\s+)?experiences?$|'
+            r'^employment(?:\s+history)?$|^work\s+history$|^career\s+history$|'
+            r'^internship(?:\s+experience)?$',
+            probe,
+        ):
+            start = i + 1
+            break
+    if start is None:
+        return ''
+    out: list[str] = []
+    for ln in lines[start:]:
+        probe = ln.strip().rstrip(':').strip()
+        if probe and re.match(
+            r'(?i)^(?:education|academic|skills?|certifications?|'
+            r'certificates?|summary|objective|declaration|hobbies|languages?|'
+            r'achievements?|awards|personal\s+details|'
+            r'technical\s+(?:skills?|proficiency))\b',
+            probe,
+        ):
+            break
+        # Bare Projects section only — not nested "Project 1 | Title" under Experience.
+        if re.match(r'(?i)^(?:key\s+)?projects?\s*:?\s*$', probe):
+            break
+        out.append(ln)
+    return '\n'.join(out)
+
+
+def experience_has_duty_evidence(extract: str) -> bool:
+    """True when the Experience section itself contains duty bullets/prose.
+
+    Employment sentences (``Working as ROLE for COMPANY``) and Project-only
+    sections elsewhere do not count. Header-only Experience → False → n/a.
+    """
+    exp = experience_section_text(extract)
+    if not exp.strip():
+        # No labeled Experience span — fall back carefully: only bullet lines
+        # that look like duties near job titles (avoid Project/Skills dumps).
+        return False
+    for ln in exp.splitlines():
+        s = ln.strip()
+        if not s or len(s) < 8:
+            continue
+        if _EMPLOYMENT_PROSE_LINE.match(s):
+            continue
+        if re.match(r'(?i)^(?:role|title|designation|position|company|employer|duration|period)\s*:', s):
+            continue
+        if re.match(r'(?i)^(?:key\s+)?projects?\s*(?:#|no\.?\s*)?\d*\b', s):
+            continue
+        if s[:1] in '•·*-●▪▸►' or re.match(r'^\d{1,2}[.)]\s+\S', s):
+            body = re.sub(r'^[\s•·\-\*●▪▸►\d.)]+', '', s).strip()
+            if len(body) >= 8 and not _EMPLOYMENT_PROSE_LINE.match(body):
+                return True
+        if _DUTY_CUE.search(s) and not _EMPLOYMENT_PROSE_LINE.match(s):
+            return True
+    return False
 
 
 def _values_close(a: str, b: str) -> bool:
@@ -505,16 +665,30 @@ def evaluate_case(
         mark('isCurrent', 'n/a' if not exp else 'pass')
 
     first_desc = (first.get('description') or '') if first else ''
-    if first_desc:
+    any_desc = any((j.get('description') or '').strip() for j in exp) if exp else False
+    exp_duty_support = experience_has_duty_evidence(extract or '')
+    if any_desc:
+        # Duties present on at least one job. First-job-empty alone is not a
+        # fail when another row owns the description (legitimate n/a on Job A).
         mark('description', 'pass')
-    elif exp and support.get('description'):
+        if first_desc and any(
+            (j.get('description') or '').strip()
+            and j is not first
+            and _fold(first_desc) == _fold(j.get('description') or '')
+            for j in exp[1:]
+        ):
+            # Same duty blob duplicated across jobs — soft signal only.
+            pass
+    elif exp and exp_duty_support:
         mark('description', 'fail')
         issues.append({
             'class': CLASS_B,
             'field': 'description',
-            'reason': 'duty_cues_in_extract_empty_description',
+            'reason': 'duty_cues_in_experience_empty_description',
         })
     else:
+        # No Experience-section duty evidence (header-only jobs, or duties only
+        # in Projects/Summary) → n/a, not a parser failure.
         mark('description', 'n/a')
 
     if first.get('company') and slim['name'] and _fold(first['company']) == _fold(slim['name']):
