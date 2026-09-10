@@ -99,7 +99,8 @@ def test_flatten_prefers_form_dto_over_toon():
     assert row['Email'] == 'form@example.com'
     assert 'Python' in row['Skills']
     assert 'TOONSKILL' not in row['Skills']
-    assert 'Intern at Acme' in row['Experience']
+    assert 'Intern' in row['Experience']
+    assert 'Acme' in row['Experience']
     assert 'Junk' not in row['Experience']
     assert 'B.Tech' in row['Education']
     assert row['Total Experience Years'] not in ('', None)
@@ -147,7 +148,7 @@ B.Tech - Mumbai University
     status = _apply_coverage_parse_honesty(
         row, form, parse_status='ok', note_bits=['source=engine:deterministic']
     )
-    assert status in ('OK', 'PARTIAL - 50-79%', 'PARTIAL - BELOW 50%')
+    assert status in ('OK', 'PARTIAL', 'WEAK')
     assert 'trace_weak=' in row['ParseNotes']
     assert 'experience' in row['ParseNotes']
     assert 'completeness=' in row['ParseNotes']

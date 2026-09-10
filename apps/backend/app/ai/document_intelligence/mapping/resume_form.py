@@ -434,9 +434,11 @@ def map_candidate_to_form(
     )
 
     # --- Certifications ---
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_cert_name
+
     cert_rows: list[CertificationFormRow] = []
     for cert in profile.certificates:
-        if not cert.name:
+        if not cert.name or not is_plausible_cert_name(cert.name):
             continue
         cert_rows.append(
             CertificationFormRow(
