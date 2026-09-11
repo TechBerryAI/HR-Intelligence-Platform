@@ -174,6 +174,13 @@ Live Redis lease test (disposable instance, not production Redis):
 TEST_REDIS_URL=redis://127.0.0.1:6379/15 python3 -m pytest tests/backend/test_parse_redis_lease.py -k live -q
 ```
 
+Backend suite: always use the project venv so locked deps (including required `redis`) resolve:
+
+```bash
+apps/backend/venv/bin/python -m pytest tests/backend -q
+# or: cd apps/backend && source venv/bin/activate && pip install -r requirements.lock.txt && cd ../.. && pytest tests/backend -q
+```
+
 AI performance harness (this machine only; do not treat numbers as SLAs):
 
 ```bash

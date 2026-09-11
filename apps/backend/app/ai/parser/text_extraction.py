@@ -42,6 +42,7 @@ from app.ai.parser.text_quality import (
     PAGE_OCR_TEXT_THRESHOLD,
     STRONG_DIGITAL_PAGE_CHARS,
     classify_text_quality,
+    has_identity_or_resume_tokens,
     looks_like_garbage_extract,
     prefer_better_text,
     quality_needs_ocr,
@@ -879,19 +880,34 @@ def _ocr_image_bytes(image_bytes: bytes, *, lang: str | None = None) -> str:
                 ocr_fn=lambda b: _ocr_image_bytes_plain(b, lang=lang),
             )
             if text and text.strip():
-                logger.debug('Layout OCR source=%s chars=%s', source, len(text))
-                _last_ocr_attempt.set(
-                    OcrAttempt(text=text.strip(), engine=source or 'rapidocr')
+                stripped = text.strip()
+                quality = classify_text_quality(stripped)
+                # Preprocessed layout OCR can return long garbled GOOD text that
+                # lacks resume/identity tokens — fall through to raw recovery.
+                layout_usable = (
+                    quality == TextQuality.GOOD
+                    and has_identity_or_resume_tokens(stripped)
+                    and not looks_like_garbage_extract(stripped)
                 )
-                return text.strip()
+                if layout_usable:
+                    logger.debug('Layout OCR source=%s chars=%s', source, len(stripped))
+                    _last_ocr_attempt.set(
+                        OcrAttempt(text=stripped, engine=source or 'rapidocr')
+                    )
+                    return stripped
+                logger.debug(
+                    'Layout OCR weak/garbage (quality=%s chars=%s); falling through to recovery',
+                    quality,
+                    len(stripped),
+                )
             # Blank page: layout already ran RapidOCR. Do not spend 12s again.
-            if source == 'empty':
+            elif source == 'empty':
                 raise ValueError(
                     'OCR failed (RapidOCR returned empty text). Install RapidOCR with '
                     'Python 3.10–3.12 (pip install rapidocr-onnxruntime), or install '
                     'system Tesseract as a fallback.'
                 )
-            # source == needs_recovery (ink but RapidOCR []): recovery ladder.
+            # source == needs_recovery (ink but RapidOCR []) or weak layout text.
         except ValueError:
             raise
         except Exception as exc:

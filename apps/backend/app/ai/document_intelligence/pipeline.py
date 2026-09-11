@@ -230,7 +230,11 @@ def _apply_resume_repair(profile, raw_text: str):
         experience=experience,
         projects=original.projects or repaired.projects,
         skills=skills,
-        certificates=original.certificates or repaired.certificates,
+        certificates=(
+            original.certificates
+            if original.certificates is not None
+            else (repaired.certificates or [])
+        ),
         languages=original.languages or repaired.languages,
         links=links,
         preferences=original.preferences or repaired.preferences,
