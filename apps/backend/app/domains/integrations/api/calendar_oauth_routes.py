@@ -15,7 +15,6 @@ calendar_oauth_bp = Blueprint('calendar_oauth', __name__)
 
 
 @calendar_oauth_bp.get('/calendar/google/connect')
-@authenticate_token
 @require_recruiter
 def google_calendar_connect():
     # Prefer the page the recruiter started from so post-Google redirect keeps the same
@@ -43,7 +42,6 @@ def google_calendar_callback():
 
 
 @calendar_oauth_bp.get('/calendar/google/status')
-@authenticate_token
 @require_recruiter
 def google_calendar_status():
     hrid = get_user_id(request.user)
@@ -53,7 +51,6 @@ def google_calendar_status():
 
 
 @calendar_oauth_bp.delete('/calendar/google/disconnect')
-@authenticate_token
 @require_recruiter
 def google_calendar_disconnect():
     hrid = get_user_id(request.user)

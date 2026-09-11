@@ -7,11 +7,23 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-_BENIGN = (
-    'already exists',
-    'duplicate',
-    'does not exist',
-)
+_BENIGN_SQLSTATES = frozenset({
+    '42P07',  # duplicate_table
+    '42710',  # duplicate_object
+})
+
+
+def _is_benign(exc: BaseException) -> bool:
+    sqlstate = getattr(exc, 'sqlstate', None) or getattr(exc, 'pgcode', None)
+    if sqlstate in _BENIGN_SQLSTATES:
+        return True
+    # SQLAlchemy wraps the DBAPI error
+    orig = getattr(exc, 'orig', None)
+    if orig is not None:
+        sqlstate = getattr(orig, 'sqlstate', None) or getattr(orig, 'pgcode', None)
+        if sqlstate in _BENIGN_SQLSTATES:
+            return True
+    return False
 
 
 def split_sql_statements(sql: str) -> list[str]:
@@ -72,15 +84,10 @@ def split_sql_statements(sql: str) -> list[str]:
     return statements
 
 
-def _is_benign(exc: BaseException) -> bool:
-    msg = str(exc).lower()
-    return any(x in msg for x in _BENIGN)
-
-
 def apply_sql_text(connection, sql: str, *, source: str = '') -> None:
     """
     Execute SQL on a SQLAlchemy Connection (Alembic) or psycopg connection.
-    Benign 'already exists' / 'does not exist' errors are skipped via SAVEPOINT.
+    Benign duplicate_table / duplicate_object errors are skipped via SAVEPOINT.
     """
     from sqlalchemy import text
     from sqlalchemy.engine import Connection as SAConnection

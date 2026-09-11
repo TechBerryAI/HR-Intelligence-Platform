@@ -21,7 +21,6 @@ from app.domains.integrations.service.dashboard_service import build_dashboard, 
 from app.domains.integrations.service.manager import IntegrationManagerService
 from app.domains.integrations.service import publish_service
 from app.domains.integrations.service.serializers import serialize_external_job, serialize_log_row
-from app.domains.recruitment.services.company_scope import companies_related, normalize_company
 from app.database.connection.db import db_get
 
 logger = logging.getLogger(__name__)
@@ -46,25 +45,20 @@ def _can_publish(user) -> bool:
 
 
 def _job_belongs_to_company(job_id: str, company_key: str, user) -> bool:
-    """Authorize job access by organization_id first. Company name is legacy-only."""
+    """Authorize job access by organization_id. Deny when org cannot be resolved."""
     job = db_get('SELECT * FROM jobs WHERE jdid = ?', (job_id,))
     if not job:
         return False
     org_id = job.get('organization_id')
     if org_id:
         return same_organization(user, org_id)
-    # Legacy unscoped row: owner's org if known, else company-name fallback.
     owner_org = _resolve_job_organization_id(
         organization_id=None,
         posted_by=job.get('posted_by'),
     )
     if owner_org:
         return same_organization(user, owner_org)
-    job_key = normalize_company(job.get('company') or '')
-    if job_key and company_key and job_key == company_key:
-        return True
-    _, display = resolve_company_for_user(user)
-    return companies_related(display, job.get('company'))
+    return False
 
 
 def _provider_known(company_key: str, provider: str) -> bool:

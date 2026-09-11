@@ -60,7 +60,6 @@ def _collect_zip_from_request():
 # ============================================================================
 
 @admin_bp.route('/bulk-parse/jobs', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def bulk_parse_create_job():
     """Create an empty bulk parse job for chunked / ZIP uploads."""
@@ -77,7 +76,6 @@ def bulk_parse_create_job():
 
 
 @admin_bp.route('/bulk-parse/upload', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def bulk_parse_upload():
     """
@@ -143,7 +141,6 @@ def bulk_parse_upload():
 
 
 @admin_bp.route('/bulk-parse/start/<job_id>', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def bulk_parse_start(job_id):
     """Start processing a previously staged bulk parse job."""
@@ -171,7 +168,6 @@ def bulk_parse_start(job_id):
 
 
 @admin_bp.route('/bulk-parse/pause/<job_id>', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def bulk_parse_pause(job_id):
     """Pause a running bulk parse job (finishes in-flight files, then stops)."""
@@ -191,7 +187,6 @@ def bulk_parse_pause(job_id):
 
 
 @admin_bp.route('/bulk-parse/resume/<job_id>', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def bulk_parse_resume(job_id):
     """Resume a paused bulk parse job."""
@@ -211,7 +206,6 @@ def bulk_parse_resume(job_id):
 
 
 @admin_bp.route('/bulk-parse/progress/<job_id>', methods=['GET'])
-@authenticate_token
 @require_recruiter
 def bulk_parse_progress(job_id):
     """Get bulk parsing job progress. Proxies to Bulk-Resume-Parser API."""
@@ -230,7 +224,6 @@ def bulk_parse_progress(job_id):
 
 
 @admin_bp.route('/bulk-parse/download/<job_id>', methods=['GET'])
-@authenticate_token
 @require_recruiter
 def bulk_parse_download(job_id):
     """Stream Excel download from Bulk-Resume-Parser. Proxies internally."""
@@ -265,7 +258,6 @@ def bulk_parse_download(job_id):
 # ============================================================================
 
 @admin_bp.route('/job-matches', methods=['GET'])
-@authenticate_token
 @require_recruiter
 def job_matches():
     """

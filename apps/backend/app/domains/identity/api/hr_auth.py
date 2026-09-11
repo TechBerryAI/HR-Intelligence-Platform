@@ -54,29 +54,31 @@ def _otp_rate_limited(email: str) -> bool:
         _OTP_RATE_WINDOW_SEC,
     )
 
-ALLOWED_PASSWORD_RESET_DOMAIN = (
-    os.getenv('ALLOWED_PASSWORD_RESET_DOMAIN') or 'techberryinfotech.com'
+ALLOWED_PASSWORD_RESET_DOMAINS_RAW = (
+    os.getenv('ALLOWED_PASSWORD_RESET_DOMAINS')
+    or os.getenv('ALLOWED_PASSWORD_RESET_DOMAIN')
+    or ''
 ).strip().lower()
+
+
+def _allowed_password_reset_domains() -> set[str] | None:
+    """Return allowlist set, or None when any domain is permitted (multi-tenant default)."""
+    raw = ALLOWED_PASSWORD_RESET_DOMAINS_RAW
+    if not raw:
+        return None
+    domains = {d.strip() for d in raw.split(',') if d.strip()}
+    return domains or None
 
 
 def _is_allowed_password_reset_email(email: str) -> bool:
     if not email or '@' not in email:
         return False
     domain = email.rsplit('@', 1)[-1].strip().lower()
-    return domain == ALLOWED_PASSWORD_RESET_DOMAIN
+    allowed = _allowed_password_reset_domains()
+    if allowed is None:
+        return True
+    return domain in allowed
 
-
-def _next_hrid() -> str:
-    try:
-        row = db_get(
-            "SELECT MAX(CAST(SUBSTRING(hrid,5,10) AS INT)) AS maxn FROM hr_signup",
-            (),
-        )
-        next_num = int(row['maxn']) + 1 if row and row.get('maxn') is not None else 1
-    except (ValueError, TypeError, KeyError):
-        count_row = db_get("SELECT COUNT(*) AS cnt FROM hr_signup", ())
-        next_num = (count_row['cnt'] if count_row else 0) + 1
-    return f"HRID{next_num:03d}"
 
 
 def _otp_valid(stored_otp, otp_expiry_raw, input_otp: str, *, grace_seconds: int = 30) -> tuple[bool, str | None]:
@@ -257,6 +259,7 @@ def hr_forgot_password():
     try:
         data = request.get_json(force=True) or {}
         email = (data.get('email') or '').strip().lower()
+        success_body = {'message': 'OTP sent successfully. Please check your email.'}
         if not email:
             return jsonify({'error': 'Email is required.'}), 400
         if not is_valid_email(email) or not _is_allowed_password_reset_email(email):
@@ -272,7 +275,8 @@ def hr_forgot_password():
             (email,),
         )
         if not hr_row:
-            return jsonify({'error': 'Invalid email'}), 400
+            # Anti-enumeration: identical success response when account is unknown/inactive
+            return jsonify(success_body), 200
 
         otp = generate_otp()
         expiry = datetime.now(timezone.utc) + timedelta(minutes=10)
@@ -282,7 +286,7 @@ def hr_forgot_password():
         )
         if not send_email_otp(email, otp, user_type="HR", purpose="password_reset", minutes=10):
             return jsonify({'error': 'Failed to send OTP email. Please try again later.'}), 500
-        return jsonify({'message': 'OTP sent successfully. Please check your email.'}), 200
+        return jsonify(success_body), 200
     except Exception as e:
         log_unexpected('hr_forgot_password', e)
         return client_internal_error()
@@ -392,10 +396,15 @@ def hr_login():
             return jsonify({"error": "Email and password are required"}), 400
 
         email_clean = email.strip().lower()
-        if is_login_rate_limited(email_clean, 'HR'):
+        if is_login_rate_limited(email_clean, 'HR', ip_address=ip_address):
             return jsonify({
                 "error": "Too many failed login attempts. Try again in 15 minutes.",
             }), 429
+
+        # Dummy hash so unknown users still pay bcrypt cost (timing anti-enumeration).
+        _DUMMY_HASH = (
+            b'$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G2oQ.Y5xqK0K1i'
+        )
 
         signup_data = db_get(
             """
@@ -406,12 +415,20 @@ def hr_login():
             (email_clean,),
         )
         if not signup_data or (signup_data.get('account_status') or 'active') != 'active':
+            try:
+                bcrypt.checkpw(password.encode('utf-8'), _DUMMY_HASH)
+            except Exception:
+                pass
             record_login_attempt(email, 'HR', 'failed', ip_address, user_agent, 'User not found')
             return jsonify({"error": "Invalid email or password"}), 401
 
         user_id = signup_data['hrid']
         stored = signup_data.get('password') or ''
         if not stored:
+            try:
+                bcrypt.checkpw(password.encode('utf-8'), _DUMMY_HASH)
+            except Exception:
+                pass
             record_login_attempt(
                 email, 'HR', 'failed', ip_address, user_agent, 'Invalid password', user_id=user_id
             )
@@ -433,6 +450,15 @@ def hr_login():
         record_login_attempt(
             email, 'HR', 'success', ip_address, user_agent, user_id=user_id
         )
+        try:
+            from app.domains.identity.sessions.service import (
+                prune_expired_refresh_tokens,
+                prune_login_history,
+            )
+            prune_expired_refresh_tokens(30)
+            prune_login_history(90)
+        except Exception:
+            pass
 
         if is_new_device:
             login_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -469,8 +495,9 @@ def hr_login():
                 "orgSlug": identity.get('org_slug'),
             }
         })
-    except Exception:
-        return jsonify({"error": "Internal server error"}), 500
+    except Exception as e:
+        log_unexpected('hr_login', e)
+        return client_internal_error()
 
 
 @auth_bp.post('/change-password')

@@ -10,7 +10,7 @@ docker compose -f infrastructure/docker/docker-compose.yml up -d
 
 ### Schema initialization
 
-Compose starts an **empty** Postgres volume. Create/upgrade the application schema with Alembic only:
+Compose starts an **empty** Postgres volume (**PostgreSQL 15+** required). Create/upgrade the application schema with Alembic only:
 
 ```bash
 cd apps/backend

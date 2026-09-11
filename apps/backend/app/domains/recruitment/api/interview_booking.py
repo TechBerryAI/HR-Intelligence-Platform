@@ -41,7 +41,6 @@ def post_booking(token: str):
 
 
 @interview_bp.get('/by-application/<int:application_id>')
-@authenticate_token
 @require_recruiter
 def interview_by_application(application_id: int):
     from app.database.connection.db import db_get

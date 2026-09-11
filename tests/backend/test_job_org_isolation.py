@@ -84,8 +84,8 @@ def test_c_different_org_different_company_denies(monkeypatch):
     assert can_access_job(user_b, posted_by='hr-a', organization_id=ORG_A) is False
 
 
-def test_d_legacy_unscoped_company_fallback_allows(monkeypatch):
-    """Jobs with NULL organization_id and no owner org use company-name fallback."""
+def test_d_legacy_unscoped_without_owner_org_denies(monkeypatch):
+    """Jobs with NULL organization_id and no owner org are denied (no fuzzy name auth)."""
     job = {
         'jdid': 'job-legacy',
         'organization_id': None,
@@ -100,11 +100,7 @@ def test_d_legacy_unscoped_company_fallback_allows(monkeypatch):
         'app.domains.integrations.api.routes._resolve_job_organization_id',
         lambda **_k: None,
     )
-    monkeypatch.setattr(
-        'app.domains.integrations.api.routes.resolve_company_for_user',
-        lambda _u: ('acme', 'Acme'),
-    )
-    assert _job_belongs_to_company('job-legacy', 'acme', _user(ORG_B)) is True
+    assert _job_belongs_to_company('job-legacy', 'acme', _user(ORG_B)) is False
 
 
 def test_d_legacy_unscoped_owner_org_denies_other_tenant(monkeypatch):

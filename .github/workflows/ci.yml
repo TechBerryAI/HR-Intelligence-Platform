@@ -9,33 +9,6 @@ on:
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install backend dependencies
-        run: |
-          pip install -r apps/backend/requirements.lock.txt
-          pip install pytest
-      - name: Verify PyMuPDF and RapidOCR
-        run: python -c "import fitz, rapidocr_onnxruntime; print('PyMuPDF+RapidOCR OK')"
-      - name: Run unit tests
-        env:
-          # Unit/mock only — no live Postgres or Ollama required
-          DOCUMENT_INTELLIGENCE_VALIDATION_PAYLOAD: "true"
-          FLASK_DEBUG: "true"
-          JWT_SECRET: "ci-test-jwt-secret-at-least-32-characters-long"
-          ALLOW_INSECURE_JWT: "true"
-        run: |
-          pytest tests/backend/ \
-            --ignore=tests/backend/test_jd_ollama_smoke.py \
-            --ignore=tests/backend/test_resume_ollama_smoke.py \
-            --ignore=tests/backend/test_platform_smoke.py \
-            -q
-
-  alembic-upgrade:
-    runs-on: ubuntu-latest
     services:
       postgres:
         image: postgres:17
@@ -56,7 +29,62 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install backend dependencies
-        run: pip install -r apps/backend/requirements.txt
+        run: |
+          pip install -r apps/backend/requirements.lock.txt
+          pip install pytest
+      - name: Verify PyMuPDF and RapidOCR
+        run: python -c "import fitz, rapidocr_onnxruntime; print('PyMuPDF+RapidOCR OK')"
+      - name: Alembic upgrade head
+        working-directory: apps/backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hcip_ci
+          FLASK_DEBUG: "true"
+          ALLOW_INSECURE_JWT: "true"
+          JWT_SECRET: "ci-test-jwt-secret-at-least-32-characters-long"
+        run: alembic upgrade head
+      - name: Run backend tests
+        env:
+          # Live Postgres required so create_app / route-matrix security tests execute
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hcip_ci
+          DOCUMENT_INTELLIGENCE_VALIDATION_PAYLOAD: "true"
+          FLASK_DEBUG: "true"
+          JWT_SECRET: "ci-test-jwt-secret-at-least-32-characters-long"
+          ALLOW_INSECURE_JWT: "true"
+          MAIL_SUPPRESS_SEND: "true"
+        run: |
+          pytest tests/backend/ \
+            --ignore=tests/backend/test_jd_ollama_smoke.py \
+            --ignore=tests/backend/test_resume_ollama_smoke.py \
+            --ignore=tests/backend/test_platform_smoke.py \
+            -q
+
+  alembic-upgrade:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["15", "16", "17"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: hcip_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d hcip_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend dependencies
+        run: pip install -r apps/backend/requirements.lock.txt
       - name: Alembic upgrade head on empty DB
         working-directory: apps/backend
         env:

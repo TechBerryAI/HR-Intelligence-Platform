@@ -10,18 +10,23 @@ from flask import Blueprint, jsonify, request
 from app.database.connection.db import db_get, db_run
 from app.core.errors import log_unexpected
 from app.domains.identity.services.organizations import (
+    OrganizationSlugConflict,
     ensure_organization,
     force_organization_id,
     get_organization,
 )
+from app.core.auth import validate_password_strength
+from app.domains.identity.services.hrid import next_hrid
 
 platform_bp = Blueprint('platform', __name__)
 
-PLATFORM_PROVISION_KEY = (os.getenv('PLATFORM_PROVISION_KEY') or '').strip()
+
+def _platform_provision_key() -> str:
+    return (os.getenv('PLATFORM_PROVISION_KEY') or '').strip()
 
 
 def _require_platform_key():
-    expected = PLATFORM_PROVISION_KEY
+    expected = _platform_provision_key()
     if not expected:
         return jsonify({
             'error': 'Platform provisioning is not configured (PLATFORM_PROVISION_KEY)',
@@ -32,15 +37,6 @@ def _require_platform_key():
     return None
 
 
-def _next_hrid() -> str:
-    row = db_get(
-        "SELECT COALESCE(MAX(CAST(SUBSTRING(hrid FROM 5) AS INT)), 0) AS maxn "
-        "FROM hr_signup WHERE hrid ~ ?",
-        ('^HRID[0-9]+$',),
-    )
-    next_num = int(row['maxn']) + 1 if row and row.get('maxn') is not None else 1
-    return f'HRID{next_num:03d}'
-
 
 def _create_staff(*, email: str, full_name: str, password: str, role: str, company: str, org_id: str):
     email_clean = email.strip().lower()
@@ -48,7 +44,7 @@ def _create_staff(*, email: str, full_name: str, password: str, role: str, compa
     if existing:
         raise ValueError(f'Email already registered: {email_clean}')
     password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-    hrid = _next_hrid()
+    hrid = next_hrid()
     db_run(
         """
         INSERT INTO hr_signup (
@@ -67,6 +63,20 @@ def _create_staff(*, email: str, full_name: str, password: str, role: str, compa
         'company': company,
         'organizationId': org_id,
     }
+
+
+def _rollback_provision(org_id: str | None, hrids: list[str]) -> None:
+    """Best-effort cleanup if CEO/staff creation fails after org insert."""
+    for hrid in reversed(hrids):
+        try:
+            db_run('DELETE FROM hr_signup WHERE hrid = ?', (hrid,))
+        except Exception:
+            pass
+    if org_id:
+        try:
+            db_run('DELETE FROM organizations WHERE id = ?', (org_id,))
+        except Exception:
+            pass
 
 
 @platform_bp.post('/companies')
@@ -100,8 +110,9 @@ def provision_company():
     head_password = (head.get('password') or '').strip()
     if not head_email or not head_name or not head_password:
         return jsonify({'error': 'headHr.email, headHr.fullName, and headHr.password are required'}), 400
-    if len(head_password) < 6:
-        return jsonify({'error': 'headHr.password must be at least 6 characters'}), 400
+    ok, err = validate_password_strength(head_password)
+    if not ok:
+        return jsonify({'error': err or 'headHr.password does not meet requirements'}), 400
 
     if ceo is not None:
         if not isinstance(ceo, dict):
@@ -111,11 +122,14 @@ def provision_company():
         ceo_password = (ceo.get('password') or '').strip()
         if not ceo_email or not ceo_name or not ceo_password:
             return jsonify({'error': 'ceo.email, ceo.fullName, and ceo.password are required'}), 400
-        if len(ceo_password) < 6:
-            return jsonify({'error': 'ceo.password must be at least 6 characters'}), 400
+        ok, err = validate_password_strength(ceo_password)
+        if not ok:
+            return jsonify({'error': err or 'ceo.password does not meet requirements'}), 400
 
+    org_id = None
+    created_hrids: list[str] = []
     try:
-        org_id = ensure_organization(name)
+        org_id = ensure_organization(name, create_only=True)
         if not org_id:
             return jsonify({'error': 'Failed to create company'}), 500
         org = get_organization(org_id)
@@ -129,6 +143,7 @@ def provision_company():
             company=company_name,
             org_id=org_id,
         )
+        created_hrids.append(head_account['hrid'])
         ceo_account = None
         if ceo is not None:
             ceo_account = _create_staff(
@@ -139,6 +154,7 @@ def provision_company():
                 company=company_name,
                 org_id=org_id,
             )
+            created_hrids.append(ceo_account['hrid'])
 
         return jsonify({
             'message': 'Company provisioned',
@@ -150,8 +166,15 @@ def provision_company():
             'headHr': head_account,
             'ceo': ceo_account,
         }), 201
+    except OrganizationSlugConflict as conflict:
+        return jsonify({
+            'error': f'Organization slug already exists: {conflict.slug}',
+            'slug': conflict.slug,
+        }), 409
     except ValueError as ve:
+        _rollback_provision(org_id, created_hrids)
         return jsonify({'error': str(ve)}), 400
     except Exception as e:
+        _rollback_provision(org_id, created_hrids)
         log_unexpected('platform_provision', e)
         return jsonify({'error': 'Failed to provision company'}), 500

@@ -69,15 +69,23 @@ def is_refresh_token_active(token: str) -> bool:
         """,
         (jti, _token_fingerprint(token)),
     )
-    if row:
-        return True
-    # Backward-compatible: accept first-use tokens issued before table existed,
-    # then register them so logout can revoke thereafter.
-    existing = db_get("SELECT jti FROM auth_refresh_tokens WHERE jti = ?", (jti,))
-    if existing:
-        return False
-    register_refresh_token(token, str(payload.get('user_id') or ''))
-    return True
+    return bool(row)
+
+
+def prune_expired_refresh_tokens(retention_days: int = 30) -> int:
+    """Delete refresh-token rows expired more than ``retention_days`` ago."""
+    row = db_get(
+        """
+        WITH deleted AS (
+            DELETE FROM auth_refresh_tokens
+            WHERE expires_at < NOW() - (? * INTERVAL '1 day')
+            RETURNING 1
+        )
+        SELECT COUNT(*) AS cnt FROM deleted
+        """,
+        (retention_days,),
+    )
+    return int(row['cnt']) if row else 0
 
 
 def revoke_refresh_token(token: str) -> Dict:
@@ -196,8 +204,16 @@ def rotate_refresh_token(old_token: str, new_token: str, user_id: str) -> Dict:
         return {"success": False, "error": "rotation failed"}
 
 
-def is_login_rate_limited(email: str, user_type: str = 'HR') -> bool:
-    return get_recent_failed_attempts(email, user_type, LOGIN_LOCKOUT_MINUTES) >= MAX_FAILED_LOGIN_ATTEMPTS
+def is_login_rate_limited(
+    email: str,
+    user_type: str = 'HR',
+    *,
+    ip_address: Optional[str] = None,
+) -> bool:
+    return (
+        get_recent_failed_attempts(email, user_type, LOGIN_LOCKOUT_MINUTES, ip_address=ip_address)
+        >= MAX_FAILED_LOGIN_ATTEMPTS
+    )
 
 
 def hash_otp(otp: str) -> str:
@@ -275,16 +291,49 @@ def get_login_history(email: str, user_type: str, limit: int = 50) -> List[Dict]
     )
 
 
-def get_recent_failed_attempts(email: str, user_type: str, minutes: int = 15) -> int:
+def get_recent_failed_attempts(
+    email: str,
+    user_type: str,
+    minutes: int = 15,
+    *,
+    ip_address: Optional[str] = None,
+) -> int:
+    if ip_address:
+        row = db_get(
+            """
+            SELECT COUNT(*) AS cnt FROM login_history
+            WHERE email = ? AND user_type = ? AND status = 'failed'
+              AND ip_address = ?
+              AND attempted_at > NOW() - (? * INTERVAL '1 minute')
+            """,
+            (email, audit_user_type(user_type), ip_address, minutes),
+        )
+    else:
+        row = db_get(
+            """
+            SELECT COUNT(*) AS cnt FROM login_history
+            WHERE email = ? AND user_type = ? AND status = 'failed'
+              AND attempted_at > NOW() - (? * INTERVAL '1 minute')
+            """,
+            (email, audit_user_type(user_type), minutes),
+        )
+    return int(row["cnt"]) if row else 0
+
+
+def prune_login_history(retention_days: int = 90) -> int:
+    """Delete login_history rows older than ``retention_days``."""
     row = db_get(
         """
-        SELECT COUNT(*) AS cnt FROM login_history
-        WHERE email = ? AND user_type = ? AND status = 'failed'
-          AND attempted_at > NOW() - (? * INTERVAL '1 minute')
+        WITH deleted AS (
+            DELETE FROM login_history
+            WHERE attempted_at < NOW() - (? * INTERVAL '1 day')
+            RETURNING 1
+        )
+        SELECT COUNT(*) AS cnt FROM deleted
         """,
-        (email, audit_user_type(user_type), minutes),
+        (retention_days,),
     )
-    return int(row["cnt"]) if row else 0
+    return int(row['cnt']) if row else 0
 
 
 def has_previous_login_from_same_device(

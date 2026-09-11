@@ -82,12 +82,11 @@ def _get_job_for_user(job_id, user, require_write=False):
 
 def _public_org_from_request():
     """
-    Resolve the public board company automatically.
-    Optional ?company= / ?slug= overrides; otherwise DEFAULT_PUBLIC_COMPANY_SLUG
-    or the sole org with jobs.
+    Resolve the public board company (per-tenant).
+    Optional ?company= / ?slug=; else Host subdomain; else DEFAULT_PUBLIC_COMPANY_SLUG.
     """
     slug = (request.args.get('company') or request.args.get('slug') or '').strip().lower()
-    return resolve_public_organization(slug or None)
+    return resolve_public_organization(slug or None, host=request.host)
 
 
 def _job_matches_public_org(job: dict, org: dict | None) -> bool:
@@ -275,10 +274,10 @@ def get_jobs_public():
 
         org = _public_org_from_request()
         if not org:
-            return jsonify({
-                'error': 'No company configured for the public job board',
-                'hint': 'Set DEFAULT_PUBLIC_COMPANY_SLUG or ensure one organization has jobs',
-            }), 400
+            logger.warning(
+                'Public job board unresolved: set ?company=<slug> or DEFAULT_PUBLIC_COMPANY_SLUG'
+            )
+            return jsonify({'error': 'Not found'}), 404
         jobs = db_all(
             '''
             SELECT j.*, hs.company as company_name
@@ -297,7 +296,6 @@ def get_jobs_public():
 
 
 @jobs_bp.get('/all')
-@authenticate_token
 @require_recruiter
 def get_jobs_all():
     """Staff job list: scoped to caller's organization."""
@@ -347,7 +345,6 @@ def get_job(job_id: str):
 
 
 @jobs_bp.get('/<string:job_id>/applications')
-@authenticate_token
 @require_recruiter
 def get_job_applications(job_id: str):
     try:
@@ -515,7 +512,6 @@ def get_job_applications(job_id: str):
 
 
 @jobs_bp.get('/<string:job_id>/applications/<string:candidate_id>/resume')
-@authenticate_token
 @require_recruiter
 def get_candidate_resume(job_id: str, candidate_id: str):
     """Download candidate resume for HR"""
@@ -575,7 +571,6 @@ def get_candidate_resume(job_id: str, candidate_id: str):
 
 
 @jobs_bp.post('/<string:job_id>/applications/<string:candidate_id>/viewed')
-@authenticate_token
 @require_recruiter
 def record_profile_viewed(job_id: str, candidate_id: str):
     """Record that HR viewed this candidate's profile for this job. Sends email and updates status."""
@@ -643,7 +638,6 @@ def record_profile_viewed(job_id: str, candidate_id: str):
 
 
 @jobs_bp.patch('/<string:job_id>/applications/<string:candidate_id>/status')
-@authenticate_token
 @require_recruiter
 def update_application_status(job_id: str, candidate_id: str):
     """Shortlist or reject candidate. Body: { "action": "shortlist" | "reject" }.
@@ -737,7 +731,6 @@ def update_application_status(job_id: str, candidate_id: str):
 
 
 @jobs_bp.post('/')
-@authenticate_token
 @require_recruiter
 def create_job():
     try:
@@ -887,7 +880,6 @@ def create_job():
 
 
 @jobs_bp.put('/<string:job_id>')
-@authenticate_token
 @require_recruiter
 def update_job(job_id: str):
     try:
@@ -956,7 +948,6 @@ def update_job(job_id: str):
 
 
 @jobs_bp.patch('/<string:job_id>/enabled')
-@authenticate_token
 @require_recruiter
 def toggle_job(job_id: str):
     try:
@@ -975,7 +966,6 @@ def toggle_job(job_id: str):
 
 
 @jobs_bp.delete('/<string:job_id>')
-@authenticate_token
 @require_recruiter
 def delete_job(job_id: str):
     try:

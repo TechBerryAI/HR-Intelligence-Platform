@@ -23,6 +23,11 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2] / 'apps' / 'backend'
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
+# Allow `from live_db_helpers import ...` in sibling test modules
+_TESTS_DIR = Path(__file__).resolve().parent
+if str(_TESTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_TESTS_DIR))
+
 from app.core.log_redaction import install_log_redaction  # noqa: E402
 
 install_log_redaction()

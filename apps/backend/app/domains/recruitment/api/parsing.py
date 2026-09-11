@@ -61,7 +61,7 @@ def _jd_client(body: dict, status: int):
 parsing_bp = Blueprint('parsing', __name__)
 
 # Image resumes (PNG/JPG) are rejected — OCR quality is too unreliable for apply/autofill.
-ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'webp'}
+ALLOWED_EXTENSIONS = {'pdf', 'docx', 'webp'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 _PUBLIC_PARSE_LIMIT = int(os.getenv('PUBLIC_PARSE_RATE_LIMIT', '10'))
@@ -71,7 +71,7 @@ _VALIDATION_TOKEN = os.getenv('DOCUMENT_INTELLIGENCE_VALIDATION_TOKEN', '')
 MIME_TYPE_MAP = {
     'pdf': 'application/pdf',
     'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'doc': 'application/msword',
+    'webp': 'image/webp',
 }
 
 
@@ -85,7 +85,7 @@ def _parse_source_filename(uploaded: str | None) -> str:
     Do not run ``secure_filename`` on this value. Werkzeug strips ``[Ny_Nm]``
     tenure markers and turns `` - Copy`` into ``_-_Copy``, which changes
     filename-derived names versus the in-process parser. Storage writes
-    ``{uploader}_{uuid}{ext}`` and does not use this string as a path.
+    use a separate sanitized name via ``save_file_to_storage``.
     """
     return (uploaded or '').replace('\\', '/').split('/')[-1].strip()
 
@@ -100,8 +100,42 @@ def _reject_legacy_doc(filename):
     return None
 
 
-def get_mime_type(filename):
-    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+def _reject_bad_content(file_data: bytes, filename: str):
+    """Reject uploads whose magic bytes do not match an allowed type."""
+    kind = sniff_upload_kind(file_data)
+    if kind is None:
+        return jsonify({
+            'status': 'error',
+            'error': 'Unrecognized file content. Allowed: PDF, DOCX, WebP.',
+        }), 400
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    if ext in ALLOWED_EXTENSIONS and ext != kind:
+        return jsonify({
+            'status': 'error',
+            'error': f'File content does not match extension .{ext}',
+        }), 400
+    return None
+
+
+def sniff_upload_kind(data: bytes) -> str | None:
+    """Return 'pdf' | 'docx' | 'webp' from magic bytes, or None if unrecognized."""
+    if not data:
+        return None
+    if data[:4] == b'%PDF':
+        return 'pdf'
+    if data[:4] == b'PK\x03\x04':
+        return 'docx'
+    if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        return 'webp'
+    return None
+
+
+def get_mime_type(filename: str | None = None, *, data: bytes | None = None) -> str:
+    if data is not None:
+        kind = sniff_upload_kind(data)
+        if kind:
+            return MIME_TYPE_MAP.get(kind, 'application/octet-stream')
+    ext = filename.rsplit('.', 1)[1].lower() if filename and '.' in filename else ''
     return MIME_TYPE_MAP.get(ext, 'application/octet-stream')
 
 
@@ -353,6 +387,9 @@ def parse_resume_public():
                 'status': 'error',
                 'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
             }), 413
+        bad = _reject_bad_content(file_data, file.filename or '')
+        if bad:
+            return bad
         filename = _parse_source_filename(file.filename)
         public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
 
@@ -421,7 +458,6 @@ def parse_resume_upload():
 
 
 @parsing_bp.route('/parse/jd', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def parse_jd_upload():
     """Upload and parse job description. POST /api/parse/jd"""
@@ -536,6 +572,9 @@ def parse_resume_public_stream():
             'status': 'error',
             'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
         }), 413
+    bad = _reject_bad_content(file_data, file.filename or '')
+    if bad:
+        return bad
     filename = _parse_source_filename(file.filename)
     public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
 
@@ -600,7 +639,6 @@ def parse_resume_stream():
 
 
 @parsing_bp.route('/parse/jd/stream', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def parse_jd_stream():
     """SSE stream of stage events for JD parse."""

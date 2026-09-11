@@ -9,6 +9,7 @@ from flask import Blueprint, jsonify, request
 
 from app.database.connection.db import db_all, db_get, db_run
 from app.core.auth import validate_password_strength
+from app.domains.identity.services.hrid import next_hrid
 from app.core.errors import log_unexpected
 from app.ai.toon.runtime import toon_loads_flex
 from app.api.middleware.auth import authenticate_token, require_head_hr
@@ -44,6 +45,40 @@ def _caller_org():
     return org_id, org, None
 
 
+def _assert_mutable_target(
+    hrid: str,
+    org_id: str,
+    caller_id: str | None,
+    *,
+    require_status: str = 'active',
+) -> tuple[dict | None, tuple[dict, int] | None]:
+    """Return ``(row, None)`` if the target may be mutated, else ``(None, (error, status))``.
+
+    Enforces: target exists in ``org_id`` with ``require_status``; not self; role not CEO/HEAD_HR.
+    """
+    existing = db_get(
+        """
+        SELECT hrid, role, account_status, full_name, email, company, password
+        FROM hr_signup
+        WHERE hrid = ?
+          AND organization_id = ?
+          AND COALESCE(account_status, 'active') = ?
+        """,
+        (hrid, org_id, require_status),
+    )
+    if not existing:
+        return None, ({'error': 'Admin not found'}, 404)
+
+    if caller_id and str(hrid) == str(caller_id):
+        return None, ({'error': 'You cannot delete your own account'}, 403)
+
+    target_role = (existing.get('role') or '').upper()
+    if target_role in ('CEO', 'HEAD_HR'):
+        return None, ({'error': 'Cannot delete CEO or Head HR accounts'}, 403)
+
+    return existing, None
+
+
 def deactivate_admin_account(
     hrid: str,
     org_id: str,
@@ -54,25 +89,9 @@ def deactivate_admin_account(
     Returns ``(payload, http_status)``. Never hard-deletes ``hr_signup`` rows so
     ``jobs.posted_by`` and other FKs remain valid.
     """
-    existing = db_get(
-        """
-        SELECT hrid, role, account_status
-        FROM hr_signup
-        WHERE hrid = ?
-          AND organization_id = ?
-          AND COALESCE(account_status, 'active') = 'active'
-        """,
-        (hrid, org_id),
-    )
-    if not existing:
-        return {'error': 'Admin not found'}, 404
-
-    if caller_id and str(hrid) == str(caller_id):
-        return {'error': 'You cannot delete your own account'}, 403
-
-    target_role = (existing.get('role') or '').upper()
-    if target_role in ('CEO', 'HEAD_HR'):
-        return {'error': 'Cannot delete CEO or Head HR accounts'}, 403
+    _existing, blocked = _assert_mutable_target(hrid, org_id, caller_id, require_status='active')
+    if blocked:
+        return blocked
 
     db_run(
         """
@@ -172,11 +191,15 @@ def list_admins():
     org_id, org, err = _caller_org()
     if err:
         return err
+    include_inactive = (request.args.get('include_inactive') or '').strip().lower() in (
+        '1', 'true', 'yes',
+    )
+    status_clause = '' if include_inactive else "AND COALESCE(account_status, 'active') = 'active'"
     rows = db_all(
-        '''SELECT hrid, full_name, email, company, created_at, role, organization_id
+        f'''SELECT hrid, full_name, email, company, created_at, role, organization_id, account_status
            FROM hr_signup
-           WHERE COALESCE(account_status, 'active') = 'active'
-             AND organization_id = ?
+           WHERE organization_id = ?
+             {status_clause}
            ORDER BY created_at DESC''',
         (org_id,),
     )
@@ -189,7 +212,6 @@ def list_admins():
 
 
 @head_hr_bp.post('/admins')
-@authenticate_token
 @require_head_hr
 def create_admin():
     """Create a new HR/admin account in the caller's company. Body: email, fullName, password."""
@@ -212,15 +234,24 @@ def create_admin():
     if not full_name:
         return jsonify({'error': 'Full name is required'}), 400
 
-    existing = db_get('SELECT hrid FROM hr_signup WHERE LOWER(email) = ?', (email,))
+    existing = db_get(
+        """
+        SELECT hrid, account_status FROM hr_signup
+        WHERE LOWER(email) = ? AND organization_id = ?
+        """,
+        (email, org_id),
+    )
     if existing:
+        if (existing.get('account_status') or 'active') == 'deactivated':
+            return jsonify({
+                'error': 'An account with this email was deactivated — reactivate it instead',
+                'hrid': existing.get('hrid'),
+            }), 400
         return jsonify({'error': 'An admin with this email already exists'}), 400
 
     try:
         password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        row = db_get('SELECT COALESCE(MAX(CAST(SUBSTRING(hrid FROM 5) AS INT)), 0) AS maxn FROM hr_signup WHERE hrid ~ ?', ('^HRID[0-9]+$',))
-        next_num = int(row['maxn']) + 1 if row and row.get('maxn') is not None else 1
-        hrid = f"HRID{next_num:03d}"
+        hrid = next_hrid()
         db_run(
             """
             INSERT INTO hr_signup (hrid, full_name, email, company, password, account_status, organization_id, role)
@@ -247,7 +278,6 @@ def create_admin():
 
 @head_hr_bp.route('/admins/<hrid>', methods=['PUT', 'DELETE', 'OPTIONS'])
 @allow_options_no_auth
-@authenticate_token
 @require_head_hr
 def update_or_delete_admin(hrid):
     """PUT: update admin. DELETE: soft-deactivate admin. OPTIONS: CORS preflight."""
@@ -271,12 +301,10 @@ def update_or_delete_admin(hrid):
             return jsonify({'error': 'Failed to deactivate admin'}), 500
 
     # PUT — update (company locked to caller's org)
-    existing = db_get(
-        'SELECT hrid, full_name, email, company FROM hr_signup WHERE hrid = ? AND organization_id = ?',
-        (hrid, org_id),
-    )
-    if not existing:
-        return jsonify({'error': 'Admin not found'}), 404
+    caller_id = (getattr(request, 'user', None) or {}).get('user_id')
+    existing, blocked = _assert_mutable_target(hrid, org_id, caller_id, require_status='active')
+    if blocked:
+        return jsonify(blocked[0]), blocked[1]
 
     data = request.get_json(force=True) or {}
     full_name = (data.get('fullName') or data.get('full_name') or '').strip()
@@ -315,6 +343,39 @@ def update_or_delete_admin(hrid):
     except Exception as e:
         log_unexpected('head_hr_update_admin', e, hrid=hrid)
         return jsonify({'error': 'Failed to update admin'}), 500
+
+
+@head_hr_bp.post('/admins/<hrid>/reactivate')
+@require_head_hr
+def reactivate_admin(hrid):
+    """Reactivate a soft-deactivated recruiter in the caller's organization."""
+    if is_read_only(request.user):
+        return jsonify({'error': 'Read-only access'}), 403
+    org_id, _org, err = _caller_org()
+    if err:
+        return err
+    caller_id = (getattr(request, 'user', None) or {}).get('user_id')
+    _existing, blocked = _assert_mutable_target(
+        hrid, org_id, caller_id, require_status='deactivated',
+    )
+    if blocked:
+        return jsonify(blocked[0]), blocked[1]
+
+    db_run(
+        """
+        UPDATE hr_signup
+        SET account_status = 'active', updated_at = NOW()
+        WHERE hrid = ?
+          AND organization_id = ?
+          AND account_status = 'deactivated'
+        """,
+        (hrid, org_id),
+    )
+    return jsonify({
+        'message': f'Admin {hrid} reactivated successfully',
+        'account_status': 'active',
+        'hrid': hrid,
+    }), 200
 
 
 # ---------------------------------------------------------------------------
@@ -511,7 +572,6 @@ def get_candidate_resume(cid):
 
 
 @head_hr_bp.delete('/candidates/<cid>')
-@authenticate_token
 @require_head_hr
 def delete_candidate(cid):
     org_id, _org, err = _caller_org()
