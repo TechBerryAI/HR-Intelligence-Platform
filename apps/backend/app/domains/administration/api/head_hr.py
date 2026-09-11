@@ -44,6 +44,61 @@ def _caller_org():
     return org_id, org, None
 
 
+def deactivate_admin_account(
+    hrid: str,
+    org_id: str,
+    caller_id: str | None,
+) -> tuple[dict, int]:
+    """Soft-deactivate an org recruiter admin without destroying job history.
+
+    Returns ``(payload, http_status)``. Never hard-deletes ``hr_signup`` rows so
+    ``jobs.posted_by`` and other FKs remain valid.
+    """
+    existing = db_get(
+        """
+        SELECT hrid, role, account_status
+        FROM hr_signup
+        WHERE hrid = ?
+          AND organization_id = ?
+          AND COALESCE(account_status, 'active') = 'active'
+        """,
+        (hrid, org_id),
+    )
+    if not existing:
+        return {'error': 'Admin not found'}, 404
+
+    if caller_id and str(hrid) == str(caller_id):
+        return {'error': 'You cannot delete your own account'}, 403
+
+    target_role = (existing.get('role') or '').upper()
+    if target_role in ('CEO', 'HEAD_HR'):
+        return {'error': 'Cannot delete CEO or Head HR accounts'}, 403
+
+    db_run(
+        """
+        UPDATE hr_signup
+        SET account_status = 'deactivated', updated_at = NOW()
+        WHERE hrid = ?
+          AND organization_id = ?
+          AND COALESCE(account_status, 'active') = 'active'
+        """,
+        (hrid, org_id),
+    )
+
+    try:
+        from app.domains.identity.sessions.service import deactivate_all_user_sessions
+
+        deactivate_all_user_sessions(hrid, 'HR')
+    except Exception:
+        logger.exception('[head_hr] session revoke failed after deactivating %s', hrid)
+
+    return {
+        'message': f'Admin {hrid} deactivated successfully',
+        'account_status': 'deactivated',
+        'hrid': hrid,
+    }, 200
+
+
 # ---------------------------------------------------------------------------
 # Stats / Dashboard
 # ---------------------------------------------------------------------------
@@ -195,7 +250,7 @@ def create_admin():
 @authenticate_token
 @require_head_hr
 def update_or_delete_admin(hrid):
-    """PUT: update admin. DELETE: remove admin. OPTIONS: CORS preflight."""
+    """PUT: update admin. DELETE: soft-deactivate admin. OPTIONS: CORS preflight."""
     if request.method == 'OPTIONS':
         return '', 204
     if is_read_only(request.user):
@@ -207,24 +262,13 @@ def update_or_delete_admin(hrid):
     company = ((org or {}).get('name') or '').strip() or '-'
 
     if request.method == 'DELETE':
-        existing = db_get(
-            'SELECT hrid, role FROM hr_signup WHERE hrid = ? AND organization_id = ?',
-            (hrid, org_id),
-        )
-        if not existing:
-            return jsonify({'error': 'Admin not found'}), 404
         caller_id = (getattr(request, 'user', None) or {}).get('user_id')
-        if caller_id and str(hrid) == str(caller_id):
-            return jsonify({'error': 'You cannot delete your own account'}), 403
-        target_role = (existing.get('role') or '').upper()
-        if target_role in ('CEO', 'HEAD_HR'):
-            return jsonify({'error': 'Cannot delete CEO or Head HR accounts'}), 403
         try:
-            db_run('DELETE FROM hr_signup WHERE hrid = ? AND organization_id = ?', (hrid, org_id))
-            return jsonify({'message': f'Admin {hrid} deleted successfully'})
+            payload, status = deactivate_admin_account(hrid, org_id, caller_id)
+            return jsonify(payload), status
         except Exception as e:
             log_unexpected('head_hr_delete_admin', e, hrid=hrid)
-            return jsonify({'error': 'Failed to delete admin'}), 500
+            return jsonify({'error': 'Failed to deactivate admin'}), 500
 
     # PUT — update (company locked to caller's org)
     existing = db_get(

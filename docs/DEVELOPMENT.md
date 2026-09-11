@@ -26,7 +26,7 @@ HR Job Portal
 |------|---------|--------|
 | Node.js | 16+ | `node --version` |
 | Python | 3.10+ required (backend); 3.11 recommended (matches CI); 3.11+ (ai) | `python --version` |
-| PostgreSQL | 12+ | Local or cloud |
+| PostgreSQL | **17+** required | Local Docker (`infrastructure/docker/docker-compose.yml`) or cloud. Baseline schema uses PG17-only settings (`transaction_timeout`). |
 
 ## Quick start (HRMS)
 
@@ -74,8 +74,16 @@ PDF digital text uses **PyMuPDF as the primary extractor**. **pdfplumber** is an
 ### Run frontend only
 
 ```bash
-cd apps/frontend && npm install && npm run dev
+cd apps/frontend && npm ci && npm run dev
+# First-time / no lock sync: npm install && npm run dev
 ```
+
+**Install / build environment (important):**
+
+- CI and release builds must run `npm ci` on a **native Linux filesystem** (GitHub `ubuntu-latest`, local ext4/`$HOME`, etc.).
+- On **WSL with the repo under `/mnt/d/...` (Windows NTFS)**, `npm ci` can fail with `EBUSY` / locked paths under `node_modules` (IDE metadata, Windows file locks). That is a host filesystem issue, not a broken lockfile.
+- Workaround for local WSL+`/mnt/d` work: copy `apps/frontend` (or at least `package.json` + `package-lock.json` + `src` + configs) to a Linux path such as `/tmp/...`, run `npm ci` / `npm test` / `npm run build` there, or keep the clone on the Linux filesystem (`~/projects/...`).
+- Never commit `node_modules/` (already gitignored). Do not hand-delete stuck Windows-locked trees from Linux if `rm` fails — remove them from Windows Explorer or rebuild on a Linux path.
 
 ### Run backend only
 

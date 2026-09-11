@@ -12,17 +12,13 @@ from app.database.alembic_runner import (
 )
 
 
-KNOWN = {
-    '20260810_s001',
-    '008763c9ff0f',
-    '20260811_email',
-    '20260812_candidates_org',
-    '20260812_oauth_scrub',
-    '20260812_bulk_leases',
-    '20260812_ext_outbox',
-    '20260814_cid_pad3',
-    '20260824_bulk_pause',
-}
+def _known_from_scripts() -> set[str]:
+    """Live revision ids from this tree's Alembic scripts (not a hardcoded list)."""
+    from app.database.alembic_runner import _known_revision_ids
+
+    known = _known_revision_ids()
+    assert known, 'Alembic script directory returned no revisions'
+    return known
 
 
 def _app_head() -> str:
@@ -35,52 +31,62 @@ def _app_head() -> str:
 
 def test_known_revision_is_ok(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'false')
+    known = _known_from_scripts()
     head = _app_head()
-    assert orphan_stamp_action(head, KNOWN) == 'ok'
-    assert orphan_stamp_action('20260814_cid_pad3', KNOWN) == 'ok'
-    assert orphan_stamp_action('20260812_ext_outbox', KNOWN) == 'ok'
-    assert orphan_stamp_action('20260811_email', KNOWN) == 'ok'
-    assert orphan_stamp_action(None, KNOWN) == 'ok'
-    assert orphan_stamp_action('', KNOWN) == 'ok'
+    assert head in known
+    assert orphan_stamp_action(head, known) == 'ok'
+    assert orphan_stamp_action('20260814_cid_pad3', known) == 'ok'
+    assert orphan_stamp_action('20260812_ext_outbox', known) == 'ok'
+    assert orphan_stamp_action('20260811_email', known) == 'ok'
+    assert orphan_stamp_action('20260911_oauth_csrf', known) == 'ok'
+    assert orphan_stamp_action('20260911_acct_deact', known) == 'ok'
+    assert orphan_stamp_action(None, known) == 'ok'
+    assert orphan_stamp_action('', known) == 'ok'
 
 
 def test_production_refuses_unknown_future_revision(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'false')
+    known = _known_from_scripts()
     with pytest.raises(AlembicOrphanStampError) as exc:
-        orphan_stamp_action('20260899_future_head', KNOWN)
+        orphan_stamp_action('20260899_future_head', known)
     assert '20260899_future_head' in str(exc.value)
     assert 'Refusing to rewrite' in str(exc.value)
 
 
 def test_production_refuses_deleted_pre_squash_stamp(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'false')
+    known = _known_from_scripts()
     with pytest.raises(AlembicOrphanStampError):
-        orphan_stamp_action('20260810_0014', KNOWN)
+        orphan_stamp_action('20260810_0014', known)
 
 
 def test_debug_repairs_allowlisted_deleted_revision(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'true')
-    assert orphan_stamp_action('20260810_0014', KNOWN) == 'repair'
-    assert orphan_stamp_action('20260811_s005', KNOWN) == 'repair'
+    known = _known_from_scripts()
+    assert orphan_stamp_action('20260810_0014', known) == 'repair'
+    assert orphan_stamp_action('20260811_s005', known) == 'repair'
 
 
 def test_debug_repairs_phantom_unmerged_stamp(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'true')
+    known = _known_from_scripts()
     # No phantom repairs configured — unknown stamps still fail in debug.
     with pytest.raises(AlembicOrphanStampError):
-        orphan_stamp_action('20260901_local_phantom', KNOWN)
+        orphan_stamp_action('20260901_local_phantom', known)
 
 
 def test_production_refuses_phantom_unmerged_stamp(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'false')
+    known = _known_from_scripts()
     with pytest.raises(AlembicOrphanStampError):
-        orphan_stamp_action('20260901_local_phantom', KNOWN)
+        orphan_stamp_action('20260901_local_phantom', known)
 
 
 def test_debug_refuses_unknown_non_allowlisted_revision(monkeypatch):
     monkeypatch.setenv('FLASK_DEBUG', 'true')
+    known = _known_from_scripts()
     with pytest.raises(AlembicOrphanStampError):
-        orphan_stamp_action('20260899_future_head', KNOWN)
+        orphan_stamp_action('20260899_future_head', known)
 
 
 def test_schema_at_head_status_ok():
