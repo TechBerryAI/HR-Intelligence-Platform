@@ -1,0 +1,15 @@
+{
+  "_note": "Experience is employment prose only. Materialized-view duty appears under Summary; other work under Projects.",
+  "file": "Naukri_DeelipuDoppalapudi[3y_1m].docx",
+  "experience": [
+    {
+      "company": "MYTECH GLOBAL Pvt.Ltd",
+      "role": "PL/SQL Developer",
+      "start": "2019-12",
+      "is_current": true,
+      "duties": [
+        "Developed materialized views for data replication in distributed environments."
+      ]
+    }
+  ]
+}

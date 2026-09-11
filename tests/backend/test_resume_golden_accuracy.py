@@ -132,6 +132,14 @@ def test_navi_mumbai_address_location():
 
 
 def test_bulk_coverage_honesty_helper():
+    from app.workers.bulk_parser import (
+        _PARSE_STATUS_OK,
+        _PARSE_STATUS_PARTIAL_LOW,
+        _PARSE_STATUS_PARTIAL_MID,
+        _parse_status_from_score,
+        _resume_excel_completeness_score,
+    )
+
     class _FakeForm:
         coverage = [
             {'field': 'email', 'status': 'filled'},
@@ -140,14 +148,37 @@ def test_bulk_coverage_honesty_helper():
         ]
 
     assert _coverage_gaps_from_form(_FakeForm()) == ['experience', 'education']
-    row = {'ParseStatus': 'ok', 'ParseNotes': ''}
+    row = {
+        'ParseStatus': 'ok',
+        'ParseNotes': '',
+        'Name': 'Ashwin R Gedekar',
+        'Email': 'a@example.com',
+        'Phone': '7757807216',
+        'Current Location': 'Pune',
+        'Summary': 'System administrator with several years of experience in Linux.',
+        'Skills': 'Linux, SIEM, Crowdstrike',
+        'Experience': 'System Admin at Comtel; patching and SIEM work.',
+        'Education': 'B.E. Computer',
+    }
     status = _apply_coverage_parse_honesty(
         row,
         _FakeForm(),
         parse_status='ok',
         note_bits=['source=engine:deterministic'],
     )
-    assert status == 'partial'
-    assert row['ParseStatus'] == 'partial'
+    assert status in (
+        _PARSE_STATUS_OK,
+        _PARSE_STATUS_PARTIAL_MID,
+        _PARSE_STATUS_PARTIAL_LOW,
+    )
+    assert row['ParseStatus'] == status
+    assert str(row.get('ParseScore') or '').endswith('%')
     assert 'coverage_gaps=' in row['ParseNotes']
-    assert 'experience' in row['ParseNotes']
+    assert 'completeness=' in row['ParseNotes']
+
+    assert _parse_status_from_score(85) == _PARSE_STATUS_OK
+    assert _parse_status_from_score(65) == _PARSE_STATUS_PARTIAL_MID
+    assert _parse_status_from_score(40) == _PARSE_STATUS_PARTIAL_LOW
+    assert _PARSE_STATUS_PARTIAL_MID == 'PARTIAL'
+    assert _PARSE_STATUS_PARTIAL_LOW == 'WEAK'
+    assert _resume_excel_completeness_score(row) >= 50

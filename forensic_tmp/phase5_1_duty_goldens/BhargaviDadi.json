@@ -1,0 +1,18 @@
+{
+  "_note": "Experience heading empty; duty bullets live in Preamble/Project Profile and should associate to 3i Infotech DBA role.",
+  "file": "Naukri_BhargaviDadi[2y_8m].pdf",
+  "experience": [
+    {
+      "company": "3i Infotech",
+      "role": "Database Admin",
+      "start": "2023-05",
+      "duties": [
+        "Configured the database instances as per application requests On-Demand.",
+        "Responsible for monitoring production databases using tools like CloudWatch, Performance",
+        "Responsible for regular maintenance on databases (e.g., Vacuum, Reindexing, Archiving).",
+        "Responsible for pro-active remediation of database operational problems.",
+        "Responsible for to take care of the replication in PostgreSQL."
+      ]
+    }
+  ]
+}

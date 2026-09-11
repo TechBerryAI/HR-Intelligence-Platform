@@ -35,6 +35,8 @@ _DATE_ATOM = (
     r'(?:'
     r'(?:(?:0?[1-9]|[12]\d|3[01])(?:st|nd|rd|th)?[\s\-]+)?'
     rf'{_MONTH_NAME}[\s\-]+(?:19|20)\d{{2}}'
+    # Day,Month,Year — "5,Jan, 2021" / "5, Jan, 2021"
+    rf'|(?:0?[1-9]|[12]\d|3[01])\s*,\s*{_MONTH_NAME}\s*,?\s*(?:19|20)\d{{2}}'
     rf'|{_MONTH_APOS_YEAR}'
     rf'|{_MONTH_SPACE_YY}'
     r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
@@ -256,12 +258,22 @@ def normalize_month_token(token: str) -> str:
         mon = _MONTH_MAP.get(m_ord.group(2).lower()[:3], '01')
         return f'{m_ord.group(3)}-{mon}'
     m = re.match(
-        r'(?i)^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+((?:19|20)\d{2})$',
+        r'(?i)^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?'
+        r'[\s\-]+((?:19|20)\d{2})$',
         t,
     )
     if m:
         mon = _MONTH_MAP.get(m.group(1).lower()[:3], '01')
         return f'{m.group(2)}-{mon}'
+    m_day_mon = re.match(
+        r'(?i)^(0?[1-9]|[12]\d|3[01])\s*,\s*'
+        r'(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*,?\s*'
+        r'((?:19|20)\d{2})$',
+        t,
+    )
+    if m_day_mon:
+        mon = _MONTH_MAP.get(m_day_mon.group(2).lower()[:3], '01')
+        return f'{m_day_mon.group(3)}-{mon}'
     m_apos = re.match(
         r'(?i)^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*[\'’]\s*(\d{2})$',
         t,
@@ -348,8 +360,18 @@ def peel_education_date_phrase(text: str) -> Tuple[str, str]:
 
 def extract_date_range(line: str) -> Tuple[str, str]:
     s = (line or '').strip()
-    if s.startswith('(') and s.endswith(')') and len(s) > 2:
+    # Unwrap a single outer paren only when it wraps the whole range once.
+    # Do not strip "(09/2022) – (06/2023)" which has two parenthesized atoms.
+    if (
+        s.startswith('(')
+        and s.endswith(')')
+        and len(s) > 2
+        and s.count('(') == 1
+        and s.count(')') == 1
+    ):
         s = s[1:-1].strip()
+    # Parenthesized atoms: "(09/2022) – (06/2023)" → "09/2022 – 06/2023"
+    s = re.sub(rf'\(\s*({_DATE_ATOM})\s*\)', r'\1', s, flags=re.I)
     m = _DATE_RANGE_RE.search(s)
     if not m:
         inner = re.search(r'\(([^)]{6,80})\)', s)
@@ -361,8 +383,16 @@ def extract_date_range(line: str) -> Tuple[str, str]:
     if m_till:
         return normalize_month_token(m_till.group(1)), 'Present'
     m_since = _SINCE_RE.search(s)
-    if m_since and not re.search(r'(?i)\b(?:server|sql|windows|oracle|version)\b', s):
-        return normalize_month_token(m_since.group(1)), 'Present'
+    if m_since:
+        since_tok = m_since.group(1) or ''
+        # Block product years ("Oracle 11g" / "SQL Server 2019"), not employment
+        # "Since May 2020" on an Oracle DBA line.
+        product_year = bool(
+            re.search(r'(?i)\b(?:server|sql|windows|oracle|version)\b', s)
+            and re.fullmatch(r'(?:19|20)\d{2}', since_tok.strip())
+        )
+        if not product_year:
+            return normalize_month_token(since_tok), 'Present'
     if _PRESENT_TOKEN_RE.match(s):
         return '', 'Present'
     m1 = _DATE_ATOM_RE.search(s)
@@ -376,31 +406,48 @@ def extract_simple_location(text: str) -> str:
         extract_location_from_text,
         heal_location_candidate,
         is_plausible_location_value,
+        is_plausible_person_name,
+        peel_place_from_candidate_address,
     )
 
     loc = extract_location_from_text(text or '')
     if loc and is_plausible_location_value(loc):
         return loc
-    # Labeled location lines — require delimiter to avoid prose captures
+    # Labeled location / permanent address lines — require delimiter
     m_label = re.search(
-        r'(?i)(?:current\s+location|location|based\s+in|residing\s+(?:in|at)|address)\s*[:.\-–—]\s*'
-        r'([A-Za-z][A-Za-z0-9 .,\-/()]{2,80})',
+        r'(?im)^(?:\*\*)?(?:(?:permanent|present|current|residential|correspondence|mailing)\s+)?'
+        r'(?:current\s+location|location|based\s+in|residing\s+(?:in|at)|address|city|residence)'
+        r'\s*[:.\-–—]\s*([A-Za-z0-9][A-Za-z0-9 .,\-/()]{2,120})',
         text or '',
     )
     if m_label:
+        raw_val = m_label.group(0)
+        peeled = peel_place_from_candidate_address(raw_val)
+        if peeled and is_plausible_location_value(peeled):
+            return peeled
         candidate = heal_location_candidate(m_label.group(1).strip().rstrip(',.;'))
         if candidate and is_plausible_location_value(candidate):
             return candidate
         if candidate and '@' not in candidate and 'http' not in candidate.lower():
-            from app.ai.parser.enrichment.resume_text_inference import known_location_cities
+            from app.ai.parser.enrichment.resume_text_inference import (
+                canonicalize_location_city,
+                known_location_cities,
+            )
+            import re as _re
 
             for city in known_location_cities():
-                if city.lower() in candidate.lower():
-                    from app.ai.parser.enrichment.resume_text_inference import (
-                        canonicalize_location_city,
-                    )
-
+                if _re.search(rf'(?i)\b{_re.escape(city)}\b', candidate):
                     return canonicalize_location_city(city)
+    # Contact pipe: trailing City – State after email/phone/linkedin
+    m_trail = re.search(
+        r'(?im)(?:[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}|(?:\+?\d[\d\s\-().]{7,}\d)|linkedin)'
+        r'[^\n|]*\|\s*([A-Za-z][A-Za-z .]{1,35}\s*[–—\-?,/]\s*[A-Za-z][A-Za-z .]{1,35})\s*$',
+        text or '',
+    )
+    if m_trail:
+        peeled = peel_place_from_candidate_address(m_trail.group(1))
+        if peeled and is_plausible_location_value(peeled):
+            return peeled
     # Pipe-header city before phone/email
     m_pipe = re.search(
         r'(?im)^([A-Za-z][A-Za-z .,]{2,40})\s*[|•·]\s*(?:mobile|phone|tel|\+?\d|[a-z0-9._%+\-]+@)',
@@ -410,6 +457,27 @@ def extract_simple_location(text: str) -> str:
         cand = heal_location_candidate(m_pipe.group(1).strip().strip(','))
         if cand and is_plausible_location_value(cand):
             return cand
+    # Street / locality line in header window with known city
+    for line in (text or '').splitlines()[:30]:
+        s = line.strip()
+        if not s or len(s) > 120:
+            continue
+        if re.search(
+            r'(?i)\b(?:worked|working|company|employer|client|university|college)\b',
+            s,
+        ):
+            continue
+        if re.search(
+            r'(?i)\b(?:road|street|cross|nagar|colony|apartment|sector|flat|plot|'
+            r'dist\.?|district|tal\.?|at\.?\s*post)\b',
+            s,
+        ):
+            peeled = peel_place_from_candidate_address(s)
+            if peeled and is_plausible_location_value(peeled):
+                return peeled
+            # Dist.-CITY (STATE) may be plausible only after peel normalization
+            if peeled:
+                return peeled[:80]
     # City, State / City, Country unlabeled
     m_cs = re.search(
         r'(?im)^([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*),\s*'
@@ -429,7 +497,15 @@ def extract_simple_location(text: str) -> str:
     }
     section_hdr = re.compile(
         r'(?i)^(?:education|experience|skills|summary|objective|projects|'
-        r'certifications|internship|work\s+history)\b'
+        r'certifications|internship|work\s+history|professional\s+experience|'
+        r'employment|career)\b'
+    )
+    # Stop before job blocks when CV has no Experience header (duty bullets / Designation)
+    job_block = re.compile(
+        r'(?i)^(?:designation|client|company|employer|organization|organisation|'
+        r'role|responsibilit|job\s+title)\s*[:\-]|'
+        r'(?:pvt\.?\s*ltd|private\s+limited|llc|inc\.?)\b|'
+        r'^\s*[•·▪◦‣●\-–—\*]\s*'
     )
     for line in (text or '').splitlines()[:20]:
         s = line.strip().strip(',')
@@ -437,7 +513,15 @@ def extract_simple_location(text: str) -> str:
             continue
         if section_hdr.match(s):
             break
+        if job_block.search(s):
+            break
         if re.match(r'^\+?\d', s):
+            continue
+        # Skip labeled contact rows (Name:/Email:/Phone:) — not places
+        if re.match(r'(?i)^(name|email|phone|mobile|contact|linkedin|github)\b', s):
+            continue
+        # Header name lines (candidate name alone) are not locations
+        if is_plausible_person_name(s) and len(s.split()) >= 2 and ',' not in s:
             continue
         healed = heal_location_candidate(s)
         if healed and is_plausible_location_value(healed):

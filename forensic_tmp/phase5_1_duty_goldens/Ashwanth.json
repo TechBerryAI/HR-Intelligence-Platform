@@ -1,0 +1,28 @@
+{
+  "_note": "Experience lists title+date rows only. No duty bullets in the document extract.",
+  "file": "Naukri_Ashwanth[4y_5m].pdf",
+  "experience": [
+    {
+      "company": null,
+      "role": "VMware Support Engineer",
+      "start": "2024-07",
+      "end": null,
+      "is_current": true,
+      "duties": []
+    },
+    {
+      "company": null,
+      "role": "Technical Engineer",
+      "start": "2023-07",
+      "end": "2024-06",
+      "duties": []
+    },
+    {
+      "company": null,
+      "role": "Technical Engineer",
+      "start": "2022-05",
+      "end": "2023-07",
+      "duties": []
+    }
+  ]
+}

@@ -69,28 +69,34 @@ def _has_phone_evidence(text: str) -> bool:
 
 
 def _has_location_evidence(text: str) -> bool:
-    from app.ai.parser.enrichment.resume_text_inference import known_location_cities
-
+    """Candidate-owned location/address evidence only (not employer/job cities)."""
     blob = text or ''
     if re.search(
-        r'(?i)(?:current\s+location|location|address|based\s+in|residing)\s*[:.\-–—]',
+        r'(?i)(?:(?:permanent|present|current|residential|correspondence|mailing)\s+)?'
+        r'(?:current\s+location|location|address|based\s+in|residing|city|residence)'
+        r'\s*[:.\-–—]',
         blob,
     ):
         return True
-    header_lines: list[str] = []
-    for line in blob.splitlines()[:24]:
-        if re.match(
-            r'(?i)^(?:experience|education|skills|summary|objective|projects|'
-            r'certifications|work\s+history)\b',
-            line.strip(),
-        ):
-            break
-        header_lines.append(line)
-    header = '\n'.join(header_lines)[:800]
-    if re.search(r'(?i)\bremote\b', header):
+    if re.search(
+        r'(?im)(?:[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}|(?:\+?\d[\d\s\-().]{7,}\d)|linkedin)'
+        r'[^\n|]*\|\s*[A-Za-z][A-Za-z .]{1,35}\s*[–—\-?,/]\s*[A-Za-z]',
+        '\n'.join(blob.splitlines()[:30]),
+    ):
         return True
-    for city in known_location_cities():
-        if re.search(rf'(?i)\b{re.escape(city)}\b', header):
+    for line in blob.splitlines()[:30]:
+        s = line.strip()
+        if not s or len(s) > 120:
+            continue
+        if re.search(
+            r'(?i)\b(?:worked|working|company|employer|client|university|college)\b',
+            s,
+        ):
+            continue
+        if re.search(
+            r'(?i)\b(?:road|street|cross|nagar|colony|apartment|sector|flat|plot)\b',
+            s,
+        ) and re.search(r'[A-Za-z]{3,}', s):
             return True
     return False
 

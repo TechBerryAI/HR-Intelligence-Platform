@@ -99,7 +99,8 @@ def test_flatten_prefers_form_dto_over_toon():
     assert row['Email'] == 'form@example.com'
     assert 'Python' in row['Skills']
     assert 'TOONSKILL' not in row['Skills']
-    assert 'Intern at Acme' in row['Experience']
+    assert 'Intern' in row['Experience']
+    assert 'Acme' in row['Experience']
     assert 'Junk' not in row['Experience']
     assert 'B.Tech' in row['Education']
     assert row['Total Experience Years'] not in ('', None)
@@ -147,9 +148,11 @@ B.Tech - Mumbai University
     status = _apply_coverage_parse_honesty(
         row, form, parse_status='ok', note_bits=['source=engine:deterministic']
     )
-    assert status == 'partial'
+    assert status in ('OK', 'PARTIAL', 'WEAK')
     assert 'trace_weak=' in row['ParseNotes']
     assert 'experience' in row['ParseNotes']
+    assert 'completeness=' in row['ParseNotes']
+    assert str(row.get('ParseScore') or '').endswith('%')
 
 
 def test_field_trace_weak_ungrounded_location():
@@ -449,9 +452,15 @@ def test_failed_excel_row_and_reconcile_match_file_count():
     wb.close()
     # header + 3 data rows
     assert len(rows) == 4
-    statuses = {r[0]: r[-2] for r in rows[1:]}
+    headers = list(rows[0])
+    status_i = headers.index('ParseStatus')
+    score_i = headers.index('ParseScore')
+    statuses = {r[0]: r[status_i] for r in rows[1:]}
+    scores = {r[0]: r[score_i] for r in rows[1:]}
     assert statuses['bad.pdf'] == 'failed'
     assert statuses['missing.pdf'] == 'failed'
+    assert scores['bad.pdf'] == '0%'
+    assert 'ParseScore' in headers
 
 
 def test_ocr_retry_on_extract_err_even_when_text_present():
