@@ -87,7 +87,7 @@ pytest tests/backend/document_intelligence/ -q
 
 <a id="production-ai-features"></a>
 
-> **Status mix:** Resume/JD parsing and ATS matching are **Current**. Interview Intelligence and HR Copilot are **Future** (schema scaffolds may exist; interview APIs are not registered in `create_app.py`). Evaluation harness is partial — verify against code and tests.
+> **Status mix:** Resume/JD parsing and ATS matching are **Current**. Google Calendar interview **booking** (`/api/interviews`) is **Current**. AI Interview Intelligence (question gen / AI sessions) and HR Copilot are **Future**. Evaluation harness is partial — verify against code and tests. Workflow map: [WORKFLOWS.md](WORKFLOWS.md).
 
 ## Resume Parser (Resume Intelligence)
 
@@ -113,8 +113,8 @@ Extract structured person, skills, education, experience, and certifications fro
 - **Location quality (Current):** reject pipe/phone/section-header / skill-summary pollution; reject document titles (`Curriculum Vitae`) and ops/soft-skill pairs (`Patching, Ansible`, `Business Communication, Financial`); comma-pairs require a known city or region; heal `Company | City` and `+91…⋄City` → city; **Phase 6:** shared city allowlist (`known_location_cities`) + aliases (`Nasik`→`Nashik`); recovery peels `experience[].location` → education institution cities → institute map (VIT→`Vellore`); section-aware early-body recovery (not from Skills/Summary)
 - **Coverage gate (Current):** after deterministic parse (and again after repair), evidence in source vs filled fields is checked for `fullName` / email / phone / location / education / experience; statuses (`filled` / `recovered` / `missing_with_evidence` / `missing_no_evidence`) are returned on form `coverage` and API `missing_fields`. Residual LLM skipped only when no core evidence gaps remain.
 - **Structural repair (Current):** DI path always runs `repair_resume_toon` after semantic/sanitize, then a final coverage pass (mirrors JD `_apply_jd_repair`).
-- **Bulk formats (Current):** staging accepts **pdf / docx / png / jpg / jpeg / webp / tif / tiff**; legacy `.doc` is rejected with `unsupported_format` (convert to PDF/DOCX). Scanned PDF + image resumes use the same RapidOCR path and `BULK_OCR_RETRY_DPI` garbage/thin-text retry as single parse (DPI retry also runs when first extract raises). Install OCR via `pip install -r requirements.txt` (`rapidocr-onnxruntime`; Python 3.10–3.12 recommended). Excel stores **Form DTO** columns (same healed values as Apply autofill), not raw TOON. Failed files still get a **Resumes** row with `ParseStatus=failed` and `ParseNotes` (`insufficient_text`, `not_processed`, …) so row count matches files uploaded. Workbook includes a **Field Trace** sheet (per file+field: ExcelValue, InResume, Coverage, Verdict `ok` / `weak_missing` / `weak_ungrounded` / `absent` / `fallback`). `ParseStatus=partial` when coverage still has evidence gaps **or** Field Trace is `weak_missing` / `weak_ungrounded`. Residual LLM skip uses the same closed-world gate as single parse (`resume_deterministic_is_strong` + `experience_is_incomplete(raw_text)` + coverage gaps); `validate_toon_format_bulk` `partial` alone never skips LLM. **Phase 6 bulk gate:** refuse deterministic skip when experience titles fail `is_plausible_job_title` or the Experience slice looks OCR-mushy. Bulk does **not** write into the single-parse `parsed_resumes` cache.
-- **Cache tag (Current):** default `DOCUMENT_INTELLIGENCE_CACHE_TAG=canonical-v7-resume-coverage` so Form DTO coverage shape is not masked by stale `parsed_resumes` cache hits.
+- **Bulk formats (Current):** staging accepts **pdf / docx / webp / tif / tiff**; legacy `.doc` and standalone **png/jpg/jpeg** are rejected with `unsupported_format` (convert DOC to PDF/DOCX; prefer PDF or TIFF/WEBP for scans). Scanned PDF + accepted image resumes use the same RapidOCR path and `BULK_OCR_RETRY_DPI` garbage/thin-text retry as single parse (DPI retry also runs when first extract raises). Install OCR via `pip install -r requirements.txt` (`rapidocr-onnxruntime`; Python 3.10–3.12 recommended). Excel stores **Form DTO** columns (same healed values as Apply autofill), not raw TOON. Failed files still get a **Resumes** row with `ParseStatus=failed` and `ParseNotes` (`insufficient_text`, `not_processed`, …) so row count matches files uploaded. Workbook includes a **Field Trace** sheet (per file+field: ExcelValue, InResume, Coverage, Verdict `ok` / `weak_missing` / `weak_ungrounded` / `absent` / `fallback`). `ParseStatus=partial` when coverage still has evidence gaps **or** Field Trace is `weak_missing` / `weak_ungrounded`. Residual LLM skip uses the same closed-world gate as single parse (`resume_deterministic_is_strong` + `experience_is_incomplete(raw_text)` + coverage gaps); `validate_toon_format_bulk` `partial` alone never skips LLM. **Phase 6 bulk gate:** refuse deterministic skip when experience titles fail `is_plausible_job_title` or the Experience slice looks OCR-mushy. Bulk does **not** write into the single-parse `parsed_resumes` cache.
+- **Cache tag (Current):** shared env `DOCUMENT_INTELLIGENCE_CACHE_TAG`; when unset, resume default is `canonical-v9-exp-date-rail` (`parsing_storage.py` / `pipeline.py`) so Form DTO coverage shape is not masked by stale `parsed_resumes` cache hits.
 
 ---
 
@@ -163,7 +163,7 @@ Structure job requirements, responsibilities, and preferences into TOON for matc
 - **Structural repair** (`repair_jd_toon`) always runs on API and in-memory parse paths
 - **LLM residual only:** semantic enrichment runs when title/skills fail plausibility **or** core coverage still has `missing_with_evidence` after the first recovery pass; skipped when title + skill-like skills + no core gaps. `force` never bypasses `DOCUMENT_INTELLIGENCE_SEMANTIC_AI=false`. Timeout via `DOCUMENT_INTELLIGENCE_SEMANTIC_TIMEOUT_SEC` (default 90s; one attempt)
 - **Recruiter UI (Current):** autofill from Form DTO; when core fields remain `missing_with_evidence`, upload shows an incomplete-fields review warning instead of full success
-- **Cache tag (Current):** default `DOCUMENT_INTELLIGENCE_CACHE_TAG=canonical-v6-jd-coverage` so parser accuracy fixes are not masked by stale `parsed_jds` cache hits
+- **Cache tag (Current):** shared env `DOCUMENT_INTELLIGENCE_CACHE_TAG`; when unset, JD default is `canonical-v6-jd-coverage` so parser accuracy fixes are not masked by stale `parsed_jds` cache hits
 - Golden regression: `tests/backend/test_jd_golden_accuracy.py` (+ `fixtures/jd_gold/` including table KV, multi-column, unlabeled paragraph, title cases, detailed skills / soft-wrap bullets, unlabeled `Location Mumbai`, video-editor tool skills, wireframing `o` bullets)
 - PDF batch acceptance: `apps/data/jd_parse_eval/run_eval.py` over `/JD` — fails on core `missing_with_evidence`, garbage skills, and non-skill-like tokens (not soft title-overlap alone)
 
@@ -190,12 +190,13 @@ Produce explainable fit scores between candidate resume TOON and job TOON.
 ### Current implementation
 
 - Service: `ats_service.py`
-- Typical weights: Skills ~60%, Experience ~25%, Education ~10%, Location ~5%
-- **Mandatory skills gate:** mandatory match &lt; 60% → Not a Match (auto-disqualify)
-- **Verdicts:** ≥75% Strong Match; 60–74% Potential Match (recruiter review); &lt;60% Not a Match
-- **Auto-shortlist:** only Strong Match (overall ≥75%, default `ATS_THRESHOLD` / `ATS_AUTO_SHORTLIST_MIN`). Potential Match is **not** auto-shortlisted.
+- Weights: Mandatory skills 40% + Preferred skills 20% (skills total 60%), Experience 25%, Education/certs 10%, Location 5%
+- **Mandatory skills gate:** mandatory match &lt; 40% → Not a Match (stays `Applied`, talent pool — **not** auto-Rejected)
+- **Verdicts:** ≥80% Strong Match; 40–79% Potential Match (recruiter review); &lt;40% Not a Match
+- **Auto-shortlist:** only Strong Match (overall ≥80%, default `ATS_THRESHOLD` / `ATS_AUTO_SHORTLIST_MIN`). Potential Match is **not** auto-shortlisted.
 - Persisted on `matches` and `applications`
 - Surfaced in recruiter / Head HR match UIs
+- See also [WORKFLOWS.md](WORKFLOWS.md#23-ats-scoring) and [GUIDE.md](GUIDE.md#4-ats-scoring-after-apply)
 
 ```mermaid
 flowchart LR
@@ -217,7 +218,7 @@ Embeddings, vector search, reranking, fairness monitors, match versioning. Optio
 ## Interview Intelligence
 
 **Document ID:** HCIP-AI-004  
-**Status:** Future / scaffold
+**Status:** Future (AI question gen / AI sessions) — Calendar booking is **Current** (separate product surface)
 
 ---
 
@@ -227,22 +228,26 @@ Support structured interviews (human, AI, or hybrid) with question generation, s
 
 ---
 
-### Current implementation
+### Current (Calendar booking — not AI Interview Intelligence)
 
-- `interviews` table scaffold exists in schema freeze.
-- Interview HTTP blueprints are **not** registered in `create_app.py`.
-- No production candidate interview session UI in the current app routes.
+Live scheduling uses Google Calendar FreeBusy + Meet, **not** this AI pack:
 
----
+- Blueprint **`interview_bp`** is registered at `/api/interviews` in `create_app.py`
+- Shortlist → invite slots + magic-link email; candidate books at `/book/:token`
+- Application status moves to `Interview` when a slot is claimed
+- Details: [WORKFLOWS.md](WORKFLOWS.md#25-interview-scheduling-calendar-booking--current) · GUIDE flows 13–14
 
-### Future design
+### Future (this section)
+
+- AI question generation, AI interview sessions, structured scoring UIs are **not** shipped as product routes
+- Capability pack may exist under `ai/capabilities/interview_generation/` for engineering use
 
 ```mermaid
 flowchart TB
   App[Application shortlisted] --> Schedule[Schedule interview]
   Schedule --> Mode{Mode}
-  Mode -->|Human| H[Interviewer console]
-  Mode -->|AI| A[AI session]
+  Mode -->|Human_Calendar_Current| H[Candidate books Meet slot]
+  Mode -->|AI_Future| A[AI session]
   H --> Eval[Structured evaluation]
   A --> Eval
   Eval --> Decision[Hire decision support]

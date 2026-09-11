@@ -269,7 +269,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
   const handleEditSubmit = async (e) => {
     e.preventDefault()
     if (!editingJobId) return
-    await updateJob(editingJobId, {
+    const result = await updateJob(editingJobId, {
       title: editTitle,
       location: editLocation,
       salary: editSalary,
@@ -278,6 +278,11 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
       description: editDescription,
       keywords: editKeywords,
     })
+    if (!result?.success) {
+      setSuccess(result?.error || 'Failed to update job')
+      setTimeout(() => setSuccess(''), 3500)
+      return
+    }
     setSuccess('Job updated successfully!')
     setTimeout(() => setSuccess(''), 2500)
     handleEditCancel()

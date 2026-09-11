@@ -100,9 +100,9 @@ export default function HeadHrAdmins() {
       const token = tokenService.getToken()
       await apiRequest(`/api/head-hr/admins/${hrid}`, { method: 'DELETE', token })
       setAdmins((prev) => prev.filter((a) => a.hrid !== hrid))
-      showToast('Admin deleted successfully')
+      showToast('Admin deactivated successfully')
     } catch (err) {
-      showToast(err?.message || 'Failed to delete admin', 'error')
+      showToast(err?.message || 'Failed to deactivate admin', 'error')
     } finally {
       setDeleting(null)
       setConfirmDelete(null)
@@ -331,10 +331,11 @@ export default function HeadHrAdmins() {
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div className="w-full max-w-sm rounded-2xl bg-[var(--ei-bg-secondary)] border border-[var(--ei-border-primary)] p-6 shadow-2xl">
-            <h3 className="text-lg font-semibold text-[var(--ei-text-primary)]">Delete Admin?</h3>
+            <h3 className="text-lg font-semibold text-[var(--ei-text-primary)]">Deactivate Admin?</h3>
             <p className="mt-2 text-sm text-[var(--ei-text-muted)]">
-              This will permanently delete admin{' '}
-              <span className="text-[var(--ei-text-primary)] font-medium">{confirmDelete.full_name}</span> ({confirmDelete.hrid}). Their jobs and login data will also be removed.
+              This will deactivate admin{' '}
+              <span className="text-[var(--ei-text-primary)] font-medium">{confirmDelete.full_name}</span> ({confirmDelete.hrid}).
+              They will no longer be able to sign in. Jobs they posted are kept for history.
             </p>
             <div className="mt-5 flex gap-3 justify-end">
               <button
@@ -348,7 +349,7 @@ export default function HeadHrAdmins() {
                 disabled={deleting === confirmDelete.hrid}
                 className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 transition-colors"
               >
-                {deleting === confirmDelete.hrid ? 'Deleting…' : 'Delete'}
+                {deleting === confirmDelete.hrid ? 'Deactivating…' : 'Deactivate'}
               </button>
             </div>
           </div>

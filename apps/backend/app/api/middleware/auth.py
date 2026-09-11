@@ -5,11 +5,28 @@ import jwt
 from flask import jsonify, request
 
 from app.core.auth import JWT_SECRET, auth_log
+from app.database.connection.db import db_get
 from app.domains.identity.authorization.rbac import (
-    get_role,
     is_head_hr,
     is_staff_recruiter,
+    resolve_hr_role,
 )
+from app.domains.identity.sessions.service import user_has_active_refresh_session
+
+
+def _load_active_hr_user(user_id: str) -> dict | None:
+    if not user_id:
+        return None
+    row = db_get(
+        """
+        SELECT hrid, email, role, account_status, organization_id, company
+        FROM hr_signup WHERE hrid = ?
+        """,
+        (user_id,),
+    )
+    if not row or (row.get('account_status') or 'active') != 'active':
+        return None
+    return row
 
 
 def authenticate_token(f):
@@ -24,11 +41,23 @@ def authenticate_token(f):
             user = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
             if user.get('type') == 'refresh':
                 return jsonify({"error": "Invalid or expired token"}), 403
+            user_id = user.get('user_id')
+            signup = _load_active_hr_user(user_id)
+            if not signup:
+                return jsonify({"error": "Invalid or expired token"}), 401
+            if not user_has_active_refresh_session(user_id):
+                return jsonify({"error": "Invalid or expired token"}), 401
+            # Align role / org with DB (covers demotion without waiting for token expiry)
+            user['role'] = resolve_hr_role(signup)
+            if signup.get('organization_id'):
+                user['organization_id'] = str(signup['organization_id'])
+            if signup.get('email'):
+                user['email'] = signup['email']
             request.user = user
         except jwt.ExpiredSignatureError:
-            return jsonify({"error": "Invalid or expired token"}), 403
+            return jsonify({"error": "Invalid or expired token"}), 401
         except Exception:
-            return jsonify({"error": "Invalid or expired token"}), 403
+            return jsonify({"error": "Invalid or expired token"}), 401
         return f(*args, **kwargs)
     return wrapper
 

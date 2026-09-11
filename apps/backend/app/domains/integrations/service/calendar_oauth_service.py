@@ -9,6 +9,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from app.core import shared_store
+from app.database.connection.db import db_get, db_run
 from app.domains.integrations.company_context import resolve_company_for_user
 from app.domains.integrations.provider.calendar_factory import get_calendar_provider
 from app.domains.integrations.provider.google_calendar import (
@@ -25,6 +26,58 @@ logger = logging.getLogger(__name__)
 PROVIDER = oauth_repo.PROVIDER_GOOGLE_CALENDAR
 _OAUTH_STATE_TTL_SEC = int(os.getenv('OAUTH_STATE_TTL_SEC', '600'))
 _OAUTH_STATE_PREFIX = 'oauth:calendar:state:'
+
+
+def _put_oauth_state(state: str, payload: dict) -> None:
+    key = f'{_OAUTH_STATE_PREFIX}{state}'
+    if shared_store.redis_status() == 'ok':
+        shared_store.set_json(key, payload, ttl_seconds=_OAUTH_STATE_TTL_SEC)
+        return
+    # Multi-worker safe fallback when Redis is down
+    import json
+
+    db_run(
+        """
+        INSERT INTO oauth_csrf_state (state, payload_json, expires_at)
+        VALUES (?, ?::jsonb, NOW() + (? * INTERVAL '1 second'))
+        ON CONFLICT (state) DO UPDATE SET
+            payload_json = EXCLUDED.payload_json,
+            expires_at = EXCLUDED.expires_at
+        """,
+        (state, json.dumps(payload), _OAUTH_STATE_TTL_SEC),
+    )
+
+
+def _pop_oauth_state(state: str | None) -> dict | None:
+    if not state:
+        return None
+    key = f'{_OAUTH_STATE_PREFIX}{state}'
+    if shared_store.redis_status() == 'ok':
+        ctx = shared_store.pop_json(key)
+        if ctx:
+            return ctx
+    row = db_get(
+        """
+        SELECT payload_json FROM oauth_csrf_state
+        WHERE state = ? AND expires_at > NOW()
+        """,
+        (state,),
+    )
+    db_run('DELETE FROM oauth_csrf_state WHERE state = ?', (state,))
+    if not row:
+        return None
+    payload = row.get('payload_json')
+    if isinstance(payload, dict):
+        return payload
+    if isinstance(payload, str):
+        import json
+
+        try:
+            data = json.loads(payload)
+            return data if isinstance(data, dict) else None
+        except Exception:
+            return None
+    return None
 
 _ALLOWED_RETURN_PATHS = frozenset({'/settings', '/head-hr/settings'})
 _DEBUG_ORIGIN_RE = re.compile(
@@ -102,24 +155,17 @@ def start_oauth(user: dict, return_to: str | None = None) -> tuple[str | None, s
     if not company_key:
         return None, 'Company context required'
     state = secrets.token_urlsafe(24)
-    if shared_store.redis_status() != 'ok':
-        flask_debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
-        if not flask_debug:
-            logger.warning(
-                '[calendar_oauth] OAuth CSRF state is process-local '
-                '(REDIS_URL not connected). Multi-worker Gunicorn callbacks '
-                'can fail; set REDIS_URL when GUNICORN_WORKERS>1.'
-            )
-    shared_store.set_json(
-        f'{_OAUTH_STATE_PREFIX}{state}',
-        {
-            'hrid': hrid,
-            'company_key': company_key,
-            'return_to': sanitize_oauth_return_to(return_to),
-            'created_at': datetime.now(timezone.utc).isoformat(),
-        },
-        ttl_seconds=_OAUTH_STATE_TTL_SEC,
-    )
+    payload = {
+        'hrid': hrid,
+        'company_key': company_key,
+        'return_to': sanitize_oauth_return_to(return_to),
+        'created_at': datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        _put_oauth_state(state, payload)
+    except Exception as exc:
+        logger.exception('[calendar_oauth] failed to persist OAuth state')
+        return None, f'Unable to start OAuth ({exc})'
     return build_google_auth_url(state), None
 
 
@@ -128,7 +174,7 @@ def handle_oauth_callback(code: str | None, state: str | None) -> tuple[str, str
     Exchange code, store tokens.
     Returns (redirect_url, error_message).
     """
-    ctx = shared_store.pop_json(f'{_OAUTH_STATE_PREFIX}{state}') if state else None
+    ctx = _pop_oauth_state(state)
     redirect = _frontend_settings_url((ctx or {}).get('return_to'))
     if not code or not state:
         return f'{redirect}&calendar=error', 'Missing code or state'

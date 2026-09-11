@@ -317,15 +317,20 @@ def save_candidate_profile(
         )
 
 
-def link_parsed_resume(parsed_id: str | None, candidate_id: str, public_uploader_id: str | None = None) -> dict | None:
+def link_parsed_resume(
+    parsed_id: str | None,
+    candidate_id: str,
+    public_uploader_id: str | None = None,
+    *,
+    claim_verified: bool = False,
+) -> dict | None:
     """
     Ensure a parsed_resumes row is linked to candidate_id.
     Returns the parsed resume record or None.
 
-    Public apply often hits content-hash cache: client gets an existing parsed_id
-    plus a fresh PUB* uploader id. Do not require raw_files.uploader_id to match
-    that new PUB id — UUID parsed_id from the parse response is sufficient to
-    bind an unowned row (or reuse a row already owned by this candidate).
+    Public apply must present a verified parse_claim for the parsed_id (or prove
+    uploader ownership). Foreign candidate_id rows are never returned without a
+    verified claim (prevents parsedId IDOR).
     """
     if parsed_id:
         row = db_get(
@@ -334,26 +339,33 @@ def link_parsed_resume(parsed_id: str | None, candidate_id: str, public_uploader
         )
         if row:
             existing_cid = row.get('candidate_id')
+            uploader_owns = False
+            if public_uploader_id and row.get('raw_file_id'):
+                owned = db_get(
+                    "SELECT 1 AS ok FROM raw_files WHERE id = ? AND uploader_id = ?",
+                    (row['raw_file_id'], public_uploader_id),
+                )
+                uploader_owns = bool(owned)
+
             if not existing_cid:
-                # Prefer proving uploader ownership when available; otherwise allow
-                # content-hash cache reuse (unowned row + explicit parsed_id).
-                if public_uploader_id and row.get('raw_file_id'):
-                    owned = db_get(
-                        "SELECT 1 AS ok FROM raw_files WHERE id = ? AND uploader_id = ?",
-                        (row['raw_file_id'], public_uploader_id),
-                    )
-                    if not owned:
-                        # Cache hit under a prior PUB* uploader — still bind for this apply
-                        pass
+                if not (claim_verified or uploader_owns):
+                    return None
                 db_run(
                     "UPDATE parsed_resumes SET candidate_id = ? WHERE id = ? AND candidate_id IS NULL",
                     (candidate_id, parsed_id),
                 )
-            elif str(existing_cid) != str(candidate_id):
-                # Same resume bytes previously linked to another applicant — reuse TOON
-                # for ATS without stealing the foreign candidate_id link.
+                return db_get(
+                    "SELECT id, toon, confidence, raw_file_id, candidate_id FROM parsed_resumes WHERE id = ?",
+                    (parsed_id,),
+                ) or row
+
+            if str(existing_cid) == str(candidate_id):
                 return row
-            return row
+
+            # Foreign candidate — only reuse TOON when claim proves this parse session
+            if claim_verified:
+                return row
+            return None
 
     row = db_get(
         """

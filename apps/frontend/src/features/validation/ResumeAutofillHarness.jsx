@@ -35,6 +35,7 @@ const initialForm = () => ({
   experiences: emptyExperience(),
   _parsedId: null,
   _publicUploaderId: null,
+  _parseClaim: null,
 })
 
 /** Same AI-owned rules as ApplyJobModal.validate (excludes user-only notice fields). */
@@ -169,6 +170,7 @@ export default function ResumeAutofillHarness() {
         resumeFileName: mapped.resumeFileName || prev.resumeFileName,
         _parsedId: mapped._parsedId || prev._parsedId,
         _publicUploaderId: mapped._publicUploaderId || prev._publicUploaderId,
+        _parseClaim: mapped._parseClaim || prev._parseClaim,
       }
       const nextErrors = validateAiOwnedFields(next)
       const doneAt = Date.now()
@@ -264,6 +266,7 @@ export default function ResumeAutofillHarness() {
                     resumeFileName: '',
                     _parsedId: null,
                     _publicUploaderId: null,
+                    _parseClaim: null,
                   }))
                   setStatus('idle')
                   setParsePayload(null)

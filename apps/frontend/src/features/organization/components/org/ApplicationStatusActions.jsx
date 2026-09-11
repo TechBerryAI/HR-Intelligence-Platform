@@ -23,14 +23,15 @@ export function canManuallyDecideApplication(application) {
 export function applicationDecisionLabel(application) {
   if (!application) return ''
   const status = String(application.status || '').toLowerCase().trim()
-  if (application.shortlisted === true || application.shortlisted === 1 || status === 'shortlisted') {
-    return 'Shortlisted'
-  }
+  // Later pipeline statuses win over a stale shortlisted flag
   if (status === 'interview') return 'Interview'
   if (status === 'offer') return 'Offer'
   if (status === 'hired') return 'Hired'
   if (status === 'rejected' || status === 'not shortlisted') return 'Rejected'
   if (status === 'withdrawn') return 'Withdrawn'
+  if (application.shortlisted === true || application.shortlisted === 1 || status === 'shortlisted') {
+    return 'Shortlisted'
+  }
   return ''
 }
 

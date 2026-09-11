@@ -16,6 +16,10 @@ PAGE_SPARSE_TEXT_WITH_IMAGES = 200
 # Full-page (or near-full-page) embedded images: always OCR, even if a thin
 # digital overlay contains resume tokens like "Experience".
 IMAGE_COVERAGE_OCR_THRESHOLD = 0.35
+# GOOD digital text at least this long is trusted even under a large embedded
+# image (photo / background art) — OCR would only be discarded by
+# prefer_better_text after wasting a render + inference pass.
+STRONG_DIGITAL_PAGE_CHARS = 400
 
 _EMAIL_RE = re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')
 _PHONE_RE = re.compile(r'\b[6-9]\d{9}\b|\+\d[\d\s\-()]{8,}\d')

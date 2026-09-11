@@ -7,6 +7,7 @@ Supports chunked uploads, ZIP extract, and parallel workers.
 from __future__ import annotations
 
 import io
+import logging
 import os
 import re
 import threading
@@ -19,6 +20,8 @@ from typing import Any
 
 from app.core import media_storage
 from app.core.errors import log_unexpected
+
+logger = logging.getLogger(__name__)
 
 # In-memory job store: job_id -> job dict
 _local_jobs: dict[str, dict[str, Any]] = {}
@@ -1714,6 +1717,7 @@ def _process_one_file_inner(
 ) -> tuple[str, dict | None, bool, str, str]:
     from app.ai.parser.text_extraction import (
         extract_document,
+        retry_extract_high_dpi,
         should_retry_high_dpi_extract,
     )
     from app.domains.recruitment.services.parsing_storage import validate_toon_format_bulk
@@ -1739,14 +1743,18 @@ def _process_one_file_inner(
             raw_text = raw_text.replace('\x00', '')
 
         max_dpi_used = extract_result.final_dpi if extract_result is not None else 0
+        did_dpi_retry = False
         if should_retry_high_dpi_extract(
             filename,
             raw_text,
             extract_failed=bool(last_extract_err),
             max_dpi_used=max_dpi_used,
         ):
+            did_dpi_retry = True
             try:
-                extract_result = extract_document(data, filename, dpi=BULK_OCR_RETRY_DPI)
+                extract_result = retry_extract_high_dpi(
+                    data, filename, extract_result, dpi=BULK_OCR_RETRY_DPI
+                )
                 raw_text = extract_result.text or ""
                 if raw_text and '\x00' in raw_text:
                     raw_text = raw_text.replace('\x00', '')
@@ -1779,6 +1787,18 @@ def _process_one_file_inner(
             pass
 
         text_ms = (time.perf_counter() - t_text) * 1000.0
+        logger.info(
+            '[bulk-timing] %s extract=%.0fms pages=%s ocr_pages=%s dpi=%s '
+            'dpi_retry=%s status=%s chars=%s',
+            filename,
+            text_ms,
+            extract_result.page_count if extract_result is not None else 0,
+            len(extract_result.ocr_pages) if extract_result is not None else 0,
+            extract_result.final_dpi if extract_result is not None else 0,
+            did_dpi_retry,
+            extract_result.status if extract_result is not None else 'error',
+            len(raw_text.strip()) if raw_text else 0,
+        )
         if not raw_text or len(raw_text.strip()) < BULK_MIN_TEXT_CHARS:
             _bulk_stage("text", "failed", text_ms)
             _bulk_stage("persist_raw", "skipped")
@@ -1814,6 +1834,7 @@ def _process_one_file_inner(
         )
 
         # --- Intelligence Engine text path (shared with single-file parse) ---
+        t_engine = time.perf_counter()
         if BULK_SKIP_LLM_WHEN_DETERMINISTIC:
             try:
                 from app.ai.parser.engine import parse_resume_text_via_engine
@@ -1892,6 +1913,11 @@ def _process_one_file_inner(
                             or row.get("Skills")
                             or row.get("Experience")
                         ):
+                            logger.info(
+                                '[bulk-timing] %s engine=deterministic ms=%.0f',
+                                filename,
+                                (time.perf_counter() - t_engine) * 1000.0,
+                            )
                             return (
                                 filename,
                                 row,
@@ -1988,6 +2014,12 @@ def _process_one_file_inner(
                         last_err = "empty fields after flatten"
                         toon = None
                         continue
+                    logger.info(
+                        '[bulk-timing] %s engine=llm attempts=%s ms=%.0f',
+                        filename,
+                        attempt + 1,
+                        (time.perf_counter() - t_engine) * 1000.0,
+                    )
                     return (
                         filename,
                         row,
@@ -2018,6 +2050,12 @@ def _process_one_file_inner(
             for x in ("person.", "missing", "must not", "insufficient fields")
         ):
             code = "validation"
+        logger.info(
+            '[bulk-timing] %s engine=failed(%s) ms=%.0f',
+            filename,
+            code,
+            (time.perf_counter() - t_engine) * 1000.0,
+        )
         return (
             filename,
             None,

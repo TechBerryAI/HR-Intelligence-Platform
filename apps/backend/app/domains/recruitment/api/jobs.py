@@ -21,6 +21,7 @@ from app.domains.candidate.services.profile_service import (
     upsert_passwordless_candidate,
     validate_public_apply_payload,
 )
+from app.domains.candidate.services.parse_claim import verify_parse_claim
 from app.domains.recruitment.api.applications import (
     _extract_ats_result,
     _jd_toon_from_job_row,
@@ -592,12 +593,13 @@ def record_profile_viewed(job_id: str, candidate_id: str):
             return jsonify({'error': 'Application not found'}), 404
         current_status = normalize_status(app.get('status'))
         is_shortlisted = app.get('shortlisted') in (True, 1, 't', 'true', '1')
-        if current_status in ('Shortlisted', 'Rejected') or is_shortlisted:
+        # Never regress Shortlisted/Rejected/Interview/Offer/Hired/etc. to Screening
+        if current_status != 'Applied' or is_shortlisted:
             return jsonify({
                 'status': 'ok',
                 'profile_update': {
                     'application_id': str(app['id']),
-                    'status': 'Shortlisted' if (current_status == 'Shortlisted' or is_shortlisted) else 'Rejected',
+                    'status': current_status or 'Applied',
                     'updated_at': datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
                     'unchanged': True,
                 }
@@ -1090,7 +1092,18 @@ def public_apply_to_job(job_id: str):
 
         parsed_id = parsed_id_early
         public_uploader_id = (data.get('publicUploaderId') or data.get('public_uploader_id') or '').strip() or None
-        parsed_resume_record = link_parsed_resume(parsed_id, candidate_id, public_uploader_id)
+        parse_claim = (data.get('parseClaim') or data.get('parse_claim') or '').strip() or None
+        claim_ok = bool(parsed_id and verify_parse_claim(parse_claim, parsed_id))
+        if parsed_id and not claim_ok:
+            return jsonify({
+                'error': 'Resume parse session expired or invalid. Please re-upload your resume and wait for parsing to finish.',
+            }), 400
+        parsed_resume_record = link_parsed_resume(
+            parsed_id,
+            candidate_id,
+            public_uploader_id,
+            claim_verified=claim_ok,
+        )
         if not parsed_resume_record:
             return jsonify({
                 'error': 'No parsed resume found. Please upload your resume and wait for AI parsing to finish.'
@@ -1218,5 +1231,9 @@ def public_apply_to_job(job_id: str):
             'matchId': match_id,
         }), 200
     except Exception as e:
+        # Concurrent double-apply races the unique (candidate_id, job_id) constraint
+        err_text = str(e).lower()
+        if 'unique' in err_text or 'duplicate' in err_text or 'applications_candidate' in err_text:
+            return jsonify({'error': 'Applicant already applied'}), 409
         log_unexpected('public_apply', e, job_id=job_id)
         return client_internal_error()

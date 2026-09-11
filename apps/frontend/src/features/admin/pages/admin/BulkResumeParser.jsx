@@ -37,7 +37,7 @@ import {
   BULK_POLL_INTERVAL_MS,
 } from '@/features/admin/services/bulkParsingService.js'
 
-const RESUME_EXT = ['pdf', 'doc', 'docx']
+const RESUME_EXT = ['pdf', 'docx', 'webp', 'tif', 'tiff']
 
 function isAuthPollError(err) {
   const status = err?.status
@@ -122,7 +122,7 @@ export default function BulkResumeParser({ embedded = false }) {
           setInputFolderFound(true)
           setError(null)
         } else {
-          setError('No PDF, DOC, or DOCX files found in that folder.')
+          setError('No PDF, DOCX, or supported image files found in that folder.')
         }
       } catch (err) {
         setError(err?.message || 'Could not read folder.')
@@ -206,7 +206,7 @@ export default function BulkResumeParser({ embedded = false }) {
 
   const startUpload = async () => {
     if (!files.length) {
-      setError('Select at least one file (PDF, DOC, DOCX) or a ZIP archive.')
+      setError('Select at least one file (PDF, DOCX, WEBP, TIF/TIFF) or a ZIP archive.')
       return
     }
     setError(null)
@@ -482,7 +482,7 @@ export default function BulkResumeParser({ embedded = false }) {
     )
   }, [progress?.message])
 
-  const resumeFiles = files.filter((f) => /\.(pdf|docx?)$/i.test(f.name))
+  const resumeFiles = files.filter((f) => /\.(pdf|docx|webp|tif|tiff)$/i.test(f.name))
   const zipSelected = files.some((f) => /\.zip$/i.test(f.name))
   // Only treat files as "in queue" when a real job is running — avoids fake stuck UI after failed upload
   const total = progress?.total_files ?? (jobId ? resumeFiles.length : 0)
@@ -704,7 +704,7 @@ export default function BulkResumeParser({ embedded = false }) {
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2.5">
                   <label className="text-sm font-medium text-[var(--ei-text-label)]">1. Input folder or ZIP</label>
-                  <span className="text-[11px] text-[var(--ei-text-muted)]">PDF · DOC · DOCX · ZIP</span>
+                  <span className="text-[11px] text-[var(--ei-text-muted)]">PDF · DOCX · WEBP · TIF · ZIP</span>
                 </div>
 
                 {/* Keep file inputs outside buttons — nesting inputs in <button> breaks pickers in Chrome */}
@@ -1131,7 +1131,7 @@ export default function BulkResumeParser({ embedded = false }) {
               </div>
               <p className="text-sm font-medium text-[var(--ei-text-secondary)]">No resumes selected yet</p>
               <p className="text-xs text-[var(--ei-text-muted)] mt-1.5 max-w-sm mx-auto leading-relaxed">
-                Browse a folder above to load PDF, DOC, or DOCX files. Processed and queued files will appear here.
+                Browse a folder above to load PDF, DOCX, or image (WEBP/TIF) files. Processed and queued files will appear here.
               </p>
             </section>
           )}

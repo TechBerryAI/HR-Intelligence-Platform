@@ -13,7 +13,7 @@ import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
 import { useToast } from '@/shared/components/Toast.jsx'
 import { useApp } from '@/core/context/AppContext.jsx'
-import { BASE_URL } from '@/core/api/api.js'
+import { apiRequest } from '@/core/api/api.js'
 
 const FEEDBACK_TYPES = [
   { value: 'Bug Report', label: 'Bug Report' },
@@ -112,7 +112,7 @@ export default function HRMSTestingFeedback() {
     }
     setIsSubmitting(true)
     try {
-      let response
+      let data
       if (screenshotFile) {
         const fd = new FormData()
         fd.append('employee_name', form.employee_name.trim())
@@ -123,7 +123,7 @@ export default function HRMSTestingFeedback() {
         fd.append('description', form.description.trim())
         if (form.feedback_type === 'Bug Report') fd.append('severity', form.severity)
         fd.append('screenshot', screenshotFile)
-        response = await fetch(`${BASE_URL}/api/feedback/submit`, {
+        data = await apiRequest('/api/feedback/submit', {
           method: 'POST',
           body: fd,
         })
@@ -137,22 +137,20 @@ export default function HRMSTestingFeedback() {
           description: form.description.trim(),
         }
         if (form.feedback_type === 'Bug Report') payload.severity = form.severity
-        response = await fetch(`${BASE_URL}/api/feedback/submit`, {
+        data = await apiRequest('/api/feedback/submit', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
+          body: payload,
         })
       }
-      const data = await response.json()
-      if (response.ok && data.success) {
+      if (data?.success) {
         setSubmitted(true)
         toast.success(data.message || 'Feedback submitted successfully.')
       } else {
-        toast.error(data.error || 'Failed to submit feedback')
+        toast.error(data?.error || 'Failed to submit feedback')
       }
     } catch (err) {
       console.error('Feedback submit error:', err)
-      toast.error('An error occurred. Please try again.')
+      toast.error(err?.data?.error || err?.message || 'An error occurred. Please try again.')
     } finally {
       setIsSubmitting(false)
     }

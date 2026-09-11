@@ -60,7 +60,7 @@ _Add screenshots here (e.g. Home, Jobs list, HR Dashboard, Applicant profile, Bu
 |-------------|---------|--------|
 | Node.js | 16+ | `node --version` |
 | Python | 3.8+ | `python --version` |
-| PostgreSQL | 12+ | Local or cloud (e.g. Supabase, Neon) |
+| PostgreSQL | **17+** | Local Docker or cloud (baseline requires PG17+) |
 
 ### Quick Start (recommended)
 
@@ -103,9 +103,11 @@ python wsgi.py
 
 ```bash
 cd apps/frontend
-npm install
+npm ci          # preferred; use on Linux filesystem (see docs/DEVELOPMENT.md)
 npm run dev
 ```
+
+WSL note: if the repo lives on `/mnt/d` (Windows drive), `npm ci` may hit `EBUSY` under `node_modules`. Use a Linux-path working copy or CI for reproducible installs.
 
 - **Frontend:** http://localhost:5173  
 - **Backend / Health:** http://localhost:3000, http://localhost:3000/health  

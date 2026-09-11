@@ -123,9 +123,14 @@ def can_modify_job(user, posted_by=None, organization_id=None):
     if is_read_only(user):
         return False
     role = get_role(user)
-    if role not in (ROLE_HEAD_HR, ROLE_RECRUITER):
-        return False
-    return can_access_job(user, posted_by=posted_by, organization_id=organization_id)
+    if role == ROLE_HEAD_HR:
+        return can_access_job(user, posted_by=posted_by, organization_id=organization_id)
+    if role == ROLE_RECRUITER:
+        if not can_access_job(user, posted_by=posted_by, organization_id=organization_id):
+            return False
+        # jobs:write_own — recruiters may only mutate jobs they posted
+        return bool(posted_by) and str(posted_by) == str(get_user_id(user) or '')
+    return False
 
 
 def can_access_application(user, job_posted_by=None, organization_id=None):
@@ -135,10 +140,8 @@ def can_access_application(user, job_posted_by=None, organization_id=None):
 def can_act_on_application(user, job_posted_by=None, organization_id=None):
     if is_read_only(user):
         return False
-    role = get_role(user)
-    if role not in (ROLE_HEAD_HR, ROLE_RECRUITER):
-        return False
-    return can_access_job(user, posted_by=job_posted_by, organization_id=organization_id)
+    # Same ownership rule as job writes: recruiters act on own jobs only
+    return can_modify_job(user, posted_by=job_posted_by, organization_id=organization_id)
 
 
 def can_access_bulk_session(user, started_by):

@@ -12,12 +12,6 @@ export const HERO_COPY = {
   secondaryCta: 'Watch Demo',
 }
 
-export const HOLOGRAPHIC_STATS = [
-  { label: 'AI Match', value: '94%', position: 'top-[22%] right-[8%] sm:right-[12%]' },
-  { label: 'Hire Rate', value: '92%', position: 'top-[38%] left-[6%] sm:left-[10%]' },
-  { label: 'Active Roles', value: '1.2k+', position: 'bottom-[38%] right-[10%] sm:right-[14%]' },
-]
-
 export const FEATURES = [
   {
     title: 'AI Resume Parsing',

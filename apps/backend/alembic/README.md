@@ -2,6 +2,8 @@
 
 Alembic is the **only** source of truth for database schema changes.
 
+**PostgreSQL version:** HCIP requires **PostgreSQL 17+**. The squashed baseline sets `transaction_timeout` (PG17). Local Docker compose and CI use `postgres:17`.
+
 ## Layout
 
 | Path | Role |
