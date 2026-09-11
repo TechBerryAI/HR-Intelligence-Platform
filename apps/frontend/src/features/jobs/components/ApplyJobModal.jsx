@@ -34,6 +34,7 @@ const initialForm = () => ({
   experiences: emptyExperience(),
   _parsedId: null,
   _publicUploaderId: null,
+  _parseClaim: null,
 })
 
 function validate(form, parseError = '') {
@@ -194,6 +195,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
         resumeFileName: mapped.resumeFileName || prev.resumeFileName,
         _parsedId: mapped._parsedId || prev._parsedId,
         _publicUploaderId: mapped._publicUploaderId || prev._publicUploaderId,
+        _parseClaim: mapped._parseClaim || prev._parseClaim,
       }
     })
     setErrors((prev) => {
@@ -272,6 +274,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
       fd.append('certifications', JSON.stringify(form.certifications || []))
       if (form._parsedId) fd.append('parsedId', form._parsedId)
       if (form._publicUploaderId) fd.append('publicUploaderId', form._publicUploaderId)
+      if (form._parseClaim) fd.append('parseClaim', form._parseClaim)
       // Resume was already stored during AI parse — re-uploading the PDF only slows submit.
       if (!form._parsedId && form.resumeFile) fd.append('resume', form.resumeFile)
 
@@ -393,6 +396,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                     resumeFileName: '',
                     _parsedId: null,
                     _publicUploaderId: null,
+                    _parseClaim: null,
                   }))}
                   onParseError={(message) => setParseError(message || '')}
                   onAutofill={handleAutofill}

@@ -113,7 +113,8 @@ def resume_deterministic_is_strong(profile, coverage=None, *, source_text: str =
         ):
             return False
     except Exception:
-        pass
+        # Fail closed: do not skip LLM residual when experience check errors
+        return False
     return True
 
 
@@ -748,6 +749,10 @@ def _cache_hit_response(
         body['canonical'] = canonical
     if kind == 'resume':
         body['public_uploader_id'] = uploader_id if uploader_role == 'public' else None
+        if body.get('parsed_id') and uploader_role == 'public':
+            from app.domains.candidate.services.parse_claim import issue_parse_claim
+
+            body['parse_claim'] = issue_parse_claim(body['parsed_id'])
     return body, 200
 
 
@@ -937,7 +942,7 @@ def _run_resume(
     _emit(parse_job_id, 'persist', 'completed', on_stage=on_stage)
 
     missing_fields = list(dict.fromkeys([*missing_ev, *(validation_issues if not is_valid else [])]))
-    return {
+    body = {
         'status': 'ok',
         'raw_file_id': raw_file_id,
         'parsed_id': parsed_id,
@@ -955,7 +960,12 @@ def _run_resume(
         'raw_text': raw_text or '',
         'raw_text_chars': len(raw_text or ''),
         'raw_text_sha256': hashlib.sha256((raw_text or '').encode('utf-8', errors='ignore')).hexdigest(),
-    }, 200
+    }
+    if uploader_role == 'public' and parsed_id:
+        from app.domains.candidate.services.parse_claim import issue_parse_claim
+
+        body['parse_claim'] = issue_parse_claim(parsed_id)
+    return body, 200
 
 
 @timing

@@ -233,6 +233,7 @@ export default function ResumeUploadWithParsing({
             _parsedId: result.parsed_id,
             _rawFileId: result.raw_file_id,
             _publicUploaderId: result.public_uploader_id || null,
+            _parseClaim: result.parse_claim || null,
             _confidence: result.confidence,
             _modelVersion: result.model_version,
             _trace: formData.trace || [],

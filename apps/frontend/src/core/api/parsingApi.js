@@ -4,7 +4,8 @@
  * React MUST consume Form DTOs only (`result.form`).
  * Raw TOON / AI output is never mapped on the frontend.
  */
-import { BASE_URL as API_URL } from './api';
+import { BASE_URL as API_URL, apiRequest, ensureFreshAccessToken } from './api';
+import { tokenService } from '@/core/auth/tokenService.js';
 
 /** Same-origin /api (Vite proxy). Never call 127.0.0.1 from localhost — that is CORS. */
 function parseUrl(path) {
@@ -66,22 +67,11 @@ export async function uploadAndParseResume(file, candidateId = null) {
     formData.append('candidate_id', candidateId);
   }
 
-  const token = localStorage.getItem('jwtToken');
-
-  const response = await fetch(`${API_URL}/api/parse/resume`, {
+  return apiRequest('/api/parse/resume', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
     body: formData,
+    timeoutMs: 120000,
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(extractParseErrorMessage(error, 'Failed to parse resume'));
-  }
-
-  return await response.json();
 }
 
 /**
@@ -222,7 +212,12 @@ export async function uploadAndParseResumeStream(file, candidateId = null, { onS
   const formData = new FormData();
   formData.append('file', file);
   if (candidateId) formData.append('candidate_id', candidateId);
-  const token = localStorage.getItem('jwtToken');
+  try {
+    await ensureFreshAccessToken();
+  } catch {
+    /* reactive refresh still possible via fallback */
+  }
+  const token = tokenService.getToken();
   try {
     const response = await fetch(parseUrl('/api/parse/resume/stream'), {
       method: 'POST',
@@ -243,7 +238,12 @@ export async function uploadAndParseJDStream(file, jobId = null, { onStage, onFi
   const formData = new FormData();
   formData.append('file', file);
   if (jobId) formData.append('job_id', jobId);
-  const token = localStorage.getItem('jwtToken');
+  try {
+    await ensureFreshAccessToken();
+  } catch {
+    /* ignore */
+  }
+  const token = tokenService.getToken();
   try {
     const response = await fetch(parseUrl('/api/parse/jd/stream'), {
       method: 'POST',
@@ -267,22 +267,11 @@ export async function uploadAndParseJD(file, jobId = null) {
     formData.append('job_id', jobId);
   }
 
-  const token = localStorage.getItem('jwtToken');
-
-  const response = await fetch(`${API_URL}/api/parse/jd`, {
+  return apiRequest('/api/parse/jd', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
     body: formData,
+    timeoutMs: 120000,
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(extractParseErrorMessage(error, 'Failed to parse job description'));
-  }
-
-  return await response.json();
 }
 
 /**

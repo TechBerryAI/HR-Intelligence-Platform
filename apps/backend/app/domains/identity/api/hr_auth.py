@@ -32,6 +32,7 @@ from app.domains.identity.sessions.service import (
     hash_otp,
     verify_otp_hash,
     deactivate_session,
+    deactivate_all_user_sessions,
 )
 from app.core.auth import build_jwt_payload, JWT_SECRET, validate_password_strength
 from app.core import shared_store
@@ -363,6 +364,7 @@ def hr_reset_password():
             """,
             (password_hash, row['hrid']),
         )
+        deactivate_all_user_sessions(row['hrid'], 'HR')
 
         html = password_changed_html(row.get('full_name') or 'there')
         send_notification_email(
@@ -504,6 +506,7 @@ def hr_change_password():
             return jsonify({'error': 'Current password is incorrect'}), 401
         password_hash = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         db_run('UPDATE hr_signup SET password = ?, updated_at = NOW() WHERE hrid = ?', (password_hash, hrid))
+        deactivate_all_user_sessions(hrid, 'HR')
         try:
             html = password_changed_html(signup_data.get('full_name') or 'there')
             send_notification_email(
@@ -548,15 +551,17 @@ def refresh_tokens():
         identity = build_hr_identity(signup_data)
         new_access = jwt.encode(build_jwt_payload(identity, refresh=False), JWT_SECRET, algorithm='HS256')
         new_refresh = jwt.encode(build_jwt_payload(identity, refresh=True), JWT_SECRET, algorithm='HS256')
-        rotate_refresh_token(refresh_token, new_refresh, identity['user_id'])
+        rotated = rotate_refresh_token(refresh_token, new_refresh, identity['user_id'])
+        if not rotated.get('success'):
+            return jsonify({"error": "Refresh token revoked"}), 401
         return jsonify({"token": new_access, "refresh_token": new_refresh})
     except jwt.ExpiredSignatureError:
-        return jsonify({"error": "Refresh token expired"}), 403
+        return jsonify({"error": "Refresh token expired"}), 401
     except jwt.InvalidTokenError:
-        return jsonify({"error": "Invalid refresh token"}), 403
+        return jsonify({"error": "Invalid refresh token"}), 401
     except Exception as e:
         log_unexpected('hr_refresh_token', e)
-        return jsonify({"error": "Invalid refresh token"}), 403
+        return jsonify({"error": "Invalid refresh token"}), 401
 
 
 @auth_bp.post('/logout')

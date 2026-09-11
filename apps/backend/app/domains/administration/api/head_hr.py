@@ -8,6 +8,7 @@ import logging
 from flask import Blueprint, jsonify, request
 
 from app.database.connection.db import db_all, db_get, db_run
+from app.core.auth import validate_password_strength
 from app.core.errors import log_unexpected
 from app.ai.toon.runtime import toon_loads_flex
 from app.api.middleware.auth import authenticate_token, require_head_hr
@@ -150,8 +151,9 @@ def create_admin():
 
     if not email:
         return jsonify({'error': 'Email is required'}), 400
-    if not password or len(password) < 6:
-        return jsonify({'error': 'Password is required and must be at least 6 characters'}), 400
+    ok, err = validate_password_strength(password)
+    if not ok:
+        return jsonify({'error': err or 'Password does not meet requirements'}), 400
     if not full_name:
         return jsonify({'error': 'Full name is required'}), 400
 
@@ -206,11 +208,17 @@ def update_or_delete_admin(hrid):
 
     if request.method == 'DELETE':
         existing = db_get(
-            'SELECT hrid FROM hr_signup WHERE hrid = ? AND organization_id = ?',
+            'SELECT hrid, role FROM hr_signup WHERE hrid = ? AND organization_id = ?',
             (hrid, org_id),
         )
         if not existing:
             return jsonify({'error': 'Admin not found'}), 404
+        caller_id = (getattr(request, 'user', None) or {}).get('user_id')
+        if caller_id and str(hrid) == str(caller_id):
+            return jsonify({'error': 'You cannot delete your own account'}), 403
+        target_role = (existing.get('role') or '').upper()
+        if target_role in ('CEO', 'HEAD_HR'):
+            return jsonify({'error': 'Cannot delete CEO or Head HR accounts'}), 403
         try:
             db_run('DELETE FROM hr_signup WHERE hrid = ? AND organization_id = ?', (hrid, org_id))
             return jsonify({'message': f'Admin {hrid} deleted successfully'})
@@ -232,8 +240,10 @@ def update_or_delete_admin(hrid):
 
     if not full_name:
         return jsonify({'error': 'Full name is required'}), 400
-    if password and len(password) < 6:
-        return jsonify({'error': 'Password must be at least 6 characters'}), 400
+    if password:
+        ok, err = validate_password_strength(password)
+        if not ok:
+            return jsonify({'error': err or 'Password does not meet requirements'}), 400
 
     try:
         if password:

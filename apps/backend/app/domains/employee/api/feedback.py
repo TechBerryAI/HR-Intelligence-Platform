@@ -67,10 +67,12 @@ def _build_email_body(record):
 
 
 @feedback_bp.route('/submit', methods=['POST'])
+@require_recruiter
 def submit_feedback():
     """
     Submit internal HRMS testing feedback.
     Accepts multipart/form-data (with optional screenshot) or application/json.
+    Requires authenticated recruiter/Head HR.
     """
     try:
         # Prefer JSON for non-file fields; if form is used, take from form

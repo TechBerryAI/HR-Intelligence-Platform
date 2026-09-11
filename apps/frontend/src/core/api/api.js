@@ -136,7 +136,7 @@ export async function tryRefresh() {
 }
 
 /** If access token expires soon, refresh before the request. */
-async function ensureFreshAccessToken() {
+export async function ensureFreshAccessToken() {
   const access = tokenService.getToken();
   if (!access) return;
   const payload = decodeJwtPayload(access);

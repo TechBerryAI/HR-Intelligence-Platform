@@ -9,7 +9,7 @@ from typing import Optional, List, Dict
 import jwt
 
 from app.core.auth import JWT_SECRET
-from app.database.connection.db import db_run, db_get, db_all
+from app.database.connection.db import db_run, db_get, db_all, get_conn
 from app.domains.identity.authorization.rbac import STAFF_ROLES
 
 MAX_FAILED_LOGIN_ATTEMPTS = 8
@@ -125,9 +125,75 @@ def deactivate_all_user_sessions(user_id, user_type: str) -> Dict:
     return {"success": True}
 
 
+def user_has_active_refresh_session(user_id) -> bool:
+    """True when the user has at least one non-revoked, unexpired refresh token."""
+    if not user_id:
+        return False
+    row = db_get(
+        """
+        SELECT 1 AS ok FROM auth_refresh_tokens
+        WHERE user_id = ? AND revoked_at IS NULL AND expires_at > NOW()
+        LIMIT 1
+        """,
+        (str(user_id),),
+    )
+    return bool(row)
+
+
 def rotate_refresh_token(old_token: str, new_token: str, user_id: str) -> Dict:
-    revoke_refresh_token(old_token)
-    return register_refresh_token(new_token, user_id)
+    """Atomically revoke old refresh and register new; fails if old already rotated."""
+    try:
+        old_payload = jwt.decode(
+            old_token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False}
+        )
+        new_payload = jwt.decode(
+            new_token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False}
+        )
+    except Exception:
+        return {"success": False, "error": "invalid token"}
+    old_jti = old_payload.get('jti')
+    new_jti = new_payload.get('jti')
+    if not old_jti or not new_jti:
+        return {"success": False, "error": "missing jti"}
+    if new_payload.get('type') != 'refresh':
+        return {"success": False, "error": "invalid token"}
+
+    exp = None
+    if new_payload.get('exp'):
+        exp = datetime.fromtimestamp(new_payload['exp'], tz=timezone.utc)
+    if exp is None:
+        exp = datetime.now(timezone.utc)
+
+    from app.database.connection.db import _pg_query
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    _pg_query(
+                        "UPDATE auth_refresh_tokens SET revoked_at = NOW() "
+                        "WHERE jti = ? AND revoked_at IS NULL"
+                    ),
+                    (old_jti,),
+                )
+                if cursor.rowcount != 1:
+                    return {"success": False, "error": "refresh token already rotated or revoked"}
+                cursor.execute(
+                    _pg_query(
+                        """
+                        INSERT INTO auth_refresh_tokens (jti, user_id, token_hash, expires_at)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT (jti) DO NOTHING
+                        """
+                    ),
+                    (new_jti, str(user_id), _token_fingerprint(new_token), exp),
+                )
+                if cursor.rowcount != 1:
+                    # Conflict means jti already existed (should never reuse); fail closed
+                    return {"success": False, "error": "failed to register refresh token"}
+        return {"success": True, "jti": new_jti}
+    except Exception:
+        return {"success": False, "error": "rotation failed"}
 
 
 def is_login_rate_limited(email: str, user_type: str = 'HR') -> bool:

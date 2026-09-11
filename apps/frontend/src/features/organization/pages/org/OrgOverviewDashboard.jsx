@@ -217,13 +217,10 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
       prev.map((j) => ((j.jdid || j.id) === jdid ? { ...j, enabled: nextEnabled } : j)),
     )
     try {
-      const token = tokenService.getToken()
-      await apiRequest(`/api/jobs/${encodeURIComponent(jdid)}/enabled`, {
-        method: 'PATCH',
-        body: { enabled: nextEnabled },
-        token,
-      })
-      await setJobEnabled(jdid, nextEnabled)
+      const result = await setJobEnabled(jdid, nextEnabled)
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to update job status')
+      }
       flashAction(nextEnabled ? 'Job enabled' : 'Job disabled (draft)')
       await load(true)
     } catch (err) {
@@ -281,20 +278,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
     setEditSaving(true)
     setEditError('')
     try {
-      const token = tokenService.getToken()
-      await apiRequest(`/api/jobs/${encodeURIComponent(editingJob.jdid)}`, {
-        method: 'PUT',
-        body: {
-          title: editTitle.trim(),
-          location: editLocation.trim(),
-          salary: editSalary.trim(),
-          experienceFrom: editExperienceFrom,
-          experienceTo: editExperienceTo,
-          description: editDescription,
-        },
-        token,
-      })
-      await updateJob(editingJob.jdid, {
+      const result = await updateJob(editingJob.jdid, {
         title: editTitle.trim(),
         location: editLocation.trim(),
         salary: editSalary.trim(),
@@ -302,6 +286,10 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
         experienceTo: editExperienceTo,
         description: editDescription,
       })
+      if (!result?.success) {
+        setEditError(result?.error || 'Failed to update job')
+        return
+      }
       flashAction('Job updated')
       setEditingJob(null)
       await load(true)
