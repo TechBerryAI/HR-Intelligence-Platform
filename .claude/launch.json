@@ -1,0 +1,15 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "start",
+      "runtimeExecutable": "wsl",
+      "runtimeArgs": [
+        "-d", "Ubuntu", "--",
+        "bash", "-lc",
+        "cd /mnt/d/Projects/HR-Intelligence-Platform && npm run start"
+      ],
+      "port": 5173
+    }
+  ]
+}
