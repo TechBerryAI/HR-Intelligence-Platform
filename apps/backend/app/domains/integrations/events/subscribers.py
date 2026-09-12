@@ -19,11 +19,11 @@ _subscribed = False
 
 
 def _on_job_created(event: DomainEvent) -> None:
-    if not event.company_key or not event.job_id:
+    if not event.organization_id or not event.job_id:
         return
     # Mode 1: auto-publish to providers with auto_publish enabled
     publish_service.enqueue_publish(
-        event.company_key,
+        event.organization_id,
         event.job_id,
         auto_publish_only=True,
         operation='publish',
@@ -31,23 +31,23 @@ def _on_job_created(event: DomainEvent) -> None:
 
 
 def _on_job_updated(event: DomainEvent) -> None:
-    if not event.company_key or not event.job_id:
+    if not event.organization_id or not event.job_id:
         return
-    publish_service.enqueue_update(event.company_key, event.job_id)
+    publish_service.enqueue_update(event.organization_id, event.job_id)
 
 
 def _on_job_closed(event: DomainEvent) -> None:
-    if not event.company_key or not event.job_id:
+    if not event.organization_id or not event.job_id:
         return
-    publish_service.enqueue_close(event.company_key, event.job_id)
+    publish_service.enqueue_close(event.organization_id, event.job_id)
 
 
 def _on_job_republished(event: DomainEvent) -> None:
-    if not event.company_key or not event.job_id:
+    if not event.organization_id or not event.job_id:
         return
     providers = (event.payload or {}).get('providers')
     publish_service.enqueue_publish(
-        event.company_key,
+        event.organization_id,
         event.job_id,
         providers=providers,
         auto_publish_only=False,

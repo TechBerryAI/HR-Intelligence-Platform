@@ -8,7 +8,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2] / 'apps' / 'backend'
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.domains.integrations.api.routes import _job_belongs_to_company
+from app.domains.integrations.api.routes import _job_belongs_to_org
 from app.domains.identity.authorization.rbac import can_access_job
 
 
@@ -40,7 +40,7 @@ def test_a_same_organization_allows(monkeypatch):
         'app.domains.identity.services.organizations.get_organization_id_for_user',
         lambda _u: ORG_A,
     )
-    assert _job_belongs_to_company('job-a', 'acme', _user(ORG_A, 'hr-a')) is True
+    assert _job_belongs_to_org('job-a', ORG_A, _user(ORG_A, 'hr-a')) is True
     assert can_access_job(_user(ORG_A, 'hr-a'), posted_by='hr-a', organization_id=ORG_A) is True
 
 
@@ -60,7 +60,8 @@ def test_b_different_org_same_company_name_denies(monkeypatch):
         lambda _u: ORG_B,
     )
     user_b = _user(ORG_B)
-    assert _job_belongs_to_company('job-a', 'acme', user_b) is False
+    # Same display name ("Acme") on both sides — must not grant access across orgs.
+    assert _job_belongs_to_org('job-a', ORG_B, user_b) is False
     assert can_access_job(user_b, posted_by='hr-a', organization_id=ORG_A) is False
 
 
@@ -80,7 +81,7 @@ def test_c_different_org_different_company_denies(monkeypatch):
         lambda _u: ORG_B,
     )
     user_b = {**_user(ORG_B), 'company': 'Other Co'}
-    assert _job_belongs_to_company('job-a', 'other co', user_b) is False
+    assert _job_belongs_to_org('job-a', ORG_B, user_b) is False
     assert can_access_job(user_b, posted_by='hr-a', organization_id=ORG_A) is False
 
 
@@ -100,7 +101,7 @@ def test_d_legacy_unscoped_without_owner_org_denies(monkeypatch):
         'app.domains.integrations.api.routes._resolve_job_organization_id',
         lambda **_k: None,
     )
-    assert _job_belongs_to_company('job-legacy', 'acme', _user(ORG_B)) is False
+    assert _job_belongs_to_org('job-legacy', ORG_B, _user(ORG_B)) is False
 
 
 def test_d_legacy_unscoped_owner_org_denies_other_tenant(monkeypatch):
@@ -123,4 +124,4 @@ def test_d_legacy_unscoped_owner_org_denies_other_tenant(monkeypatch):
         'app.domains.identity.services.organizations.get_organization_id_for_user',
         lambda _u: ORG_B,
     )
-    assert _job_belongs_to_company('job-legacy', 'acme', _user(ORG_B)) is False
+    assert _job_belongs_to_org('job-legacy', ORG_B, _user(ORG_B)) is False

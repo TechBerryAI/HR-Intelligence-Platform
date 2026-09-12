@@ -20,6 +20,7 @@ SYNC_FAILED = 'SyncFailed'
 @dataclass
 class DomainEvent:
     event_type: str
+    organization_id: str | None = None
     company_key: str | None = None
     job_id: str | None = None
     provider: str | None = None

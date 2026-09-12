@@ -112,6 +112,73 @@ def seed_org_with_staff(
     }
 
 
+def seed_org_with_staff_same_name(
+    name: str,
+    *,
+    head_email: str | None = None,
+    ceo_email: str | None = None,
+    recruiter_email: str | None = None,
+    password: str = STRONG_PASSWORD,
+):
+    """Seed a second, independent organization sharing ``name`` with another org.
+
+    Real provisioning (``ensure_organization(..., create_only=True)``) refuses
+    a colliding slug, so two organizations can never legitimately share a
+    display name today. This helper bypasses that by inserting the
+    ``organizations`` row directly with a forced-unique slug, modelling the
+    worst case BUG-004 must still defend against: legacy/migrated data, or a
+    future bug in slug generation, producing two tenants with an identical
+    (or company_key-colliding) display name. Tenant isolation must hold on
+    organization_id regardless of how such a collision arises.
+    """
+    from app.database.connection.db import db_get, db_run
+    from app.domains.identity.services.hrid import next_hrid
+
+    forced_slug = f'forced-{uuid.uuid4().hex[:12]}'
+    org_row = db_get(
+        """
+        INSERT INTO organizations (name, slug) VALUES (?, ?)
+        RETURNING id, name, slug
+        """,
+        (name, forced_slug),
+    )
+    org_id = str(org_row['id'])
+    pw = hash_password(password)
+
+    def _insert(role: str, email: str, full_name: str) -> str:
+        hrid = next_hrid()
+        db_run(
+            """
+            INSERT INTO hr_signup (
+                hrid, full_name, email, company, password, role,
+                account_status, organization_id
+            ) VALUES (?, ?, ?, ?, ?, ?, 'active', ?)
+            """,
+            (hrid, full_name, email, name, pw, role, org_id),
+        )
+        return hrid
+
+    head_email = head_email or unique_email()
+    head_id = _insert('HEAD_HR', head_email, 'Head HR')
+    ceo_email = ceo_email or unique_email()
+    ceo_id = _insert('CEO', ceo_email, 'CEO User')
+    recruiter_email = recruiter_email or unique_email()
+    recruiter_id = _insert('RECRUITER', recruiter_email, 'Recruiter User')
+
+    return {
+        'org_id': org_id,
+        'org_name': name,
+        'org_slug': forced_slug,
+        'head_hrid': head_id,
+        'head_email': head_email,
+        'ceo_hrid': ceo_id,
+        'ceo_email': ceo_email,
+        'recruiter_hrid': recruiter_id,
+        'recruiter_email': recruiter_email,
+        'password': password,
+    }
+
+
 def login(client, email: str, password: str = STRONG_PASSWORD) -> str:
     resp = client.post('/api/login', json={'email': email, 'password': password})
     assert resp.status_code == 200, resp.get_json()

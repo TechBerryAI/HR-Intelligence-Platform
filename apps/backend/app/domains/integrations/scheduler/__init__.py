@@ -93,9 +93,10 @@ def _tick_auto_sync_unlocked() -> None:
 
     for row in rows:
         provider = (row.get('provider') or '').strip().lower()
-        company_key = row.get('company_key') or ''
-        if not provider or not company_key:
+        organization_id = row.get('organization_id')
+        if not provider or not organization_id:
             continue
+        organization_id = str(organization_id)
         if is_builtin(provider):
             # Built-ins keep their own sync implementations; still allow auto_sync
             pass
@@ -104,16 +105,16 @@ def _tick_auto_sync_unlocked() -> None:
         if not is_builtin(provider) and adapter != 'http':
             continue
         try:
-            result = manager.sync_provider(company_key, provider)
+            result = manager.sync_provider(organization_id, provider)
             logger.info(
                 '[integrations] auto-sync %s/%s success=%s imported=%s',
-                company_key,
+                organization_id,
                 provider,
                 result.success,
                 result.imported_count,
             )
         except Exception:
-            logger.exception('[integrations] auto-sync failed for %s/%s', company_key, provider)
+            logger.exception('[integrations] auto-sync failed for %s/%s', organization_id, provider)
 
 
 def _loop():

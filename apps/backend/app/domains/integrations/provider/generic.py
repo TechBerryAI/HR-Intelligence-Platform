@@ -377,6 +377,7 @@ class GenericHttpProvider(JobProvider):
             # Temporarily override for this call
             config = ProviderConfig(
                 id=config.id,
+                organization_id=config.organization_id,
                 company_key=config.company_key,
                 company=config.company,
                 provider=config.provider,

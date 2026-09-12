@@ -1,4 +1,8 @@
-"""IntegrationManagerService — routes operations to enabled providers."""
+"""IntegrationManagerService — routes operations to enabled providers.
+
+Every method is scoped by ``organization_id`` (the tenant boundary) — never
+by company name / company_key. See BUG-004.
+"""
 from __future__ import annotations
 
 import logging
@@ -21,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 def _log_call(
-    company_key: str,
+    organization_id: str,
     provider: str,
     operation: str,
     status: str,
@@ -36,7 +40,7 @@ def _log_call(
 ):
     try:
         repo.insert_sync_log(
-            company_key,
+            organization_id,
             provider,
             operation,
             status,
@@ -60,18 +64,18 @@ class IntegrationManagerService:
 
     def _configs_for(
         self,
-        company_key: str,
+        organization_id: str,
         providers: Iterable[str] | None = None,
         *,
         enabled_only: bool = True,
         auto_publish_only: bool = False,
     ) -> list[ProviderConfig]:
         if auto_publish_only:
-            rows = repo.list_enabled_auto_publish(company_key)
+            rows = repo.list_enabled_auto_publish(organization_id)
         elif enabled_only:
-            rows = repo.list_enabled_providers(company_key)
+            rows = repo.list_enabled_providers(organization_id)
         else:
-            rows = repo.list_providers(company_key)
+            rows = repo.list_providers(organization_id)
         configs = [row_to_provider_config(r) for r in rows]
         configs = [c for c in configs if c]
         if providers:
@@ -88,7 +92,7 @@ class IntegrationManagerService:
         retry_count: int = 0,
     ) -> AggregatePublishResult:
         configs = self._configs_for(
-            job.company_key,
+            job.organization_id,
             providers,
             enabled_only=True,
             auto_publish_only=auto_publish_only,
@@ -125,9 +129,10 @@ class IntegrationManagerService:
         # redelivery-create a second remote listing.
         if result.success and result.external_job_id:
             repo.upsert_external_job(
-                job.company_key,
+                job.organization_id,
                 job.job_id,
                 config.provider,
+                company_key=job.company_key,
                 external_job_id=result.external_job_id,
                 sync_status='pending',
                 pending_operation='update',
@@ -136,7 +141,7 @@ class IntegrationManagerService:
             )
         ms = int((time.perf_counter() - start) * 1000)
         _log_call(
-            job.company_key,
+            job.organization_id,
             config.provider,
             'publish',
             'success' if result.success else 'failed',
@@ -158,7 +163,7 @@ class IntegrationManagerService:
         providers: list[str] | None = None,
         retry_count: int = 0,
     ) -> AggregatePublishResult:
-        configs = self._configs_for(job.company_key, providers, enabled_only=True)
+        configs = self._configs_for(job.organization_id, providers, enabled_only=True)
         results: list[PublishResult] = []
         for config in configs:
             existing = repo.get_external_job(job.job_id, config.provider)
@@ -176,7 +181,7 @@ class IntegrationManagerService:
                 result = PublishResult(success=False, provider=config.provider, error=str(exc))
             ms = int((time.perf_counter() - start) * 1000)
             _log_call(
-                job.company_key,
+                job.organization_id,
                 config.provider,
                 'update',
                 'success' if result.success else 'failed',
@@ -194,13 +199,13 @@ class IntegrationManagerService:
 
     def close_job(
         self,
-        company_key: str,
+        organization_id: str,
         job_id: str,
         *,
         providers: list[str] | None = None,
         retry_count: int = 0,
     ) -> AggregatePublishResult:
-        externals = repo.list_external_jobs(company_key, job_id=job_id)
+        externals = repo.list_external_jobs(organization_id, job_id=job_id)
         if providers:
             wanted = {p.strip().lower() for p in providers}
             externals = [e for e in externals if e.get('provider') in wanted]
@@ -211,9 +216,9 @@ class IntegrationManagerService:
             if not external_id:
                 continue
             provider = get_provider(provider_name)
-            config_row = repo.get_provider_row(company_key, provider_name)
+            config_row = repo.get_provider_row(organization_id, provider_name)
             config = row_to_provider_config(config_row) or ProviderConfig(
-                id=None, company_key=company_key, company=None, provider=provider_name
+                id=None, organization_id=organization_id, company=None, provider=provider_name
             )
             start = time.perf_counter()
             if not provider:
@@ -225,7 +230,7 @@ class IntegrationManagerService:
                     result = PublishResult(success=False, provider=provider_name, error=str(exc))
             ms = int((time.perf_counter() - start) * 1000)
             _log_call(
-                company_key,
+                organization_id,
                 provider_name,
                 'close',
                 'success' if result.success else 'failed',
@@ -237,7 +242,7 @@ class IntegrationManagerService:
                 error_message=result.error,
             )
             repo.upsert_external_job(
-                company_key,
+                organization_id,
                 job_id,
                 provider_name,
                 external_job_id=external_id,
@@ -250,14 +255,14 @@ class IntegrationManagerService:
             results.append(result)
         return AggregatePublishResult(job_id=job_id, results=results)
 
-    def test_connection(self, company_key: str, provider_name: str) -> ConnectionResult:
+    def test_connection(self, organization_id: str, provider_name: str) -> ConnectionResult:
         ensure_default_providers()
         provider = get_provider(provider_name)
         if not provider:
             return ConnectionResult(success=False, provider=provider_name, error='Unknown provider')
-        row = repo.get_provider_row(company_key, provider_name)
+        row = repo.get_provider_row(organization_id, provider_name)
         config = row_to_provider_config(row) or ProviderConfig(
-            id=None, company_key=company_key, company=None, provider=provider_name
+            id=None, organization_id=organization_id, company=None, provider=provider_name
         )
         start = time.perf_counter()
         try:
@@ -266,7 +271,7 @@ class IntegrationManagerService:
             result = ConnectionResult(success=False, provider=provider_name, error=str(exc))
         ms = int((time.perf_counter() - start) * 1000)
         _log_call(
-            company_key,
+            organization_id,
             provider_name,
             'test_connection',
             'success' if result.success else 'failed',
@@ -276,14 +281,14 @@ class IntegrationManagerService:
         )
         return result
 
-    def sync_provider(self, company_key: str, provider_name: str) -> SyncResult:
+    def sync_provider(self, organization_id: str, provider_name: str) -> SyncResult:
         ensure_default_providers()
         provider = get_provider(provider_name)
         if not provider:
             return SyncResult(success=False, provider=provider_name, error='Unknown provider')
-        row = repo.get_provider_row(company_key, provider_name)
+        row = repo.get_provider_row(organization_id, provider_name)
         config = row_to_provider_config(row) or ProviderConfig(
-            id=None, company_key=company_key, company=None, provider=provider_name
+            id=None, organization_id=organization_id, company=None, provider=provider_name
         )
         start = time.perf_counter()
         imported = 0
@@ -292,12 +297,12 @@ class IntegrationManagerService:
             from app.domains.integrations.provider.generic import GenericHttpProvider
 
             if isinstance(provider, GenericHttpProvider):
-                externals = repo.list_external_jobs(company_key)
+                externals = repo.list_external_jobs(organization_id)
                 externals = [e for e in externals if e.get('provider') == provider_name and e.get('external_job_id')]
                 if not externals:
                     result, apps = provider.sync_applications_detailed(config)
                     imported = self._persist_applications(
-                        company_key, provider_name, apps, job_id=None, external_job_id=None
+                        organization_id, provider_name, apps, job_id=None, external_job_id=None
                     )
                     result.imported_count = imported
                 else:
@@ -310,7 +315,7 @@ class IntegrationManagerService:
                             errors.append(result_one.error or 'sync failed')
                             continue
                         imported += self._persist_applications(
-                            company_key,
+                            organization_id,
                             provider_name,
                             apps,
                             job_id=ext.get('job_id'),
@@ -329,7 +334,7 @@ class IntegrationManagerService:
             result = SyncResult(success=False, provider=provider_name, error=str(exc))
         ms = int((time.perf_counter() - start) * 1000)
         _log_call(
-            company_key,
+            organization_id,
             provider_name,
             'sync',
             'success' if result.success else 'failed',
@@ -341,7 +346,7 @@ class IntegrationManagerService:
 
     def _persist_applications(
         self,
-        company_key: str,
+        organization_id: str,
         provider_name: str,
         apps: list,
         *,
@@ -354,7 +359,7 @@ class IntegrationManagerService:
             if not app_id:
                 continue
             repo.upsert_external_application(
-                company_key,
+                organization_id,
                 provider_name,
                 str(app_id),
                 job_id=job_id,
@@ -379,9 +384,10 @@ class IntegrationManagerService:
         if result.external_status == 'closed':
             sync_status = 'closed'
         repo.upsert_external_job(
-            job.company_key,
+            job.organization_id,
             job.job_id,
             provider_name,
+            company_key=job.company_key,
             external_job_id=result.external_job_id,
             external_status=result.external_status,
             sync_status=sync_status,

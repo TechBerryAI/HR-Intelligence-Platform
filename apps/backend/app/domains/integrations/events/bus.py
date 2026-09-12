@@ -27,6 +27,7 @@ class InProcessEventBus:
         try:
             repo.insert_provider_event(
                 event.event_type,
+                organization_id=event.organization_id,
                 company_key=event.company_key,
                 job_id=event.job_id,
                 provider=event.provider,

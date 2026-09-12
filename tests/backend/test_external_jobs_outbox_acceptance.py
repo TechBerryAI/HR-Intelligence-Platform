@@ -51,6 +51,13 @@ def _unique_job() -> str:
     return f'ACC{uuid.uuid4().hex[:8].upper()}'
 
 
+def _real_org_id() -> str:
+    """organization_id is a real FK to organizations(id) — never an arbitrary string."""
+    from app.domains.identity.services.organizations import ensure_organization
+
+    return ensure_organization(f'Acceptance Test Co {uuid.uuid4().hex[:10]}', create_only=True)
+
+
 def _drain_for_job(job_id: str, *, worker_id: str, timeout: float = 3.0) -> int:
     """Retry claim+drain: SKIP LOCKED can miss a just-inserted row under load."""
     deadline = time.monotonic() + timeout
@@ -122,7 +129,7 @@ def _reclaim_expired_row(
 def test_acc1_publish_durable_survives_memory_skip_and_drain(pg, monkeypatch):
     """Request publish → durable row → no memory enqueue → restart drain → executes."""
     job_id = _unique_job()
-    company = f'co-{uuid.uuid4().hex[:6]}'
+    company = _real_org_id()
     monkeypatch.setattr(publish_service, '_best_effort_memory_hint', lambda t: None)
     monkeypatch.setattr(
         repo,
@@ -134,7 +141,7 @@ def test_acc1_publish_durable_survives_memory_skip_and_drain(pg, monkeypatch):
     def fake_process(row):
         executed['n'] += 1
         repo.upsert_external_job(
-            row['company_key'],
+            row['organization_id'],
             row['job_id'],
             row['provider'],
             external_job_id='LI-DURABLE-1',
@@ -161,7 +168,7 @@ def test_acc1_publish_durable_survives_memory_skip_and_drain(pg, monkeypatch):
 
 def test_acc2_close_durable_survives_crash_before_drain(pg, monkeypatch):
     job_id = _unique_job()
-    company = f'co-{uuid.uuid4().hex[:6]}'
+    company = _real_org_id()
     monkeypatch.setattr(publish_service, '_best_effort_memory_hint', lambda t: None)
     executed = {'n': 0}
 
@@ -169,7 +176,7 @@ def test_acc2_close_durable_survives_crash_before_drain(pg, monkeypatch):
         executed['n'] += 1
         assert (row.get('pending_operation') or '') == 'close'
         repo.upsert_external_job(
-            row['company_key'],
+            row['organization_id'],
             row['job_id'],
             row['provider'],
             external_job_id='NK-CLOSE-1',
@@ -202,7 +209,7 @@ def test_acc2_close_durable_survives_crash_before_drain(pg, monkeypatch):
 
 def test_acc3_parallel_claim_only_one_wins(pg):
     job_id = _unique_job()
-    company = f'co-{uuid.uuid4().hex[:6]}'
+    company = _real_org_id()
     try:
         repo.upsert_external_job(
             company,
@@ -237,7 +244,7 @@ def test_acc3_parallel_claim_only_one_wins(pg):
 
 def test_acc4_lease_expire_then_other_worker_completes(pg, monkeypatch):
     job_id = _unique_job()
-    company = f'co-{uuid.uuid4().hex[:6]}'
+    company = _real_org_id()
 
     class OkResult:
         success = True
@@ -270,7 +277,7 @@ def test_acc4_lease_expire_then_other_worker_completes(pg, monkeypatch):
     )
     monkeypatch.setattr(
         'app.domains.integrations.service.publish_service.load_job_snapshot',
-        lambda *a, **k: MagicMock(job_id=job_id, company_key=company, to_dict=lambda: {}),
+        lambda *a, **k: MagicMock(job_id=job_id, organization_id=company, company_key='', to_dict=lambda: {}),
     )
     try:
         repo.upsert_external_job(
@@ -305,7 +312,7 @@ def test_acc4_lease_expire_then_other_worker_completes(pg, monkeypatch):
 def test_acc5_provider_success_crash_before_final_uses_update(pg, monkeypatch):
     """Provider returns remote id; local dies before published; retry must update."""
     job_id = _unique_job()
-    company = f'co-{uuid.uuid4().hex[:6]}'
+    company = _real_org_id()
     calls = {'publish': 0, 'update': 0}
 
     class FakeProvider:
@@ -346,7 +353,8 @@ def test_acc5_provider_success_crash_before_final_uses_update(pg, monkeypatch):
 
     snapshot = MagicMock()
     snapshot.job_id = job_id
-    snapshot.company_key = company
+    snapshot.organization_id = company
+    snapshot.company_key = ''
     snapshot.to_dict = lambda: {'jobId': job_id}
 
     try:
@@ -400,7 +408,7 @@ def test_acc5_provider_success_crash_before_final_uses_update(pg, monkeypatch):
 
 def test_acc6_existing_external_id_never_recreates(pg, monkeypatch):
     job_id = _unique_job()
-    company = f'co-{uuid.uuid4().hex[:6]}'
+    company = _real_org_id()
     calls = {'publish': 0, 'update': 0}
 
     class FakeProvider:
@@ -429,7 +437,7 @@ def test_acc6_existing_external_id_never_recreates(pg, monkeypatch):
         'app.domains.integrations.service.manager._log_call',
         lambda *a, **k: None,
     )
-    snapshot = MagicMock(job_id=job_id, company_key=company, to_dict=lambda: {})
+    snapshot = MagicMock(job_id=job_id, organization_id=company, company_key='', to_dict=lambda: {})
     try:
         repo.upsert_external_job(
             company,
@@ -451,7 +459,7 @@ def test_acc6_existing_external_id_never_recreates(pg, monkeypatch):
 
 def test_acc7_retry_then_success(pg, monkeypatch):
     job_id = _unique_job()
-    company = f'co-{uuid.uuid4().hex[:6]}'
+    company = _real_org_id()
     attempts = {'n': 0}
 
     class FailThenOk:
@@ -493,7 +501,7 @@ def test_acc7_retry_then_success(pg, monkeypatch):
     )
     monkeypatch.setattr(
         'app.domains.integrations.service.publish_service.load_job_snapshot',
-        lambda *a, **k: MagicMock(job_id=job_id, company_key=company, to_dict=lambda: {}),
+        lambda *a, **k: MagicMock(job_id=job_id, organization_id=company, company_key='', to_dict=lambda: {}),
     )
     monkeypatch.setattr(
         'app.domains.integrations.config.get_max_retries',
@@ -540,7 +548,7 @@ def test_acc7_retry_then_success(pg, monkeypatch):
 
 def test_acc7b_max_retry_dead_letter(pg, monkeypatch):
     job_id = _unique_job()
-    company = f'co-{uuid.uuid4().hex[:6]}'
+    company = _real_org_id()
 
     class FailResult:
         success = False
@@ -561,7 +569,7 @@ def test_acc7b_max_retry_dead_letter(pg, monkeypatch):
     )
     monkeypatch.setattr(
         'app.domains.integrations.service.publish_service.load_job_snapshot',
-        lambda *a, **k: MagicMock(job_id=job_id, company_key=company, to_dict=lambda: {}),
+        lambda *a, **k: MagicMock(job_id=job_id, organization_id=company, company_key='', to_dict=lambda: {}),
     )
     monkeypatch.setattr(
         'app.domains.integrations.worker.retry.get_max_retries',
@@ -589,7 +597,7 @@ def test_acc7b_max_retry_dead_letter(pg, monkeypatch):
 def test_acc8_startup_eligibility_respects_active_leases(pg):
     from app.database.connection.db import db_run
 
-    company = f'co-{uuid.uuid4().hex[:6]}'
+    company = _real_org_id()
     job_none = _unique_job()
     job_expired = _unique_job()
     job_active = _unique_job()
@@ -628,7 +636,7 @@ def test_acc8_startup_eligibility_respects_active_leases(pg):
 
 
 def test_acc9_two_drain_workers_no_duplicate_process(pg, monkeypatch):
-    company = f'co-{uuid.uuid4().hex[:6]}'
+    company = _real_org_id()
     job_a = _unique_job()
     job_b = _unique_job()
     processed: list[str] = []
@@ -638,7 +646,7 @@ def test_acc9_two_drain_workers_no_duplicate_process(pg, monkeypatch):
         with lock:
             processed.append(f"{row['job_id']}:{row['provider']}")
         repo.upsert_external_job(
-            row['company_key'],
+            row['organization_id'],
             row['job_id'],
             row['provider'],
             sync_status='published',

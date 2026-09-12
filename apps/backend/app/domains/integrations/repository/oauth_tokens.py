@@ -45,7 +45,8 @@ def upsert_oauth_tokens(
     *,
     provider: str,
     hrid: str,
-    company_key: str,
+    organization_id: str,
+    company_key: str | None = None,
     access_token: str,
     refresh_token: str | None,
     expires_at: datetime | None,
@@ -53,6 +54,10 @@ def upsert_oauth_tokens(
     scope: str | None = None,
     raw_json: dict | None = None,
 ) -> None:
+    """Persist a per-recruiter OAuth token. Scoped by ``hrid`` (the owning
+    recruiter) and tagged with ``organization_id`` (the tenant boundary) for
+    reporting/auditing. ``company_key`` is display metadata only.
+    """
     enc_access = encrypt_secret(access_token)
     enc_refresh = encrypt_secret(refresh_token) if refresh_token else None
     safe_raw = sanitize_oauth_raw_json(raw_json)
@@ -65,7 +70,8 @@ def upsert_oauth_tokens(
         db_run(
             '''
             UPDATE oauth_tokens
-            SET company_key = ?,
+            SET organization_id = ?,
+                company_key = ?,
                 access_token = ?,
                 refresh_token = ?,
                 token_type = ?,
@@ -76,7 +82,8 @@ def upsert_oauth_tokens(
             WHERE provider = ? AND hrid = ?
             ''',
             (
-                company_key,
+                organization_id,
+                company_key or '',
                 enc_access,
                 enc_refresh,
                 token_type,
@@ -92,13 +99,14 @@ def upsert_oauth_tokens(
     db_run(
         '''
         INSERT INTO oauth_tokens (
-            company_key, provider, hrid, access_token, refresh_token,
+            organization_id, company_key, provider, hrid, access_token, refresh_token,
             token_type, scope, expires_at, raw_json
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''',
         (
-            company_key,
+            organization_id,
+            company_key or '',
             provider,
             hrid,
             enc_access,

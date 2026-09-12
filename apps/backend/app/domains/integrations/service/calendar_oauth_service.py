@@ -10,7 +10,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from app.core import shared_store
 from app.database.connection.db import db_get, db_run
-from app.domains.integrations.company_context import resolve_company_for_user
+from app.domains.integrations.company_context import resolve_organization_for_user
 from app.domains.integrations.provider.calendar_factory import get_calendar_provider
 from app.domains.integrations.provider.google_calendar import (
     build_google_auth_url,
@@ -151,13 +151,13 @@ def start_oauth(user: dict, return_to: str | None = None) -> tuple[str | None, s
     hrid = get_user_id(user)
     if not hrid:
         return None, 'User id required'
-    company_key, _ = resolve_company_for_user(user)
-    if not company_key:
+    organization_id, _ = resolve_organization_for_user(user)
+    if not organization_id:
         return None, 'Company context required'
     state = secrets.token_urlsafe(24)
     payload = {
         'hrid': hrid,
-        'company_key': company_key,
+        'organization_id': organization_id,
         'return_to': sanitize_oauth_return_to(return_to),
         'created_at': datetime.now(timezone.utc).isoformat(),
     }
@@ -189,13 +189,23 @@ def handle_oauth_callback(code: str | None, state: str | None) -> tuple[str, str
     access = data.get('access_token')
     if not access:
         return f'{redirect}&calendar=error', 'No access token returned'
+
+    # Re-resolve organization_id from the DB for this hrid at callback time —
+    # never trust the org id carried in the (popped, single-use) state blob,
+    # so a stale/forged state cannot bind tokens to the wrong tenant.
+    from app.domains.identity.services.organizations import get_organization_id_for_user
+
+    organization_id = get_organization_id_for_user({'user_id': ctx['hrid']})
+    if not organization_id:
+        return f'{redirect}&calendar=error', 'Unable to verify company context for this account'
+
     refresh = data.get('refresh_token')
     expires_in = int(data.get('expires_in') or 3600)
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
     oauth_repo.upsert_oauth_tokens(
         provider=PROVIDER,
         hrid=ctx['hrid'],
-        company_key=ctx['company_key'],
+        organization_id=organization_id,
         access_token=access,
         refresh_token=refresh,
         expires_at=expires_at,
@@ -247,11 +257,19 @@ def load_valid_tokens(hrid: str) -> OAuthTokenBundle | None:
     except Exception:
         logger.exception('[calendar_oauth] refresh failed for hrid=%s', hrid)
         return None
-    company_key = (row or {}).get('company_key') or 'unknown'
+    organization_id = (row or {}).get('organization_id')
+    if not organization_id:
+        from app.domains.identity.services.organizations import get_organization_id_for_user
+
+        organization_id = get_organization_id_for_user({'user_id': hrid})
+    if not organization_id:
+        logger.warning('[calendar_oauth] refresh aborted — no organization_id for hrid=%s', hrid)
+        return None
     oauth_repo.upsert_oauth_tokens(
         provider=PROVIDER,
         hrid=hrid,
-        company_key=company_key,
+        organization_id=str(organization_id),
+        company_key=(row or {}).get('company_key'),
         access_token=refreshed.access_token,
         refresh_token=refreshed.refresh_token,
         expires_at=refreshed.expires_at,

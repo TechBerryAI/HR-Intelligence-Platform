@@ -7,12 +7,18 @@ from typing import Any
 
 @dataclass
 class JobSnapshot:
-    """Provider-agnostic job view — never pass ORM/raw Job rows to providers."""
+    """Provider-agnostic job view — never pass ORM/raw Job rows to providers.
+
+    ``organization_id`` is the tenant boundary used for every persistence
+    lookup. ``company_key`` (a normalized company *name*) is retained only as
+    display/backward-compatible metadata — see BUG-004.
+    """
 
     job_id: str
     title: str
     company: str
-    company_key: str
+    organization_id: str
+    company_key: str = ''
     location: str | None = None
     salary: str | None = None
     experience: str | None = None
@@ -27,10 +33,15 @@ class JobSnapshot:
 
 @dataclass
 class ProviderConfig:
+    """Tenant-scoped provider config. ``organization_id`` is the authoritative
+    tenant boundary; ``company_key`` is display/backward-compat metadata only.
+    """
+
     id: int | None
-    company_key: str
+    organization_id: str
     company: str | None
     provider: str
+    company_key: str = ''
     enabled: bool = False
     status: str = 'disconnected'
     auth_type: str = 'api_key'
@@ -48,6 +59,7 @@ class ProviderConfig:
 
         return {
             'id': self.id,
+            'organizationId': self.organization_id,
             'companyKey': self.company_key,
             'company': self.company,
             'provider': self.provider,

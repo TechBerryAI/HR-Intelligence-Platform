@@ -31,7 +31,7 @@ def _ensure_external_id(row: dict) -> dict:
     if not recovered:
         return row
     repo.upsert_external_job(
-        row['company_key'],
+        row['organization_id'],
         row['job_id'],
         row['provider'],
         external_job_id=recovered,
@@ -57,7 +57,7 @@ def process_external_job_row(row: dict) -> None:
     from app.domains.integrations.service.publish_service import load_job_snapshot
 
     manager = IntegrationManagerService()
-    company_key = row['company_key']
+    organization_id = row['organization_id']
     job_id = row['job_id']
     provider = row['provider']
     retry_count = int(row.get('retry_count') or 0)
@@ -76,7 +76,7 @@ def process_external_job_row(row: dict) -> None:
     if operation == 'close':
         if not row.get('external_job_id'):
             repo.upsert_external_job(
-                company_key,
+                organization_id,
                 job_id,
                 provider,
                 sync_status='closed',
@@ -86,14 +86,14 @@ def process_external_job_row(row: dict) -> None:
             )
             return
         aggregate = manager.close_job(
-            company_key, job_id, providers=[provider], retry_count=retry_count
+            organization_id, job_id, providers=[provider], retry_count=retry_count
         )
     else:
-        snapshot = load_job_snapshot(job_id, company_key)
+        snapshot = load_job_snapshot(job_id, organization_id)
         if not snapshot:
             logger.warning('[integrations] outbox job not found: %s', job_id)
             repo.upsert_external_job(
-                company_key,
+                organization_id,
                 job_id,
                 provider,
                 sync_status='failed',
@@ -115,12 +115,12 @@ def process_external_job_row(row: dict) -> None:
                 retry_count=retry_count,
             )
 
-    _handle_outbox_result(aggregate, company_key, job_id, provider, retry_count, operation)
+    _handle_outbox_result(aggregate, organization_id, job_id, provider, retry_count, operation)
 
 
 def _handle_outbox_result(
     aggregate,
-    company_key: str,
+    organization_id: str,
     job_id: str,
     provider: str,
     retry_count: int,
@@ -137,7 +137,7 @@ def _handle_outbox_result(
             delay = retry_mod.backoff_seconds(retry_count)
             next_at = datetime.now(timezone.utc) + timedelta(seconds=min(delay, 300.0))
             repo.schedule_external_job_retry(
-                company_key,
+                organization_id,
                 job_id,
                 provider,
                 pending_operation=operation if operation != 'republish' else 'publish',
@@ -153,7 +153,7 @@ def _handle_outbox_result(
                 next_retry,
             )
         else:
-            retry_mod.mark_dead(company_key, job_id, provider, result.error, next_retry)
+            retry_mod.mark_dead(organization_id, job_id, provider, result.error, next_retry)
 
 
 def drain_outbox(*, limit: int = 10, worker_id: str | None = None, job_id: str | None = None) -> int:
