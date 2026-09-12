@@ -7,6 +7,7 @@ from werkzeug.utils import secure_filename
 from app.database.connection.db import db_get, db_all, BACKEND, TRUE_SQL
 from app.api.middleware.auth import authenticate_token, require_recruiter
 from app.domains.identity.authorization.rbac import can_access_bulk_session, get_role, ROLE_HEAD_HR, is_read_only, get_user_id
+from app.domains.identity.services.organizations import require_organization_id
 from app.domains.administration.services.bulk_parsing import (
     create_job as bulk_create_job,
     upload_chunk as bulk_upload_chunk,
@@ -269,14 +270,19 @@ def job_matches():
         return jsonify({'error': 'HR user required'}), 403
     role = get_role(request.user)
     if role == ROLE_HEAD_HR:
+        org_id, err = require_organization_id(request.user)
+        if err:
+            return err
         jobs = db_all(
             '''
             SELECT j.jdid, j.title, j.company, j.location, j.enabled,
                    (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid) as application_count,
                    (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid AND a.shortlisted = ''' + TRUE_SQL + ''') as shortlisted_count
             FROM jobs j
+            WHERE j.organization_id = ?
             ORDER BY j.posted_on DESC
-            '''
+            ''',
+            (org_id,),
         )
     else:
         jobs = db_all(

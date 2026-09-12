@@ -23,7 +23,9 @@ from app.ai.parser.engine import get_parse_job, run_jd_parse_pipeline, run_resum
 from app.ai.parser.engine.confidence import calculate_confidence
 from app.ai.toon.runtime import toon_loads_flex
 from app.core import shared_store
+from app.database.connection.db import db_get
 from app.domains.identity.authorization.rbac import STAFF_ROLES, get_role, get_user_id
+from app.domains.identity.services.organizations import require_organization_id
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,29 @@ _SSE_HEADERS = {
     'Cache-Control': 'no-cache, no-transform',
     'X-Accel-Buffering': 'no',
 }
+
+
+def _owned_candidate_id_or_error(user, candidate_id):
+    """
+    Verify a client-supplied candidate_id belongs to the caller's organization
+    before it is allowed to touch parsed_resumes for that candidate.
+    Returns (candidate_id, None) on success, or (None, (jsonify_response, status)).
+    """
+    if not candidate_id:
+        return None, None
+    org_id, err = require_organization_id(user)
+    if err:
+        return None, err
+    row = db_get(
+        'SELECT 1 FROM candidates WHERE cid = ? AND organization_id = ?',
+        (candidate_id, org_id),
+    )
+    if not row:
+        return None, (jsonify({
+            'status': 'error',
+            'error': 'candidate_id does not belong to your organization',
+        }), 403)
+    return candidate_id, None
 
 
 def _safe_error_body(body: dict, status: int) -> dict:
@@ -442,7 +467,12 @@ def parse_resume_upload():
             }), 401
 
         uploader_role = 'recruiter' if jwt_role in STAFF_ROLES else 'recruiter'
-        candidate_id = request.form.get('candidate_id') or None
+        candidate_id, cand_err = _owned_candidate_id_or_error(
+            current_user, request.form.get('candidate_id') or None
+        )
+        if cand_err:
+            resp, code = cand_err
+            return resp, code
 
         body, status = run_resume_parse_pipeline(
             file_data,
@@ -622,7 +652,12 @@ def parse_resume_stream():
         return jsonify({'status': 'error', 'error': 'User ID not found in authentication token'}), 401
 
     uploader_role = 'recruiter' if jwt_role in STAFF_ROLES else 'recruiter'
-    candidate_id = request.form.get('candidate_id') or None
+    candidate_id, cand_err = _owned_candidate_id_or_error(
+        current_user, request.form.get('candidate_id') or None
+    )
+    if cand_err:
+        resp, code = cand_err
+        return resp, code
 
     def _run(on_stage):
         return run_resume_parse_pipeline(

@@ -224,7 +224,11 @@ def create_admin():
     email = (data.get('email') or '').strip().lower()
     full_name = (data.get('fullName') or data.get('full_name') or '').strip()
     password = (data.get('password') or '').strip()
-    company = ((org or {}).get('name') or '').strip() or '-'
+    # Never fall back to a shared literal here: two orgs with blank display
+    # names would otherwise collide onto the same integrations company_key
+    # (see app/domains/integrations/company_context.py) and share OAuth
+    # credentials/ATS sync data. Fall back to a per-org-unique key instead.
+    company = ((org or {}).get('name') or '').strip() or f'org:{org_id}'
 
     if not email:
         return jsonify({'error': 'Email is required'}), 400
@@ -289,7 +293,8 @@ def update_or_delete_admin(hrid):
     org_id, org, err = _caller_org()
     if err:
         return err
-    company = ((org or {}).get('name') or '').strip() or '-'
+    # See create_admin() above: avoid the shared '-' collision key.
+    company = ((org or {}).get('name') or '').strip() or f'org:{org_id}'
 
     if request.method == 'DELETE':
         caller_id = (getattr(request, 'user', None) or {}).get('user_id')

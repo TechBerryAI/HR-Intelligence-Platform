@@ -343,6 +343,8 @@ def hr_reset_password():
             return jsonify({'error': err}), 400
         if new_password != confirm_password:
             return jsonify({'error': 'Passwords do not match.'}), 400
+        if _otp_rate_limited(email):
+            return jsonify({'error': 'Too many OTP attempts. Please try again later.'}), 429
 
         row = db_get(
             """
@@ -352,10 +354,10 @@ def hr_reset_password():
             """,
             (email,),
         )
-        if not row:
-            return jsonify({'error': 'Account not found for this email.'}), 404
-        if not row.get('otp'):
-            return jsonify({'error': 'Please request a new OTP.'}), 400
+        # Same generic response for "no such active account" and "no OTP pending" —
+        # a distinguishable status here is an account-enumeration oracle.
+        if not row or not row.get('otp'):
+            return jsonify({'error': 'Invalid or expired OTP.'}), 400
         valid, verr = _otp_valid(row.get('otp'), row.get('otp_expiry'), otp, grace_seconds=0)
         if not valid:
             return jsonify({'error': verr}), 400
