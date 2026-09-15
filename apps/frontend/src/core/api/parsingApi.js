@@ -307,17 +307,12 @@ export function takeJDFormDTO(result) {
  * Validate file before upload.
  */
 export function validateFileForParsing(file) {
-  const allowedExtensions = ['pdf', 'docx', 'webp'];
+  // Legacy .doc is read server-side via antiword; the server returns a clear
+  // error when that binary is unavailable, so do not block it here.
+  const allowedExtensions = ['pdf', 'docx', 'doc', 'webp'];
   const maxSize = 10 * 1024 * 1024; // 10MB
 
   const extension = file.name.split('.').pop().toLowerCase();
-
-  if (extension === 'doc') {
-    return {
-      valid: false,
-      error: 'Legacy .doc format is not supported. Please use DOCX or PDF.',
-    };
-  }
 
   if (extension === 'png' || extension === 'jpg' || extension === 'jpeg') {
     return {
@@ -329,7 +324,7 @@ export function validateFileForParsing(file) {
   if (!allowedExtensions.includes(extension)) {
     return {
       valid: false,
-      error: 'Invalid file type. Please upload PDF or DOCX files only.',
+      error: 'Invalid file type. Please upload PDF, DOCX or DOC files only.',
     };
   }
 

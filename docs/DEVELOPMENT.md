@@ -28,6 +28,29 @@ HR Job Portal
 | Python | 3.10+ required (backend); 3.11 recommended (matches CI); 3.11+ (ai) | `python --version` |
 | PostgreSQL | **17+** required | Local Docker (`infrastructure/docker/docker-compose.yml`) or cloud. Baseline schema uses PG17-only settings (`transaction_timeout`). |
 
+### System packages (document parsing)
+
+Python requirements do not cover these; install them on every machine and image
+that runs the backend parser.
+
+| Package | Needed for | Install (Debian/Ubuntu) | Without it |
+|---|---|---|---|
+| `antiword` | Legacy Word 97-2003 `.doc` resumes/JDs | `sudo apt-get install -y antiword` | `.doc` uploads are rejected with "cannot be read on this server" |
+
+```bash
+sudo apt-get update && sudo apt-get install -y antiword
+```
+
+OCR (RapidOCR) ships via `apps/backend/requirements.txt` — no system package
+needed. `pytesseract` is only a fallback and needs a system `tesseract` binary
+if you want it; RapidOCR alone is sufficient.
+
+Verify what the backend can see:
+
+```bash
+cd apps/backend && python -c "from app.ai.parser.text_extraction import antiword_available, get_ocr_engine_status; print('antiword:', antiword_available()); print('ocr:', get_ocr_engine_status())"
+```
+
 ## Quick start (HRMS)
 
 ```bash
