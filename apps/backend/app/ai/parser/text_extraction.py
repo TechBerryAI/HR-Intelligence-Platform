@@ -1707,12 +1707,19 @@ def extract_text_from_doc(file_data: bytes) -> str:
         )
 
     import subprocess  # local import: only legacy .doc needs a subprocess
+    import tempfile
+
+    # antiword is given a real path rather than stdin: the Windows build rejects
+    # the `-` stdin argument ("- is not a Word Document") even though the Unix
+    # build accepts it.
+    with tempfile.NamedTemporaryFile(suffix='.doc', delete=False) as handle:
+        handle.write(file_data)
+        temp_path = handle.name
 
     def _run(args: list[str]) -> subprocess.CompletedProcess[bytes]:
         try:
             return subprocess.run(
-                [binary, *args, '-'],
-                input=file_data,
+                [binary, *args, temp_path],
                 capture_output=True,
                 timeout=ANTIWORD_TIMEOUT_SECONDS,
                 check=False,
@@ -1724,20 +1731,26 @@ def extract_text_from_doc(file_data: bytes) -> str:
         except OSError as exc:
             raise ValueError(f'Could not run antiword: {exc}') from exc
 
-    # `-m UTF-8.txt` needs antiword's mapping files. An install without
-    # /usr/share/antiword still reads the document in the default encoding, so
-    # fall back rather than losing the whole file.
-    completed = _run(['-m', 'UTF-8.txt', '-w', '0'])
-    if completed.returncode != 0 and b'mapping file' in completed.stderr:
-        logger.warning('antiword mapping files missing; retrying without -m UTF-8.txt')
-        completed = _run(['-w', '0'])
+    try:
+        # `-m UTF-8.txt` needs antiword's mapping files. An install without them
+        # still reads the document in the default encoding, so fall back rather
+        # than losing the whole file.
+        completed = _run(['-m', 'UTF-8.txt', '-w', '0'])
+        if completed.returncode != 0 and b'mapping file' in completed.stderr:
+            logger.warning('antiword mapping files missing; retrying without -m UTF-8.txt')
+            completed = _run(['-w', '0'])
 
-    text = completed.stdout.decode('utf-8', errors='replace').replace('\x00', '')
-    if completed.returncode != 0 and len(text.strip()) < MIN_TEXT_CHARS:
-        detail = completed.stderr.decode('utf-8', errors='replace').strip()[:200]
-        raise ValueError(f'antiword failed on this .doc file: {detail or "no output"}')
-    if len(text.strip()) < MIN_TEXT_CHARS:
-        raise ValueError('Insufficient text extracted from .doc file')
+        text = completed.stdout.decode('utf-8', errors='replace').replace('\x00', '')
+        if completed.returncode != 0 and len(text.strip()) < MIN_TEXT_CHARS:
+            detail = completed.stderr.decode('utf-8', errors='replace').strip()[:200]
+            raise ValueError(f'antiword failed on this .doc file: {detail or "no output"}')
+        if len(text.strip()) < MIN_TEXT_CHARS:
+            raise ValueError('Insufficient text extracted from .doc file')
+    finally:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            logger.debug('could not remove temp .doc file %s', temp_path)
 
     # antiword marks list items with '[]' and pads tables with '|' borders.
     text = re.sub(r'^\s*\[\]\s*', '\u2022 ', text, flags=re.MULTILINE)
