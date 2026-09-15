@@ -14,12 +14,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install system packages for document parsing
+        run: sudo apt-get update && sudo apt-get install -y antiword
       - name: Install backend dependencies
         run: |
           pip install -r apps/backend/requirements.lock.txt
           pip install pytest
-      - name: Verify PyMuPDF and RapidOCR
-        run: python -c "import fitz, rapidocr_onnxruntime; print('PyMuPDF+RapidOCR OK')"
+      - name: Verify PyMuPDF, RapidOCR and antiword
+        run: |
+          python -c "import fitz, rapidocr_onnxruntime; print('PyMuPDF+RapidOCR OK')"
+          python -c "import sys; sys.path.insert(0, 'apps/backend'); from app.ai.parser.text_extraction import antiword_available; assert antiword_available(), 'antiword missing'; print('antiword OK')"
       - name: Run unit tests
         env:
           # Unit/mock only — no live Postgres or Ollama required

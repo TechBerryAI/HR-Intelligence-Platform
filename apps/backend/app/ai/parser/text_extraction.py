@@ -1653,6 +1653,113 @@ def extract_text_from_pdf(file_data: bytes, *, dpi: int | None = None) -> str:
     return result.text
 
 
+ANTIWORD_TIMEOUT_SECONDS = max(5, int(os.getenv('ANTIWORD_TIMEOUT_SECONDS', '30')))
+
+# Word 97-2003 binary documents are OLE2 compound files. A .docx or an RTF
+# renamed to .doc is common enough to be worth detecting before shelling out.
+_OLE2_MAGIC = b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'
+_ZIP_MAGIC = b'PK\x03\x04'
+_RTF_MAGIC = b'{\\rt'
+
+
+def _antiword_path() -> str:
+    """Path to the antiword binary, or '' when it is not installed."""
+    return shutil.which(os.getenv('ANTIWORD_BIN', 'antiword')) or ''
+
+
+def antiword_available() -> bool:
+    return bool(_antiword_path())
+
+
+def extract_text_from_doc(file_data: bytes) -> str:
+    """Extract text from a legacy Word 97-2003 (.doc) binary document.
+
+    Files are routinely mislabelled, so the real container is sniffed first: a
+    .docx or RTF wearing a .doc extension is handled natively rather than being
+    handed to antiword, which would reject it.
+
+    Genuine OLE2 documents go through ``antiword`` (``-m UTF-8.txt`` keeps
+    non-ASCII characters, ``-w 0`` disables line wrapping so paragraphs survive
+    intact for the section detector).
+    """
+    if not file_data:
+        raise ValueError('Empty .doc file')
+
+    if file_data.startswith(_ZIP_MAGIC):
+        logger.info('.doc file is actually a DOCX container; extracting as DOCX')
+        return extract_text_from_docx(file_data)
+    if file_data.lstrip()[:4] == _RTF_MAGIC:
+        logger.info('.doc file is actually RTF; extracting as RTF')
+        return _extract_text_from_rtf_bytes(file_data)
+
+    if not file_data.startswith(_OLE2_MAGIC):
+        raise ValueError(
+            'Unrecognized .doc container (not OLE2, DOCX or RTF). '
+            'Please re-save the file as DOCX or PDF.'
+        )
+
+    binary = _antiword_path()
+    if not binary:
+        raise ValueError(
+            'Legacy .doc extraction requires antiword, which is not installed. '
+            'Install it (Debian/Ubuntu: apt-get install -y antiword) or ask for '
+            'the resume as DOCX or PDF.'
+        )
+
+    import subprocess  # local import: only legacy .doc needs a subprocess
+
+    def _run(args: list[str]) -> subprocess.CompletedProcess[bytes]:
+        try:
+            return subprocess.run(
+                [binary, *args, '-'],
+                input=file_data,
+                capture_output=True,
+                timeout=ANTIWORD_TIMEOUT_SECONDS,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise ValueError(
+                f'antiword timed out after {ANTIWORD_TIMEOUT_SECONDS}s on this .doc file'
+            ) from exc
+        except OSError as exc:
+            raise ValueError(f'Could not run antiword: {exc}') from exc
+
+    # `-m UTF-8.txt` needs antiword's mapping files. An install without
+    # /usr/share/antiword still reads the document in the default encoding, so
+    # fall back rather than losing the whole file.
+    completed = _run(['-m', 'UTF-8.txt', '-w', '0'])
+    if completed.returncode != 0 and b'mapping file' in completed.stderr:
+        logger.warning('antiword mapping files missing; retrying without -m UTF-8.txt')
+        completed = _run(['-w', '0'])
+
+    text = completed.stdout.decode('utf-8', errors='replace').replace('\x00', '')
+    if completed.returncode != 0 and len(text.strip()) < MIN_TEXT_CHARS:
+        detail = completed.stderr.decode('utf-8', errors='replace').strip()[:200]
+        raise ValueError(f'antiword failed on this .doc file: {detail or "no output"}')
+    if len(text.strip()) < MIN_TEXT_CHARS:
+        raise ValueError('Insufficient text extracted from .doc file')
+
+    # antiword marks list items with '[]' and pads tables with '|' borders.
+    text = re.sub(r'^\s*\[\]\s*', '\u2022 ', text, flags=re.MULTILINE)
+    text = re.sub(r'[ \t]*\|[ \t]*', ' | ', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def _extract_text_from_rtf_bytes(file_data: bytes) -> str:
+    """Minimal RTF-to-text for documents mislabelled as .doc."""
+    raw = file_data.decode('latin-1', errors='replace')
+    raw = re.sub(r'\\\'([0-9a-fA-F]{2})', lambda m: chr(int(m.group(1), 16)), raw)
+    raw = re.sub(r'\\(?:par|line|pard)\b', '\n', raw)
+    raw = re.sub(r'\\[a-zA-Z]+-?\d*\s?', ' ', raw)
+    raw = raw.replace('{', ' ').replace('}', ' ')
+    raw = re.sub(r'[ \t]+', ' ', raw)
+    text = re.sub(r'\n{3,}', '\n\n', raw).strip()
+    if len(text) < MIN_TEXT_CHARS:
+        raise ValueError('Insufficient text extracted from RTF-in-.doc file')
+    return text
+
+
 def extract_text_from_docx(file_data: bytes) -> str:
     """Extract text from DOCX (document-order blocks + headers/footers + XML fallback)."""
     text_parts: list[str] = []
@@ -1858,7 +1965,13 @@ def extract_document(file_data: bytes, filename: str, *, dpi: int | None = None)
                 if result.status == STATUS_OK and not (result.text or '').strip():
                     result.status = STATUS_OCR_UNAVAILABLE
     elif ext == 'doc':
-        raise ValueError('Legacy .doc format is not supported. Please use DOCX or PDF.')
+        text = extract_text_from_doc(file_data)
+        result = ExtractionResult(
+            text=text,
+            source='doc',
+            quality=classify_text_quality(text),
+            status=STATUS_OK,
+        )
     elif ext == 'docx':
         text = extract_text_from_docx(file_data)
         result = ExtractionResult(

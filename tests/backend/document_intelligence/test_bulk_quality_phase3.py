@@ -630,19 +630,20 @@ def test_p4_location_heal_phone_bleed_and_ambernath():
     assert not is_plausible_location_value('Education')
 
 
-def test_p4_bulk_allowed_ext_rejects_doc():
+def test_p4_bulk_allowed_ext_accepts_doc_and_still_rejects_photos():
+    """Legacy .doc is extractable via antiword; PNG/JPG remain out."""
     from app.workers import bulk_parser as bp
 
-    assert 'doc' not in bp.ALLOWED_EXT
+    assert 'doc' in bp.ALLOWED_EXT
     assert 'pdf' in bp.ALLOWED_EXT and 'docx' in bp.ALLOWED_EXT
     assert 'png' not in bp.ALLOWED_EXT
     assert 'jpg' not in bp.ALLOWED_EXT
     assert 'jpeg' not in bp.ALLOWED_EXT
     assert 'webp' in bp.ALLOWED_EXT and 'tiff' in bp.ALLOWED_EXT
-    # Staging gate mirrors ALLOWED_EXT (legacy .doc and PNG/JPG never queued)
+    # Staging gate mirrors ALLOWED_EXT (PNG/JPG never queued)
     assert all(
         ext in bp.ALLOWED_EXT
-        for ext in ('pdf', 'docx', 'webp', 'tif', 'tiff')
+        for ext in ('pdf', 'docx', 'doc', 'webp', 'tif', 'tiff')
     )
 
 

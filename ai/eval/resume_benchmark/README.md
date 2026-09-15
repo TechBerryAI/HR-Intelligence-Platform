@@ -158,11 +158,26 @@ be split. These surface in `manifest.json` and in a section of every report.
 Fix those cells before chasing the corresponding parser "failures": each one
 caps the score the parser can possibly reach.
 
-## Known corpus gaps
+## System packages
 
-| File | Gap |
-|---|---|
-| `Vishal Goel Mongodb.doc` | Legacy binary `.doc` — `text_extraction.py` rejects the format outright, and no converter (`antiword`, `catdoc`, LibreOffice) is installed. Not an OCR problem: the file is a Word document, not an image. Fixing it means either a converter in the backend image or asking for a `.docx`/PDF. |
+Two corpus formats need more than Python packages. Install both before
+recording a baseline, or the affected resumes score zero:
+
+| Need | Package | Install | Covers |
+|---|---|---|---|
+| OCR | RapidOCR (pip, already in `apps/backend/requirements.txt`) | comes with the backend venv | 3 scanned / mixed-scan PDFs |
+| Legacy Word | `antiword` (system) | `sudo apt-get install -y antiword` | 1 `.doc` resume |
+
+Check what the current interpreter can see:
+
+```bash
+PYTHONPATH=apps/backend python -c "from app.ai.parser.text_extraction import antiword_available, get_ocr_engine_status; print('antiword:', antiword_available()); print('ocr:', get_ocr_engine_status())"
+```
+
+The runner hard-stops on missing OCR. A missing `antiword` is softer — only
+`.doc` files fail, and they fail with a clear per-case error rather than
+silently — so it shows up as a parse failure in the report and in
+`max_cases_failed`.
 
 ## Tests
 

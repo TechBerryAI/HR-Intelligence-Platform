@@ -39,8 +39,9 @@ _export_rebuild_inflight: set[str] = set()
 
 # Image resumes (PNG/JPG) are rejected — OCR quality is too unreliable for bulk Excel export.
 # WEBP/TIFF kept for rare scanned archives; PDF/DOCX are preferred.
-ALLOWED_EXT = {'pdf', 'docx', 'webp', 'tif', 'tiff'}
-# Legacy .doc is not extractable by current text_extraction — reject before staging.
+ALLOWED_EXT = {'pdf', 'docx', 'doc', 'webp', 'tif', 'tiff'}
+# Legacy .doc needs the antiword binary; text_extraction raises a clear error
+# when it is missing, and that file is reported as a per-file failure.
 
 # Decompression-bomb guards for extract_zip_to_job: a small malicious ZIP can
 # otherwise claim to decompress to gigabytes of data. Checked against the

@@ -86,7 +86,9 @@ def _jd_client(body: dict, status: int):
 parsing_bp = Blueprint('parsing', __name__)
 
 # Image resumes (PNG/JPG) are rejected — OCR quality is too unreliable for apply/autofill.
-ALLOWED_EXTENSIONS = {'pdf', 'docx', 'webp'}
+# Legacy .doc is accepted only when the antiword binary is installed; see
+# `_reject_unsupported_doc`.
+ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'webp'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 _PUBLIC_PARSE_LIMIT = int(os.getenv('PUBLIC_PARSE_RATE_LIMIT', '10'))
@@ -96,8 +98,13 @@ _VALIDATION_TOKEN = os.getenv('DOCUMENT_INTELLIGENCE_VALIDATION_TOKEN', '')
 MIME_TYPE_MAP = {
     'pdf': 'application/pdf',
     'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'doc': 'application/msword',
     'webp': 'image/webp',
 }
+
+# A .docx or RTF saved with a .doc extension is common; the extractor sniffs the
+# real container, so these pairs must not trip the extension/content check.
+_INTERCHANGEABLE_KINDS = ({'doc', 'docx'},)
 
 
 def allowed_file(filename):
@@ -115,14 +122,24 @@ def _parse_source_filename(uploaded: str | None) -> str:
     return (uploaded or '').replace('\\', '/').split('/')[-1].strip()
 
 
-def _reject_legacy_doc(filename):
+def _reject_unsupported_doc(filename):
+    """Reject legacy .doc only when no converter is installed to read it."""
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-    if ext == 'doc':
-        return jsonify({
-            'status': 'error',
-            'error': 'Legacy .doc format is not supported. Please use DOCX or PDF.',
-        }), 400
-    return None
+    if ext != 'doc':
+        return None
+    from app.ai.parser.text_extraction import antiword_available
+
+    if antiword_available():
+        return None
+    return jsonify({
+        'status': 'error',
+        'error': 'Legacy .doc files cannot be read on this server. '
+                 'Please upload the resume as DOCX or PDF.',
+    }), 400
+
+
+# Back-compat alias for callers/tests written against the old name.
+_reject_legacy_doc = _reject_unsupported_doc
 
 
 def _reject_bad_content(file_data: bytes, filename: str):
@@ -131,10 +148,11 @@ def _reject_bad_content(file_data: bytes, filename: str):
     if kind is None:
         return jsonify({
             'status': 'error',
-            'error': 'Unrecognized file content. Allowed: PDF, DOCX, WebP.',
+            'error': 'Unrecognized file content. Allowed: PDF, DOCX, DOC, WebP.',
         }), 400
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-    if ext in ALLOWED_EXTENSIONS and ext != kind:
+    interchangeable = any({ext, kind} <= pair for pair in _INTERCHANGEABLE_KINDS)
+    if ext in ALLOWED_EXTENSIONS and ext != kind and not interchangeable:
         return jsonify({
             'status': 'error',
             'error': f'File content does not match extension .{ext}',
@@ -143,13 +161,18 @@ def _reject_bad_content(file_data: bytes, filename: str):
 
 
 def sniff_upload_kind(data: bytes) -> str | None:
-    """Return 'pdf' | 'docx' | 'webp' from magic bytes, or None if unrecognized."""
+    """Return 'pdf' | 'docx' | 'doc' | 'webp' from magic bytes, or None."""
     if not data:
         return None
     if data[:4] == b'%PDF':
         return 'pdf'
     if data[:4] == b'PK\x03\x04':
         return 'docx'
+    # OLE2 compound file — Word 97-2003 .doc
+    if data[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1':
+        return 'doc'
+    if data.lstrip()[:4] == b'{\\rt':
+        return 'doc'
     if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
         return 'webp'
     return None
@@ -416,7 +439,7 @@ def parse_resume_public():
         if file.filename == '':
             return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
-        doc_reject = _reject_legacy_doc(file.filename)
+        doc_reject = _reject_unsupported_doc(file.filename)
         if doc_reject:
             return doc_reject
 
@@ -465,7 +488,7 @@ def parse_resume_upload():
         if file.filename == '':
             return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
-        doc_reject = _reject_legacy_doc(file.filename)
+        doc_reject = _reject_unsupported_doc(file.filename)
         if doc_reject:
             return doc_reject
 
@@ -523,7 +546,7 @@ def parse_jd_upload():
         if file.filename == '':
             return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
-        doc_reject = _reject_legacy_doc(file.filename)
+        doc_reject = _reject_unsupported_doc(file.filename)
         if doc_reject:
             return doc_reject
 
@@ -605,7 +628,7 @@ def parse_resume_public_stream():
     if not file.filename:
         return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
-    doc_reject = _reject_legacy_doc(file.filename)
+    doc_reject = _reject_unsupported_doc(file.filename)
     if doc_reject:
         return doc_reject
 
@@ -653,7 +676,7 @@ def parse_resume_stream():
     if not file.filename:
         return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
-    doc_reject = _reject_legacy_doc(file.filename)
+    doc_reject = _reject_unsupported_doc(file.filename)
     if doc_reject:
         return doc_reject
 
@@ -706,7 +729,7 @@ def parse_jd_stream():
     if not file.filename:
         return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
-    doc_reject = _reject_legacy_doc(file.filename)
+    doc_reject = _reject_unsupported_doc(file.filename)
     if doc_reject:
         return doc_reject
 
