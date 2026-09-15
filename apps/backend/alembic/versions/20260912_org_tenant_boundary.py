@@ -122,16 +122,26 @@ def _assert_fully_backfilled(bind) -> None:
 
 def upgrade() -> None:
     bind = op.get_bind()
+    inspector = sa.inspect(bind)
 
     # 1. oauth_tokens.hrid was queried/written by the app but never existed —
     #    add it now (nullable: legacy rows, if any, cannot be attributed to a
-    #    recruiter after the fact).
-    op.add_column('oauth_tokens', sa.Column('hrid', sa.String(length=20), nullable=True))
-    op.create_foreign_key(
-        'oauth_tokens_hrid_fkey', 'oauth_tokens', 'hr_signup',
-        ['hrid'], ['hrid'], ondelete='CASCADE',
-    )
-    op.create_index('ix_oauth_tokens_hrid', 'oauth_tokens', ['hrid'])
+    #    recruiter after the fact). Guarded because some environments had the
+    #    column added by hand before this migration existed.
+    existing_columns = {c['name'] for c in inspector.get_columns('oauth_tokens')}
+    if 'hrid' not in existing_columns:
+        op.add_column('oauth_tokens', sa.Column('hrid', sa.String(length=20), nullable=True))
+
+    existing_fks = {fk['name'] for fk in inspector.get_foreign_keys('oauth_tokens')}
+    if 'oauth_tokens_hrid_fkey' not in existing_fks:
+        op.create_foreign_key(
+            'oauth_tokens_hrid_fkey', 'oauth_tokens', 'hr_signup',
+            ['hrid'], ['hrid'], ondelete='CASCADE',
+        )
+
+    existing_indexes = {ix['name'] for ix in inspector.get_indexes('oauth_tokens')}
+    if 'ix_oauth_tokens_hrid' not in existing_indexes:
+        op.create_index('ix_oauth_tokens_hrid', 'oauth_tokens', ['hrid'])
 
     # 2. Backfill organization_id from company_key -> organizations.slug.
     for table in _TABLES:
