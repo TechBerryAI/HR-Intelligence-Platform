@@ -205,3 +205,17 @@ def seed_job(org_id: str, posted_by: str, *, title: str = 'Engineer', enabled: b
         (jdid, title, posted_by, org_id, enabled),
     )
     return jdid
+
+
+def seed_candidate_with_application(org_id: str, job_id: str, *, name: str = 'Test Candidate', email: str | None = None) -> str:
+    """Insert a candidate (scoped to ``org_id``) and an application linking it to ``job_id``."""
+    from app.database.connection.db import db_get, db_run
+
+    email = email or unique_email()
+    cand = db_get(
+        'INSERT INTO candidates (name, email, organization_id) VALUES (?, ?, ?) RETURNING cid',
+        (name, email, org_id),
+    )
+    cid = cand['cid']
+    db_run('INSERT INTO applications (candidate_id, job_id) VALUES (?, ?)', (cid, job_id))
+    return cid

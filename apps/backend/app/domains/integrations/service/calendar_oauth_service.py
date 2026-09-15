@@ -56,15 +56,22 @@ def _pop_oauth_state(state: str | None) -> dict | None:
         ctx = shared_store.pop_json(key)
         if ctx:
             return ctx
+    # Atomic delete-and-return (single statement) so two concurrent callback
+    # requests racing on the same state cannot both observe the row before
+    # either deletes it — a SELECT-then-DELETE here would allow a replay
+    # window whenever Redis is down and this DB fallback is in use.
     row = db_get(
         """
-        SELECT payload_json FROM oauth_csrf_state
+        DELETE FROM oauth_csrf_state
         WHERE state = ? AND expires_at > NOW()
+        RETURNING payload_json
         """,
         (state,),
     )
-    db_run('DELETE FROM oauth_csrf_state WHERE state = ?', (state,))
     if not row:
+        # Opportunistic cleanup: reap an expired-but-not-yet-deleted row for
+        # this state so it can't be queried again even by mistake.
+        db_run('DELETE FROM oauth_csrf_state WHERE state = ?', (state,))
         return None
     payload = row.get('payload_json')
     if isinstance(payload, dict):

@@ -196,6 +196,26 @@ def _read_upload_bytes(file) -> bytes:
     return file.read(MAX_FILE_SIZE + 1)
 
 
+def _read_and_validate_upload(file):
+    """Read+cap upload bytes and verify magic-byte content against the
+    declared extension. Returns (file_data, None) or (None, (response, status)).
+
+    Every parse endpoint (public and authenticated, upload and SSE-stream)
+    must apply the same size cap and content sniff — an authenticated
+    endpoint is not a lower-trust boundary than the public one.
+    """
+    file_data = _read_upload_bytes(file)
+    if len(file_data) > MAX_FILE_SIZE:
+        return None, (jsonify({
+            'status': 'error',
+            'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
+        }), 413)
+    bad = _reject_bad_content(file_data, file.filename or '')
+    if bad:
+        return None, bad
+    return file_data, None
+
+
 def _generic_parse_error(exc: Exception, where: str):
     logger.exception('%s', where)
     return jsonify({'status': 'error', 'error': 'Internal server error'}), 500
@@ -455,7 +475,9 @@ def parse_resume_upload():
                 'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
             }), 400
 
-        file_data = file.read()
+        file_data, upload_err = _read_and_validate_upload(file)
+        if upload_err:
+            return upload_err
         filename = _parse_source_filename(file.filename)
 
         uploader_id = get_user_id(current_user)
@@ -511,12 +533,9 @@ def parse_jd_upload():
                 'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
             }), 400
 
-        file_data = file.read()
-        if len(file_data) > MAX_FILE_SIZE:
-            return jsonify({
-                'status': 'error',
-                'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024}MB',
-            }), 400
+        file_data, upload_err = _read_and_validate_upload(file)
+        if upload_err:
+            return upload_err
 
         filename = secure_filename(file.filename)
         uploader_id = get_user_id(current_user)
@@ -644,7 +663,9 @@ def parse_resume_stream():
             'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
         }), 400
 
-    file_data = file.read()
+    file_data, upload_err = _read_and_validate_upload(file)
+    if upload_err:
+        return upload_err
     filename = _parse_source_filename(file.filename)
     uploader_id = get_user_id(current_user)
     jwt_role = get_role(current_user)
@@ -695,7 +716,9 @@ def parse_jd_stream():
             'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
         }), 400
 
-    file_data = file.read()
+    file_data, upload_err = _read_and_validate_upload(file)
+    if upload_err:
+        return upload_err
     filename = secure_filename(file.filename)
     uploader_id = get_user_id(current_user)
     jwt_role = get_role(current_user)

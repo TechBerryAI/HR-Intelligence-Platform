@@ -6,11 +6,23 @@ from flask import Blueprint, request, jsonify
 from app.api.middleware.auth import authenticate_token, require_head_hr
 from app.core.errors import log_unexpected
 from app.database.connection.db import db_run, db_get, db_all, BACKEND, NOW_SQL
+from app.domains.identity.services.organizations import require_organization_id
 from app.integrations.email.utils import send_notification_email
 from app.integrations.email.templates import support_request_html
 
 support_bp = Blueprint('support', __name__)
 SUPPORT_TABLE = "support_requests" if BACKEND == "postgresql" else "dbo.support_requests"
+
+# Tenant boundary: a support request only belongs to an organization when it
+# was raised by an authenticated hr/candidate user of that org (resolved via
+# hr_signup/candidates.organization_id, never a client-supplied value).
+# 'guest' requests (or missing/stale user_id) are not attributable to any
+# tenant and are intentionally excluded from every org's Head HR view — they
+# are still delivered to SUPPORT_NOTIFICATION_EMAIL for manual handling.
+_ORG_SCOPE_CLAUSE = """(
+    (user_type = 'hr' AND user_id IN (SELECT hrid FROM hr_signup WHERE organization_id = ?))
+    OR (user_type = 'candidate' AND user_id IN (SELECT cid FROM candidates WHERE organization_id = ?))
+)"""
 
 # Email where Contact Us and internal feedback notifications are sent (can override via env)
 SUPPORT_NOTIFICATION_EMAIL = os.getenv('SUPPORT_NOTIFICATION_EMAIL', 'techberryaiteam@gmail.com')
@@ -161,27 +173,32 @@ def get_my_requests():
 @support_bp.route('/all', methods=['GET'])
 @require_head_hr
 def get_all_requests():
-    """Get all support requests (Head HR only)."""
+    """Get all support requests for the caller's own organization (Head HR only)."""
     try:
+        org_id, err = require_organization_id(request.user)
+        if err:
+            return err
+
         status = request.args.get('status', '').strip()
-        
+
         if status:
             query = """
-                SELECT id, name, email, user_id, user_type, subject, message, 
+                SELECT id, name, email, user_id, user_type, subject, message,
                        status, priority, created_at, updated_at, resolved_at
                 FROM """ + SUPPORT_TABLE + """
-                WHERE status = ?
+                WHERE status = ? AND """ + _ORG_SCOPE_CLAUSE + """
                 ORDER BY created_at DESC
             """
-            requests = db_all(query, (status,))
+            requests = db_all(query, (status, org_id, org_id))
         else:
             query = """
-                SELECT id, name, email, user_id, user_type, subject, message, 
+                SELECT id, name, email, user_id, user_type, subject, message,
                        status, priority, created_at, updated_at, resolved_at
                 FROM """ + SUPPORT_TABLE + """
+                WHERE """ + _ORG_SCOPE_CLAUSE + """
                 ORDER BY created_at DESC
             """
-            requests = db_all(query)
+            requests = db_all(query, (org_id, org_id))
 
         for req in requests:
             _serialize_request_datetimes(req)
@@ -199,15 +216,19 @@ def get_all_requests():
 @support_bp.route('/<int:request_id>', methods=['GET'])
 @require_head_hr
 def get_request_by_id(request_id):
-    """Get a specific support request by ID (Head HR only)."""
+    """Get a specific support request by ID, scoped to the caller's own organization (Head HR only)."""
     try:
+        org_id, err = require_organization_id(request.user)
+        if err:
+            return err
+
         query = """
-            SELECT id, name, email, user_id, user_type, subject, message, 
+            SELECT id, name, email, user_id, user_type, subject, message,
                    status, priority, created_at, updated_at, resolved_at, admin_notes
             FROM """ + SUPPORT_TABLE + """
-            WHERE id = ?
+            WHERE id = ? AND """ + _ORG_SCOPE_CLAUSE + """
         """
-        support_request = db_get(query, (request_id,))
+        support_request = db_get(query, (request_id, org_id, org_id))
         
         if not support_request:
             return jsonify({"error": "Support request not found"}), 404
@@ -227,24 +248,28 @@ def get_request_by_id(request_id):
 @support_bp.route('/<int:request_id>/status', methods=['PATCH'])
 @require_head_hr
 def update_request_status(request_id):
-    """Update the status of a support request (Head HR only)."""
+    """Update the status of a support request, scoped to the caller's own organization (Head HR only)."""
     try:
+        org_id, err = require_organization_id(request.user)
+        if err:
+            return err
+
         data = request.get_json()
         if not data:
             return jsonify({"error": "No data provided"}), 400
-        
+
         status = data.get('status', '').strip()
         admin_notes = data.get('admin_notes', '').strip()
-        
+
         if not status:
             return jsonify({"error": "Status is required"}), 400
-        
+
         if status not in ['open', 'in_progress', 'resolved', 'closed']:
             return jsonify({"error": "Invalid status"}), 400
-        
-        # Check if request exists
-        check_query = "SELECT id FROM " + SUPPORT_TABLE + " WHERE id = ?"
-        existing = db_get(check_query, (request_id,))
+
+        # Check the request exists AND belongs to the caller's own organization.
+        check_query = "SELECT id FROM " + SUPPORT_TABLE + " WHERE id = ? AND " + _ORG_SCOPE_CLAUSE
+        existing = db_get(check_query, (request_id, org_id, org_id))
         if not existing:
             return jsonify({"error": "Support request not found"}), 404
         

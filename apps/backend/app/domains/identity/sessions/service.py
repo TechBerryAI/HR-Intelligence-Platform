@@ -107,12 +107,22 @@ def revoke_refresh_token(token: str) -> Dict:
     return {"success": True}
 
 
-def deactivate_session(token: str) -> Dict:
-    """Revoke a refresh token (or access token's sibling via body refresh)."""
+def deactivate_session(token: str, expected_user_id: str | None = None) -> Dict:
+    """Revoke a refresh token (or access token's sibling via body refresh).
+
+    ``expected_user_id``, when given, must match the token's own embedded
+    ``user_id`` — used by the authenticated ``/sessions/logout-session``
+    route so a caller cannot revoke another user's sessions by supplying an
+    arbitrary (but validly-signed) token they happen to have obtained; the
+    two self-service (unauthenticated) callers in hr_auth.py omit it because
+    the supplied token *is* the only identity in play there.
+    """
     if not token:
         return {"success": False, "error": "Token is required"}
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False})
+        if expected_user_id is not None and str(payload.get('user_id')) != str(expected_user_id):
+            return {"success": False, "error": "Token does not belong to this account"}
         if payload.get('type') == 'refresh':
             return revoke_refresh_token(token)
         # Access token logout: revoke all sessions for this user.
