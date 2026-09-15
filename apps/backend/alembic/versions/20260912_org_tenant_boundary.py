@@ -120,6 +120,24 @@ def _assert_fully_backfilled(bind) -> None:
         )
 
 
+def _existing_constraint_names(inspector, table: str) -> set[str]:
+    names = {c['name'] for c in inspector.get_unique_constraints(table)}
+    pk = inspector.get_pk_constraint(table).get('name')
+    if pk:
+        names.add(pk)
+    return names
+
+
+def _drop_constraint_if_exists(inspector, table: str, name: str) -> None:
+    if name in _existing_constraint_names(inspector, table):
+        op.drop_constraint(name, table, type_='unique')
+
+
+def _create_unique_constraint_if_missing(inspector, name: str, table: str, columns: list[str]) -> None:
+    if name not in _existing_constraint_names(inspector, table):
+        op.create_unique_constraint(name, table, columns)
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
@@ -156,25 +174,27 @@ def upgrade() -> None:
 
     # 5. Replace company_key-scoped uniqueness with organization_id-scoped
     #    uniqueness (hrid-scoped for oauth_tokens — tokens are per-recruiter).
-    op.drop_constraint(
-        'uq_integration_provider_company_provider', 'integration_provider', type_='unique'
+    _drop_constraint_if_exists(
+        inspector, 'integration_provider', 'uq_integration_provider_company_provider'
     )
-    op.create_unique_constraint(
-        'uq_integration_provider_org_provider', 'integration_provider', ['organization_id', 'provider']
+    _create_unique_constraint_if_missing(
+        inspector,
+        'uq_integration_provider_org_provider', 'integration_provider', ['organization_id', 'provider'],
     )
 
-    op.drop_constraint(
-        'uq_external_applications_provider_app', 'external_applications', type_='unique'
+    _drop_constraint_if_exists(
+        inspector, 'external_applications', 'uq_external_applications_provider_app'
     )
-    op.create_unique_constraint(
+    _create_unique_constraint_if_missing(
+        inspector,
         'uq_external_applications_org_provider_app',
         'external_applications',
         ['organization_id', 'provider', 'external_application_id'],
     )
 
-    op.drop_constraint('uq_oauth_tokens_company_provider', 'oauth_tokens', type_='unique')
-    op.create_unique_constraint(
-        'uq_oauth_tokens_hrid_provider', 'oauth_tokens', ['hrid', 'provider']
+    _drop_constraint_if_exists(inspector, 'oauth_tokens', 'uq_oauth_tokens_company_provider')
+    _create_unique_constraint_if_missing(
+        inspector, 'uq_oauth_tokens_hrid_provider', 'oauth_tokens', ['hrid', 'provider']
     )
 
 
