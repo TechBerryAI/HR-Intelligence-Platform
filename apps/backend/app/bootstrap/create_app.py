@@ -81,9 +81,8 @@ def create_app() -> Flask:
 
     app = Flask(__name__)
     app.request_class = _AppRequest
-    # Bulk resume uploads: raise body size (Flask wires this via Request.max_content_length).
-    # Form part/memory limits are on _AppRequest (see class docstring).
-    app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', str(512 * 1024 * 1024)))
+    # Default body size (raise on bulk-upload blueprint only).
+    app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', str(32 * 1024 * 1024)))
     from app.core.auth import JWT_SECRET
     app.config['JWT_SECRET'] = JWT_SECRET
     app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
@@ -167,6 +166,14 @@ def create_app() -> Flask:
         response.headers.setdefault(
             'Permissions-Policy',
             'camera=(), microphone=(), geolocation=(), payment=()',
+        )
+        response.headers.setdefault(
+            'Content-Security-Policy',
+            "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+        )
+        response.headers.setdefault(
+            'Strict-Transport-Security',
+            'max-age=31536000; includeSubDomains',
         )
         return response
 
@@ -252,10 +259,20 @@ def create_app() -> Flask:
             pass
 
     print("[DB] Initializing database at startup...")
-    _db_host = os.getenv('POSTGRES_HOST', os.getenv('PGHOST', 'localhost'))
-    _db_port = os.getenv('POSTGRES_PORT', os.getenv('PGPORT', '5432'))
-    _db_name = os.getenv('POSTGRES_DB', os.getenv('PGDATABASE', 'postgres'))
-    print(f"[DB] Target: {_db_host}:{_db_port}/{_db_name}")
+    from urllib.parse import urlparse
+
+    _db_url = (os.getenv('DATABASE_URL') or '').strip()
+    if _db_url:
+        _parsed = urlparse(_db_url)
+        _db_host = _parsed.hostname or 'localhost'
+        _db_port = str(_parsed.port or 5432)
+        _db_name = (_parsed.path or '/').lstrip('/') or 'postgres'
+        print(f"[DB] Target: {_db_host}:{_db_port}/{_db_name}")
+    else:
+        _db_host = os.getenv('POSTGRES_HOST', os.getenv('PGHOST', 'localhost'))
+        _db_port = os.getenv('POSTGRES_PORT', os.getenv('PGPORT', '5432'))
+        _db_name = os.getenv('POSTGRES_DB', os.getenv('PGDATABASE', 'postgres'))
+        print(f"[DB] Target: {_db_host}:{_db_port}/{_db_name}")
     try:
         from app.database.alembic_runner import prepare_schema_for_web_process
 
@@ -417,6 +434,10 @@ def create_app() -> Flask:
     app.register_blueprint(media_bp, url_prefix='/api/media')
     app.register_blueprint(feedback_bp, url_prefix='/api/feedback')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    # Bulk resume uploads need a higher body limit than the global default.
+    admin_bp.max_content_length = int(
+        os.getenv('BULK_MAX_CONTENT_LENGTH', str(512 * 1024 * 1024))
+    )
     app.register_blueprint(developer_bp, url_prefix='/api/admin/developer')
     app.register_blueprint(head_hr_bp, url_prefix='/api/head-hr')
     app.register_blueprint(integrations_bp, url_prefix='/api/integrations')

@@ -69,15 +69,23 @@ def is_refresh_token_active(token: str) -> bool:
         """,
         (jti, _token_fingerprint(token)),
     )
-    if row:
-        return True
-    # Backward-compatible: accept first-use tokens issued before table existed,
-    # then register them so logout can revoke thereafter.
-    existing = db_get("SELECT jti FROM auth_refresh_tokens WHERE jti = ?", (jti,))
-    if existing:
-        return False
-    register_refresh_token(token, str(payload.get('user_id') or ''))
-    return True
+    return bool(row)
+
+
+def prune_expired_refresh_tokens(retention_days: int = 30) -> int:
+    """Delete refresh-token rows expired more than ``retention_days`` ago."""
+    row = db_get(
+        """
+        WITH deleted AS (
+            DELETE FROM auth_refresh_tokens
+            WHERE expires_at < NOW() - (? * INTERVAL '1 day')
+            RETURNING 1
+        )
+        SELECT COUNT(*) AS cnt FROM deleted
+        """,
+        (retention_days,),
+    )
+    return int(row['cnt']) if row else 0
 
 
 def revoke_refresh_token(token: str) -> Dict:
@@ -99,12 +107,22 @@ def revoke_refresh_token(token: str) -> Dict:
     return {"success": True}
 
 
-def deactivate_session(token: str) -> Dict:
-    """Revoke a refresh token (or access token's sibling via body refresh)."""
+def deactivate_session(token: str, expected_user_id: str | None = None) -> Dict:
+    """Revoke a refresh token (or access token's sibling via body refresh).
+
+    ``expected_user_id``, when given, must match the token's own embedded
+    ``user_id`` — used by the authenticated ``/sessions/logout-session``
+    route so a caller cannot revoke another user's sessions by supplying an
+    arbitrary (but validly-signed) token they happen to have obtained; the
+    two self-service (unauthenticated) callers in hr_auth.py omit it because
+    the supplied token *is* the only identity in play there.
+    """
     if not token:
         return {"success": False, "error": "Token is required"}
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False})
+        if expected_user_id is not None and str(payload.get('user_id')) != str(expected_user_id):
+            return {"success": False, "error": "Token does not belong to this account"}
         if payload.get('type') == 'refresh':
             return revoke_refresh_token(token)
         # Access token logout: revoke all sessions for this user.
@@ -196,8 +214,16 @@ def rotate_refresh_token(old_token: str, new_token: str, user_id: str) -> Dict:
         return {"success": False, "error": "rotation failed"}
 
 
-def is_login_rate_limited(email: str, user_type: str = 'HR') -> bool:
-    return get_recent_failed_attempts(email, user_type, LOGIN_LOCKOUT_MINUTES) >= MAX_FAILED_LOGIN_ATTEMPTS
+def is_login_rate_limited(
+    email: str,
+    user_type: str = 'HR',
+    *,
+    ip_address: Optional[str] = None,
+) -> bool:
+    return (
+        get_recent_failed_attempts(email, user_type, LOGIN_LOCKOUT_MINUTES, ip_address=ip_address)
+        >= MAX_FAILED_LOGIN_ATTEMPTS
+    )
 
 
 def hash_otp(otp: str) -> str:
@@ -275,16 +301,49 @@ def get_login_history(email: str, user_type: str, limit: int = 50) -> List[Dict]
     )
 
 
-def get_recent_failed_attempts(email: str, user_type: str, minutes: int = 15) -> int:
+def get_recent_failed_attempts(
+    email: str,
+    user_type: str,
+    minutes: int = 15,
+    *,
+    ip_address: Optional[str] = None,
+) -> int:
+    if ip_address:
+        row = db_get(
+            """
+            SELECT COUNT(*) AS cnt FROM login_history
+            WHERE email = ? AND user_type = ? AND status = 'failed'
+              AND ip_address = ?
+              AND attempted_at > NOW() - (? * INTERVAL '1 minute')
+            """,
+            (email, audit_user_type(user_type), ip_address, minutes),
+        )
+    else:
+        row = db_get(
+            """
+            SELECT COUNT(*) AS cnt FROM login_history
+            WHERE email = ? AND user_type = ? AND status = 'failed'
+              AND attempted_at > NOW() - (? * INTERVAL '1 minute')
+            """,
+            (email, audit_user_type(user_type), minutes),
+        )
+    return int(row["cnt"]) if row else 0
+
+
+def prune_login_history(retention_days: int = 90) -> int:
+    """Delete login_history rows older than ``retention_days``."""
     row = db_get(
         """
-        SELECT COUNT(*) AS cnt FROM login_history
-        WHERE email = ? AND user_type = ? AND status = 'failed'
-          AND attempted_at > NOW() - (? * INTERVAL '1 minute')
+        WITH deleted AS (
+            DELETE FROM login_history
+            WHERE attempted_at < NOW() - (? * INTERVAL '1 day')
+            RETURNING 1
+        )
+        SELECT COUNT(*) AS cnt FROM deleted
         """,
-        (email, audit_user_type(user_type), minutes),
+        (retention_days,),
     )
-    return int(row["cnt"]) if row else 0
+    return int(row['cnt']) if row else 0
 
 
 def has_previous_login_from_same_device(

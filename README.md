@@ -60,7 +60,7 @@ _Add screenshots here (e.g. Home, Jobs list, HR Dashboard, Applicant profile, Bu
 |-------------|---------|--------|
 | Node.js | 16+ | `node --version` |
 | Python | 3.8+ | `python --version` |
-| PostgreSQL | **17+** | Local Docker or cloud (baseline requires PG17+) |
+| PostgreSQL | **15+** | Local Docker or cloud (baseline requires PG15+) |
 
 ### Quick Start (recommended)
 

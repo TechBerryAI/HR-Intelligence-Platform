@@ -23,7 +23,9 @@ from app.ai.parser.engine import get_parse_job, run_jd_parse_pipeline, run_resum
 from app.ai.parser.engine.confidence import calculate_confidence
 from app.ai.toon.runtime import toon_loads_flex
 from app.core import shared_store
+from app.database.connection.db import db_get
 from app.domains.identity.authorization.rbac import STAFF_ROLES, get_role, get_user_id
+from app.domains.identity.services.organizations import require_organization_id
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,29 @@ _SSE_HEADERS = {
     'Cache-Control': 'no-cache, no-transform',
     'X-Accel-Buffering': 'no',
 }
+
+
+def _owned_candidate_id_or_error(user, candidate_id):
+    """
+    Verify a client-supplied candidate_id belongs to the caller's organization
+    before it is allowed to touch parsed_resumes for that candidate.
+    Returns (candidate_id, None) on success, or (None, (jsonify_response, status)).
+    """
+    if not candidate_id:
+        return None, None
+    org_id, err = require_organization_id(user)
+    if err:
+        return None, err
+    row = db_get(
+        'SELECT 1 FROM candidates WHERE cid = ? AND organization_id = ?',
+        (candidate_id, org_id),
+    )
+    if not row:
+        return None, (jsonify({
+            'status': 'error',
+            'error': 'candidate_id does not belong to your organization',
+        }), 403)
+    return candidate_id, None
 
 
 def _safe_error_body(body: dict, status: int) -> dict:
@@ -61,7 +86,7 @@ def _jd_client(body: dict, status: int):
 parsing_bp = Blueprint('parsing', __name__)
 
 # Image resumes (PNG/JPG) are rejected — OCR quality is too unreliable for apply/autofill.
-ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'webp'}
+ALLOWED_EXTENSIONS = {'pdf', 'docx', 'webp'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 _PUBLIC_PARSE_LIMIT = int(os.getenv('PUBLIC_PARSE_RATE_LIMIT', '10'))
@@ -71,7 +96,7 @@ _VALIDATION_TOKEN = os.getenv('DOCUMENT_INTELLIGENCE_VALIDATION_TOKEN', '')
 MIME_TYPE_MAP = {
     'pdf': 'application/pdf',
     'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'doc': 'application/msword',
+    'webp': 'image/webp',
 }
 
 
@@ -85,7 +110,7 @@ def _parse_source_filename(uploaded: str | None) -> str:
     Do not run ``secure_filename`` on this value. Werkzeug strips ``[Ny_Nm]``
     tenure markers and turns `` - Copy`` into ``_-_Copy``, which changes
     filename-derived names versus the in-process parser. Storage writes
-    ``{uploader}_{uuid}{ext}`` and does not use this string as a path.
+    use a separate sanitized name via ``save_file_to_storage``.
     """
     return (uploaded or '').replace('\\', '/').split('/')[-1].strip()
 
@@ -100,8 +125,42 @@ def _reject_legacy_doc(filename):
     return None
 
 
-def get_mime_type(filename):
-    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+def _reject_bad_content(file_data: bytes, filename: str):
+    """Reject uploads whose magic bytes do not match an allowed type."""
+    kind = sniff_upload_kind(file_data)
+    if kind is None:
+        return jsonify({
+            'status': 'error',
+            'error': 'Unrecognized file content. Allowed: PDF, DOCX, WebP.',
+        }), 400
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    if ext in ALLOWED_EXTENSIONS and ext != kind:
+        return jsonify({
+            'status': 'error',
+            'error': f'File content does not match extension .{ext}',
+        }), 400
+    return None
+
+
+def sniff_upload_kind(data: bytes) -> str | None:
+    """Return 'pdf' | 'docx' | 'webp' from magic bytes, or None if unrecognized."""
+    if not data:
+        return None
+    if data[:4] == b'%PDF':
+        return 'pdf'
+    if data[:4] == b'PK\x03\x04':
+        return 'docx'
+    if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        return 'webp'
+    return None
+
+
+def get_mime_type(filename: str | None = None, *, data: bytes | None = None) -> str:
+    if data is not None:
+        kind = sniff_upload_kind(data)
+        if kind:
+            return MIME_TYPE_MAP.get(kind, 'application/octet-stream')
+    ext = filename.rsplit('.', 1)[1].lower() if filename and '.' in filename else ''
     return MIME_TYPE_MAP.get(ext, 'application/octet-stream')
 
 
@@ -135,6 +194,26 @@ def _read_upload_bytes(file) -> bytes:
     omitted or spoofed low.
     """
     return file.read(MAX_FILE_SIZE + 1)
+
+
+def _read_and_validate_upload(file):
+    """Read+cap upload bytes and verify magic-byte content against the
+    declared extension. Returns (file_data, None) or (None, (response, status)).
+
+    Every parse endpoint (public and authenticated, upload and SSE-stream)
+    must apply the same size cap and content sniff — an authenticated
+    endpoint is not a lower-trust boundary than the public one.
+    """
+    file_data = _read_upload_bytes(file)
+    if len(file_data) > MAX_FILE_SIZE:
+        return None, (jsonify({
+            'status': 'error',
+            'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
+        }), 413)
+    bad = _reject_bad_content(file_data, file.filename or '')
+    if bad:
+        return None, bad
+    return file_data, None
 
 
 def _generic_parse_error(exc: Exception, where: str):
@@ -353,6 +432,9 @@ def parse_resume_public():
                 'status': 'error',
                 'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
             }), 413
+        bad = _reject_bad_content(file_data, file.filename or '')
+        if bad:
+            return bad
         filename = _parse_source_filename(file.filename)
         public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
 
@@ -393,7 +475,9 @@ def parse_resume_upload():
                 'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
             }), 400
 
-        file_data = file.read()
+        file_data, upload_err = _read_and_validate_upload(file)
+        if upload_err:
+            return upload_err
         filename = _parse_source_filename(file.filename)
 
         uploader_id = get_user_id(current_user)
@@ -405,7 +489,12 @@ def parse_resume_upload():
             }), 401
 
         uploader_role = 'recruiter' if jwt_role in STAFF_ROLES else 'recruiter'
-        candidate_id = request.form.get('candidate_id') or None
+        candidate_id, cand_err = _owned_candidate_id_or_error(
+            current_user, request.form.get('candidate_id') or None
+        )
+        if cand_err:
+            resp, code = cand_err
+            return resp, code
 
         body, status = run_resume_parse_pipeline(
             file_data,
@@ -421,7 +510,6 @@ def parse_resume_upload():
 
 
 @parsing_bp.route('/parse/jd', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def parse_jd_upload():
     """Upload and parse job description. POST /api/parse/jd"""
@@ -445,12 +533,9 @@ def parse_jd_upload():
                 'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
             }), 400
 
-        file_data = file.read()
-        if len(file_data) > MAX_FILE_SIZE:
-            return jsonify({
-                'status': 'error',
-                'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024}MB',
-            }), 400
+        file_data, upload_err = _read_and_validate_upload(file)
+        if upload_err:
+            return upload_err
 
         filename = secure_filename(file.filename)
         uploader_id = get_user_id(current_user)
@@ -536,6 +621,9 @@ def parse_resume_public_stream():
             'status': 'error',
             'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
         }), 413
+    bad = _reject_bad_content(file_data, file.filename or '')
+    if bad:
+        return bad
     filename = _parse_source_filename(file.filename)
     public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
 
@@ -575,7 +663,9 @@ def parse_resume_stream():
             'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
         }), 400
 
-    file_data = file.read()
+    file_data, upload_err = _read_and_validate_upload(file)
+    if upload_err:
+        return upload_err
     filename = _parse_source_filename(file.filename)
     uploader_id = get_user_id(current_user)
     jwt_role = get_role(current_user)
@@ -583,7 +673,12 @@ def parse_resume_stream():
         return jsonify({'status': 'error', 'error': 'User ID not found in authentication token'}), 401
 
     uploader_role = 'recruiter' if jwt_role in STAFF_ROLES else 'recruiter'
-    candidate_id = request.form.get('candidate_id') or None
+    candidate_id, cand_err = _owned_candidate_id_or_error(
+        current_user, request.form.get('candidate_id') or None
+    )
+    if cand_err:
+        resp, code = cand_err
+        return resp, code
 
     def _run(on_stage):
         return run_resume_parse_pipeline(
@@ -600,7 +695,6 @@ def parse_resume_stream():
 
 
 @parsing_bp.route('/parse/jd/stream', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def parse_jd_stream():
     """SSE stream of stage events for JD parse."""
@@ -622,7 +716,9 @@ def parse_jd_stream():
             'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
         }), 400
 
-    file_data = file.read()
+    file_data, upload_err = _read_and_validate_upload(file)
+    if upload_err:
+        return upload_err
     filename = secure_filename(file.filename)
     uploader_id = get_user_id(current_user)
     jwt_role = get_role(current_user)

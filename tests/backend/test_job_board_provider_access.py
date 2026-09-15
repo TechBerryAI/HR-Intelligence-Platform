@@ -12,6 +12,7 @@ def _job(**kwargs):
         job_id='JD-STABLE-1',
         title='Engineer',
         company='Acme',
+        organization_id='11111111-1111-1111-1111-111111111111',
         company_key='acme',
         location='Bengaluru, India',
         description='Build things.',
@@ -27,6 +28,7 @@ def _cfg(**kwargs):
     settings = dict(kwargs.pop('settings', None) or {})
     return ProviderConfig(
         id=1,
+        organization_id='11111111-1111-1111-1111-111111111111',
         company_key='acme',
         company='Acme',
         provider=kwargs.get('provider', 'linkedin'),

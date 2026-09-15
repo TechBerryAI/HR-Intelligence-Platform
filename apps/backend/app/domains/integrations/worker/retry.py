@@ -19,9 +19,9 @@ def backoff_seconds(retry_count: int) -> float:
     return base * (2 ** max(0, retry_count))
 
 
-def mark_dead(company_key: str, job_id: str, provider: str, error: str | None, retry_count: int) -> None:
+def mark_dead(organization_id: str, job_id: str, provider: str, error: str | None, retry_count: int) -> None:
     repo.upsert_external_job(
-        company_key,
+        organization_id,
         job_id,
         provider,
         sync_status='dead',

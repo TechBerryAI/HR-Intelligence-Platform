@@ -41,6 +41,14 @@ _export_rebuild_inflight: set[str] = set()
 # WEBP/TIFF kept for rare scanned archives; PDF/DOCX are preferred.
 ALLOWED_EXT = {'pdf', 'docx', 'webp', 'tif', 'tiff'}
 # Legacy .doc is not extractable by current text_extraction — reject before staging.
+
+# Decompression-bomb guards for extract_zip_to_job: a small malicious ZIP can
+# otherwise claim to decompress to gigabytes of data. Checked against the
+# ZIP's own (untrusted) central-directory file_size *before* zf.read()
+# decompresses that entry, so an oversized entry is never actually inflated.
+_ZIP_MAX_ENTRIES = 500
+_ZIP_MAX_ENTRY_BYTES = 25 * 1024 * 1024  # 25MB per extracted file
+_ZIP_MAX_TOTAL_BYTES = 300 * 1024 * 1024  # 300MB decompressed per archive
 EXCEL_HEADERS = [
     'Filename',
     'Name',
@@ -224,6 +232,20 @@ def _results_sidecar_path(job_id: str) -> Path:
 
 def _staging_dir(job_id: str) -> Path:
     return _BULK_UPLOAD_DIR / job_id
+
+
+# Every job_id this module ever creates is a fresh uuid4 (create_local_job,
+# create_empty_session). job_id also arrives here straight from client input
+# (the `job_id` multipart form field in POST /bulk-parse/upload has no route
+# converter restricting it, unlike the `<job_id>` URL segment) — reject
+# anything that isn't that shape before it is ever joined into a filesystem
+# path, so a value like `../../../etc` cannot make _staging_dir()/_ensure_job()
+# create directories or write files outside _BULK_UPLOAD_DIR.
+_JOB_ID_RE = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+
+
+def _is_valid_job_id(job_id: str | None) -> bool:
+    return bool(job_id) and bool(_JOB_ID_RE.match(job_id))
 
 
 def _excel_safe_cell(value: Any) -> Any:
@@ -2370,6 +2392,8 @@ def _ensure_job(job_id: str, started_by=None, append: bool = False) -> dict | No
             if append:
                 job['append'] = True
             return job
+    if not _is_valid_job_id(job_id):
+        return None
     # Recreate from DB owner if needed
     from app.domains.administration.repositories.bulk_session_db import get_session_owner
 
@@ -2477,6 +2501,8 @@ def extract_zip_to_job(job_id: str, zip_bytes: bytes, started_by=None) -> tuple[
         return False, {'error': f'Cannot upload to job in status {status}'}
 
     extracted: list[tuple[str, bytes]] = []
+    total_uncompressed = 0
+    entry_count = 0
     try:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             for info in zf.infolist():
@@ -2493,6 +2519,19 @@ def extract_zip_to_job(job_id: str, zip_bytes: bytes, started_by=None) -> tuple[
                 ext = base.rsplit('.', 1)[-1].lower()
                 if ext not in ALLOWED_EXT:
                     continue
+                entry_count += 1
+                if entry_count > _ZIP_MAX_ENTRIES:
+                    return False, {'error': f'ZIP contains too many files (max {_ZIP_MAX_ENTRIES}).'}
+                # Reject on the archive's own declared size *before*
+                # decompressing — never inflate an oversized entry into memory.
+                if info.file_size > _ZIP_MAX_ENTRY_BYTES:
+                    continue
+                total_uncompressed += info.file_size
+                if total_uncompressed > _ZIP_MAX_TOTAL_BYTES:
+                    return False, {
+                        'error': f'ZIP archive too large when decompressed '
+                                 f'(max {_ZIP_MAX_TOTAL_BYTES // (1024 * 1024)}MB total).'
+                    }
                 try:
                     data = zf.read(info)
                 except Exception:

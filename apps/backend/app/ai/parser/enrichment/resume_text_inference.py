@@ -272,6 +272,8 @@ _TECH_SINGLE_TOKEN = frozenset({
     'powerpoint', 'excel', 'outlook', 'word', 'sharepoint', 'tableau', 'powerbi',
     'agile', 'multi-threading', 'data structure',
     'terraform', 'ansible', 'helm', 'jenkins', 'tomcat', 'weblogic', 'scripting',
+    # Multi-word product names that look person-like under TitleCase heuristics
+    'visual studio code', 'google analytics', 'facebook ads manager', 'golden gate',
 })
 _SKILL_CRUMB_TOKENS = frozenset({
     'set', 'tools', 'technologies', 'technology', 'skills', 'skill', 'expertise',
@@ -676,6 +678,7 @@ def is_plausible_skill_item(item: str | None) -> bool:
     if not s or len(s) < 2 or len(s) > 80:
         return False
     s = s.lstrip(':').strip()
+    s = re.sub(r'(?i)\bc\s+#', 'C#', s)
     if not s or len(s) < 2:
         return False
     # Tiny OCR crumbs like "ET" unless known short tech token
@@ -812,10 +815,18 @@ def is_plausible_skill_item(item: str | None) -> bool:
         s,
     ) and len(s.split()) <= 5:
         return False
-    if is_plausible_person_name(s) and s.lower() not in _TECH_SINGLE_TOKEN and not re.search(
-        r'(?i)(?:python|java|sql|aws|azure|react|\.net|linux|oracle|tensor|flow|'
-        r'docker|kubernetes|spring|hibernate|mongodb|postgres|redis|kafka)',
-        s,
+    # Multi-token person names ("John Smith") — not single-token TitleCase products
+    # (Putty, Canva, Figma, Selenium) which is_plausible_person_name also accepts.
+    if (
+        len(s.split()) >= 2
+        and is_plausible_person_name(s)
+        and s.lower() not in _TECH_SINGLE_TOKEN
+        and not re.search(
+            r'(?i)(?:python|java|sql|aws|azure|react|\.net|linux|oracle|tensor|flow|'
+            r'docker|kubernetes|spring|hibernate|mongodb|postgres|redis|kafka|'
+            r'studio|analytics|selenium|figma|canva)',
+            s,
+        )
     ):
         return False
     if re.match(r'(?i)^(?:&|and)\s+(?:platforms?|tools?|abilities|technologies?)\b', s):
@@ -2345,11 +2356,13 @@ def is_non_job_experience_record(row: Any) -> bool:
         company = str(row.get('company') or '').strip()
         start = str(row.get('start') or row.get('from') or '').strip()
         end = str(row.get('end') or row.get('to') or '').strip()
+        is_current = bool(row.get('is_current') or row.get('isCurrent'))
     else:
         role = (getattr(row, 'role', '') or '').strip()
         company = (getattr(row, 'company', '') or '').strip()
         start = (getattr(row, 'start', '') or '').strip()
         end = (getattr(row, 'end', '') or '').strip()
+        is_current = bool(getattr(row, 'is_current', False))
 
     company_meta = is_project_or_employment_meta_label(company)
     role_meta = is_project_or_employment_meta_label(role)
@@ -2444,9 +2457,17 @@ def is_non_job_experience_record(row: Any) -> bool:
             company,
         ) or re.match(r'(?i)^indian\s+industry\)?', company):
             return True
-        if len(company.split()) <= 3 and not re.search(
-            r'(?i)\b(?:pvt|ltd|inc|llc|corp|technologies|solutions|systems|labs?|university|college)\b',
-            company,
+        # Dated / current rows are jobs even without Ltd/Pvt (Infosenseglobal, Contoso).
+        if (
+            not start
+            and not end
+            and not is_current
+            and len(company.split()) <= 3
+            and not re.search(
+                r'(?i)\b(?:pvt|ltd|inc|llc|corp|technologies|solutions|systems|'
+                r'labs?|university|college|infotech|interactive)\b',
+                company,
+            )
         ):
             return True
     if is_biodata_or_address_line(role) or is_biodata_or_address_line(company):
@@ -2786,7 +2807,10 @@ def extract_skills_from_text(
     for match in SKILL_SECTION_PATTERN.finditer(text):
         block = match.group(1) or ''
         skills.extend(split_list_items(block))
-    skills = [s for s in skills if is_plausible_skill_item(s)]
+    # Category peel + C# normalize happen inside filter_skill_items — do not
+    # pre-drop labeled rows like "CORE LANG : C #" via is_plausible_skill_item.
+    if skills:
+        skills = filter_skill_items(skills, max_items=max_items)
 
     if not skills:
         in_section = False
@@ -2821,8 +2845,8 @@ def extract_skills_from_text(
                 item = re.sub(r'^\d+[\.\)]\s*', '', item).strip()
                 if is_labeled_contact_metadata(item):
                     continue
-                if item and is_plausible_skill_item(item):
-                    skills.append(item)
+                if item:
+                    skills.extend(filter_skill_items([item], max_items=max_items))
                 if len(skills) >= max_items:
                     break
 
@@ -3974,7 +3998,7 @@ _KNOWN_LOCATION_CITIES = (
     'Sewree', 'Solapur', 'Kalyan', 'Kalyani', 'Vasai', 'Virar', 'Panvel', 'Aurangabad',
     'Kolhapur',
     'Bhubaneswar', 'Vellore', 'Berhampur', 'Kanpur', 'Mangalore', 'Shevgaon',
-    'Austin', 'Seattle', 'San Francisco', 'New York', 'London',
+    'Austin', 'Seattle', 'San Francisco', 'New York', 'London', 'Berlin',
     'Toronto', 'Singapore', 'Dubai',
 )
 # Spelling / OCR aliases → canonical city for Excel

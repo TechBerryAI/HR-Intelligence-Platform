@@ -7,8 +7,8 @@ from app.domains.integrations.service.serializers import serialize_log_row
 from app.domains.integrations.worker.queue import get_queue
 
 
-def build_status(company_key: str) -> dict:
-    counts = repo.count_external_by_status(company_key)
+def build_status(organization_id: str) -> dict:
+    counts = repo.count_external_by_status(organization_id)
     by_provider: dict[str, dict[str, int]] = {}
     for row in counts:
         p = row.get('provider') or 'unknown'
@@ -22,7 +22,7 @@ def build_status(company_key: str) -> dict:
         pid = meta['id']
         seen.add(pid)
         stats = by_provider.get(pid, {})
-        cfg = repo.get_provider_row(company_key, pid)
+        cfg = repo.get_provider_row(organization_id, pid)
         providers.append({
             'provider': pid,
             'name': meta['name'],
@@ -36,7 +36,7 @@ def build_status(company_key: str) -> dict:
             'closed': stats.get('closed', 0),
         })
 
-    for row in repo.list_providers(company_key):
+    for row in repo.list_providers(organization_id):
         pid = row.get('provider')
         if not pid or pid in seen:
             continue
@@ -81,9 +81,9 @@ def build_status(company_key: str) -> dict:
     }
 
 
-def build_dashboard(company_key: str) -> dict:
-    status = build_status(company_key)
-    logs = repo.list_sync_logs(company_key, limit=20)
+def build_dashboard(organization_id: str) -> dict:
+    status = build_status(organization_id)
+    logs = repo.list_sync_logs(organization_id, limit=20)
     recent_errors = [
         serialize_log_row(r)
         for r in logs

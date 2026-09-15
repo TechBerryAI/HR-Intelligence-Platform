@@ -158,6 +158,17 @@ def reset_memory_store_for_tests() -> None:
         _mem_hits.clear()
 
 
+def _evict_mem_stores(now: float | None = None) -> None:
+    """Drop expired kv entries and empty hit buckets (must hold ``_mem_lock``)."""
+    now = time.time() if now is None else now
+    expired = [k for k, (_v, exp) in _mem_kv.items() if exp is not None and now > exp]
+    for k in expired:
+        _mem_kv.pop(k, None)
+    empty_hits = [k for k, q in _mem_hits.items() if not q]
+    for k in empty_hits:
+        _mem_hits.pop(k, None)
+
+
 def set_json_nx(key: str, value: dict, ttl_seconds: int) -> bool:
     """Atomic set-if-not-exists. Returns True if this caller created the key."""
     payload = json.dumps(value)
@@ -378,7 +389,12 @@ def rate_limit_hit(bucket_key: str, limit: int, window_sec: int) -> bool:
         q = _mem_hits[bucket_key]
         while q and now - q[0] > window_sec:
             q.popleft()
+        if not q:
+            _mem_hits.pop(bucket_key, None)
+            q = _mem_hits[bucket_key]
         if len(q) >= limit:
+            _evict_mem_stores(now)
             return True
         q.append(now)
+        _evict_mem_stores(now)
         return False

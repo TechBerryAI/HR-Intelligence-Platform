@@ -98,7 +98,17 @@ def optional_authenticate_token(f):
                     # Treat refresh tokens as unauthenticated for optional routes
                     request.user = None
                 else:
-                    request.user = user
+                    user_id = user.get('user_id')
+                    signup = _load_active_hr_user(user_id)
+                    if not signup or not user_has_active_refresh_session(user_id):
+                        request.user = None
+                    else:
+                        user['role'] = resolve_hr_role(signup)
+                        if signup.get('organization_id'):
+                            user['organization_id'] = str(signup['organization_id'])
+                        if signup.get('email'):
+                            user['email'] = signup['email']
+                        request.user = user
             except jwt.ExpiredSignatureError:
                 request.user = None
             except Exception:

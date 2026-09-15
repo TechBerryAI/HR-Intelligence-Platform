@@ -159,7 +159,22 @@ def test_logout_idempotent_without_auth(app_client):
 def test_public_health_and_jobs(app_client):
     assert app_client.get('/health').status_code == 200
     assert app_client.get('/ready').status_code == 200
-    assert app_client.get('/api/jobs/').status_code == 200
+    # Multi-tenant: bare public board resolves only via ?company= or DEFAULT_PUBLIC_COMPANY_SLUG
+    from live_db_helpers import seed_job, seed_org_with_staff
+    import os
+
+    os.environ.pop('DEFAULT_PUBLIC_COMPANY_SLUG', None)
+    alpha = seed_org_with_staff(name=f'Alpha Board {__import__("uuid").uuid4().hex[:6]}')
+    _beta = seed_org_with_staff(name=f'Beta Board {__import__("uuid").uuid4().hex[:6]}')
+    seed_job(alpha['org_id'], alpha['recruiter_hrid'], title='Alpha Public')
+
+    bare = app_client.get('/api/jobs/')
+    assert bare.status_code == 404
+    assert 'hint' not in (bare.get_json() or {})
+
+    listed = app_client.get(f"/api/jobs/?company={alpha['org_slug']}")
+    assert listed.status_code == 200
+    assert isinstance(listed.get_json(), list)
 
 
 def test_invalid_jwt_rejected(app_client):
@@ -169,11 +184,14 @@ def test_invalid_jwt_rejected(app_client):
 
 
 def test_sql_injection_in_public_apply_validation(app_client):
-    jobs = app_client.get('/api/jobs/').get_json()
+    from live_db_helpers import seed_job, seed_org_with_staff
+
+    org = seed_org_with_staff()
+    job_id = seed_job(org['org_id'], org['recruiter_hrid'], title='Apply Probe')
+    jobs = app_client.get(f"/api/jobs/?company={org['org_slug']}").get_json()
     job_list = jobs if isinstance(jobs, list) else (jobs or {}).get('jobs') or []
-    if not job_list:
-        pytest.skip('No public jobs for apply validation probe')
-    job_id = job_list[0].get('id') or job_list[0].get('jdid')
+    assert job_list, 'expected seeded public jobs'
+    job_id = job_list[0].get('id') or job_list[0].get('jdid') or job_id
     resp = app_client.post(
         f'/api/jobs/{job_id}/apply',
         data={
@@ -199,33 +217,25 @@ def test_parse_public_requires_file(app_client):
 
 
 def test_ceo_cannot_create_job_when_authed(app_client):
-    email = os.getenv('SMOKE_CEO_EMAIL', 'unmesh.tari@techberryinfotech.com')
-    password = os.getenv('SMOKE_CEO_PASSWORD', 'P@ssw0rd')
-    login = app_client.post('/api/login', json={'email': email, 'password': password})
-    if login.status_code != 200:
-        pytest.skip(f'CEO login unavailable: {login.status_code}')
-    token = (login.get_json() or {}).get('token')
-    if not token:
-        pytest.skip('No CEO token')
+    from live_db_helpers import auth_header, login, seed_org_with_staff
+
+    org = seed_org_with_staff()
+    token = login(app_client, org['ceo_email'])
     resp = app_client.post(
         '/api/jobs/',
-        headers={'Authorization': f'Bearer {token}'},
+        headers=auth_header(token),
         json={'title': 'QA blocked job', 'company': 'Test', 'location': 'Remote'},
     )
     assert resp.status_code == 403
 
 
 def test_head_hr_stats_when_authed(app_client):
-    email = os.getenv('SMOKE_HEAD_HR_EMAIL', 'chetan.gore@techberryinfotech.com')
-    password = os.getenv('SMOKE_HEAD_HR_PASSWORD', 'P@ssw0rd')
-    login = app_client.post('/api/login', json={'email': email, 'password': password})
-    if login.status_code != 200:
-        pytest.skip(f'Head HR login unavailable: {login.status_code}')
-    token = (login.get_json() or {}).get('token')
-    if not token:
-        pytest.skip('No Head HR token')
+    from live_db_helpers import auth_header, login, seed_org_with_staff
+
+    org = seed_org_with_staff()
+    token = login(app_client, org['head_email'])
     resp = app_client.get(
         '/api/head-hr/stats',
-        headers={'Authorization': f'Bearer {token}'},
+        headers=auth_header(token),
     )
     assert resp.status_code == 200

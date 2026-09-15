@@ -21,6 +21,7 @@ def row_to_provider_config(row: dict | None, *, decrypt: bool = True) -> Provide
         refresh = decrypt_secret(refresh)
     return ProviderConfig(
         id=row.get('id'),
+        organization_id=str(row.get('organization_id')) if row.get('organization_id') else '',
         company_key=row.get('company_key') or '',
         company=row.get('company'),
         provider=row.get('provider') or '',
@@ -53,6 +54,7 @@ def serialize_log_row(row: dict) -> dict:
 
     return {
         'id': row.get('id'),
+        'organizationId': str(row.get('organization_id')) if row.get('organization_id') else None,
         'companyKey': row.get('company_key'),
         'provider': row.get('provider'),
         'operation': row.get('operation'),
@@ -71,6 +73,7 @@ def serialize_log_row(row: dict) -> dict:
 def serialize_external_job(row: dict) -> dict:
     return {
         'id': row.get('id'),
+        'organizationId': str(row.get('organization_id')) if row.get('organization_id') else None,
         'companyKey': row.get('company_key'),
         'jobId': row.get('job_id'),
         'provider': row.get('provider'),

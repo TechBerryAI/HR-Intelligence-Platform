@@ -5524,7 +5524,7 @@ def parse_summary(section_text: str, full_text: str = '') -> str:
         if (
             cleaned
             and is_valid_summary(cleaned)
-            and len(cleaned) >= 80
+            and len(cleaned) >= 40
             and not re.match(r'(?i)^(?:responsibilit|roles?\s+and)', cleaned)
         ):
             return cleaned

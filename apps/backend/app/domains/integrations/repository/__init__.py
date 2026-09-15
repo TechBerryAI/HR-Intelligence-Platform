@@ -1,4 +1,12 @@
-"""Integration persistence (raw SQL via db_* helpers)."""
+"""Integration persistence (raw SQL via db_* helpers).
+
+Tenant boundary: every lookup/scope filter below MUST use ``organization_id``
+(the immutable tenant identity), never ``company_key`` (a lowercased/stripped
+company *name*). Two unrelated organizations can share the same or a
+similar-looking name and would therefore collide on ``company_key`` — see
+BUG-004. ``company_key``/``company`` are still stored on rows for display and
+backward-compatible reporting only.
+"""
 from __future__ import annotations
 
 import json
@@ -35,64 +43,65 @@ def _parse_settings(row: dict | None) -> dict:
 # integration_provider
 # ---------------------------------------------------------------------------
 
-def get_provider_row(company_key: str, provider: str) -> dict | None:
+def get_provider_row(organization_id: str, provider: str) -> dict | None:
     return db_get(
         '''
         SELECT * FROM integration_provider
-        WHERE company_key = ? AND provider = ?
+        WHERE organization_id = ? AND provider = ?
         ''',
-        (company_key, provider),
+        (organization_id, provider),
     )
 
 
-def get_provider_by_id(provider_id: int, company_key: str) -> dict | None:
+def get_provider_by_id(provider_id: int, organization_id: str) -> dict | None:
     return db_get(
         '''
         SELECT * FROM integration_provider
-        WHERE id = ? AND company_key = ?
+        WHERE id = ? AND organization_id = ?
         ''',
-        (provider_id, company_key),
+        (provider_id, organization_id),
     )
 
 
-def list_providers(company_key: str) -> list[dict]:
+def list_providers(organization_id: str) -> list[dict]:
     return db_all(
         '''
         SELECT * FROM integration_provider
-        WHERE company_key = ?
+        WHERE organization_id = ?
         ORDER BY provider ASC
         ''',
-        (company_key,),
+        (organization_id,),
     )
 
 
-def list_enabled_auto_publish(company_key: str) -> list[dict]:
+def list_enabled_auto_publish(organization_id: str) -> list[dict]:
     return db_all(
         '''
         SELECT * FROM integration_provider
-        WHERE company_key = ? AND enabled = TRUE AND auto_publish = TRUE
+        WHERE organization_id = ? AND enabled = TRUE AND auto_publish = TRUE
         ORDER BY provider ASC
         ''',
-        (company_key,),
+        (organization_id,),
     )
 
 
-def list_enabled_providers(company_key: str) -> list[dict]:
+def list_enabled_providers(organization_id: str) -> list[dict]:
     return db_all(
         '''
         SELECT * FROM integration_provider
-        WHERE company_key = ? AND enabled = TRUE
+        WHERE organization_id = ? AND enabled = TRUE
         ORDER BY provider ASC
         ''',
-        (company_key,),
+        (organization_id,),
     )
 
 
 def upsert_provider(
-    company_key: str,
+    organization_id: str,
     company: str | None,
     provider: str,
     *,
+    company_key: str | None = None,
     enabled: bool | None = None,
     status: str | None = None,
     auth_type: str | None = None,
@@ -106,19 +115,20 @@ def upsert_provider(
     settings_json: Any = None,
     update_secrets: bool = False,
 ) -> dict | None:
-    existing = get_provider_row(company_key, provider)
+    existing = get_provider_row(organization_id, provider)
     if not existing:
         result = db_run(
             '''
             INSERT INTO integration_provider (
-                company_key, company, provider, enabled, status, auth_type,
+                organization_id, company_key, company, provider, enabled, status, auth_type,
                 auto_publish, auto_sync, client_id, client_secret,
                 access_token, refresh_token, expires_at, settings_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
             RETURNING id
             ''',
             (
-                company_key,
+                organization_id,
+                company_key or '',
                 company,
                 provider,
                 bool(enabled) if enabled is not None else False,
@@ -134,7 +144,7 @@ def upsert_provider(
                 _json_dumps(settings_json if settings_json is not None else {}),
             ),
         )
-        return get_provider_by_id(result['lastID'], company_key) if result.get('lastID') else get_provider_row(company_key, provider)
+        return get_provider_by_id(result['lastID'], organization_id) if result.get('lastID') else get_provider_row(organization_id, provider)
 
     # Partial update
     enabled_v = existing['enabled'] if enabled is None else bool(enabled)
@@ -146,6 +156,7 @@ def upsert_provider(
     settings_v = existing['settings_json'] if settings_json is None else settings_json
     expires_v = existing['expires_at'] if expires_at is None else expires_at
     company_v = company if company is not None else existing.get('company')
+    company_key_v = company_key if company_key is not None else existing.get('company_key')
 
     if update_secrets:
         secret_v = client_secret if client_secret is not None else existing.get('client_secret')
@@ -166,6 +177,7 @@ def upsert_provider(
         '''
         UPDATE integration_provider SET
             company = ?,
+            company_key = ?,
             enabled = ?,
             status = ?,
             auth_type = ?,
@@ -178,10 +190,11 @@ def upsert_provider(
             expires_at = ?,
             settings_json = ?::jsonb,
             updated_at = NOW()
-        WHERE company_key = ? AND provider = ?
+        WHERE organization_id = ? AND provider = ?
         ''',
         (
             company_v,
+            company_key_v,
             enabled_v,
             status_v,
             auth_v,
@@ -193,25 +206,25 @@ def upsert_provider(
             refresh_v,
             expires_v,
             _json_dumps(settings_v if not isinstance(settings_v, str) else json.loads(settings_v) if settings_v else {}),
-            company_key,
+            organization_id,
             provider,
         ),
     )
-    return get_provider_row(company_key, provider)
+    return get_provider_row(organization_id, provider)
 
 
-def delete_provider(company_key: str, provider: str) -> int:
+def delete_provider(organization_id: str, provider: str) -> int:
     result = db_run(
-        'DELETE FROM integration_provider WHERE company_key = ? AND provider = ?',
-        (company_key, provider),
+        'DELETE FROM integration_provider WHERE organization_id = ? AND provider = ?',
+        (organization_id, provider),
     )
     return result.get('changes') or 0
 
 
-def delete_provider_by_id(company_key: str, provider_id: int) -> int:
+def delete_provider_by_id(organization_id: str, provider_id: int) -> int:
     result = db_run(
-        'DELETE FROM integration_provider WHERE company_key = ? AND id = ?',
-        (company_key, provider_id),
+        'DELETE FROM integration_provider WHERE organization_id = ? AND id = ?',
+        (organization_id, provider_id),
     )
     return result.get('changes') or 0
 
@@ -231,39 +244,40 @@ def get_external_job(job_id: str, provider: str) -> dict | None:
     )
 
 
-def get_external_job_by_id(external_row_id: int, company_key: str) -> dict | None:
+def get_external_job_by_id(external_row_id: int, organization_id: str) -> dict | None:
     return db_get(
-        'SELECT * FROM external_jobs WHERE id = ? AND company_key = ?',
-        (external_row_id, company_key),
+        'SELECT * FROM external_jobs WHERE id = ? AND organization_id = ?',
+        (external_row_id, organization_id),
     )
 
 
-def list_external_jobs(company_key: str, job_id: str | None = None) -> list[dict]:
+def list_external_jobs(organization_id: str, job_id: str | None = None) -> list[dict]:
     if job_id:
         return db_all(
             '''
             SELECT * FROM external_jobs
-            WHERE company_key = ? AND job_id = ?
+            WHERE organization_id = ? AND job_id = ?
             ORDER BY provider ASC
             ''',
-            (company_key, job_id),
+            (organization_id, job_id),
         )
     return db_all(
         '''
         SELECT * FROM external_jobs
-        WHERE company_key = ?
+        WHERE organization_id = ?
         ORDER BY updated_at DESC
         LIMIT 200
         ''',
-        (company_key,),
+        (organization_id,),
     )
 
 
 def upsert_external_job(
-    company_key: str,
+    organization_id: str,
     job_id: str,
     provider: str,
     *,
+    company_key: str | None = None,
     external_job_id: str | None = None,
     external_status: str | None = None,
     sync_status: str = 'pending',
@@ -287,13 +301,13 @@ def upsert_external_job(
         db_run(
             '''
             INSERT INTO external_jobs (
-                company_key, job_id, provider, external_job_id, external_status,
+                organization_id, company_key, job_id, provider, external_job_id, external_status,
                 published_at, last_sync, sync_status, error_message, retry_count,
                 request_payload, response_payload,
                 pending_operation, next_attempt_at,
                 leased_by, leased_until
             ) VALUES (
-                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?,
                 CASE WHEN ? THEN NOW() ELSE NULL END,
                 NOW(), ?, ?, ?,
                 ?::jsonb, ?::jsonb,
@@ -303,7 +317,8 @@ def upsert_external_job(
             )
             ''',
             (
-                company_key,
+                organization_id,
+                company_key or '',
                 job_id,
                 provider,
                 external_job_id,
@@ -463,7 +478,7 @@ def release_leases_for_worker(worker_id: str) -> int:
 
 
 def schedule_external_job_retry(
-    company_key: str,
+    organization_id: str,
     job_id: str,
     provider: str,
     *,
@@ -473,7 +488,7 @@ def schedule_external_job_retry(
     next_attempt_at,
 ) -> None:
     upsert_external_job(
-        company_key,
+        organization_id,
         job_id,
         provider,
         sync_status='pending',
@@ -526,15 +541,15 @@ def recover_external_job_id_from_logs(job_id: str, provider: str) -> str | None:
     return None
 
 
-def count_external_by_status(company_key: str) -> list[dict]:
+def count_external_by_status(organization_id: str) -> list[dict]:
     return db_all(
         '''
         SELECT provider, sync_status, COUNT(*)::int AS count
         FROM external_jobs
-        WHERE company_key = ?
+        WHERE organization_id = ?
         GROUP BY provider, sync_status
         ''',
-        (company_key,),
+        (organization_id,),
     )
 
 
@@ -543,11 +558,12 @@ def count_external_by_status(company_key: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def insert_sync_log(
-    company_key: str,
+    organization_id: str | None,
     provider: str,
     operation: str,
     status: str,
     *,
+    company_key: str | None = None,
     job_id: str | None = None,
     external_job_id: str | None = None,
     request_payload: Any = None,
@@ -559,14 +575,15 @@ def insert_sync_log(
     result = db_run(
         '''
         INSERT INTO sync_logs (
-            company_key, provider, operation, job_id, external_job_id,
+            organization_id, company_key, provider, operation, job_id, external_job_id,
             request_payload, response_payload, status, execution_time_ms,
             retry_count, error_message
-        ) VALUES (?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?, ?, ?, ?)
         RETURNING id
         ''',
         (
-            company_key,
+            organization_id,
+            company_key or 'unknown',
             provider,
             operation,
             job_id,
@@ -582,26 +599,26 @@ def insert_sync_log(
     return result.get('lastID')
 
 
-def list_sync_logs(company_key: str, limit: int = 50, provider: str | None = None) -> list[dict]:
+def list_sync_logs(organization_id: str, limit: int = 50, provider: str | None = None) -> list[dict]:
     limit = max(1, min(int(limit or 50), 200))
     if provider:
         return db_all(
             '''
             SELECT * FROM sync_logs
-            WHERE company_key = ? AND provider = ?
+            WHERE organization_id = ? AND provider = ?
             ORDER BY created_at DESC
             LIMIT ?
             ''',
-            (company_key, provider, limit),
+            (organization_id, provider, limit),
         )
     return db_all(
         '''
         SELECT * FROM sync_logs
-        WHERE company_key = ?
+        WHERE organization_id = ?
         ORDER BY created_at DESC
         LIMIT ?
         ''',
-        (company_key, limit),
+        (organization_id, limit),
     )
 
 
@@ -612,6 +629,7 @@ def list_sync_logs(company_key: str, limit: int = 50, provider: str | None = Non
 def insert_provider_event(
     event_type: str,
     *,
+    organization_id: str | None = None,
     company_key: str | None = None,
     job_id: str | None = None,
     provider: str | None = None,
@@ -620,10 +638,11 @@ def insert_provider_event(
 ) -> int | None:
     """Persist domain events into sync_logs (provider_events table removed)."""
     return insert_sync_log(
-        company_key or 'unknown',
+        organization_id,
         provider or 'system',
         event_type or 'provider_event',
         status=status or 'dispatched',
+        company_key=company_key,
         job_id=job_id,
         request_payload=payload,
     )
@@ -632,6 +651,7 @@ def insert_provider_event(
 def insert_webhook_event(
     provider: str,
     *,
+    organization_id: str | None = None,
     company_key: str | None = None,
     event_type: str | None = None,
     payload: Any = None,
@@ -639,10 +659,11 @@ def insert_webhook_event(
 ) -> int | None:
     """Persist webhooks into sync_logs (webhook_events table removed)."""
     return insert_sync_log(
-        company_key or 'unknown',
+        organization_id,
         provider,
         event_type or 'webhook',
         status='pending',
+        company_key=company_key,
         request_payload=payload,
         response_payload=headers_json,
     )
@@ -653,10 +674,11 @@ def insert_webhook_event(
 # ---------------------------------------------------------------------------
 
 def upsert_external_application(
-    company_key: str,
+    organization_id: str,
     provider: str,
     external_application_id: str,
     *,
+    company_key: str | None = None,
     job_id: str | None = None,
     external_job_id: str | None = None,
     candidate_email: str | None = None,
@@ -667,9 +689,9 @@ def upsert_external_application(
     existing = db_get(
         '''
         SELECT id FROM external_applications
-        WHERE company_key = ? AND provider = ? AND external_application_id = ?
+        WHERE organization_id = ? AND provider = ? AND external_application_id = ?
         ''',
-        (company_key, provider, external_application_id),
+        (organization_id, provider, external_application_id),
     )
     if existing:
         db_run(
@@ -699,12 +721,13 @@ def upsert_external_application(
     db_run(
         '''
         INSERT INTO external_applications (
-            company_key, provider, job_id, external_job_id, external_application_id,
+            organization_id, company_key, provider, job_id, external_job_id, external_application_id,
             candidate_email, candidate_name, mapped_status, payload
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb)
         ''',
         (
-            company_key,
+            organization_id,
+            company_key or '',
             provider,
             job_id,
             external_job_id,
@@ -718,7 +741,7 @@ def upsert_external_application(
 
 
 def list_external_applications(
-    company_key: str,
+    organization_id: str,
     *,
     provider: str | None = None,
     job_id: str | None = None,
@@ -729,27 +752,27 @@ def list_external_applications(
         return db_all(
             '''
             SELECT * FROM external_applications
-            WHERE company_key = ? AND provider = ? AND job_id = ?
+            WHERE organization_id = ? AND provider = ? AND job_id = ?
             ORDER BY last_synced_at DESC LIMIT ?
             ''',
-            (company_key, provider, job_id, limit),
+            (organization_id, provider, job_id, limit),
         )
     if provider:
         return db_all(
             '''
             SELECT * FROM external_applications
-            WHERE company_key = ? AND provider = ?
+            WHERE organization_id = ? AND provider = ?
             ORDER BY last_synced_at DESC LIMIT ?
             ''',
-            (company_key, provider, limit),
+            (organization_id, provider, limit),
         )
     return db_all(
         '''
         SELECT * FROM external_applications
-        WHERE company_key = ?
+        WHERE organization_id = ?
         ORDER BY last_synced_at DESC LIMIT ?
         ''',
-        (company_key, limit),
+        (organization_id, limit),
     )
 
 
@@ -759,6 +782,6 @@ def list_auto_sync_http_providers() -> list[dict]:
         '''
         SELECT * FROM integration_provider
         WHERE enabled = TRUE AND auto_sync = TRUE
-        ORDER BY company_key, provider
+        ORDER BY organization_id, provider
         '''
     )
