@@ -96,6 +96,56 @@ def _parse_json_output(output: Any) -> dict[str, Any]:
     raise ValueError(f"AI runtime returned unsupported output type: {type(output)}")
 
 
+# Technology names that read as bare domains once the URL regex sees a dot.
+_TECH_DOT_TOKENS = frozenset({
+    'asp.net', 'vb.net', 'ado.net', 'adonet', 'node.js', 'next.js', 'nuxt.js',
+    'vue.js', 'react.js', 'express.js', 'nest.js', 'three.js', 'd3.js', 'ember.js',
+    'backbone.js', 'jquery.js', 'socket.io', 'knockout.js', 'angular.js', 'salesforce.com',
+    'force.com', 'workday.com', 'sap.com', 'oracle.com', 'microsoft.com', 'ibm.com',
+    'aws.amazon.com', 'azure.com', 'google.com',
+})
+
+_PORTFOLIO_HEADER_LINES = 12
+"""A bare domain only reads as the candidate's own site near the contact block."""
+
+_KNOWN_TLDS = frozenset({
+    'com', 'net', 'org', 'io', 'dev', 'me', 'co', 'app', 'in', 'ai', 'xyz', 'info',
+    'biz', 'tech', 'site', 'online', 'page', 'gd', 'ly', 'sh', 'cloud', 'studio',
+    'design', 'portfolio', 'work', 'uk', 'us', 'ca', 'au', 'de', 'fr', 'nl', 'eu',
+    'edu', 'gov', 'ac', 'org.in', 'co.in', 'co.uk', 'github.io', 'vercel.app',
+    'netlify.app', 'pages.dev', 'web.app', 'firebaseapp.com', 'herokuapp.com',
+})
+
+
+def _is_plausible_portfolio_url(url: str, raw_resume_text: str) -> bool:
+    """True when a harvested URL can credibly be the candidate's own site.
+
+    The URL regex matches any ``word.word`` token, so body prose contributes
+    ``Salesforce.com``, ``ASP.NET`` and the like. An explicit URL (scheme or
+    ``www.``) is taken at face value; a bare domain is only trusted when it sits
+    in the contact header, where a personal site would actually be listed.
+    """
+    candidate = (url or '').strip().strip('.,;:')
+    if not candidate:
+        return False
+    low = candidate.lower()
+    host = re.sub(r'^https?://', '', low).split('/')[0]
+    if host in _TECH_DOT_TOKENS or low in _TECH_DOT_TOKENS:
+        return False
+    bare_host = host[4:] if host.startswith('www.') else host
+    labels = [part for part in bare_host.split('.') if part]
+    if len(labels) < 2 or labels[-1] not in _KNOWN_TLDS:
+        # Not a routable host: an abbreviation ("KES.Shroff") or a truncated
+        # link ("www.linked") that the URL regex happened to match.
+        return False
+    if low.startswith(('http://', 'https://', 'www.')):
+        return True
+    header = '\n'.join(
+        [ln for ln in (raw_resume_text or '').splitlines() if ln.strip()][:_PORTFOLIO_HEADER_LINES]
+    )
+    return candidate in header
+
+
 def _apply_resume_text_fields(person: dict[str, Any], raw_resume_text: str | None, actions: list[str]) -> None:
     """Extract URLs and location from raw resume text when LLM missed them."""
     if not raw_resume_text:
@@ -176,6 +226,7 @@ def _apply_resume_text_fields(person: dict[str, Any], raw_resume_text: str | Non
             u for u in found_urls
             if not any(x in u.lower() for x in excluded) and '.' in u and len(u) > 5
             and not _is_false_address_url(u)
+            and _is_plausible_portfolio_url(u, raw_resume_text)
         ]
         if portfolio_urls:
             url = _normalize_url(portfolio_urls[0])

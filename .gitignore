@@ -351,3 +351,8 @@ apps/data/jd_parse_eval/report.md
 ~$*
 **/~$*
 
+
+# Resume parsing benchmark — real candidate documents + run artifacts.
+# Tracked: ai/eval/resume_benchmark/** (harness code + thresholds.yaml).
+ai/dataset/lake/benchmark/resume_gold/
+ai/eval/reports/resume_benchmark/
