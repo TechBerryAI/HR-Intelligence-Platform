@@ -18,6 +18,7 @@ import json
 import re
 import requests
 
+from app.ai.toon.runtime import toon_dumps
 from app.core.timing import timing
 
 ATS_API_URL = (os.getenv('ATS_API_URL') or '').rstrip('/')
@@ -720,6 +721,46 @@ def _build_deterministic_narrative(
     return " ".join(parts)
 
 
+def _narrative_evidence(
+    *,
+    verdict: str,
+    overall: float,
+    mandatory_match_pct: float,
+    skills_result: dict,
+    skills_raw: float,
+    exp_score: float,
+    exp_summary: str,
+    education_score: float,
+    education_assessment: str,
+    location_score: float,
+) -> dict:
+    """The facts needed to write two sentences, and nothing else.
+
+    Deliberately excludes ``category_reasons``, ``score_math`` and
+    ``decision_explanation``: those are already-written prose and UI scaffolding
+    built for the recruiter report. Passing them made the payload ~5.1k chars
+    against a 4k cap, so every call truncated mid-structure and the model was
+    asked to reason over a malformed document — while being handed the very
+    explanation it was supposed to write.
+    """
+    return {
+        "verdict": verdict,
+        "overall_match_score": overall,
+        "mandatory_skills_match_pct": mandatory_match_pct,
+        "scores": [
+            {"category": "skills", "raw_pct": round(skills_raw, 1), "weight_pct": int(WEIGHT_SKILLS_TOTAL * 100)},
+            {"category": "experience", "raw_pct": round(exp_score, 1), "weight_pct": int(WEIGHT_EXPERIENCE * 100)},
+            {"category": "education", "raw_pct": round(education_score, 1), "weight_pct": int(WEIGHT_EDUCATION * 100)},
+            {"category": "location", "raw_pct": round(location_score, 1), "weight_pct": int(WEIGHT_LOCATION * 100)},
+        ],
+        "mandatory_matched": list(skills_result.get("mandatory_matched") or [])[:12],
+        "mandatory_missing": list(skills_result.get("mandatory_missing") or [])[:12],
+        "preferred_matched": list(skills_result.get("preferred_matched") or [])[:8],
+        "experience_summary": exp_summary,
+        "education_assessment": education_assessment,
+    }
+
+
 @timing
 def _optional_llm_narrative(evidence: dict) -> str:
     """Best-effort 2–4 sentence narrative from scored evidence; empty on failure."""
@@ -742,11 +783,13 @@ def _optional_llm_narrative(evidence: dict) -> str:
                 from app.ai.adapter.runtime_adapter import parse_via_runtime
 
                 prompt = (
-                    "You are a recruiting analyst. Using ONLY the JSON evidence below, write 2-4 short "
+                    "You are a recruiting analyst. Using ONLY the TOON evidence below, write 2-4 short "
                     "plain-English sentences explaining why this candidate received the given verdict. "
+                    "TOON is one fact per line as 'key: value'; 'key[N]: a|b|c' is a list, and "
+                    "'key[N]{col,col}:' heads indented comma-separated rows. "
                     "Do not invent skills, employers, or scores. Do not use markdown. "
                     "Return JSON: {\"narrative\": \"...\"}\n\n"
-                    f"Evidence:\n{json.dumps(evidence, ensure_ascii=False)[:4000]}"
+                    f"Evidence:\n{toon_dumps(evidence)[:4000]}"
                 )
                 result = parse_via_runtime(prompt, "jd")
                 if isinstance(result, dict):
@@ -1129,22 +1172,18 @@ def _internal_match(parsed_resume: dict, parsed_jd: dict, *, skip_narrative: boo
         and os.getenv("ATS_NARRATIVE_LLM", "1").strip().lower() not in ("0", "false", "no", "off")
     ):
         llm_narrative = _optional_llm_narrative(
-            {
-                "verdict": verdict,
-                "overall_match_score": overall,
-                "mandatory_skills_match_pct": mandatory_match_pct,
-                "requirement_analysis": requirement_analysis,
-                "decision_explanation": decision_explanation,
-                "score_breakdown": {
-                    "skills": round(skills_raw, 1),
-                    "experience": round(exp_score, 1),
-                    "education": round(education_score, 1),
-                    "location": round(location_score, 1),
-                },
-                "experience_summary": exp_summary,
-                "education_assessment": education_assessment,
-                "decision_summary": decision_summary,
-            }
+            _narrative_evidence(
+                verdict=verdict,
+                overall=overall,
+                mandatory_match_pct=mandatory_match_pct,
+                skills_result=skills_result,
+                skills_raw=skills_raw,
+                exp_score=exp_score,
+                exp_summary=exp_summary,
+                education_score=education_score,
+                education_assessment=education_assessment,
+                location_score=location_score,
+            )
         )
     narrative = llm_narrative or deterministic_narrative
 

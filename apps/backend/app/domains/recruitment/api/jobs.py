@@ -21,6 +21,7 @@ from app.domains.candidate.services.profile_service import (
     upsert_passwordless_candidate,
     validate_public_apply_payload,
 )
+from app.ai.document_intelligence.mapping.resume_form import apply_form_to_resume_toon
 from app.domains.candidate.services.parse_claim import verify_parse_claim
 from app.domains.recruitment.api.applications import (
     _extract_ats_result,
@@ -1128,6 +1129,13 @@ def public_apply_to_job(job_id: str):
         parsed_resume = toon_loads_flex(parsed_resume_record['toon'])
         if not parsed_resume or not isinstance(parsed_resume, dict) or not isinstance(parsed_jd, dict):
             return jsonify({'error': 'Resume or job description data is not in a valid format'}), 400
+
+        # Score what the candidate submitted, not only what the parser guessed.
+        # parsed_resumes.toon is written once at parse time and never revised, so
+        # without this overlay a candidate who corrected a mis-parsed skill list
+        # on the Apply screen was still matched on the original parse — and
+        # skills carry 60% of the ATS weight.
+        parsed_resume = apply_form_to_resume_toon(parsed_resume, data)
 
         # Public apply: deterministic ATS only (skip Ollama narrative — that blocked
         # the HTTP response for many seconds while the UI showed "Submitting…").
