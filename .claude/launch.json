@@ -6,8 +6,7 @@
       "runtimeExecutable": "wsl",
       "runtimeArgs": [
         "-d", "Ubuntu", "--",
-        "bash", "-lc",
-        "cd /mnt/d/Projects/HR-Intelligence-Platform && npm run start"
+        "bash", "/mnt/d/Projects/HR-Intelligence-Platform/scripts/dev-start.sh"
       ],
       "port": 5173
     }

@@ -12,6 +12,9 @@
     "clear-cache": "node scripts/clear-cache.js",
     "clear-cache:dry": "node scripts/clear-cache.js --dry-run"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "devDependencies": {
     "electron": "^28.0.0"
   }

@@ -24,7 +24,9 @@ from app.domains.recruitment.services.ats_service import (
     _internal_match,
     _skill_match,
     _sanitize_skill_list,
+    AUTO_SHORTLIST_MIN,
     MANDATORY_SKILLS_MIN_PCT,
+    MAX_SCORE_WITHOUT_EVIDENCE,
 )
 
 BASE_RESUME = {
@@ -377,3 +379,40 @@ def test_narrative_evidence_round_trips_as_toon(monkeypatch):
     )
     _internal_match(BASE_RESUME, BASE_JD, skip_narrative=False)
     assert toon_loads(toon_dumps(captured["ev"])) == captured["ev"]
+
+
+def test_jd_with_no_skills_does_not_auto_shortlist_an_unqualified_candidate():
+    """A JD whose description yields no parseable skills has nothing to score.
+
+    Full marks for the 60%-weighted skills category used to push a wholly
+    unrelated applicant to 80 (Strong Match, auto-shortlisted) on such a job.
+    No direct evidence means the module's MAX_SCORE_WITHOUT_EVIDENCE cap, so
+    these route to recruiter review instead.
+    """
+    jd_without_skills = dict(BASE_JD, mandatory_skills=[], preferred_skills=[], skills=[])
+    unqualified = dict(
+        BASE_RESUME,
+        skills=['Cooking', 'Gardening'],
+        experience=[{'title': 'Dog Walker', 'company': 'Co', 'from': '2023', 'to': '2024'}],
+        total_experience_years=1,
+    )
+
+    result = _internal_match(unqualified, jd_without_skills, skip_narrative=True)
+
+    assert result['overall_match_score'] < AUTO_SHORTLIST_MIN
+    assert result['verdict'] != 'Strong Match'
+
+
+def test_jd_with_no_skills_still_scores_skills_at_the_no_evidence_cap():
+    jd_without_skills = dict(BASE_JD, mandatory_skills=[], preferred_skills=[], skills=[])
+    result = _internal_match(BASE_RESUME, jd_without_skills, skip_narrative=True)
+    assert result['score_breakdown']['skills'] == MAX_SCORE_WITHOUT_EVIDENCE
+
+
+def test_absent_preferred_skills_alone_do_not_trigger_the_cap():
+    """Mandatory skills are evidence; a JD that simply lists no *preferred*
+    skills must still be able to produce a Strong Match."""
+    jd = dict(BASE_JD, preferred_skills=[])
+    result = _internal_match(BASE_RESUME, jd, skip_narrative=True)
+    assert result['overall_match_score'] >= AUTO_SHORTLIST_MIN
+    assert result['verdict'] == 'Strong Match'
