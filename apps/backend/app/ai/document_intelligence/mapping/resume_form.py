@@ -509,3 +509,114 @@ def map_candidate_to_form(
         trace=traces,
         coverage=coverage_rows,
     )
+
+
+# --- Application form → resume TOON (the reverse direction) -----------------
+#
+# The ATS scores `parsed_resumes.toon`, which is written once at parse time.
+# Anything the candidate corrected on the Apply screen lived only in the
+# submitted form, so a candidate who fixed a mis-parsed skill list was still
+# scored on the parser's original guess — and skills carry 60% of the ATS
+# weight. `apply_form_to_resume_toon` overlays the submitted form onto the
+# stored TOON so the ATS scores what the candidate actually stated.
+
+def _clean(value) -> str:
+    return str(value or '').strip()
+
+
+def _form_skill_list(form: dict) -> list[str]:
+    """Skills as the form states them: `_skills` list first, else the CSV field."""
+    raw = form.get('_skills')
+    if isinstance(raw, list):
+        return [s for s in (_clean(x) for x in raw) if s]
+    raw = form.get('skills')
+    if isinstance(raw, list):
+        return [s for s in (_clean(x) for x in raw) if s]
+    return [s for s in (_clean(x) for x in _clean(raw).split(',')) if s]
+
+
+def _form_rows(form: dict, key: str) -> list[dict]:
+    return [row for row in (form.get(key) or []) if isinstance(row, dict)]
+
+
+def apply_form_to_resume_toon(toon: dict, form: dict) -> dict:
+    """Overlay a submitted application form onto a stored resume TOON.
+
+    A key absent from ``form`` leaves the parsed value alone. A key that is
+    present wins, including when it is empty: the candidate deleting a
+    hallucinated employer is a correction, not a gap to be back-filled.
+
+    Scalars are the exception — the Apply form requires name, email, phone and
+    both locations, so a blank there means the field was never rendered rather
+    than cleared, and the parsed value is kept.
+    """
+    if not isinstance(toon, dict):
+        return toon
+    if not isinstance(form, dict) or not form:
+        return dict(toon)
+
+    out = dict(toon)
+    person = dict(out.get('person') or {}) if isinstance(out.get('person'), dict) else {}
+
+    for toon_key, form_key in (
+        ('name', 'fullName'),
+        ('email', 'email'),
+        ('phone', 'phone'),
+        ('location', 'currentLocation'),
+        ('preferred_location', 'preferredLocation'),
+        ('linkedin', 'linkedinUrl'),
+        ('github', 'githubUrl'),
+        ('portfolio', 'portfolioUrl'),
+    ):
+        value = _clean(form.get(form_key))
+        if value:
+            person[toon_key] = value
+    out['person'] = person
+
+    summary = _clean(form.get('summary') or form.get('_summary'))
+    if summary:
+        out['summary'] = summary
+
+    if '_skills' in form or 'skills' in form:
+        out['skills'] = _form_skill_list(form)
+
+    if 'experiences' in form:
+        out['experience'] = [
+            {
+                'title': _clean(row.get('role')),
+                'company': _clean(row.get('company')),
+                'from': _clean(row.get('startMonth')),
+                'to': 'Present' if row.get('isCurrent') else _clean(row.get('endMonth')),
+                'description': _clean(row.get('description')),
+            }
+            for row in _form_rows(form, 'experiences')
+            if _clean(row.get('role')) or _clean(row.get('company'))
+        ]
+
+    if 'education' in form:
+        out['education'] = [
+            {
+                'degree': _clean(row.get('degree')),
+                'institution': _clean(row.get('institution')),
+                'gpa': _clean(row.get('cgpa')),
+                'from': _clean(row.get('startMonth')),
+                'to': _clean(row.get('endMonth')),
+            }
+            for row in _form_rows(form, 'education')
+            if _clean(row.get('degree')) or _clean(row.get('institution'))
+        ]
+
+    if 'certifications' in form:
+        out['certifications'] = [
+            {
+                'name': _clean(row.get('name')),
+                'issuer': _clean(row.get('issuer')),
+                'validTill': _clean(row.get('validTill')),
+                'url': _clean(row.get('validationUrl')),
+                'status': _clean(row.get('status')),
+            }
+            for row in _form_rows(form, 'certifications')
+            if _clean(row.get('name'))
+        ]
+
+    return out

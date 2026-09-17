@@ -325,3 +325,57 @@ def test_form_does_not_emit_empty_experience_or_education_placeholders():
     assert form.education == []
     assert form.experiences == []
     assert form.certifications == []
+
+
+# --- The ATS branch must agree with the form branch -------------------------
+#
+# map_candidate_to_form blanks contact fields that fail validation, so the Apply
+# screen never shows a malformed email. toon_from_candidate_profile used to copy
+# the profile straight through, so the ATS saw values the candidate never did.
+
+@pytest.mark.parametrize(
+    'field,toon_key,bad_value',
+    [
+        ('email', 'email', 'not-an-email'),
+        ('phone', 'phone', '12'),
+        ('linkedin', 'linkedin', 'https://twitter.com/someone'),
+        ('github', 'github', 'https://example.com/someone'),
+    ],
+)
+def test_toon_blanks_the_same_invalid_contact_fields_as_the_form(field, toon_key, bad_value):
+    from app.ai.document_intelligence.canonical.from_toon import toon_from_candidate_profile
+
+    profile = candidate_profile_from_toon(
+        {
+            'type': 'resume',
+            'person': {'name': 'Alex Dev', field: bad_value},
+        }
+    )
+    toon = toon_from_candidate_profile(profile)
+    form = map_candidate_to_form(profile)
+
+    assert toon['person'][toon_key] == ''
+    # Both views of one parse agree.
+    form_key = {'email': 'email', 'phone': 'phone',
+                'linkedin': 'linkedinUrl', 'github': 'githubUrl'}[field]
+    assert getattr(form, form_key) == ''
+
+
+def test_toon_keeps_valid_contact_fields():
+    from app.ai.document_intelligence.canonical.from_toon import toon_from_candidate_profile
+
+    profile = candidate_profile_from_toon(
+        {
+            'type': 'resume',
+            'person': {
+                'name': 'Alex Dev',
+                'email': 'alex@example.com',
+                'phone': '+919619463501',
+                'linkedin': 'https://www.linkedin.com/in/alexdev',
+            },
+        }
+    )
+    toon = toon_from_candidate_profile(profile)
+    assert toon['person']['email'] == 'alex@example.com'
+    assert toon['person']['phone'] == '+919619463501'
+    assert 'linkedin.com' in toon['person']['linkedin']

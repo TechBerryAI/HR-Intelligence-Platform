@@ -322,3 +322,58 @@ def test_skip_narrative_does_not_call_llm(monkeypatch):
     assert called["n"] == 0
     assert result["overall_match_score"] >= 80
     assert result.get("narrative") or result.get("final_reasoning")
+
+
+def test_narrative_evidence_stays_well_under_the_prompt_cap(monkeypatch):
+    """The prompt truncates at 4000 chars; the payload must fit whole.
+
+    It previously carried category_reasons / score_math / decision_explanation
+    and ran ~5.1k chars, so every call was cut mid-structure.
+    """
+    from app.ai.toon.runtime import toon_dumps
+
+    captured = {}
+    monkeypatch.setenv("ATS_NARRATIVE_LLM", "1")
+    monkeypatch.setattr(
+        "app.domains.recruitment.services.ats_service._optional_llm_narrative",
+        lambda evidence: captured.setdefault("ev", evidence) and "",
+    )
+    _internal_match(BASE_RESUME, BASE_JD, skip_narrative=False)
+
+    assert len(toon_dumps(captured["ev"])) < 4000
+    # The recruiter-report scaffolding must not come along for the ride.
+    for noisy in ("category_reasons", "score_math", "decision_explanation", "requirement_analysis"):
+        assert noisy not in captured["ev"]
+
+
+def test_narrative_evidence_carries_the_facts_the_prose_needs(monkeypatch):
+    captured = {}
+    monkeypatch.setenv("ATS_NARRATIVE_LLM", "1")
+    monkeypatch.setattr(
+        "app.domains.recruitment.services.ats_service._optional_llm_narrative",
+        lambda evidence: captured.setdefault("ev", evidence) and "",
+    )
+    result = _internal_match(BASE_RESUME, BASE_JD, skip_narrative=False)
+    ev = captured["ev"]
+
+    assert ev["verdict"] == result["verdict"]
+    assert ev["overall_match_score"] == result["overall_match_score"]
+    assert {r["category"] for r in ev["scores"]} == {
+        "skills", "experience", "education", "location",
+    }
+    assert "Python" in ev["mandatory_matched"]
+    assert ev["experience_summary"]
+
+
+def test_narrative_evidence_round_trips_as_toon(monkeypatch):
+    """What the model is handed must parse back to what was scored."""
+    from app.ai.toon.runtime import toon_dumps, toon_loads
+
+    captured = {}
+    monkeypatch.setenv("ATS_NARRATIVE_LLM", "1")
+    monkeypatch.setattr(
+        "app.domains.recruitment.services.ats_service._optional_llm_narrative",
+        lambda evidence: captured.setdefault("ev", evidence) and "",
+    )
+    _internal_match(BASE_RESUME, BASE_JD, skip_narrative=False)
+    assert toon_loads(toon_dumps(captured["ev"])) == captured["ev"]
