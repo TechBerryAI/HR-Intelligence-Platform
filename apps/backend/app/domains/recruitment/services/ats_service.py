@@ -857,7 +857,14 @@ def _compute_skills_scores(cand_skills_list: list, mandatory_skills: list, prefe
         else:
             skills_category_raw = 100.0
     else:
-        skills_category_raw = 100.0
+        # The JD names no skills at all, so there is nothing to score against.
+        # Full marks here handed out the entire 60% skills weight for free: an
+        # unqualified applicant (unrelated skills, unrelated role, wrong
+        # location) reached 80 and was auto-shortlisted on a job whose
+        # description yielded no parseable skills. Apply this module's own
+        # no-direct-evidence cap, the same one location/experience/education
+        # already use, so such a job routes to recruiter review instead.
+        skills_category_raw = MAX_SCORE_WITHOUT_EVIDENCE
 
     return {
         "mandatory_matched": mand_matched,

@@ -22,6 +22,8 @@ const VENV_PYTHON = path.join(
 );
 const BACKEND_PORT = 3000;
 const FRONTEND_PORT = 5173;
+/** Lowest Node major the frontend supports: pdfjs-dist requires >= 20, CI builds on 20. */
+const MIN_NODE_MAJOR = 20;
 const BROWSER_URL = `http://localhost:${FRONTEND_PORT}`;
 const DEFAULT_OLLAMA_HOST = 'http://192.168.1.200:11434';
 /** Pull-only fallback when hardware detection is unavailable. Never written to .env. */
@@ -107,11 +109,24 @@ function warnOrFailPythonVersion(major, minor) {
 
 function checkEnv() {
   logStep(1, 7, 'Checking environment');
+  let nodeVer = '';
   try {
-    const nodeVer = nodeExecSync('node --version', { encoding: 'utf8' }).trim();
-    log(`Node: ${nodeVer}`);
+    nodeVer = nodeExecSync('node --version', { encoding: 'utf8' }).trim();
   } catch (e) {
-    log('Node.js 16+ required. Install from https://nodejs.org', 'err');
+    log(`Node.js ${MIN_NODE_MAJOR}+ required. Install from https://nodejs.org`, 'err');
+    process.exit(1);
+  }
+  log(`Node: ${nodeVer}`);
+  // pdfjs-dist requires Node >= 20 and CI builds on 20. Node 18 installs and runs,
+  // then misbehaves inside the PDF paths, so fail loudly here rather than later.
+  const nodeMajor = Number((nodeVer.match(/^v(\d+)/) || [])[1]);
+  if (Number.isFinite(nodeMajor) && nodeMajor < MIN_NODE_MAJOR) {
+    log(
+      `Node ${MIN_NODE_MAJOR}+ required (found ${nodeVer}). pdfjs-dist does not support ` +
+        `this version. Run "nvm use" in the repo root (.nvmrc pins ${MIN_NODE_MAJOR}), or ` +
+        `install Node ${MIN_NODE_MAJOR} LTS from https://nodejs.org`,
+      'err'
+    );
     process.exit(1);
   }
   try {

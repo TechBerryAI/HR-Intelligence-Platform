@@ -7,8 +7,17 @@
     <!--
       CSP: JWT remains in localStorage (XSS-sensitive); a tight CSP reduces that risk.
       connect-src allows same-origin (Vite /api proxy + HMR) and local Flask during split-origin dev.
+
+      frame-ancestors is deliberately NOT here: browsers ignore it when it arrives
+      via <meta>, and every page load logged a console error saying so. It is
+      enforced as a real header instead — see `_security_headers` in
+      apps/backend/app/bootstrap/create_app.py, which sets both
+      `X-Frame-Options: DENY` and a CSP carrying `frame-ancestors 'none'`. When
+      this SPA is served by a reverse proxy in production, that proxy must send
+      the same two headers for the HTML document; object-src/frame-src 'none'
+      below still block embedding *other* documents from here either way.
     -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; worker-src 'self' blob:; frame-ancestors 'none'; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob: https:; media-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; worker-src 'self' blob:; connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; img-src 'self' data: blob: https:; media-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com;" />
     <meta name="description" content="AI-powered workforce management for modern organizations. The future of HR technology." />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
