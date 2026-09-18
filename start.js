@@ -22,6 +22,8 @@ const VENV_PYTHON = path.join(
 );
 const BACKEND_PORT = 3000;
 const FRONTEND_PORT = 5173;
+/** Lowest Node major the frontend supports: pdfjs-dist requires >= 20, CI builds on 20. */
+const MIN_NODE_MAJOR = 20;
 const BROWSER_URL = `http://localhost:${FRONTEND_PORT}`;
 const DEFAULT_OLLAMA_HOST = 'http://192.168.1.200:11434';
 /** Pull-only fallback when hardware detection is unavailable. Never written to .env. */
@@ -68,13 +70,63 @@ function checkCriticalSource() {
   process.exit(1);
 }
 
+/** Legacy rapidocr-onnxruntime wheels: Python 3.10–3.12 only. */
+function pythonSupportsLegacyRapidOCR(major, minor) {
+  return major === 3 && minor >= 10 && minor < 13;
+}
+
+/** Any supported OCR path (legacy package, or rapidocr 3.x on 3.13+). */
+function pythonSupportsRapidOCR(major, minor) {
+  return major === 3 && minor >= 10;
+}
+
+function rapidocrPythonHint(version) {
+  return (
+    `Python ${version}: use rapidocr+onnxruntime on 3.13+, ` +
+    'or rapidocr-onnxruntime on 3.10–3.12 (see requirements.txt).'
+  );
+}
+
+function warnOrFailPythonVersion(major, minor) {
+  if (major < 3 || (major === 3 && minor < 10)) {
+    log(
+      `Python ${major}.${minor} is below the supported range (3.10+). ` +
+        'Type hints like str | None will crash the backend. Install Python 3.10+ ' +
+        'and recreate apps/backend/venv, or continue only if all modules use ' +
+        '`from __future__ import annotations`.',
+      'warn'
+    );
+    return;
+  }
+  if (!pythonSupportsLegacyRapidOCR(major, minor)) {
+    log(
+      `Python ${major}.${minor} — RapidOCR via rapidocr+onnxruntime (3.13+ path). ` +
+        rapidocrPythonHint(`${major}.${minor}`),
+      'warn'
+    );
+  }
+}
+
 function checkEnv() {
   logStep(1, 7, 'Checking environment');
+  let nodeVer = '';
   try {
-    const nodeVer = nodeExecSync('node --version', { encoding: 'utf8' }).trim();
-    log(`Node: ${nodeVer}`);
+    nodeVer = nodeExecSync('node --version', { encoding: 'utf8' }).trim();
   } catch (e) {
-    log('Node.js 16+ required. Install from https://nodejs.org', 'err');
+    log(`Node.js ${MIN_NODE_MAJOR}+ required. Install from https://nodejs.org`, 'err');
+    process.exit(1);
+  }
+  log(`Node: ${nodeVer}`);
+  // pdfjs-dist requires Node >= 20 and CI builds on 20. Node 18 installs and runs,
+  // then misbehaves inside the PDF paths, so fail loudly here rather than later.
+  const nodeMajor = Number((nodeVer.match(/^v(\d+)/) || [])[1]);
+  if (Number.isFinite(nodeMajor) && nodeMajor < MIN_NODE_MAJOR) {
+    log(
+      `Node ${MIN_NODE_MAJOR}+ required (found ${nodeVer}). pdfjs-dist does not support ` +
+        `this version. Run "nvm use" in the repo root (.nvmrc pins ${MIN_NODE_MAJOR}), or ` +
+        `install Node ${MIN_NODE_MAJOR} LTS from https://nodejs.org`,
+      'err'
+    );
     process.exit(1);
   }
   try {
@@ -82,17 +134,7 @@ function checkEnv() {
     log(`Python: ${pyVer}`);
     const m = /Python\s+(\d+)\.(\d+)/i.exec(pyVer);
     if (m) {
-      const major = Number(m[1]);
-      const minor = Number(m[2]);
-      if (major < 3 || (major === 3 && minor < 10)) {
-        log(
-          `Python ${major}.${minor} is below the supported range (3.10–3.12). ` +
-            'Type hints like str | None will crash the backend. Install Python 3.10+ ' +
-            'and recreate apps/backend/venv, or continue only if all modules use ' +
-            '`from __future__ import annotations`.',
-          'warn'
-        );
-      }
+      warnOrFailPythonVersion(Number(m[1]), Number(m[2]));
     }
   } catch (e) {
     try {
@@ -108,6 +150,8 @@ function checkEnv() {
               'Prefer Python 3.10+ for the backend venv on the VM.',
             'warn'
           );
+        } else {
+          warnOrFailPythonVersion(major, minor);
         }
       }
     } catch (e2) {
@@ -329,7 +373,28 @@ async function setupBackend() {
   }
   log('Upgrading pip...');
   await runCmd(VENV_PYTHON, ['-m', 'pip', 'install', '--upgrade', 'pip', '-q'], BACKEND_DIR);
-  log('Installing backend dependencies from requirements.txt (includes OCR: pymupdf, Pillow; RapidOCR on Python <3.13)...');
+  const venvPy = spawnSync(
+    VENV_PYTHON,
+    ['-c', 'import sys; print("%d.%d" % sys.version_info[:2])'],
+    { cwd: BACKEND_DIR, encoding: 'utf8' }
+  );
+  const venvVersion = (venvPy.stdout || '').trim() || 'unknown';
+  const venvParts = /^(\d+)\.(\d+)$/.exec(venvVersion);
+  const major = venvParts ? Number(venvParts[1]) : 0;
+  const minor = venvParts ? Number(venvParts[2]) : 0;
+  const legacyRapid = pythonSupportsLegacyRapidOCR(major, minor);
+  const py313Plus = major === 3 && minor >= 13;
+  if (venvParts && !pythonSupportsRapidOCR(major, minor)) {
+    log(`Unsupported Python ${venvVersion} for backend (need 3.10+).`, 'err');
+    process.exit(1);
+  }
+  log(
+    legacyRapid
+      ? 'Installing backend dependencies from requirements.txt (includes OCR: pymupdf, Pillow, RapidOCR)...'
+      : py313Plus
+        ? 'Installing backend dependencies from requirements.txt (includes OCR: pymupdf, Pillow, rapidocr+onnxruntime)...'
+        : 'Installing backend dependencies from requirements.txt...'
+  );
   await runCmd(VENV_PYTHON, ['-m', 'pip', 'install', '-r', 'requirements.txt', '-q'], BACKEND_DIR);
   log('Verifying OCR packages import...');
   const verifyCore = spawnSync(
@@ -346,22 +411,33 @@ async function setupBackend() {
 
   const verifyRapid = spawnSync(
     VENV_PYTHON,
-    ['-c', "import rapidocr_onnxruntime; print('RapidOCR OK')"],
+    [
+      '-c',
+      "ok=False\n"
+        + "try:\n"
+        + " import rapidocr_onnxruntime; ok=True; print('RapidOCR OK (rapidocr_onnxruntime)')\n"
+        + "except Exception:\n"
+        + " pass\n"
+        + "if not ok:\n"
+        + " try:\n"
+        + "  import rapidocr; import onnxruntime; ok=True; print('RapidOCR OK (rapidocr)')\n"
+        + " except Exception as e:\n"
+        + "  raise SystemExit('RapidOCR import failed: '+str(e))\n",
+    ],
     { cwd: BACKEND_DIR, encoding: 'utf8' }
   );
-  if (verifyRapid.status === 0) {
-    if (verifyRapid.stdout) process.stdout.write(verifyRapid.stdout.trim() + '\n');
-  } else {
-    const pyVer = spawnSync(VENV_PYTHON, ['-c', 'import sys; print("%d.%d" % sys.version_info[:2])'], {
-      cwd: BACKEND_DIR,
-      encoding: 'utf8',
-    });
-    const version = (pyVer.stdout || '').trim() || 'unknown';
+  if (verifyRapid.status !== 0) {
     log(
-      `RapidOCR not available on this Python (${version}). ` +
-        'Scanned-image OCR needs Python 3.12 (recommended) or system Tesseract. Continuing setup...',
+      `RapidOCR import failed on Python ${venvVersion}. ` +
+        (py313Plus
+          ? 'pip install rapidocr onnxruntime (or recreate venv after updating requirements.txt).'
+          : 'Use Python 3.11–3.12 and pip install -r requirements.txt.') +
+        ' Scanned PDFs will fail without OCR — continuing API setup.',
       'warn'
     );
+    if (verifyRapid.stderr) process.stderr.write(verifyRapid.stderr);
+  } else if (verifyRapid.stdout) {
+    process.stdout.write(verifyRapid.stdout.trim() + '\n');
   }
   log('Backend setup complete');
 }
@@ -449,6 +525,25 @@ function modelIsPresent(tags, modelName) {
   });
 }
 
+/** Pull a model onto `host` (local or LAN). Sets OLLAMA_HOST so the CLI does not hit a different daemon. */
+async function pullOllamaModel(host, model) {
+  log(`Pulling Ollama model ${model} at ${host} (this can take several minutes on first run)...`);
+  try {
+    await runCmd(
+      'ollama',
+      ['pull', model],
+      ROOT,
+      { ...process.env, OLLAMA_HOST: host },
+      process.platform === 'win32'
+    );
+    log(`Model ${model} pulled successfully`);
+    return true;
+  } catch (err) {
+    log(`Failed to pull model ${model} at ${host}: ${err.message || err}`, 'err');
+    return false;
+  }
+}
+
 function resolveAdaptiveOllamaModel(envMap = {}) {
   const pinned = explicitOllamaModel(envMap);
   if (pinned) {
@@ -493,8 +588,8 @@ async function setupOllama() {
   log(`Using Ollama host: ${host}`);
 
   if (!isOllamaLoopbackHost(host)) {
-    log('Remote Ollama host — health-check only (no local serve or model pull)');
-    const tags = await httpGetJson(`${host}/api/tags`);
+    log('Remote Ollama host — will not start a local daemon; JD/resume/bulk parse use this IP');
+    let tags = await httpGetJson(`${host}/api/tags`);
     if (!tags) {
       log(
         `Ollama did not become ready at ${host}. Parsing may fail until the central server is reachable.`,
@@ -503,15 +598,23 @@ async function setupOllama() {
       return { host, model, ready: false };
     }
     log('Ollama API is reachable');
-    const ready = modelIsPresent(tags, model);
-    if (ready) {
+    if (modelIsPresent(tags, model)) {
       log(`Ollama setup complete (model ${model} listed)`);
-    } else {
+      return { host, model, ready: true };
+    }
+    if (!commandExists('ollama')) {
       log(
-        `Ollama is reachable but model ${model} is not listed. Pull it on the central server.`,
+        `Ollama is reachable but model ${model} is not listed. Install the Ollama CLI or pull it on ${host}.`,
         'warn'
       );
+      return { host, model, ready: false };
     }
+    const pulled = await pullOllamaModel(host, model);
+    if (!pulled) return { host, model, ready: false };
+    tags = await httpGetJson(`${host}/api/tags`);
+    const ready = modelIsPresent(tags, model);
+    if (ready) log('Ollama setup complete');
+    else log(`Model ${model} still not listed after pull`, 'warn');
     return { host, model, ready };
   }
 
@@ -548,12 +651,7 @@ async function setupOllama() {
   log('Ollama API is reachable');
 
   if (!modelIsPresent(tags, model)) {
-    log(`Pulling Ollama model ${model} (this can take several minutes on first run)...`);
-    try {
-      await runCmd('ollama', ['pull', model], ROOT, process.env, process.platform === 'win32');
-      log(`Model ${model} pulled successfully`);
-    } catch (err) {
-      log(`Failed to pull model ${model}: ${err.message || err}`, 'err');
+    if (!(await pullOllamaModel(host, model))) {
       return { host, model, ready: false };
     }
   } else {
@@ -652,6 +750,7 @@ function startBackend() {
 
 function startFrontend() {
   logStep(7, 7, 'Starting frontend (Vite)');
+  freePort(FRONTEND_PORT);
   // On Windows use shell with single command string to avoid spawn deprecation (args + shell).
   const useShell = process.platform === 'win32';
   const cmd = useShell ? 'npm run dev' : 'npm';
@@ -682,6 +781,40 @@ function httpGet(url) {
     req.on('error', () => resolve(false));
     req.end();
   });
+}
+
+/**
+ * Poll the backend's /health until it answers.
+ *
+ * Flask needs ~9s to come up (connection pool, Alembic upgrade, Ollama probe)
+ * while Vite is serving in under a second. Starting both together left a window
+ * where every proxied /api call failed with ECONNREFUSED, and the Apply/Jobs
+ * screens gave up after their two retries and showed "Unable to load jobs"
+ * until the visitor refreshed by hand. Gate the frontend on this instead.
+ */
+async function waitForBackend(maxWaitMs = 90000) {
+  const step = 1000;
+  const backendUrl = `http://localhost:${BACKEND_PORT}/health`;
+  let elapsed = 0;
+  log('Waiting for backend to answer /health before starting the frontend...');
+  while (elapsed < maxWaitMs) {
+    if (await httpGet(backendUrl)) {
+      log(`Backend is ready (${(elapsed / 1000).toFixed(1)}s)`);
+      return true;
+    }
+    if (elapsed > 0 && elapsed % 5000 === 0) {
+      log(`Still waiting for backend... (${elapsed / 1000}s)`);
+    }
+    await new Promise((r) => setTimeout(r, step));
+    elapsed += step;
+  }
+  log(
+    `Backend did not answer /health within ${maxWaitMs / 1000}s. Starting the ` +
+      'frontend anyway so its errors are visible — expect /api proxy failures ' +
+      'until the backend finishes starting.',
+    'warn'
+  );
+  return false;
 }
 
 async function waitForReady(maxWaitMs = 60000) {
@@ -758,6 +891,9 @@ async function main() {
   process.on('SIGTERM', onExit);
 
   startBackend();
+  // Gate the frontend on the backend being reachable, so no page load can land
+  // in the window where Vite proxies /api to a socket nothing is listening on.
+  await waitForBackend();
   startFrontend();
 
   const ready = await waitForReady();
@@ -779,6 +915,7 @@ module.exports = {
   readEnvFile,
   upsertEnvKeys,
   DEFAULT_OLLAMA_HOST,
+  pullOllamaModel,
   explicitOllamaModel,
   ollamaModelIsExplicit,
   isOllamaLoopbackHost,
@@ -796,9 +933,12 @@ module.exports = {
   setupFrontend,
   startBackend,
   startFrontend,
+  waitForBackend,
   waitForReady,
   openBrowser,
   onExit,
+  pythonSupportsRapidOCR,
+  pythonSupportsLegacyRapidOCR,
   BACKEND_PORT,
   FRONTEND_PORT,
   BROWSER_URL,

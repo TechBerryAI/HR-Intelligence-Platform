@@ -1,0 +1,48 @@
+Priya Sharma
+Email: priya.sharma@example.com
+Phone: +91 9876543210
+
+Professional Summary
+Results-driven software engineer with 4 years of experience building backend services.
+
+Experience
+ABC Technologies
+Software Engineer
+Jan 2020 - Mar 2022
+
+Developed REST APIs.
+Managed deployment pipelines.
+
+XYZ Solutions
+Senior Software Engineer
+Apr 2022 - Present
+
+Led engineering team.
+Designed distributed architecture.
+
+Education
+Bachelor of Technology
+Computer Science
+ABC University
+2018 - 2022
+
+MBA
+University A
+2018
+
+B.Tech
+University B
+2014
+
+Skills
+Python
+Java
+AWS
+Docker
+
+Certifications
+AWS Certified Solutions Architect – Associate
+Amazon Web Services
+2024
+
+Completed AWS cloud training

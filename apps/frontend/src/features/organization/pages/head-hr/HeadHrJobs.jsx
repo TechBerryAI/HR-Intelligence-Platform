@@ -136,20 +136,7 @@ export default function HeadHrJobs() {
     setEditSaving(true)
     setEditError('')
     try {
-      const token = tokenService.getToken()
-      await apiRequest(`/api/jobs/${encodeURIComponent(editingJob.jdid)}`, {
-        method: 'PUT',
-        body: {
-          title: editTitle.trim(),
-          location: editLocation.trim(),
-          salary: editSalary.trim(),
-          experienceFrom: editExperienceFrom,
-          experienceTo: editExperienceTo,
-          description: editDescription,
-        },
-        token,
-      })
-      await updateJob(editingJob.jdid, {
+      const result = await updateJob(editingJob.jdid, {
         title: editTitle.trim(),
         location: editLocation.trim(),
         salary: editSalary.trim(),
@@ -157,6 +144,10 @@ export default function HeadHrJobs() {
         experienceTo: editExperienceTo,
         description: editDescription,
       })
+      if (!result?.success) {
+        setEditError(result?.error || 'Failed to update job')
+        return
+      }
       showToast('Job updated successfully')
       setEditingJob(null)
       await load()

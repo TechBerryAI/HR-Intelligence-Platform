@@ -15,9 +15,25 @@ def slugify_company(name: str | None) -> str:
     return slug or 'org'
 
 
-def ensure_organization(name: str | None, *, company_key: str | None = None) -> str | None:
+class OrganizationSlugConflict(Exception):
+    """Raised when create_only=True and the slug already exists."""
+
+    def __init__(self, slug: str):
+        self.slug = slug
+        super().__init__(f'Organization slug already exists: {slug}')
+
+
+def ensure_organization(
+    name: str | None,
+    *,
+    company_key: str | None = None,
+    create_only: bool = False,
+) -> str | None:
     """
     Find or create an organizations row. Returns organization UUID or None.
+
+    When ``create_only`` is True, never return an existing id — raise
+    ``OrganizationSlugConflict`` if the slug is already taken.
     """
     display = (name or company_key or '').strip()
     slug = slugify_company(company_key or name)
@@ -25,7 +41,26 @@ def ensure_organization(name: str | None, *, company_key: str | None = None) -> 
         return None
     existing = db_get('SELECT id FROM organizations WHERE slug = ?', (slug,))
     if existing:
+        if create_only:
+            raise OrganizationSlugConflict(slug)
         return str(existing['id'])
+    if create_only:
+        try:
+            row = db_get(
+                """
+                INSERT INTO organizations (name, slug)
+                VALUES (?, ?)
+                RETURNING id
+                """,
+                (display or slug, slug),
+            )
+        except Exception as exc:
+            # Unique race: treat as conflict
+            again = db_get('SELECT id FROM organizations WHERE slug = ?', (slug,))
+            if again:
+                raise OrganizationSlugConflict(slug) from exc
+            raise
+        return str(row['id']) if row else None
     row = db_get(
         """
         INSERT INTO organizations (name, slug)
@@ -159,14 +194,16 @@ def list_companies_with_enabled_jobs() -> list[dict]:
     ]
 
 
-def resolve_public_organization(slug: str | None = None) -> dict | None:
+def resolve_public_organization(slug: str | None = None, *, host: str | None = None) -> dict | None:
     """
-    Resolve the company for the public job board without prompting the user.
+    Resolve the company for the public job board (per-tenant model).
 
     Order:
-      1. Explicit slug (?company= / path)
-      2. DEFAULT_PUBLIC_COMPANY_SLUG env
-      3. Sole organization that currently has enabled jobs
+      1. Explicit slug (?company= / ?slug=)
+      2. Host subdomain (e.g. acme.example.com → acme)
+      3. DEFAULT_PUBLIC_COMPANY_SLUG env
+
+    Never auto-picks a sole organization — multi-tenant boards must be explicit.
     """
     import os
 
@@ -174,20 +211,20 @@ def resolve_public_organization(slug: str | None = None) -> dict | None:
     if explicit:
         return find_organization_by_slug(explicit)
 
+    if host:
+        host_clean = host.split(':')[0].strip().lower()
+        parts = host_clean.split('.')
+        if len(parts) >= 3 and parts[0] not in ('www', 'api', 'localhost'):
+            org = find_organization_by_slug(parts[0])
+            if org:
+                return org
+
     default_slug = (os.getenv('DEFAULT_PUBLIC_COMPANY_SLUG') or '').strip().lower()
     if default_slug:
         org = find_organization_by_slug(default_slug)
         if org:
             return org
 
-    companies = list_companies_with_enabled_jobs()
-    if len(companies) == 1:
-        return find_organization_by_slug(companies[0].get('slug'))
-    if len(companies) == 0:
-        # Fall back to sole organization row even if no enabled jobs yet
-        rows = db_all('SELECT id, name, slug FROM organizations ORDER BY created_at ASC LIMIT 2', ())
-        if rows and len(rows) == 1:
-            return dict(rows[0])
     return None
 
 

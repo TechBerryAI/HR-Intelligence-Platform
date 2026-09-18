@@ -13,7 +13,6 @@ import { useTheme } from '@/core/context/ThemeContext.jsx'
 
 const SORT_OPTIONS = [
   { value: 'relevance', label: 'Relevance' },
-  { value: 'newest', label: 'Newest first' },
   { value: 'oldest', label: 'Oldest first' },
 ]
 
@@ -119,8 +118,6 @@ export default function Jobs() {
     const list = [...filtered]
     const kw = query.keywords.toLowerCase()
     switch (sortBy) {
-      case 'newest':
-        return list.sort((a, b) => postedTime(b) - postedTime(a))
       case 'oldest':
         return list.sort((a, b) => postedTime(a) - postedTime(b))
       case 'relevance':

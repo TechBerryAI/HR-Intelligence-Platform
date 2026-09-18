@@ -1,0 +1,16 @@
+{
+  "education": [],
+  "experience": [
+    {
+      "company": "Helios Analytics",
+      "role": "Data Analyst",
+      "start_date": "2021-01",
+      "end_date": "2023-12",
+      "duties": ["Built dashboards for finance stakeholders"]
+    }
+  ],
+  "skills": ["SQL", "Python", "AWS"],
+  "certifications": [{"name": "PMP"}],
+  "forbidden_certifications": ["AWS"],
+  "summary": "Seeking a challenging role as a data analyst"
+}

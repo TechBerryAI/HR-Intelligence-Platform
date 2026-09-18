@@ -7,6 +7,8 @@ import { BASE_URL, apiRequest } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
 import { getAvatarGradient } from '@/shared/utils/avatarColor.js'
 import { fetchInterviewByApplication } from '@/features/interview/services/bookingApi.js'
+const ALL_CANDIDATES_ID = '__all__'
+
 // Helper function to get score color and label (same as CandidateCard)
 const formatStatusLabel = (status) => {
   if (!status) return 'Applied'
@@ -81,7 +83,7 @@ export default function AppliedCandidates() {
   const { jobs, fetchApplicationsForJob, auth } = useApp()
   const { surfaceTheme, isDark } = useTheme()
   const matchVariant = isDark ? 'enterprise' : 'default'
-  const [selectedJobId, setSelectedJobId] = useState(null)
+  const [selectedJobId, setSelectedJobId] = useState(ALL_CANDIDATES_ID)
   const [applications, setApplications] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -95,6 +97,8 @@ export default function AppliedCandidates() {
   const [interviewInfo, setInterviewInfo] = useState(null)
   const [interviewLoading, setInterviewLoading] = useState(false)
 
+  const isAllCandidates = selectedJobId === ALL_CANDIDATES_ID
+
   const resolvedCandidateId = useMemo(() => {
     if (!selectedCandidate) return null
     return (
@@ -106,37 +110,81 @@ export default function AppliedCandidates() {
     )
   }, [selectedCandidate])
 
+  const effectiveJobId = useMemo(() => {
+    if (!isAllCandidates) return selectedJobId
+    return selectedCandidate?.jobId || selectedCandidate?.job_id || null
+  }, [isAllCandidates, selectedJobId, selectedCandidate])
+
   // Filter jobs to only show those with applications (for HR)
   const jobsWithApplications = useMemo(() => {
     return jobs.filter(job => job.enabled !== false)
   }, [jobs])
 
-  // Set initial selected job
-  useEffect(() => {
-    if (jobsWithApplications.length > 0 && !selectedJobId) {
-      setSelectedJobId(jobsWithApplications[0].id)
+  const jobTitleById = useMemo(() => {
+    const map = {}
+    for (const job of jobsWithApplications) {
+      map[job.id] = job.title
     }
-  }, [jobsWithApplications, selectedJobId])
+    return map
+  }, [jobsWithApplications])
 
-  // Fetch applications when job is selected
-  useEffect(() => {
-    if (!selectedJobId) return
-
-    const loadApplications = async () => {
-      setLoading(true)
-      setError('')
-      const result = await fetchApplicationsForJob(selectedJobId)
-      if (result.ok) {
-        setApplications(result.data || [])
+  const loadApplications = async (jobId) => {
+    setLoading(true)
+    setError('')
+    try {
+      if (jobId === ALL_CANDIDATES_ID) {
+        if (jobsWithApplications.length === 0) {
+          setApplications([])
+          return
+        }
+        const results = await Promise.all(
+          jobsWithApplications.map((job) => fetchApplicationsForJob(job.id)),
+        )
+        const failed = results.find((r) => !r.ok)
+        if (failed && results.every((r) => !r.ok)) {
+          setError(failed.message || 'Failed to load applications')
+          setApplications([])
+          return
+        }
+        const merged = results.flatMap((result, index) => {
+          if (!result.ok) return []
+          const job = jobsWithApplications[index]
+          return (result.data || []).map((app) => ({
+            ...app,
+            jobId: app.jobId || app.job_id || job.id,
+            jobTitle: app.jobTitle || job.title,
+          }))
+        })
+        merged.sort((a, b) => {
+          const scoreA = Number(getApplicationDisplayMatch(a).score ?? a.matchScore ?? a.score ?? 0)
+          const scoreB = Number(getApplicationDisplayMatch(b).score ?? b.matchScore ?? b.score ?? 0)
+          return scoreB - scoreA
+        })
+        setApplications(merged)
       } else {
-        setError(result.message || 'Failed to load applications')
-        setApplications([])
+        const result = await fetchApplicationsForJob(jobId)
+        if (result.ok) {
+          setApplications(result.data || [])
+        } else {
+          setError(result.message || 'Failed to load applications')
+          setApplications([])
+        }
       }
+    } finally {
       setLoading(false)
     }
+  }
 
-    loadApplications()
-  }, [selectedJobId, fetchApplicationsForJob])
+  // Fetch applications when job selection changes
+  useEffect(() => {
+    if (!selectedJobId) return
+    if (selectedJobId === ALL_CANDIDATES_ID && jobsWithApplications.length === 0) {
+      setApplications([])
+      return
+    }
+    loadApplications(selectedJobId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on selection / job list changes
+  }, [selectedJobId, jobsWithApplications, fetchApplicationsForJob])
 
   useEffect(() => {
     setSelectedFilter('all')
@@ -234,17 +282,17 @@ export default function AppliedCandidates() {
   }, [selectedCandidate?.id, selectedCandidate?.status, selectedCandidate?.shortlisted])
 
   const handleStatusAction = async (action) => {
-    if (!selectedJobId || !resolvedCandidateId || statusAction.loading) return
+    const jobId = effectiveJobId
+    if (!jobId || jobId === ALL_CANDIDATES_ID || !resolvedCandidateId || statusAction.loading) return
     setStatusAction({ loading: true, action })
     try {
-      await apiRequest(`/api/jobs/${encodeURIComponent(selectedJobId)}/applications/${encodeURIComponent(resolvedCandidateId)}/status`, {
+      await apiRequest(`/api/jobs/${encodeURIComponent(jobId)}/applications/${encodeURIComponent(resolvedCandidateId)}/status`, {
         method: 'PATCH',
         body: { action },
         token: tokenService.getToken(),
       })
       setSelectedCandidate((prev) => prev ? { ...prev, status: action === 'shortlist' ? 'Shortlisted' : 'Not Shortlisted', shortlisted: action === 'shortlist' } : prev)
-      const result = await fetchApplicationsForJob(selectedJobId)
-      if (result.ok) setApplications(result.data || [])
+      await loadApplications(selectedJobId)
     } catch (err) {
       console.error('Status action failed:', err)
       alert(err?.message || 'Failed to update status')
@@ -254,7 +302,7 @@ export default function AppliedCandidates() {
   }
 
   useEffect(() => {
-    if (!resolvedCandidateId || !selectedJobId) return
+    if (!resolvedCandidateId || !effectiveJobId || effectiveJobId === ALL_CANDIDATES_ID) return
 
     let cancelled = false
 
@@ -265,7 +313,7 @@ export default function AppliedCandidates() {
           apiRequest(`/api/candidate/profile/${encodeURIComponent(resolvedCandidateId)}`, {
             token: tokenService.getToken(),
           }),
-          apiRequest(`/api/jobs/${encodeURIComponent(selectedJobId)}/applications/${encodeURIComponent(resolvedCandidateId)}/viewed`, {
+          apiRequest(`/api/jobs/${encodeURIComponent(effectiveJobId)}/applications/${encodeURIComponent(resolvedCandidateId)}/viewed`, {
             method: 'POST',
             token: tokenService.getToken(),
           }).catch(() => null),
@@ -278,13 +326,22 @@ export default function AppliedCandidates() {
             const viewedOk = viewedRes?.status === 'ok' && !viewedRes?.profile_update?.unchanged
             const status = (viewedOk && !alreadyDecided) ? 'profile_viewed' : prev.status
             const shortlisted = prev.shortlisted
-            return { ...prev, ...profile, status, shortlisted }
+            return {
+              ...prev,
+              ...profile,
+              status,
+              shortlisted,
+              jobId: prev.jobId || prev.job_id || effectiveJobId,
+              jobTitle: prev.jobTitle || jobTitleById[prev.jobId || prev.job_id || effectiveJobId],
+            }
           })
           if (viewedRes?.status === 'ok' && !viewedRes?.profile_update?.unchanged) {
             setApplications((prevList) =>
               prevList.map((app) => {
                 const cid = app.candidateId ?? app.candidate_id ?? app.candidateID ?? app.cid
                 if (String(cid) !== String(resolvedCandidateId)) return app
+                const appJobId = app.jobId || app.job_id
+                if (appJobId && String(appJobId) !== String(effectiveJobId)) return app
                 const alreadyDecided = app.shortlisted === true || app.shortlisted === 1 ||
                   ['shortlisted', 'rejected'].includes(String(app.status || '').toLowerCase())
                 if (alreadyDecided) return app
@@ -305,7 +362,7 @@ export default function AppliedCandidates() {
     return () => {
       cancelled = true
     }
-  }, [resolvedCandidateId, selectedJobId])
+  }, [resolvedCandidateId, effectiveJobId, jobTitleById])
 
   const buildResumeUrl = (candidate) => {
     if (!candidate) return null
@@ -425,18 +482,31 @@ export default function AppliedCandidates() {
               <div className={panelClass}>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs uppercase tracking-[0.2em] text-[var(--ei-text-muted)] font-semibold">Job Description</p>
-                  <h2 className="text-lg font-semibold text-[var(--ei-text-primary)] mt-1">Select a job to view applicants</h2>
+                  <h2 className="text-lg font-semibold text-[var(--ei-text-primary)] mt-1">
+                    {isAllCandidates ? 'View applicants across all jobs' : 'Select a job to view applicants'}
+                  </h2>
                 </div>
                 <div className="w-full sm:min-w-[20rem] sm:w-96 flex-shrink-0">
                   <div className={selectWrapClass}>
                     <select
-                      value={selectedJobId || ''}
+                      value={selectedJobId || ALL_CANDIDATES_ID}
                       onChange={(e) => setSelectedJobId(e.target.value)}
-                      title={jobsWithApplications.find(j => j.id === selectedJobId)
-                        ? `JD #${selectedJobId} • ${jobsWithApplications.find(j => j.id === selectedJobId)?.title ?? ''}`
-                        : 'Select a job'}
+                      title={
+                        isAllCandidates
+                          ? 'All Candidates'
+                          : jobsWithApplications.find(j => j.id === selectedJobId)
+                            ? `JD #${selectedJobId} • ${jobsWithApplications.find(j => j.id === selectedJobId)?.title ?? ''}`
+                            : 'Select a job'
+                      }
                       className={selectClass}
                     >
+                      <option
+                        value={ALL_CANDIDATES_ID}
+                        className="text-zinc-900 bg-white"
+                        style={{ backgroundColor: '#f5f6f8', color: '#0f172a' }}
+                      >
+                        All Candidates
+                      </option>
                       {jobsWithApplications.map(job => (
                         <option
                           key={job.id}
@@ -524,7 +594,9 @@ export default function AppliedCandidates() {
                     <h3 className="text-lg font-medium text-[var(--ei-text-primary)]">No Candidates Found</h3>
                     <p className="mt-1 text-sm text-[var(--ei-text-muted)]">
                       {selectedFilter === 'all' 
-                        ? 'No applications received for this job yet' 
+                        ? (isAllCandidates
+                          ? 'No applications received yet'
+                          : 'No applications received for this job yet')
                         : 'No candidates match the selected score range'}
                     </p>
                   </div>
@@ -618,6 +690,9 @@ export default function AppliedCandidates() {
                               <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-[var(--ei-text-muted)] uppercase tracking-wider">Sr.no</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-[var(--ei-text-muted)] uppercase tracking-wider">Candidate Name</th>
+                                {isAllCandidates && (
+                                  <th className="px-6 py-3 text-left text-xs font-medium text-[var(--ei-text-muted)] uppercase tracking-wider">Job</th>
+                                )}
                                 <th className="px-6 py-3 text-left text-xs font-medium text-[var(--ei-text-muted)] uppercase tracking-wider">Match Score</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-[var(--ei-text-muted)] uppercase tracking-wider">Status</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-[var(--ei-text-muted)] uppercase tracking-wider">Action</th>
@@ -653,6 +728,13 @@ export default function AppliedCandidates() {
                                         </div>
                                       </div>
                                     </td>
+                                    {isAllCandidates && (
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className="text-sm text-[var(--ei-text-secondary)]">
+                                          {candidate.jobTitle || jobTitleById[candidate.jobId || candidate.job_id] || `JD #${candidate.jobId || candidate.job_id || '—'}`}
+                                        </span>
+                                      </td>
+                                    )}
                                     <td className="px-6 py-4 whitespace-nowrap">
                                       <div className="flex items-center gap-2">
                                         <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full ${scoreInfo.bgColor} ring-1 ${scoreInfo.ringColor}`}>
@@ -1107,10 +1189,26 @@ export default function AppliedCandidates() {
         const strengthChips = toChips(rawStrengths)
         const gapChips = toChips(rawGaps)
 
+        const enterpriseModal = matchVariant === 'enterprise'
+        const modalShell = enterpriseModal
+          ? 'border-white/[0.08] bg-[rgba(16,23,30,0.96)] shadow-[0_24px_64px_rgba(0,0,0,0.45)]'
+          : 'border-slate-200 bg-white shadow-[0_24px_64px_rgba(15,23,42,0.18)]'
+        const labelTone = enterpriseModal ? 'text-[#83909C]' : 'text-slate-500'
+        const bodyTone = enterpriseModal ? 'text-[#F2F5F8]' : 'text-slate-900'
+        const mutedTone = enterpriseModal ? 'text-[#8796A5]' : 'text-slate-600'
+        const subtitleTone = enterpriseModal ? 'text-[#A0ABB6]' : 'text-slate-600'
+        const verdictBox = isNotMatch
+          ? enterpriseModal
+            ? 'bg-[rgba(255,82,105,0.035)] border border-[rgba(255,82,105,0.12)] border-l-[rgba(255,82,105,0.65)]'
+            : 'bg-red-50 border border-red-200 border-l-red-500'
+          : enterpriseModal
+            ? 'bg-[rgba(55,214,160,0.04)] border border-[rgba(55,214,160,0.12)] border-l-[rgba(55,214,160,0.55)]'
+            : 'bg-emerald-50 border border-emerald-200 border-l-emerald-500'
+
         return (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={closeReasonModal}>
+          <div className={`fixed inset-0 z-[100] flex items-center justify-center p-4 backdrop-blur-sm ${enterpriseModal ? 'bg-black/70' : 'bg-slate-900/40'}`} onClick={closeReasonModal}>
             <div
-              className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[20px] border border-white/[0.08] bg-[rgba(16,23,30,0.96)] shadow-[0_24px_64px_rgba(0,0,0,0.45)]"
+              className={`w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-[20px] border ${modalShell}`}
               onClick={(e) => e.stopPropagation()}
               role="dialog"
               aria-labelledby="match-modal-title"
@@ -1124,24 +1222,18 @@ export default function AppliedCandidates() {
                 onClose={closeReasonModal}
               />
               <div className="p-5 sm:p-6 space-y-6">
-                <div
-                  className={`rounded-[14px] px-4 py-3.5 border-l-[3px] ${
-                    isNotMatch
-                      ? 'bg-[rgba(255,82,105,0.035)] border border-[rgba(255,82,105,0.12)] border-l-[rgba(255,82,105,0.65)]'
-                      : 'bg-[rgba(55,214,160,0.04)] border border-[rgba(55,214,160,0.12)] border-l-[rgba(55,214,160,0.55)]'
-                  }`}
-                >
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#83909C]">
+                <div className={`rounded-[14px] px-4 py-3.5 border-l-[3px] ${verdictBox}`}>
+                  <p className={`text-[11px] font-semibold uppercase tracking-[0.08em] ${labelTone}`}>
                     Why this verdict
                   </p>
-                  <p className="mt-1.5 text-sm font-medium text-[#F2F5F8] leading-relaxed">
+                  <p className={`mt-1.5 text-sm font-medium leading-relaxed ${bodyTone}`}>
                     {verdictReason}
                   </p>
                   {recon?.note && (
-                    <p className="mt-2 text-xs text-[#8796A5] leading-relaxed">{recon.note}</p>
+                    <p className={`mt-2 text-xs leading-relaxed ${mutedTone}`}>{recon.note}</p>
                   )}
                   {displayMandatoryPct != null && Number(displayMandatoryPct) < 60 && missingMandatory.length > 0 && (
-                    <p className="mt-1.5 text-xs text-[#8796A5]">
+                    <p className={`mt-1.5 text-xs ${mutedTone}`}>
                       Missing mandatory: {missingMandatory.join(', ')}
                     </p>
                   )}
@@ -1149,10 +1241,10 @@ export default function AppliedCandidates() {
 
                 {(breakdown.skills != null || breakdown.experience != null || breakdown.education != null || breakdown.location != null) && (
                   <div>
-                    <h3 className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#83909C] mb-1">
+                    <h3 className={`text-[12px] font-semibold uppercase tracking-[0.08em] mb-1 ${labelTone}`}>
                       Score breakdown
                     </h3>
-                    <p className="text-xs text-[#738394] mb-3">
+                    <p className={`text-xs mb-3 ${subtitleTone}`}>
                       How well the candidate fits each area of the role
                       {displayMandatoryPct != null ? ` · Mandatory skills: ${Number(displayMandatoryPct)}% matched` : ''}
                     </p>

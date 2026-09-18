@@ -9,7 +9,7 @@ from typing import Optional, List, Dict
 import jwt
 
 from app.core.auth import JWT_SECRET
-from app.database.connection.db import db_run, db_get, db_all
+from app.database.connection.db import db_run, db_get, db_all, get_conn
 from app.domains.identity.authorization.rbac import STAFF_ROLES
 
 MAX_FAILED_LOGIN_ATTEMPTS = 8
@@ -69,15 +69,23 @@ def is_refresh_token_active(token: str) -> bool:
         """,
         (jti, _token_fingerprint(token)),
     )
-    if row:
-        return True
-    # Backward-compatible: accept first-use tokens issued before table existed,
-    # then register them so logout can revoke thereafter.
-    existing = db_get("SELECT jti FROM auth_refresh_tokens WHERE jti = ?", (jti,))
-    if existing:
-        return False
-    register_refresh_token(token, str(payload.get('user_id') or ''))
-    return True
+    return bool(row)
+
+
+def prune_expired_refresh_tokens(retention_days: int = 30) -> int:
+    """Delete refresh-token rows expired more than ``retention_days`` ago."""
+    row = db_get(
+        """
+        WITH deleted AS (
+            DELETE FROM auth_refresh_tokens
+            WHERE expires_at < NOW() - (? * INTERVAL '1 day')
+            RETURNING 1
+        )
+        SELECT COUNT(*) AS cnt FROM deleted
+        """,
+        (retention_days,),
+    )
+    return int(row['cnt']) if row else 0
 
 
 def revoke_refresh_token(token: str) -> Dict:
@@ -99,12 +107,22 @@ def revoke_refresh_token(token: str) -> Dict:
     return {"success": True}
 
 
-def deactivate_session(token: str) -> Dict:
-    """Revoke a refresh token (or access token's sibling via body refresh)."""
+def deactivate_session(token: str, expected_user_id: str | None = None) -> Dict:
+    """Revoke a refresh token (or access token's sibling via body refresh).
+
+    ``expected_user_id``, when given, must match the token's own embedded
+    ``user_id`` — used by the authenticated ``/sessions/logout-session``
+    route so a caller cannot revoke another user's sessions by supplying an
+    arbitrary (but validly-signed) token they happen to have obtained; the
+    two self-service (unauthenticated) callers in hr_auth.py omit it because
+    the supplied token *is* the only identity in play there.
+    """
     if not token:
         return {"success": False, "error": "Token is required"}
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False})
+        if expected_user_id is not None and str(payload.get('user_id')) != str(expected_user_id):
+            return {"success": False, "error": "Token does not belong to this account"}
         if payload.get('type') == 'refresh':
             return revoke_refresh_token(token)
         # Access token logout: revoke all sessions for this user.
@@ -125,13 +143,87 @@ def deactivate_all_user_sessions(user_id, user_type: str) -> Dict:
     return {"success": True}
 
 
+def user_has_active_refresh_session(user_id) -> bool:
+    """True when the user has at least one non-revoked, unexpired refresh token."""
+    if not user_id:
+        return False
+    row = db_get(
+        """
+        SELECT 1 AS ok FROM auth_refresh_tokens
+        WHERE user_id = ? AND revoked_at IS NULL AND expires_at > NOW()
+        LIMIT 1
+        """,
+        (str(user_id),),
+    )
+    return bool(row)
+
+
 def rotate_refresh_token(old_token: str, new_token: str, user_id: str) -> Dict:
-    revoke_refresh_token(old_token)
-    return register_refresh_token(new_token, user_id)
+    """Atomically revoke old refresh and register new; fails if old already rotated."""
+    try:
+        old_payload = jwt.decode(
+            old_token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False}
+        )
+        new_payload = jwt.decode(
+            new_token, JWT_SECRET, algorithms=["HS256"], options={"verify_exp": False}
+        )
+    except Exception:
+        return {"success": False, "error": "invalid token"}
+    old_jti = old_payload.get('jti')
+    new_jti = new_payload.get('jti')
+    if not old_jti or not new_jti:
+        return {"success": False, "error": "missing jti"}
+    if new_payload.get('type') != 'refresh':
+        return {"success": False, "error": "invalid token"}
+
+    exp = None
+    if new_payload.get('exp'):
+        exp = datetime.fromtimestamp(new_payload['exp'], tz=timezone.utc)
+    if exp is None:
+        exp = datetime.now(timezone.utc)
+
+    from app.database.connection.db import _pg_query
+
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    _pg_query(
+                        "UPDATE auth_refresh_tokens SET revoked_at = NOW() "
+                        "WHERE jti = ? AND revoked_at IS NULL"
+                    ),
+                    (old_jti,),
+                )
+                if cursor.rowcount != 1:
+                    return {"success": False, "error": "refresh token already rotated or revoked"}
+                cursor.execute(
+                    _pg_query(
+                        """
+                        INSERT INTO auth_refresh_tokens (jti, user_id, token_hash, expires_at)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT (jti) DO NOTHING
+                        """
+                    ),
+                    (new_jti, str(user_id), _token_fingerprint(new_token), exp),
+                )
+                if cursor.rowcount != 1:
+                    # Conflict means jti already existed (should never reuse); fail closed
+                    return {"success": False, "error": "failed to register refresh token"}
+        return {"success": True, "jti": new_jti}
+    except Exception:
+        return {"success": False, "error": "rotation failed"}
 
 
-def is_login_rate_limited(email: str, user_type: str = 'HR') -> bool:
-    return get_recent_failed_attempts(email, user_type, LOGIN_LOCKOUT_MINUTES) >= MAX_FAILED_LOGIN_ATTEMPTS
+def is_login_rate_limited(
+    email: str,
+    user_type: str = 'HR',
+    *,
+    ip_address: Optional[str] = None,
+) -> bool:
+    return (
+        get_recent_failed_attempts(email, user_type, LOGIN_LOCKOUT_MINUTES, ip_address=ip_address)
+        >= MAX_FAILED_LOGIN_ATTEMPTS
+    )
 
 
 def hash_otp(otp: str) -> str:
@@ -209,16 +301,49 @@ def get_login_history(email: str, user_type: str, limit: int = 50) -> List[Dict]
     )
 
 
-def get_recent_failed_attempts(email: str, user_type: str, minutes: int = 15) -> int:
+def get_recent_failed_attempts(
+    email: str,
+    user_type: str,
+    minutes: int = 15,
+    *,
+    ip_address: Optional[str] = None,
+) -> int:
+    if ip_address:
+        row = db_get(
+            """
+            SELECT COUNT(*) AS cnt FROM login_history
+            WHERE email = ? AND user_type = ? AND status = 'failed'
+              AND ip_address = ?
+              AND attempted_at > NOW() - (? * INTERVAL '1 minute')
+            """,
+            (email, audit_user_type(user_type), ip_address, minutes),
+        )
+    else:
+        row = db_get(
+            """
+            SELECT COUNT(*) AS cnt FROM login_history
+            WHERE email = ? AND user_type = ? AND status = 'failed'
+              AND attempted_at > NOW() - (? * INTERVAL '1 minute')
+            """,
+            (email, audit_user_type(user_type), minutes),
+        )
+    return int(row["cnt"]) if row else 0
+
+
+def prune_login_history(retention_days: int = 90) -> int:
+    """Delete login_history rows older than ``retention_days``."""
     row = db_get(
         """
-        SELECT COUNT(*) AS cnt FROM login_history
-        WHERE email = ? AND user_type = ? AND status = 'failed'
-          AND attempted_at > NOW() - (? * INTERVAL '1 minute')
+        WITH deleted AS (
+            DELETE FROM login_history
+            WHERE attempted_at < NOW() - (? * INTERVAL '1 day')
+            RETURNING 1
+        )
+        SELECT COUNT(*) AS cnt FROM deleted
         """,
-        (email, audit_user_type(user_type), minutes),
+        (retention_days,),
     )
-    return int(row["cnt"]) if row else 0
+    return int(row['cnt']) if row else 0
 
 
 def has_previous_login_from_same_device(

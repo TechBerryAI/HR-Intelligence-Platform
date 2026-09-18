@@ -304,6 +304,8 @@ apps/backend/data/bulk_exports/
 # Local resume / JD corpora (large PII — keep on disk, never push)
 /Resumes/
 /resumes/
+/resume testing/
+/resume_testing/
 /JDs/
 /JD/
 /jds/
@@ -335,8 +337,22 @@ validation-report*.log
 *.field-accuracy*.json
 /tmp-*/
 /scratch/
+_forensic_tmp/
+
+# Local QA / pytest capture dumps (never commit)
+.qa-*.txt
+.qa-*.log
+
+# JD parse eval runner outputs (keep apps/data/jd_parse_eval/run_eval.py)
+apps/data/jd_parse_eval/*.json
+apps/data/jd_parse_eval/report.md
 
 # Word lock / temp files
 ~$*
 **/~$*
 
+
+# Resume parsing benchmark — real candidate documents + run artifacts.
+# Tracked: ai/eval/resume_benchmark/** (harness code + thresholds.yaml).
+ai/dataset/lake/benchmark/resume_gold/
+ai/eval/reports/resume_benchmark/

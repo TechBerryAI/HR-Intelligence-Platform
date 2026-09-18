@@ -7,10 +7,13 @@ from werkzeug.utils import secure_filename
 from app.database.connection.db import db_get, db_all, BACKEND, TRUE_SQL
 from app.api.middleware.auth import authenticate_token, require_recruiter
 from app.domains.identity.authorization.rbac import can_access_bulk_session, get_role, ROLE_HEAD_HR, is_read_only, get_user_id
+from app.domains.identity.services.organizations import require_organization_id
 from app.domains.administration.services.bulk_parsing import (
     create_job as bulk_create_job,
     upload_chunk as bulk_upload_chunk,
     start_job as bulk_start_job,
+    pause_job as bulk_pause_job,
+    resume_job as bulk_resume_job,
     upload_files as bulk_upload,
     get_progress as bulk_progress,
     stream_download as bulk_stream_download,
@@ -58,7 +61,6 @@ def _collect_zip_from_request():
 # ============================================================================
 
 @admin_bp.route('/bulk-parse/jobs', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def bulk_parse_create_job():
     """Create an empty bulk parse job for chunked / ZIP uploads."""
@@ -75,7 +77,6 @@ def bulk_parse_create_job():
 
 
 @admin_bp.route('/bulk-parse/upload', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def bulk_parse_upload():
     """
@@ -141,7 +142,6 @@ def bulk_parse_upload():
 
 
 @admin_bp.route('/bulk-parse/start/<job_id>', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def bulk_parse_start(job_id):
     """Start processing a previously staged bulk parse job."""
@@ -168,8 +168,45 @@ def bulk_parse_start(job_id):
     return jsonify(result), 200
 
 
+@admin_bp.route('/bulk-parse/pause/<job_id>', methods=['POST'])
+@require_recruiter
+def bulk_parse_pause(job_id):
+    """Pause a running bulk parse job (finishes in-flight files, then stops)."""
+    if is_read_only(request.user):
+        return jsonify({'error': 'Read-only access'}), 403
+    from app.workers.bulk_parser import get_local_progress
+
+    ok_local, local_job = get_local_progress(job_id, check_only=True)
+    if ok_local:
+        started_by = local_job.get('started_by')
+        if started_by and not can_access_bulk_session(request.user, started_by):
+            return jsonify({'error': 'Access denied'}), 403
+    success, result = bulk_pause_job(job_id)
+    if not success:
+        return jsonify(result), 400
+    return jsonify(result), 200
+
+
+@admin_bp.route('/bulk-parse/resume/<job_id>', methods=['POST'])
+@require_recruiter
+def bulk_parse_resume(job_id):
+    """Resume a paused bulk parse job."""
+    if is_read_only(request.user):
+        return jsonify({'error': 'Read-only access'}), 403
+    from app.workers.bulk_parser import get_local_progress
+
+    ok_local, local_job = get_local_progress(job_id, check_only=True)
+    if ok_local:
+        started_by = local_job.get('started_by')
+        if started_by and not can_access_bulk_session(request.user, started_by):
+            return jsonify({'error': 'Access denied'}), 403
+    success, result = bulk_resume_job(job_id)
+    if not success:
+        return jsonify(result), 400
+    return jsonify(result), 200
+
+
 @admin_bp.route('/bulk-parse/progress/<job_id>', methods=['GET'])
-@authenticate_token
 @require_recruiter
 def bulk_parse_progress(job_id):
     """Get bulk parsing job progress. Proxies to Bulk-Resume-Parser API."""
@@ -188,7 +225,6 @@ def bulk_parse_progress(job_id):
 
 
 @admin_bp.route('/bulk-parse/download/<job_id>', methods=['GET'])
-@authenticate_token
 @require_recruiter
 def bulk_parse_download(job_id):
     """Stream Excel download from Bulk-Resume-Parser. Proxies internally."""
@@ -202,7 +238,14 @@ def bulk_parse_download(job_id):
     if not success:
         if payload.get('code') == ERROR_CODE_UNREACHABLE or payload.get('code') == 'BULK_PARSER_NOT_CONFIGURED':
             return jsonify(payload), 503
-        return jsonify(payload), 404 if 'not found' in str(payload.get('error', '')).lower() else 502
+        if payload.get('code') == 'EXPORT_REGENERATING':
+            return jsonify(payload), 202
+        err = str(payload.get('error', '')).lower()
+        if 'not found' in err or 'export is missing' in err:
+            return jsonify(payload), 404
+        if 'not completed' in err:
+            return jsonify(payload), 409
+        return jsonify(payload), 502
     iterator, filename, content_type = payload
     return Response(
         iterator,
@@ -216,7 +259,6 @@ def bulk_parse_download(job_id):
 # ============================================================================
 
 @admin_bp.route('/job-matches', methods=['GET'])
-@authenticate_token
 @require_recruiter
 def job_matches():
     """
@@ -228,14 +270,19 @@ def job_matches():
         return jsonify({'error': 'HR user required'}), 403
     role = get_role(request.user)
     if role == ROLE_HEAD_HR:
+        org_id, err = require_organization_id(request.user)
+        if err:
+            return err
         jobs = db_all(
             '''
             SELECT j.jdid, j.title, j.company, j.location, j.enabled,
                    (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid) as application_count,
                    (SELECT COUNT(*) FROM applications a WHERE a.job_id = j.jdid AND a.shortlisted = ''' + TRUE_SQL + ''') as shortlisted_count
             FROM jobs j
+            WHERE j.organization_id = ?
             ORDER BY j.posted_on DESC
-            '''
+            ''',
+            (org_id,),
         )
     else:
         jobs = db_all(

@@ -4,7 +4,18 @@
  * React MUST consume Form DTOs only (`result.form`).
  * Raw TOON / AI output is never mapped on the frontend.
  */
-import { BASE_URL as API_URL } from './api';
+import { BASE_URL as API_URL, apiRequest, ensureFreshAccessToken } from './api';
+import { tokenService } from '@/core/auth/tokenService.js';
+
+/** Same-origin /api (Vite proxy). Never call 127.0.0.1 from localhost — that is CORS. */
+function parseUrl(path) {
+  return `${API_URL || ''}${path}`
+}
+
+function isTransportError(err) {
+  const msg = String(err?.message || err || '')
+  return /failed to fetch|network error|networkerror|failed to reach parse api|empty response stream|parse stream ended without result/i.test(msg)
+}
 
 function validationHeaders() {
   // Never embed validation bypass tokens in production bundles.
@@ -45,21 +56,6 @@ export function extractParseErrorMessage(payload, fallback = 'Unable to parse th
   return fallback;
 }
 
-function isGenericParseFailure(message) {
-  return /^failed to parse (resume|document|job description)?\.?$/i.test(String(message || '').trim())
-    || /^parse failed\.?$/i.test(String(message || '').trim())
-    || /^unable to parse this document\.?$/i.test(String(message || '').trim());
-}
-
-function isStreamTransportFailure(err) {
-  const msg = err?.message || '';
-  return (
-    err instanceof TypeError
-    || /failed to fetch|networkerror|load failed|aborterror/i.test(msg)
-    || /parse stream ended without result/i.test(msg)
-  );
-}
-
 /**
  * Upload and parse resume file (authenticated).
  * @returns {Promise<Object>} Parse result with `form` Form DTO
@@ -71,22 +67,11 @@ export async function uploadAndParseResume(file, candidateId = null) {
     formData.append('candidate_id', candidateId);
   }
 
-  const token = localStorage.getItem('jwtToken');
-
-  const response = await fetch(`${API_URL}/api/parse/resume`, {
+  return apiRequest('/api/parse/resume', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
     body: formData,
+    timeoutMs: 120000,
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(extractParseErrorMessage(error, 'Failed to parse resume'));
-  }
-
-  return await response.json();
 }
 
 /**
@@ -112,10 +97,31 @@ export async function uploadAndParseResumePublic(file) {
   return await response.json();
 }
 
+function applySseChunk(chunk, { onStage, sink }) {
+  const lines = String(chunk || '').split('\n');
+  let eventName = 'message';
+  const dataLines = [];
+  for (const line of lines) {
+    const trimmed = line.replace(/\r$/, '');
+    if (trimmed.startsWith('event:')) eventName = trimmed.slice(6).trim();
+    else if (trimmed.startsWith('data:')) dataLines.push(trimmed.slice(5).trimStart());
+  }
+  if (!dataLines.length) return;
+  let data;
+  try {
+    data = JSON.parse(dataLines.join('\n'));
+  } catch {
+    return;
+  }
+  if (eventName === 'stage' && onStage) onStage(data);
+  if (eventName === 'result') sink.result = data;
+  if (eventName === 'error') sink.errorPayload = data;
+}
+
 /**
  * Parse SSE stream from Document Intelligence Engine.
  */
-async function consumeParseSSE(response, { onStage } = {}) {
+async function consumeParseSSE(response, { onStage, onFirstChunk } = {}) {
   const contentType = response.headers.get('content-type') || '';
   if (!response.ok) {
     if (contentType.includes('application/json')) {
@@ -131,110 +137,123 @@ async function consumeParseSSE(response, { onStage } = {}) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-  let result = null;
-  let errorPayload = null;
+  const sink = { result: null, errorPayload: null };
 
+  const drainBuffer = (flush) => {
+    buffer = buffer.replace(/\r\n/g, '\n');
+    const chunks = buffer.split('\n\n');
+    if (!flush) {
+      buffer = chunks.pop() || '';
+    } else {
+      buffer = '';
+    }
+    for (const chunk of chunks) {
+      applySseChunk(chunk, { onStage, sink });
+    }
+  };
+
+  let sawChunk = false
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const chunks = buffer.split('\n\n');
-    buffer = chunks.pop() || '';
-    for (const chunk of chunks) {
-      const lines = chunk.split('\n');
-      let eventName = 'message';
-      let dataLine = '';
-      for (const line of lines) {
-        if (line.startsWith('event:')) eventName = line.slice(6).trim();
-        if (line.startsWith('data:')) dataLine += line.slice(5).trim();
-      }
-      if (!dataLine) continue;
-      let data;
-      try {
-        data = JSON.parse(dataLine);
-      } catch {
-        continue;
-      }
-      if (eventName === 'stage' && onStage) onStage(data);
-      if (eventName === 'result') result = data;
-      if (eventName === 'error') errorPayload = data;
+    if (!sawChunk && value) {
+      sawChunk = true
+      onFirstChunk?.()
     }
+    if (done) {
+      buffer += decoder.decode();
+      drainBuffer(true);
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    drainBuffer(false);
   }
-  if (errorPayload) {
-    throw new Error(extractParseErrorMessage(errorPayload, 'Parse failed'));
+  if (sink.errorPayload) {
+    throw new Error(extractParseErrorMessage(sink.errorPayload, 'Parse failed'));
   }
-  if (!result) {
+  if (!sink.result) {
     throw new Error('Parse stream ended without result');
   }
-  return result;
+  return sink.result;
 }
+
+const SSE_HEADERS = {
+  Accept: 'text/event-stream',
+};
 
 /**
  * Public resume parse with live stage events (SSE).
  * Falls back to sync only for transport/stream issues — never hides a real parse error.
  */
-export async function uploadAndParseResumePublicStream(file, { onStage } = {}) {
+export async function uploadAndParseResumePublicStream(file, { onStage, onFirstChunk } = {}) {
   const formData = new FormData();
   formData.append('file', file);
-  let response;
   try {
-    response = await fetch(`${API_URL}/api/parse/resume/public/stream`, {
+    const response = await fetch(parseUrl('/api/parse/resume/public/stream'), {
       method: 'POST',
       headers: {
+        ...SSE_HEADERS,
         ...validationHeaders(),
       },
       body: formData,
     });
-  } catch {
-    return uploadAndParseResumePublic(file);
-  }
-
-  try {
-    return await consumeParseSSE(response, { onStage });
+    return await consumeParseSSE(response, { onStage, onFirstChunk });
   } catch (err) {
-    if (!isStreamTransportFailure(err)) throw err;
-    try {
-      return await uploadAndParseResumePublic(file);
-    } catch (syncErr) {
-      if (!isGenericParseFailure(err?.message) && isGenericParseFailure(syncErr?.message)) {
-        throw err;
-      }
-      throw syncErr;
-    }
+    if (!isTransportError(err)) throw err
+    // Live stream dropped (empty SSE body). JSON parse still fills the apply form.
+    return uploadAndParseResumePublic(file)
   }
 }
 
 /**
- * JD parse with live stage events (SSE), sync fallback.
+ * Authenticated resume parse with live stage events (SSE).
+ * Falls back to sync only for transport/stream issues.
  */
-export async function uploadAndParseJDStream(file, jobId = null, { onStage } = {}) {
+export async function uploadAndParseResumeStream(file, candidateId = null, { onStage, onFirstChunk } = {}) {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (candidateId) formData.append('candidate_id', candidateId);
+  try {
+    await ensureFreshAccessToken();
+  } catch {
+    /* reactive refresh still possible via fallback */
+  }
+  const token = tokenService.getToken();
+  try {
+    const response = await fetch(parseUrl('/api/parse/resume/stream'), {
+      method: 'POST',
+      headers: { ...SSE_HEADERS, Authorization: `Bearer ${token}` },
+      body: formData,
+    });
+    return await consumeParseSSE(response, { onStage, onFirstChunk });
+  } catch (err) {
+    if (!isTransportError(err)) throw err
+    return uploadAndParseResume(file, candidateId)
+  }
+}
+
+/**
+ * JD parse with live stage events (SSE).
+ */
+export async function uploadAndParseJDStream(file, jobId = null, { onStage, onFirstChunk } = {}) {
   const formData = new FormData();
   formData.append('file', file);
   if (jobId) formData.append('job_id', jobId);
-  const token = localStorage.getItem('jwtToken');
-  let response;
   try {
-    response = await fetch(`${API_URL}/api/parse/jd/stream`, {
+    await ensureFreshAccessToken();
+  } catch {
+    /* ignore */
+  }
+  const token = tokenService.getToken();
+  try {
+    const response = await fetch(parseUrl('/api/parse/jd/stream'), {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { ...SSE_HEADERS, Authorization: `Bearer ${token}` },
       body: formData,
     });
-  } catch {
-    return uploadAndParseJD(file, jobId);
-  }
-
-  try {
-    return await consumeParseSSE(response, { onStage });
+    return await consumeParseSSE(response, { onStage, onFirstChunk });
   } catch (err) {
-    if (!isStreamTransportFailure(err)) throw err;
-    try {
-      return await uploadAndParseJD(file, jobId);
-    } catch (syncErr) {
-      if (!isGenericParseFailure(err?.message) && isGenericParseFailure(syncErr?.message)) {
-        throw err;
-      }
-      throw syncErr;
-    }
+    if (!isTransportError(err)) throw err
+    return uploadAndParseJD(file, jobId)
   }
 }
 
@@ -248,22 +267,11 @@ export async function uploadAndParseJD(file, jobId = null) {
     formData.append('job_id', jobId);
   }
 
-  const token = localStorage.getItem('jwtToken');
-
-  const response = await fetch(`${API_URL}/api/parse/jd`, {
+  return apiRequest('/api/parse/jd', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
     body: formData,
+    timeoutMs: 120000,
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(extractParseErrorMessage(error, 'Failed to parse job description'));
-  }
-
-  return await response.json();
 }
 
 /**
@@ -299,22 +307,24 @@ export function takeJDFormDTO(result) {
  * Validate file before upload.
  */
 export function validateFileForParsing(file) {
-  const allowedExtensions = ['pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp'];
+  // Legacy .doc is read server-side via antiword; the server returns a clear
+  // error when that binary is unavailable, so do not block it here.
+  const allowedExtensions = ['pdf', 'docx', 'doc', 'webp'];
   const maxSize = 10 * 1024 * 1024; // 10MB
 
   const extension = file.name.split('.').pop().toLowerCase();
 
-  if (extension === 'doc') {
+  if (extension === 'png' || extension === 'jpg' || extension === 'jpeg') {
     return {
       valid: false,
-      error: 'Legacy .doc format is not supported. Please use DOCX or PDF.',
+      error: 'Image resumes (PNG/JPG) are not supported. Please upload PDF or DOCX.',
     };
   }
 
   if (!allowedExtensions.includes(extension)) {
     return {
       valid: false,
-      error: 'Invalid file type. Please upload PDF, DOCX, PNG, JPG, or WEBP files only.',
+      error: 'Invalid file type. Please upload PDF, DOCX or DOC files only.',
     };
   }
 
@@ -326,4 +336,66 @@ export function validateFileForParsing(file) {
   }
 
   return { valid: true, error: null };
+}
+
+/**
+ * Wall-clock from file chosen until the parsed form is visible.
+ * Reported to Developer Mode so the dashboard total matches what the user waited.
+ */
+export function startParseClock() {
+  const start = performance.now()
+  const clock = {
+    start,
+    fetchStarted: start,
+    firstChunk: null,
+    resultAt: null,
+    stageSpans: [],
+    markFetch() {
+      clock.fetchStarted = performance.now()
+    },
+    markFirstChunk() {
+      if (clock.firstChunk == null) clock.firstChunk = performance.now()
+    },
+    markResult() {
+      clock.resultAt = performance.now()
+    },
+    addStageSpans(spans) {
+      if (Array.isArray(spans) && spans.length) {
+        clock.stageSpans = spans
+      }
+    },
+  }
+  return clock
+}
+
+export async function reportClientParseTiming(result, clock, extra = {}) {
+  const requestId = result?.timing_request_id
+  if (!requestId || !clock) return
+  const done = performance.now()
+  const first = clock.firstChunk ?? clock.resultAt ?? done
+  const resultAt = clock.resultAt ?? done
+  const overlayMs = Number(extra.overlayMs) || 0
+  const payload = {
+    request_id: requestId,
+    total_ms: done - clock.start,
+    spans: [
+      { key: 'upload', duration_ms: Math.max(0, clock.fetchStarted - clock.start) },
+      { key: 'client_wait', duration_ms: Math.max(0, first - clock.fetchStarted) },
+      { key: 'deliver', duration_ms: Math.max(0, resultAt - first) },
+      { key: 'autofill', duration_ms: Math.max(0, done - resultAt + overlayMs) },
+      ...(clock.stageSpans || []),
+    ],
+  }
+  try {
+    await fetch(parseUrl('/api/parse/timing-client'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...validationHeaders(),
+      },
+      body: JSON.stringify(payload),
+    })
+  } catch {
+    // Developer Mode only; never block autofill
+  }
 }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from providers.ollama.structured_output import build_messages as _ollama_build_messages
 from providers.ollama.structured_output import extract_json_content
 
 
@@ -19,8 +20,8 @@ def normalize_content(content: str, *, schema_id: str | None) -> str:
 
 
 def build_messages(*, prompt: str, input_text: str) -> list[dict[str, str]]:
-    system = prompt.strip() or "You are a structured data extraction assistant. Return JSON only."
-    return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": input_text},
-    ]
+    return _ollama_build_messages(
+        prompt=prompt,
+        input_text=input_text,
+        default_system="You are a structured data extraction assistant. Return JSON only.",
+    )

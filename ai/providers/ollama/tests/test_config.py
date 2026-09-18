@@ -11,6 +11,7 @@ def test_from_dict_defaults() -> None:
     assert config.base_url == "http://192.168.1.200:11434"
     assert config.default_timeout_seconds == 120.0
     assert config.stream is False
+    assert config.keep_alive == "10m"
 
 
 def test_from_dict_custom_values() -> None:
@@ -21,6 +22,7 @@ def test_from_dict_custom_values() -> None:
             "timeout_seconds": 90,
             "api_key": "secret",
             "stream": True,
+            "keep_alive": "30m",
         }
     )
     assert config.enabled is False
@@ -28,3 +30,4 @@ def test_from_dict_custom_values() -> None:
     assert config.default_timeout_seconds == 90.0
     assert config.api_key == "secret"
     assert config.stream is True
+    assert config.keep_alive == "30m"

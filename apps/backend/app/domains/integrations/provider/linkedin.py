@@ -84,12 +84,13 @@ class LinkedInProvider(JobProvider):
         if posting_id.startswith('hcip:') and len(posting_id) <= 75:
             from app.domains.integrations.service.publish_service import load_job_snapshot
 
-            job = load_job_snapshot(posting_id[5:], config.company_key)
+            job = load_job_snapshot(posting_id[5:], config.organization_id)
         if job is None:
             job = JobSnapshot(
                 job_id=posting_id,
                 title='close',
                 company=config.company or '',
+                organization_id=config.organization_id or '',
                 company_key=config.company_key or '',
             )
         return self._operate(job, config, 'CLOSE', posting_id=posting_id)

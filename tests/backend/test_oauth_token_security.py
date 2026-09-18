@@ -79,6 +79,7 @@ def test_upsert_oauth_tokens_scrubs_and_encrypts(monkeypatch):
     repo.upsert_oauth_tokens(
         provider='google_calendar',
         hrid='HR001',
+        organization_id='11111111-1111-1111-1111-111111111111',
         company_key='acme',
         access_token='ya29.access',
         refresh_token='1//refresh',
@@ -95,7 +96,7 @@ def test_upsert_oauth_tokens_scrubs_and_encrypts(monkeypatch):
         },
     )
     params = stored['params']
-    access_col, refresh_col, raw_col = params[3], params[4], params[8]
+    access_col, refresh_col, raw_col = params[4], params[5], params[9]
     assert access_col.startswith('enc:v1:')
     assert refresh_col.startswith('enc:v1:')
     assert 'ya29' not in access_col

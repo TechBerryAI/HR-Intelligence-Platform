@@ -34,9 +34,9 @@ def process_task(task: dict) -> None:
             provider = (task.get('provider') or '') or ''
             providers = task.get('providers') or []
             provider = provider or (providers[0] if providers else '')
-            company_key = task.get('company_key') or ''
-            if provider and company_key:
-                IntegrationManagerService().sync_provider(company_key, provider)
+            organization_id = task.get('organization_id') or ''
+            if provider and organization_id:
+                IntegrationManagerService().sync_provider(organization_id, provider)
             return
         n = drain_outbox(limit=20)
         logger.info('[integrations] memory hint drained %s outbox row(s)', n)

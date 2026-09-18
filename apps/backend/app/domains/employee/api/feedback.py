@@ -6,9 +6,11 @@ import os
 import re
 import uuid
 from flask import Blueprint, request, jsonify, current_app
-from app.api.middleware.auth import require_head_hr
+from app.api.middleware.auth import require_recruiter
 from app.core.errors import log_unexpected
 from app.database.connection.db import db_run, db_get, db_all, BACKEND, NOW_SQL
+from app.domains.identity.authorization.rbac import get_user_id
+from app.domains.identity.services.organizations import require_organization_id
 from app.integrations.email.utils import send_notification_email
 from app.integrations.email.templates import hrms_feedback_html
 
@@ -67,10 +69,12 @@ def _build_email_body(record):
 
 
 @feedback_bp.route('/submit', methods=['POST'])
+@require_recruiter
 def submit_feedback():
     """
     Submit internal HRMS testing feedback.
     Accepts multipart/form-data (with optional screenshot) or application/json.
+    Requires authenticated recruiter/Head HR.
     """
     try:
         # Prefer JSON for non-file fields; if form is used, take from form
@@ -125,23 +129,25 @@ def submit_feedback():
             # Store media key (portable across MEDIA_ROOT moves)
             screenshot_path = key
 
+        submitted_by = get_user_id(request.user)
+
         # Insert
         if BACKEND == "postgresql":
             query = """
                 INSERT INTO """ + FEEDBACK_TABLE + """
-                (employee_name, employee_id, department, feedback_type, module, severity, description, screenshot_path, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', """ + NOW_SQL + """)
+                (employee_name, employee_id, department, feedback_type, module, severity, description, screenshot_path, status, submitted_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, """ + NOW_SQL + """)
                 RETURNING id
             """
         else:
             query = """
                 INSERT INTO """ + FEEDBACK_TABLE + """
-                (employee_name, employee_id, department, feedback_type, module, severity, description, screenshot_path, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', SYSUTCDATETIME());
+                (employee_name, employee_id, department, feedback_type, module, severity, description, screenshot_path, status, submitted_by, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, SYSUTCDATETIME());
                 SELECT CAST(SCOPE_IDENTITY() AS INT) as lastID;
             """
         result = db_run(query, (
-            employee_name, employee_id, department, feedback_type, module, severity, description, screenshot_path
+            employee_name, employee_id, department, feedback_type, module, severity, description, screenshot_path, submitted_by
         ))
         feedback_id = result.get('lastID')
 
@@ -185,13 +191,17 @@ def submit_feedback():
 
 
 @feedback_bp.route('/list', methods=['GET'])
-@require_head_hr
+@require_recruiter
 def list_feedback():
     """
-    List feedback entries with optional filters (Head HR only).
+    List feedback entries with optional filters (staff recruiters).
     Query params: feedback_type, module, severity, status, date_from, date_to.
     """
     try:
+        org_id, err = require_organization_id(request.user)
+        if err:
+            return err
+
         feedback_type = request.args.get('feedback_type', '').strip()
         module = request.args.get('module', '').strip()
         severity = request.args.get('severity', '').strip()
@@ -199,8 +209,10 @@ def list_feedback():
         date_from = request.args.get('date_from', '').strip()
         date_to = request.args.get('date_to', '').strip()
 
-        conditions = []
-        params = []
+        # Tenant boundary: only feedback submitted by a staff member of the
+        # caller's own organization is visible — never other tenants' data.
+        conditions = ["submitted_by IN (SELECT hrid FROM hr_signup WHERE organization_id = ?)"]
+        params = [org_id]
         if feedback_type and feedback_type in FEEDBACK_TYPES:
             conditions.append("feedback_type = ?")
             params.append(feedback_type)
@@ -244,15 +256,25 @@ def list_feedback():
 
 
 @feedback_bp.route('/<int:feedback_id>/status', methods=['PATCH'])
-@require_head_hr
+@require_recruiter
 def update_feedback_status(feedback_id):
-    """Update feedback status (open / reviewed / resolved). Head HR only."""
+    """Update feedback status (open / reviewed / resolved). Staff recruiters."""
     try:
+        org_id, err = require_organization_id(request.user)
+        if err:
+            return err
+
         data = request.get_json() or {}
         status = (data.get('status') or '').strip()
         if status not in STATUSES:
             return jsonify({"error": "Invalid status"}), 400
-        existing = db_get("SELECT id FROM " + FEEDBACK_TABLE + " WHERE id = ?", (feedback_id,))
+        # Tenant boundary: only mutate feedback submitted by the caller's own org.
+        existing = db_get(
+            "SELECT id FROM " + FEEDBACK_TABLE + """
+            WHERE id = ? AND submitted_by IN (SELECT hrid FROM hr_signup WHERE organization_id = ?)
+            """,
+            (feedback_id, org_id),
+        )
         if not existing:
             return jsonify({"error": "Feedback not found"}), 404
         db_run(

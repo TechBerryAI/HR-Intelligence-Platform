@@ -70,13 +70,19 @@ def create_app() -> Flask:
     except Exception as exc:
         print(f"[AI] hardware profile apply skipped: {exc}")
 
+    try:
+        from app.ai.parser.text_extraction import log_ocr_readiness
+
+        log_ocr_readiness()
+    except Exception as exc:
+        print(f"[OCR] readiness probe skipped: {exc}")
+
     from app.domains.identity.models import init_models  # noqa: E402
 
     app = Flask(__name__)
     app.request_class = _AppRequest
-    # Bulk resume uploads: raise body size (Flask wires this via Request.max_content_length).
-    # Form part/memory limits are on _AppRequest (see class docstring).
-    app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', str(512 * 1024 * 1024)))
+    # Default body size (raise on bulk-upload blueprint only).
+    app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', str(32 * 1024 * 1024)))
     from app.core.auth import JWT_SECRET
     app.config['JWT_SECRET'] = JWT_SECRET
     app.config['MAIL_SERVER'] = os.getenv('MAIL_SERVER', 'smtp.gmail.com')
@@ -114,7 +120,15 @@ def create_app() -> Flask:
             r"/*": {
                 "origins": cors_origins,
                 "methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
-                "allow_headers": ["Content-Type", "Authorization", "Accept", "X-Requested-With", "X-Platform-Key"],
+                "allow_headers": [
+                    "Content-Type",
+                    "Authorization",
+                    "Accept",
+                    "X-Requested-With",
+                    "X-Platform-Key",
+                    "X-Validation-Token",
+                    "Cache-Control",
+                ],
                 "expose_headers": ["Content-Type", "Authorization"],
                 "supports_credentials": True,
                 "max_age": 3600,
@@ -152,6 +166,14 @@ def create_app() -> Flask:
         response.headers.setdefault(
             'Permissions-Policy',
             'camera=(), microphone=(), geolocation=(), payment=()',
+        )
+        response.headers.setdefault(
+            'Content-Security-Policy',
+            "default-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+        )
+        response.headers.setdefault(
+            'Strict-Transport-Security',
+            'max-age=31536000; includeSubDomains',
         )
         return response
 
@@ -224,16 +246,33 @@ def create_app() -> Flask:
                     wall_ms = (_time.perf_counter() - started) * 1000.0
                 if exc is not None:
                     timing_collector.mark_error(rid)
+                if getattr(request, 'timing_keep_open', False):
+                    # SSE parse: the generator ends the session after the stream
+                    # finishes (upload → result). Ending here would freeze totals
+                    # at view-return time. Still clear this thread's contextvar
+                    # so the next request on the same worker is not polluted.
+                    set_timing_context(None)
+                    return
                 timing_collector.end_session(rid, wall_duration_ms=wall_ms)
             set_timing_context(None)
         except Exception:
             pass
 
     print("[DB] Initializing database at startup...")
-    _db_host = os.getenv('POSTGRES_HOST', os.getenv('PGHOST', 'localhost'))
-    _db_port = os.getenv('POSTGRES_PORT', os.getenv('PGPORT', '5432'))
-    _db_name = os.getenv('POSTGRES_DB', os.getenv('PGDATABASE', 'postgres'))
-    print(f"[DB] Target: {_db_host}:{_db_port}/{_db_name}")
+    from urllib.parse import urlparse
+
+    _db_url = (os.getenv('DATABASE_URL') or '').strip()
+    if _db_url:
+        _parsed = urlparse(_db_url)
+        _db_host = _parsed.hostname or 'localhost'
+        _db_port = str(_parsed.port or 5432)
+        _db_name = (_parsed.path or '/').lstrip('/') or 'postgres'
+        print(f"[DB] Target: {_db_host}:{_db_port}/{_db_name}")
+    else:
+        _db_host = os.getenv('POSTGRES_HOST', os.getenv('PGHOST', 'localhost'))
+        _db_port = os.getenv('POSTGRES_PORT', os.getenv('PGPORT', '5432'))
+        _db_name = os.getenv('POSTGRES_DB', os.getenv('PGDATABASE', 'postgres'))
+        print(f"[DB] Target: {_db_host}:{_db_port}/{_db_name}")
     try:
         from app.database.alembic_runner import prepare_schema_for_web_process
 
@@ -295,20 +334,14 @@ def create_app() -> Flask:
             return 'error'
 
     def _check_ollama() -> str:
-        base = (
-            (os.getenv('OLLAMA_HOST') or os.getenv('OLLAMA_BASE_URL') or '')
-            .strip()
-            .rstrip('/')
-        )
-        if not base:
-            return 'not_configured'
-        try:
-            import requests
+        from app.ai.parser.engine.ollama_health import inspect_ollama_runtime
 
-            r = requests.get(f'{base}/api/tags', timeout=2)
-            return 'ok' if r.ok else 'unreachable'
-        except Exception:
-            return 'unreachable'
+        info = inspect_ollama_runtime()
+        if info.get('error') == 'not_configured':
+            return 'not_configured'
+        if info.get('reachable'):
+            return 'ok'
+        return 'unreachable'
 
     def _check_bulk_parser() -> str:
         bulk_url = (os.getenv('BULK_PARSER_URL') or '').rstrip('/')
@@ -322,25 +355,42 @@ def create_app() -> Flask:
         except Exception:
             return 'unreachable'
 
+    def _check_ocr() -> str:
+        try:
+            from app.ai.parser.text_extraction import ocr_health_status
+
+            return ocr_health_status()
+        except Exception:
+            return 'unavailable'
+
     @app.route('/health', methods=['GET'])
     def health():
-        """Liveness: process is up. Reports dependency status; does not fail on Ollama/DB."""
-        from app.core.shared_store import redis_status
+        """
+        Liveness: process is up. Fast path for UI / load balancers.
 
-        checks = {
-            'postgres': _check_postgres(),
-            'redis': redis_status(),
-            'ollama': _check_ollama(),
-            'bulk_parser': _check_bulk_parser(),
-        }
-        return jsonify({
+        Dependency probes (Postgres, Ollama, …) are expensive and block under bulk
+        parse load — only run them when ``?deps=1`` (or use ``GET /ready``).
+        """
+        from flask import request
+
+        body = {
             'status': 'ok',
             'message': 'HR Intelligence API is running',
             'pid': os.getpid(),
-            'checks': checks,
-            # Back-compat for older probes
-            'bulk_parser': checks['bulk_parser'],
-        })
+        }
+        if request.args.get('deps') in ('1', 'true', 'yes'):
+            from app.core.shared_store import redis_status
+
+            checks = {
+                'postgres': _check_postgres(),
+                'redis': redis_status(),
+                'ollama': _check_ollama(),
+                'bulk_parser': _check_bulk_parser(),
+                'ocr': _check_ocr(),
+            }
+            body['checks'] = checks
+            body['bulk_parser'] = checks['bulk_parser']
+        return jsonify(body)
 
     @app.route('/ready', methods=['GET'])
     def ready():
@@ -384,6 +434,10 @@ def create_app() -> Flask:
     app.register_blueprint(media_bp, url_prefix='/api/media')
     app.register_blueprint(feedback_bp, url_prefix='/api/feedback')
     app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    # Bulk resume uploads need a higher body limit than the global default.
+    admin_bp.max_content_length = int(
+        os.getenv('BULK_MAX_CONTENT_LENGTH', str(512 * 1024 * 1024))
+    )
     app.register_blueprint(developer_bp, url_prefix='/api/admin/developer')
     app.register_blueprint(head_hr_bp, url_prefix='/api/head-hr')
     app.register_blueprint(integrations_bp, url_prefix='/api/integrations')
@@ -418,5 +472,12 @@ def create_app() -> Flask:
 
     if app.config.get('DEVELOPER_MODE'):
         print("[DEVELOPER MODE] Enabled — Admin performance collector active")
+
+    try:
+        from app.ai.parser.engine.ollama_health import log_ollama_runtime
+
+        log_ollama_runtime()
+    except Exception as exc:
+        print(f"[ollama] startup probe skipped: {exc}")
 
     return app

@@ -38,7 +38,7 @@ contracts/ → schemas/ → knowledge/ → toon/v1/ → backend/toon.py
 |----------|-------|
 | Document schemas | `ai/schemas/*.yaml` reference contracts |
 | Knowledge bases | Alias lookup during normalization |
-| Documentation | `docs/ADRS.md` · YAML contracts in this package |
+| Documentation | `docs/AI.md` · YAML contracts in this package |
 
 ## Extension points
 

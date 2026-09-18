@@ -17,6 +17,7 @@ const PremiumInput = forwardRef(({
   children,
   type: typeProp = 'text',
   showPasswordToggle = true,
+  required,
   ...props 
 }, ref) => {
   const [isFocused, setIsFocused] = useState(false);
@@ -44,7 +45,7 @@ const PremiumInput = forwardRef(({
       {label && (
         <label className={labelClass}>
           {label}
-          {props.required && <span className="text-[#FF6B81] ml-1">*</span>}
+          {required && <span className="text-[#FF6B81] ml-1">*</span>}
         </label>
       )}
       
@@ -61,6 +62,8 @@ const PremiumInput = forwardRef(({
           onBlur={() => setIsFocused(false)}
           type={as === 'textarea' || as === 'select' ? undefined : inputType}
           className={fieldClass}
+          aria-required={required || undefined}
+          aria-invalid={error ? true : undefined}
           {...props}
         >
           {children}

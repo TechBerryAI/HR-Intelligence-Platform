@@ -36,11 +36,12 @@ export default function CandidateCard({ candidate, onViewDetails, onViewReason }
   const location = candidate.currentLocation || null
   const experience = candidate.experienceLevel ? candidate.experienceLevel.replace(/_/g, ' ') : null
   const appliedAt = candidate.appliedAt ? formatDate(candidate.appliedAt) : null
+  const jobLabel = candidate.jobTitle || null
   const educationLine = candidate.education?.[0]
     ? [candidate.education[0].degree, candidate.education[0].institution].filter(Boolean).join(' · ')
     : null
 
-  const metaParts = [location, experience, appliedAt && `Applied ${appliedAt}`].filter(Boolean)
+  const metaParts = [jobLabel, location, experience, appliedAt && `Applied ${appliedAt}`].filter(Boolean)
 
   return (
     <article className="group relative org-glass-card p-5">

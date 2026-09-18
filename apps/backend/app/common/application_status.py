@@ -101,4 +101,9 @@ def can_transition(from_status: str | None, to_status: str | None) -> bool:
 
 
 def status_after_ats(shortlisted: bool) -> str:
-    return STATUS_SHORTLISTED if shortlisted else STATUS_REJECTED
+    """Map ATS auto-shortlist decision to application status.
+
+    Non-shortlisted outcomes stay Applied (talent pool), not Rejected.
+    Matches apply + n8n callback paths in applications.py / jobs.py.
+    """
+    return STATUS_SHORTLISTED if shortlisted else STATUS_APPLIED

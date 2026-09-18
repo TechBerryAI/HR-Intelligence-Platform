@@ -107,7 +107,19 @@ class ConnectionPool:
                     pass
                 return self._create_connection()
         except Empty:
-            return self._create_connection()
+            with self.lock:
+                if getattr(self, '_overflow', 0) >= self.pool_size:
+                    raise RuntimeError(
+                        f'Database connection pool exhausted '
+                        f'(pool_size={self.pool_size}, overflow cap reached)'
+                    )
+                self._overflow = getattr(self, '_overflow', 0) + 1
+            try:
+                return self._create_connection()
+            except Exception:
+                with self.lock:
+                    self._overflow = max(0, getattr(self, '_overflow', 1) - 1)
+                raise
 
     def return_connection(self, conn):
         try:
@@ -115,11 +127,15 @@ class ConnectionPool:
                 self.pool.put_nowait(conn)
             else:
                 conn.close()
+                with self.lock:
+                    self._overflow = max(0, getattr(self, '_overflow', 1) - 1)
         except Exception:
             try:
                 conn.close()
             except Exception:
                 pass
+            with self.lock:
+                self._overflow = max(0, getattr(self, '_overflow', 1) - 1)
 
 
 _connection_pool = ConnectionPool(pool_size=POOL_SIZE)

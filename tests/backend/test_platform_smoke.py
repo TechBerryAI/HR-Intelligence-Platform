@@ -14,10 +14,15 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2] / 'apps' / 'backend'
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-HEAD_HR_EMAIL = os.getenv('SMOKE_HEAD_HR_EMAIL', 'chetan.gore@techberryinfotech.com')
-HEAD_HR_PASSWORD = os.getenv('SMOKE_HEAD_HR_PASSWORD', 'P@ssw0rd')
-CEO_EMAIL = os.getenv('SMOKE_CEO_EMAIL', 'unmesh.tari@techberryinfotech.com')
-CEO_PASSWORD = os.getenv('SMOKE_CEO_PASSWORD', 'P@ssw0rd')
+# No hardcoded fallback credentials: this file is a manual smoke test meant to
+# run against a real, operator-chosen environment. Every SMOKE_* var must be
+# set explicitly; missing credentials cleanly skip the tests that need them
+# (see _staff_login) rather than silently authenticating against whatever
+# database happens to be configured.
+HEAD_HR_EMAIL = os.getenv('SMOKE_HEAD_HR_EMAIL', '')
+HEAD_HR_PASSWORD = os.getenv('SMOKE_HEAD_HR_PASSWORD', '')
+CEO_EMAIL = os.getenv('SMOKE_CEO_EMAIL', '')
+CEO_PASSWORD = os.getenv('SMOKE_CEO_PASSWORD', '')
 RECRUITER_EMAIL = os.getenv('SMOKE_RECRUITER_EMAIL', '')
 RECRUITER_PASSWORD = os.getenv('SMOKE_RECRUITER_PASSWORD', '')
 

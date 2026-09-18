@@ -4,6 +4,7 @@
 // proxy should do the same. Set an absolute VITE_API_URL only for rare split-origin setups.
 // If you migrate auth to HttpOnly cookies, keep `credentials: 'include'` (already set below).
 import { tokenService } from '@/core/auth/tokenService.js';
+import { markBackendSeen } from '@/core/api/healthCheck.js';
 
 // Empty string = same-origin relative URLs (recommended)
 export const BASE_URL = (import.meta.env?.VITE_API_URL ?? '').replace(/\/$/, '');
@@ -135,7 +136,7 @@ export async function tryRefresh() {
 }
 
 /** If access token expires soon, refresh before the request. */
-async function ensureFreshAccessToken() {
+export async function ensureFreshAccessToken() {
   const access = tokenService.getToken();
   if (!access) return;
   const payload = decodeJwtPayload(access);
@@ -175,6 +176,8 @@ export async function apiRequest(
       if (attempt > 0 && import.meta.env?.DEV) {
         console.log(`[API] ✓ Request succeeded after ${attempt} ${attempt === 1 ? 'retry' : 'retries'}`);
       }
+      // Any successful API traffic (incl. bulk progress) proves the backend is up
+      try { markBackendSeen(); } catch { /* ignore */ }
       return result;
       
     } catch (error) {

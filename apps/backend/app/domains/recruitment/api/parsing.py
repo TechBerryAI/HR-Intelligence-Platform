@@ -9,7 +9,6 @@ from __future__ import annotations
 import hmac
 import logging
 import os
-import time
 import uuid
 
 from flask import Blueprint, Response, jsonify, request, stream_with_context
@@ -24,9 +23,40 @@ from app.ai.parser.engine import get_parse_job, run_jd_parse_pipeline, run_resum
 from app.ai.parser.engine.confidence import calculate_confidence
 from app.ai.toon.runtime import toon_loads_flex
 from app.core import shared_store
+from app.database.connection.db import db_get
 from app.domains.identity.authorization.rbac import STAFF_ROLES, get_role, get_user_id
+from app.domains.identity.services.organizations import require_organization_id
 
 logger = logging.getLogger(__name__)
+
+_SSE_PAD = ':' + (' ' * 2048) + '\n\n'
+_SSE_HEADERS = {
+    'Cache-Control': 'no-cache, no-transform',
+    'X-Accel-Buffering': 'no',
+}
+
+
+def _owned_candidate_id_or_error(user, candidate_id):
+    """
+    Verify a client-supplied candidate_id belongs to the caller's organization
+    before it is allowed to touch parsed_resumes for that candidate.
+    Returns (candidate_id, None) on success, or (None, (jsonify_response, status)).
+    """
+    if not candidate_id:
+        return None, None
+    org_id, err = require_organization_id(user)
+    if err:
+        return None, err
+    row = db_get(
+        'SELECT 1 FROM candidates WHERE cid = ? AND organization_id = ?',
+        (candidate_id, org_id),
+    )
+    if not row:
+        return None, (jsonify({
+            'status': 'error',
+            'error': 'candidate_id does not belong to your organization',
+        }), 403)
+    return candidate_id, None
 
 
 def _safe_error_body(body: dict, status: int) -> dict:
@@ -55,7 +85,10 @@ def _jd_client(body: dict, status: int):
 
 parsing_bp = Blueprint('parsing', __name__)
 
-ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp'}
+# Image resumes (PNG/JPG) are rejected — OCR quality is too unreliable for apply/autofill.
+# Legacy .doc is accepted only when the antiword binary is installed; see
+# `_reject_unsupported_doc`.
+ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'webp'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
 _PUBLIC_PARSE_LIMIT = int(os.getenv('PUBLIC_PARSE_RATE_LIMIT', '10'))
@@ -66,25 +99,91 @@ MIME_TYPE_MAP = {
     'pdf': 'application/pdf',
     'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'doc': 'application/msword',
+    'webp': 'image/webp',
 }
+
+# A .docx or RTF saved with a .doc extension is common; the extractor sniffs the
+# real container, so these pairs must not trip the extension/content check.
+_INTERCHANGEABLE_KINDS = ({'doc', 'docx'},)
 
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
-def _reject_legacy_doc(filename):
+def _parse_source_filename(uploaded: str | None) -> str:
+    """Basename used for parse / name inference.
+
+    Do not run ``secure_filename`` on this value. Werkzeug strips ``[Ny_Nm]``
+    tenure markers and turns `` - Copy`` into ``_-_Copy``, which changes
+    filename-derived names versus the in-process parser. Storage writes
+    use a separate sanitized name via ``save_file_to_storage``.
+    """
+    return (uploaded or '').replace('\\', '/').split('/')[-1].strip()
+
+
+def _reject_unsupported_doc(filename):
+    """Reject legacy .doc only when no converter is installed to read it."""
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-    if ext == 'doc':
+    if ext != 'doc':
+        return None
+    from app.ai.parser.text_extraction import antiword_available
+
+    if antiword_available():
+        return None
+    return jsonify({
+        'status': 'error',
+        'error': 'Legacy .doc files cannot be read on this server. '
+                 'Please upload the resume as DOCX or PDF.',
+    }), 400
+
+
+# Back-compat alias for callers/tests written against the old name.
+_reject_legacy_doc = _reject_unsupported_doc
+
+
+def _reject_bad_content(file_data: bytes, filename: str):
+    """Reject uploads whose magic bytes do not match an allowed type."""
+    kind = sniff_upload_kind(file_data)
+    if kind is None:
         return jsonify({
             'status': 'error',
-            'error': 'Legacy .doc format is not supported. Please use DOCX or PDF.',
+            'error': 'Unrecognized file content. Allowed: PDF, DOCX, DOC, WebP.',
+        }), 400
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    interchangeable = any({ext, kind} <= pair for pair in _INTERCHANGEABLE_KINDS)
+    if ext in ALLOWED_EXTENSIONS and ext != kind and not interchangeable:
+        return jsonify({
+            'status': 'error',
+            'error': f'File content does not match extension .{ext}',
         }), 400
     return None
 
 
-def get_mime_type(filename):
-    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+def sniff_upload_kind(data: bytes) -> str | None:
+    """Return 'pdf' | 'docx' | 'doc' | 'webp' from magic bytes, or None."""
+    if not data:
+        return None
+    if data[:4] == b'%PDF':
+        return 'pdf'
+    if data[:4] == b'PK\x03\x04':
+        return 'docx'
+    # OLE2 compound file — Word 97-2003 .doc
+    if data[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1':
+        return 'doc'
+    if data.lstrip()[:4] == b'{\\rt':
+        return 'doc'
+    if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        return 'webp'
+    return None
+
+
+def get_mime_type(filename: str | None = None, *, data: bytes | None = None) -> str:
+    if data is not None:
+        kind = sniff_upload_kind(data)
+        if kind:
+            return MIME_TYPE_MAP.get(kind, 'application/octet-stream')
+    ext = filename.rsplit('.', 1)[1].lower() if filename and '.' in filename else ''
     return MIME_TYPE_MAP.get(ext, 'application/octet-stream')
 
 
@@ -108,6 +207,36 @@ def _reject_public_oversize():
             'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
         }), 413
     return None
+
+
+def _read_upload_bytes(file) -> bytes:
+    """Read at most MAX_FILE_SIZE+1 bytes.
+
+    Flask's process-wide MAX_CONTENT_LENGTH defaults to 512MB for bulk
+    uploads. Public Apply must not buffer that much when Content-Length is
+    omitted or spoofed low.
+    """
+    return file.read(MAX_FILE_SIZE + 1)
+
+
+def _read_and_validate_upload(file):
+    """Read+cap upload bytes and verify magic-byte content against the
+    declared extension. Returns (file_data, None) or (None, (response, status)).
+
+    Every parse endpoint (public and authenticated, upload and SSE-stream)
+    must apply the same size cap and content sniff — an authenticated
+    endpoint is not a lower-trust boundary than the public one.
+    """
+    file_data = _read_upload_bytes(file)
+    if len(file_data) > MAX_FILE_SIZE:
+        return None, (jsonify({
+            'status': 'error',
+            'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
+        }), 413)
+    bad = _reject_bad_content(file_data, file.filename or '')
+    if bad:
+        return None, bad
+    return file_data, None
 
 
 def _generic_parse_error(exc: Exception, where: str):
@@ -135,13 +264,157 @@ def _public_parse_rate_limited(ip: str) -> bool:
     )
 
 
-# Re-export for tests / bulk workers that import from this module
-__all__ = [
-    'parsing_bp',
-    'run_resume_parse_pipeline',
-    'run_jd_parse_pipeline',
-    'calculate_confidence',
-]
+def _sse_pack(event_name: str, payload: dict) -> str:
+    import json
+
+    return f"event: {event_name}\ndata: {json.dumps(payload, default=str)}\n\n{_SSE_PAD}"
+
+
+def iter_parse_sse(run_with_on_stage, build_ok_payload, timing_ctx=None):
+    """Yield SSE chunks while a parse pipeline runs in a worker thread.
+
+    Stage events are flushed as they happen so the upload overlay can track
+    live progress through Vite / reverse-proxy buffers.
+    """
+    import time as _time
+    from concurrent.futures import ThreadPoolExecutor
+    from queue import Empty, Queue
+
+    from app.core.request_context import get_timing_context, run_in_timing_context
+    from app.core.timing_collector import record_pipeline_stage
+
+    events_q: Queue = Queue()
+    bound_ctx = timing_ctx if timing_ctx is not None else get_timing_context()
+
+    def on_stage(event):
+        events_q.put(event)
+
+    def _run():
+        if bound_ctx is not None:
+            return run_in_timing_context(bound_ctx, run_with_on_stage, on_stage)
+        return run_with_on_stage(on_stage)
+
+    yield _SSE_PAD
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_run)
+        while not future.done():
+            try:
+                ev = events_q.get(timeout=0.25)
+                yield _sse_pack('stage', ev.to_dict())
+            except Empty:
+                # Pad pings too — Vite / proxies otherwise buffer tiny comments
+                # and the overlay stays on the last flushed stage (usually "text").
+                yield _SSE_PAD
+        while True:
+            try:
+                ev = events_q.get_nowait()
+                yield _sse_pack('stage', ev.to_dict())
+            except Empty:
+                break
+        t_deliver = _time.perf_counter()
+        try:
+            body, status = future.result()
+        except Exception:
+            logger.exception('Parse SSE worker failed')
+            record_pipeline_stage(
+                'deliver',
+                'failed',
+                duration_ms=(_time.perf_counter() - t_deliver) * 1000.0,
+            )
+            yield _sse_pack('error', {'status': 'error', 'error': 'Internal server error'})
+            return
+        if status == 200:
+            payload = build_ok_payload(body)
+            record_pipeline_stage(
+                'deliver',
+                'completed',
+                duration_ms=(_time.perf_counter() - t_deliver) * 1000.0,
+            )
+            yield _sse_pack('result', payload)
+        else:
+            record_pipeline_stage(
+                'deliver',
+                'failed',
+                duration_ms=(_time.perf_counter() - t_deliver) * 1000.0,
+            )
+            yield _sse_pack('error', body)
+
+
+def _bind_sse_timing():
+    """Keep Developer Mode session open for the whole SSE stream (not view return)."""
+    import time as _time
+
+    from app.core.developer_mode import is_developer_mode_enabled
+    from app.core.request_context import get_timing_context
+    from app.core.timing_collector import record_pipeline_stage
+
+    ctx = get_timing_context()
+    rid = getattr(request, 'timing_request_id', None) or (ctx.request_id if ctx else None)
+    started = getattr(request, 'timing_started_at', None)
+    request.timing_keep_open = True
+    if is_developer_mode_enabled() and started is not None:
+        record_pipeline_stage(
+            'upload',
+            'completed',
+            duration_ms=(_time.perf_counter() - started) * 1000.0,
+        )
+    return ctx, rid, started
+
+
+def _end_sse_timing(rid, started):
+    import time as _time
+
+    from app.core.developer_mode import is_developer_mode_enabled
+    from app.core.timing_collector import timing_collector
+
+    if not rid or not is_developer_mode_enabled():
+        return
+    wall_ms = None
+    if started is not None:
+        wall_ms = (_time.perf_counter() - started) * 1000.0
+    timing_collector.end_session(rid, wall_duration_ms=wall_ms)
+
+
+def _sse_generate(run_with_on_stage, build_ok_payload):
+    """Bind timing context in the view, restore it in the generator, end after stream."""
+    from app.core.developer_mode import is_developer_mode_enabled
+    from app.core.request_context import reset_timing_context, set_timing_context
+
+    ctx, rid, started = _bind_sse_timing()
+
+    def _build(body):
+        payload = build_ok_payload(body)
+        if rid and is_developer_mode_enabled():
+            payload['timing_request_id'] = rid
+        return payload
+
+    def generate():
+        token = set_timing_context(ctx) if ctx is not None else None
+        try:
+            yield from iter_parse_sse(run_with_on_stage, _build, timing_ctx=ctx)
+        finally:
+            try:
+                _end_sse_timing(rid, started)
+            finally:
+                if token is not None:
+                    try:
+                        reset_timing_context(token)
+                    except Exception:
+                        set_timing_context(None)
+
+    return generate
+
+
+def _sse_response(generate):
+    # Do not set direct_passthrough: Werkzeug then skips stream_with_context and
+    # closes the socket after headers (browser: "Failed to fetch" / network error).
+    resp = Response(
+        stream_with_context(generate()),
+        mimetype='text/event-stream; charset=utf-8',
+        headers=_SSE_HEADERS,
+    )
+    resp.implicit_sequence_conversion = False
+    return resp
 
 
 @parsing_bp.route('/parse/resume/public', methods=['POST'])
@@ -153,7 +426,6 @@ def parse_resume_public():
             return jsonify({
                 'status': 'error',
                 'error': 'Too many resume parse requests. Please try again later.',
-                'pid': os.getpid(),
             }), 429
 
         oversize = _reject_public_oversize()
@@ -161,13 +433,13 @@ def parse_resume_public():
             return oversize
 
         if 'file' not in request.files:
-            return jsonify({'status': 'error', 'error': 'No file provided', 'pid': os.getpid()}), 400
+            return jsonify({'status': 'error', 'error': 'No file provided'}), 400
 
         file = request.files['file']
         if file.filename == '':
             return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
-        doc_reject = _reject_legacy_doc(file.filename)
+        doc_reject = _reject_unsupported_doc(file.filename)
         if doc_reject:
             return doc_reject
 
@@ -177,13 +449,16 @@ def parse_resume_public():
                 'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
             }), 400
 
-        file_data = file.read()
+        file_data = _read_upload_bytes(file)
         if len(file_data) > MAX_FILE_SIZE:
             return jsonify({
                 'status': 'error',
                 'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
             }), 413
-        filename = secure_filename(file.filename)
+        bad = _reject_bad_content(file_data, file.filename or '')
+        if bad:
+            return bad
+        filename = _parse_source_filename(file.filename)
         public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
 
         body, status = run_resume_parse_pipeline(
@@ -213,7 +488,7 @@ def parse_resume_upload():
         if file.filename == '':
             return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
-        doc_reject = _reject_legacy_doc(file.filename)
+        doc_reject = _reject_unsupported_doc(file.filename)
         if doc_reject:
             return doc_reject
 
@@ -223,8 +498,10 @@ def parse_resume_upload():
                 'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
             }), 400
 
-        file_data = file.read()
-        filename = secure_filename(file.filename)
+        file_data, upload_err = _read_and_validate_upload(file)
+        if upload_err:
+            return upload_err
+        filename = _parse_source_filename(file.filename)
 
         uploader_id = get_user_id(current_user)
         jwt_role = get_role(current_user)
@@ -235,7 +512,12 @@ def parse_resume_upload():
             }), 401
 
         uploader_role = 'recruiter' if jwt_role in STAFF_ROLES else 'recruiter'
-        candidate_id = request.form.get('candidate_id') or None
+        candidate_id, cand_err = _owned_candidate_id_or_error(
+            current_user, request.form.get('candidate_id') or None
+        )
+        if cand_err:
+            resp, code = cand_err
+            return resp, code
 
         body, status = run_resume_parse_pipeline(
             file_data,
@@ -251,7 +533,6 @@ def parse_resume_upload():
 
 
 @parsing_bp.route('/parse/jd', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def parse_jd_upload():
     """Upload and parse job description. POST /api/parse/jd"""
@@ -265,7 +546,7 @@ def parse_jd_upload():
         if file.filename == '':
             return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
-        doc_reject = _reject_legacy_doc(file.filename)
+        doc_reject = _reject_unsupported_doc(file.filename)
         if doc_reject:
             return doc_reject
 
@@ -275,12 +556,9 @@ def parse_jd_upload():
                 'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
             }), 400
 
-        file_data = file.read()
-        if len(file_data) > MAX_FILE_SIZE:
-            return jsonify({
-                'status': 'error',
-                'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024}MB',
-            }), 400
+        file_data, upload_err = _read_and_validate_upload(file)
+        if upload_err:
+            return upload_err
 
         filename = secure_filename(file.filename)
         uploader_id = get_user_id(current_user)
@@ -350,7 +628,7 @@ def parse_resume_public_stream():
     if not file.filename:
         return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
-    doc_reject = _reject_legacy_doc(file.filename)
+    doc_reject = _reject_unsupported_doc(file.filename)
     if doc_reject:
         return doc_reject
 
@@ -360,82 +638,86 @@ def parse_resume_public_stream():
             'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
         }), 400
 
-    file_data = file.read()
+    file_data = _read_upload_bytes(file)
     if len(file_data) > MAX_FILE_SIZE:
         return jsonify({
             'status': 'error',
             'error': f'File too large. Maximum size: {MAX_FILE_SIZE / 1024 / 1024:.0f}MB',
         }), 413
-    filename = secure_filename(file.filename)
+    bad = _reject_bad_content(file_data, file.filename or '')
+    if bad:
+        return bad
+    filename = _parse_source_filename(file.filename)
     public_uploader_id = f"PUB{(uuid.uuid4().hex[:16]).upper()}"
 
-    def generate():
-        import json
+    def _run(on_stage):
+        return run_resume_parse_pipeline(
+            file_data,
+            filename,
+            uploader_id=public_uploader_id,
+            uploader_role='public',
+            candidate_id=None,
+            enrichment_context=None,
+            on_stage=on_stage,
+        )
 
-        events_q: list = []
+    return _sse_response(_sse_generate(_run, build_resume_client_payload))
 
-        def on_stage(event):
-            events_q.append(event)
 
-        # Run pipeline synchronously while flushing queued stage events
-        from concurrent.futures import ThreadPoolExecutor
+@parsing_bp.route('/parse/resume/stream', methods=['POST'])
+@authenticate_token
+def parse_resume_stream():
+    """SSE stream of stage events for authenticated resume parse."""
+    current_user = request.user
+    if 'file' not in request.files:
+        return jsonify({'status': 'error', 'error': 'No file provided'}), 400
 
-        from app.core.request_context import get_timing_context, run_in_timing_context
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
-        timing_ctx = get_timing_context()
+    doc_reject = _reject_unsupported_doc(file.filename)
+    if doc_reject:
+        return doc_reject
 
-        def _run_pipeline():
-            if timing_ctx is not None:
-                return run_in_timing_context(
-                    timing_ctx,
-                    run_resume_parse_pipeline,
-                    file_data,
-                    filename,
-                    uploader_id=public_uploader_id,
-                    uploader_role='public',
-                    candidate_id=None,
-                    enrichment_context=None,
-                    on_stage=on_stage,
-                )
-            return run_resume_parse_pipeline(
-                file_data,
-                filename,
-                uploader_id=public_uploader_id,
-                uploader_role='public',
-                candidate_id=None,
-                enrichment_context=None,
-                on_stage=on_stage,
-            )
+    if not allowed_file(file.filename):
+        return jsonify({
+            'status': 'error',
+            'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
+        }), 400
 
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(_run_pipeline)
-            while not future.done():
-                while events_q:
-                    ev = events_q.pop(0)
-                    yield f"event: stage\ndata: {json.dumps(ev.to_dict(), default=str)}\n\n"
-                time.sleep(0.05)
-            while events_q:
-                ev = events_q.pop(0)
-                yield f"event: stage\ndata: {json.dumps(ev.to_dict(), default=str)}\n\n"
-            body, status = future.result()
-            if status == 200:
-                payload = build_resume_client_payload(body)
-                yield f"event: result\ndata: {json.dumps(payload, default=str)}\n\n"
-            else:
-                yield f"event: error\ndata: {json.dumps(body, default=str)}\n\n"
+    file_data, upload_err = _read_and_validate_upload(file)
+    if upload_err:
+        return upload_err
+    filename = _parse_source_filename(file.filename)
+    uploader_id = get_user_id(current_user)
+    jwt_role = get_role(current_user)
+    if not uploader_id:
+        return jsonify({'status': 'error', 'error': 'User ID not found in authentication token'}), 401
 
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no',
-        },
+    uploader_role = 'recruiter' if jwt_role in STAFF_ROLES else 'recruiter'
+    candidate_id, cand_err = _owned_candidate_id_or_error(
+        current_user, request.form.get('candidate_id') or None
     )
+    if cand_err:
+        resp, code = cand_err
+        return resp, code
+
+    def _run(on_stage):
+        return run_resume_parse_pipeline(
+            file_data,
+            filename,
+            uploader_id=uploader_id,
+            uploader_role=uploader_role,
+            candidate_id=candidate_id,
+            enrichment_context=None,
+            on_stage=on_stage,
+        )
+
+    return _sse_response(_sse_generate(_run, build_resume_client_payload))
 
 
 @parsing_bp.route('/parse/jd/stream', methods=['POST'])
-@authenticate_token
 @require_recruiter
 def parse_jd_stream():
     """SSE stream of stage events for JD parse."""
@@ -447,7 +729,7 @@ def parse_jd_stream():
     if not file.filename:
         return jsonify({'status': 'error', 'error': 'No file selected'}), 400
 
-    doc_reject = _reject_legacy_doc(file.filename)
+    doc_reject = _reject_unsupported_doc(file.filename)
     if doc_reject:
         return doc_reject
 
@@ -457,7 +739,9 @@ def parse_jd_stream():
             'error': f'Invalid file type. Allowed: {", ".join(ALLOWED_EXTENSIONS)}',
         }), 400
 
-    file_data = file.read()
+    file_data, upload_err = _read_and_validate_upload(file)
+    if upload_err:
+        return upload_err
     filename = secure_filename(file.filename)
     uploader_id = get_user_id(current_user)
     jwt_role = get_role(current_user)
@@ -467,65 +751,39 @@ def parse_jd_stream():
 
     job_id = request.form.get('job_id')
 
-    def generate():
-        import json
-        from concurrent.futures import ThreadPoolExecutor
+    def _run(on_stage):
+        return run_jd_parse_pipeline(
+            file_data,
+            filename,
+            uploader_id=uploader_id,
+            uploader_role=uploader_role,
+            job_id=job_id,
+            on_stage=on_stage,
+        )
 
-        from app.core.request_context import get_timing_context, run_in_timing_context
+    return _sse_response(_sse_generate(_run, build_jd_client_payload))
 
-        events_q: list = []
 
-        def on_stage(event):
-            events_q.append(event)
+@parsing_bp.route('/parse/timing-client', methods=['POST'])
+def parse_timing_client():
+    """
+    Browser timings from file-chosen until autofill is visible.
 
-        timing_ctx = get_timing_context()
+    No auth: the parse request_id is unguessable and only attaches to an
+    in-memory Developer Mode session on this process.
+    """
+    from app.core.developer_mode import is_developer_mode_enabled
+    from app.core.timing_collector import attach_client_timings
 
-        def _run_pipeline():
-            if timing_ctx is not None:
-                return run_in_timing_context(
-                    timing_ctx,
-                    run_jd_parse_pipeline,
-                    file_data,
-                    filename,
-                    uploader_id=uploader_id,
-                    uploader_role=uploader_role,
-                    job_id=job_id,
-                    on_stage=on_stage,
-                )
-            return run_jd_parse_pipeline(
-                file_data,
-                filename,
-                uploader_id=uploader_id,
-                uploader_role=uploader_role,
-                job_id=job_id,
-                on_stage=on_stage,
-            )
-
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(_run_pipeline)
-            while not future.done():
-                while events_q:
-                    ev = events_q.pop(0)
-                    yield f"event: stage\ndata: {json.dumps(ev.to_dict(), default=str)}\n\n"
-                time.sleep(0.05)
-            while events_q:
-                ev = events_q.pop(0)
-                yield f"event: stage\ndata: {json.dumps(ev.to_dict(), default=str)}\n\n"
-            body, status = future.result()
-            if status == 200:
-                payload = build_jd_client_payload(body)
-                yield f"event: result\ndata: {json.dumps(payload, default=str)}\n\n"
-            else:
-                yield f"event: error\ndata: {json.dumps(body, default=str)}\n\n"
-
-    return Response(
-        stream_with_context(generate()),
-        mimetype='text/event-stream',
-        headers={
-            'Cache-Control': 'no-cache',
-            'X-Accel-Buffering': 'no',
-        },
-    )
+    if not is_developer_mode_enabled():
+        return jsonify({'ok': True, 'ignored': True}), 200
+    data = request.get_json(silent=True) or {}
+    rid = str(data.get('request_id') or data.get('timing_request_id') or '').strip()
+    if not rid or len(rid) > 64:
+        return jsonify({'ok': False, 'error': 'invalid request'}), 400
+    if not attach_client_timings(rid, data):
+        return jsonify({'ok': False, 'error': 'unknown request'}), 404
+    return jsonify({'ok': True}), 200
 
 
 @parsing_bp.route('/parsed/resume/<parsed_id>', methods=['GET'])

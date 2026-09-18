@@ -47,6 +47,15 @@ function StaffSettingsRoute({ children }) {
   return children
 }
 
+function FeedbackAdminRoute({ children }) {
+  const { auth } = useApp()
+  const staffRoles = new Set(['RECRUITER', 'HEAD_HR'])
+  if (!auth.isLoggedIn || !staffRoles.has(auth.role)) {
+    return <Navigate to="/login/admin" replace />
+  }
+  return children
+}
+
 export default function AppRoutes() {
   return (
     <Routes>
@@ -78,7 +87,7 @@ export default function AppRoutes() {
       <Route path="/settings" element={<StaffSettingsRoute><Settings /></StaffSettingsRoute>} />
       <Route path="/integrations" element={<StaffSettingsRoute><IntegrationsDashboard /></StaffSettingsRoute>} />
       <Route path="/admin/bulk-resume-parser" element={<RecruiterGuard><BulkResumeParser /></RecruiterGuard>} />
-      <Route path="/admin/feedback" element={<HeadHrGuard><FeedbackAdmin /></HeadHrGuard>} />
+      <Route path="/admin/feedback" element={<FeedbackAdminRoute><FeedbackAdmin /></FeedbackAdminRoute>} />
       <Route path="/head-hr" element={<HeadHrGuard><HeadHrDashboard /></HeadHrGuard>} />
       <Route path="/head-hr/admins" element={<HeadHrGuard><HeadHrAdmins /></HeadHrGuard>} />
       <Route path="/head-hr/candidates" element={<HeadHrGuard><HeadHrCandidates /></HeadHrGuard>} />

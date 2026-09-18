@@ -45,12 +45,37 @@ _EDUCATION_STRING_FIELDS = (
 )
 
 
-def build_messages(*, prompt: str, input_text: str) -> list[dict[str, str]]:
-    """Build Ollama chat messages from runtime prompt and input."""
-    system = prompt.strip() or "Return JSON only."
+_MIN_DEDUP_INPUT_CHARS = 24
+
+
+def _strip_inlined_input(prompt: str, input_text: str) -> str:
+    """Remove a once-inlined payload so the user message is the only copy."""
+    stripped = prompt.replace(input_text, "", 1)
+    stripped = re.sub(r"(?im)^##\s*Input\s*$", "", stripped).strip()
+    return stripped
+
+
+def build_messages(
+    *,
+    prompt: str,
+    input_text: str,
+    default_system: str = "Return JSON only.",
+) -> list[dict[str, str]]:
+    """Build chat messages from runtime prompt and input.
+
+    Capability prompts inline ``{{input}}`` into the system prompt, and the
+    executor also passes the same text as ``input_text``. Send the payload
+    exactly once: instructions in ``system``, resume/JD text in ``user``.
+    """
+    system = (prompt or "").strip() or default_system
+    user = (input_text or "").strip()
+    if user and len(user) >= _MIN_DEDUP_INPUT_CHARS and user in system:
+        system = _strip_inlined_input(system, user) or default_system
+    if not user:
+        return [{"role": "user", "content": system}]
     return [
         {"role": "system", "content": system},
-        {"role": "user", "content": input_text},
+        {"role": "user", "content": user},
     ]
 
 

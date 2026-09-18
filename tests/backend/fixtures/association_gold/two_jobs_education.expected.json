@@ -1,0 +1,53 @@
+{
+  "education": [
+    {
+      "degree": "Bachelor of Technology",
+      "institution": "ABC University",
+      "field_of_study": "Computer Science",
+      "start_year": "2018",
+      "end_year": "2022"
+    },
+    {
+      "degree": "MBA",
+      "institution": "University A",
+      "field_of_study": "",
+      "start_year": "",
+      "end_year": "2018"
+    },
+    {
+      "degree": "B.Tech",
+      "institution": "University B",
+      "field_of_study": "",
+      "start_year": "",
+      "end_year": "2014"
+    }
+  ],
+  "experience": [
+    {
+      "company": "ABC Technologies",
+      "role": "Software Engineer",
+      "start_date": "2020-01",
+      "end_date": "2022-03",
+      "duties": [
+        "Developed REST APIs",
+        "Managed deployment pipelines"
+      ]
+    },
+    {
+      "company": "XYZ Solutions",
+      "role": "Senior Software Engineer",
+      "start_date": "2022-04",
+      "end_date": "Present",
+      "duties": [
+        "Led engineering team",
+        "Designed distributed architecture"
+      ]
+    }
+  ],
+  "skills": ["Python", "Java", "AWS", "Docker"],
+  "certifications": [
+    {"name": "AWS Certified Solutions Architect"}
+  ],
+  "forbidden_certifications": ["AWS", "Python", "Docker", "Completed AWS cloud training"],
+  "summary": "Results-driven software engineer"
+}

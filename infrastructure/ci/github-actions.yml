@@ -14,10 +14,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install system packages for document parsing
+        run: sudo apt-get update && sudo apt-get install -y antiword
       - name: Install backend dependencies
         run: |
-          pip install -r apps/backend/requirements.txt
+          pip install -r apps/backend/requirements.lock.txt
           pip install pytest
+      - name: Verify PyMuPDF, RapidOCR and antiword
+        run: |
+          python -c "import fitz, rapidocr_onnxruntime; print('PyMuPDF+RapidOCR OK')"
+          python -c "import sys; sys.path.insert(0, 'apps/backend'); from app.ai.parser.text_extraction import antiword_available; assert antiword_available(), 'antiword missing'; print('antiword OK')"
       - name: Run unit tests
         env:
           # Unit/mock only — no live Postgres or Ollama required
@@ -36,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:17
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -64,8 +70,9 @@ jobs:
           JWT_SECRET: "ci-test-jwt-secret-at-least-32-characters-long"
         run: |
           alembic upgrade head
-          alembic heads | grep -q 20260814_cid_pad3
-          alembic current | grep -q 20260814_cid_pad3
+          test "$(alembic heads | awk '{print $1}')" = "$(alembic current | awk '{print $1}')"
+          alembic heads | grep -q 20260824_bulk_pause
+          alembic current | grep -q 20260824_bulk_pause
           python - <<'PY'
           import os
           import psycopg
@@ -108,7 +115,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # Single source of truth: .nvmrc, so CI and local dev cannot drift.
+          # Vite 8 and @vitejs/plugin-react 6 require ^20.19.0 || >=22.12.0.
+          node-version-file: .nvmrc
       - name: Build frontend
         working-directory: apps/frontend
         run: |

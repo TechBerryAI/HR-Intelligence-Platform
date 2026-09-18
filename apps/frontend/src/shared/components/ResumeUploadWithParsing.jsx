@@ -1,16 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  uploadAndParseResume,
+  uploadAndParseResumeStream,
   uploadAndParseResumePublicStream,
   takeResumeFormDTO,
   validateFileForParsing,
   extractParseErrorMessage,
+  startParseClock,
+  reportClientParseTiming,
 } from '@/core/api/parsingApi.js';
+import { hintForStage, isPipelineComplete, overlayCatchupMs, overlayGroupMsFromSpans, progressPctForStage, createStageClock, userFacingParseMessage } from '@/shared/utils/parsePipelineProgress.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiExternalLink, FiTrash2 } from 'react-icons/fi';
+import { FiUpload, FiFile, FiCheck, FiAlertCircle, FiEye, FiTrash2 } from 'react-icons/fi';
 import { tokenService } from '@/core/auth/tokenService.js';
 import { useTheme } from '@/core/context/ThemeContext.jsx';
+import ResumeFilePreviewModal from './ResumeFilePreviewModal.jsx';
 
 function humanizeParseError(raw) {
   const detail = extractParseErrorMessage(raw, '').trim();
@@ -19,6 +23,14 @@ function humanizeParseError(raw) {
   }
   if (/^failed to parse resume\.?$/i.test(detail) || /^parse failed\.?$/i.test(detail)) {
     return 'Unable to parse this resume. Please try another file or fill the form manually.';
+  }
+  if (
+    /failed to fetch/i.test(detail) ||
+    /^network error$/i.test(detail) ||
+    /networkerror/i.test(detail) ||
+    /failed to reach parse api/i.test(detail)
+  ) {
+    return 'Could not reach the parser. Confirm the backend is running on port 3000, then try the resume again.';
   }
   return detail;
 }
@@ -33,17 +45,22 @@ export default function ResumeUploadWithParsing({
   onFileSelect,
   onParseComplete,
   currentFileName,
+  resumeFile,
   onRemove,
   onOpenResume,
   onParseError,
   publicMode = false,
 }) {
   const [isUploading, setIsUploading] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
   const [parseError, setParseError] = useState('');
   const [parseSuccess, setParseSuccess] = useState('');
   const [confidence, setConfidence] = useState(null);
   const [stageLabel, setStageLabel] = useState(null);
+  const [stageMessage, setStageMessage] = useState(null);
   const [progressPct, setProgressPct] = useState(null);
+  const [overlayGroupMs, setOverlayGroupMs] = useState([0, 0, 0, 0]);
   const fileInputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const { theme } = useTheme();
@@ -85,7 +102,22 @@ export default function ResumeUploadWithParsing({
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    setSelectedFile(null);
+    setPreviewOpen(false);
     onRemove?.();
+  };
+
+  const previewFile = resumeFile instanceof File ? resumeFile : selectedFile;
+  const canPreview = Boolean(previewFile) || typeof onOpenResume === 'function';
+
+  const handleViewResume = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (previewFile) {
+      setPreviewOpen(true);
+      return;
+    }
+    onOpenResume?.();
   };
 
   const processFile = async (file) => {
@@ -109,32 +141,47 @@ export default function ResumeUploadWithParsing({
       return;
     }
 
+    setSelectedFile(file);
     if (onFileSelect) {
       onFileSelect(file);
     }
 
     setIsUploading(true);
-    // Leave stage/progress null so the overlay animates through steps (as before).
-    // Live SSE stages take over when the engine reports them.
-    setStageLabel(null);
-    setProgressPct(null);
+    setOverlayGroupMs([0, 0, 0, 0]);
+    setStageLabel('upload');
+    setStageMessage('Uploading resume');
+    setProgressPct(4);
+    let lastStage = 'upload';
+    const clock = startParseClock();
+    const stageClock = createStageClock();
     
     try {
       const onStage = (ev) => {
-        if (ev?.stage) setStageLabel(ev.stage);
-        const order = ['cache', 'persist_raw', 'layout', 'text', 'sections', 'deterministic', 'coverage', 'semantic', 'knowledge', 'validate', 'persist'];
-        const idx = order.indexOf(ev?.stage);
-        if (idx >= 0) setProgressPct(Math.round(((idx + 1) / order.length) * 100));
+        stageClock.onEvent(ev);
+        if (ev?.stage) {
+          lastStage = ev.stage;
+          setStageLabel(ev.stage);
+          setStageMessage(hintForStage(ev.stage, ev.message));
+          setOverlayGroupMs(overlayGroupMsFromSpans('resume', stageClock.getSpans()));
+        }
+        const pct = progressPctForStage('resume', ev?.stage);
+        if (pct != null) setProgressPct((prev) => Math.max(prev ?? 0, pct));
+        if (isPipelineComplete(ev)) setProgressPct(100);
       };
 
+      clock.markFetch();
       const result = publicMode
-        ? await uploadAndParseResumePublicStream(file, { onStage })
-        : await uploadAndParseResume(file);
+        ? await uploadAndParseResumePublicStream(file, { onStage, onFirstChunk: clock.markFirstChunk })
+        : await uploadAndParseResumeStream(file, null, { onStage, onFirstChunk: clock.markFirstChunk });
+      clock.markResult();
 
       if (result.status === 'ok' && result.form) {
         const formData = takeResumeFormDTO(result);
         setConfidence(result.confidence);
         setProgressPct(100);
+        setStageLabel('persist');
+        setStageMessage(hintForStage('persist'));
+        await new Promise((r) => setTimeout(r, overlayCatchupMs('resume', lastStage)));
 
         const coverage = Array.isArray(formData.coverage)
           ? formData.coverage
@@ -168,12 +215,11 @@ export default function ResumeUploadWithParsing({
             `Parsed with incomplete fields — please review: ${labels}. Other fields were auto-filled below.`,
           );
         } else if (result.is_duplicate) {
-          setParseSuccess('Resume recognized! Using previously parsed data.');
+          setParseSuccess('Resume recognized. Using your previously parsed details.');
           setParseError('');
           onParseError?.(null);
         } else {
-          const modelInfo = result.model_version ? ` (${result.model_version})` : '';
-          setParseSuccess(`Resume parsed successfully! Fields auto-filled below.${modelInfo}`);
+          setParseSuccess('Resume parsed successfully. Your details were filled in below.');
           setParseError('');
           onParseError?.(null);
         }
@@ -187,11 +233,15 @@ export default function ResumeUploadWithParsing({
             _parsedId: result.parsed_id,
             _rawFileId: result.raw_file_id,
             _publicUploaderId: result.public_uploader_id || null,
+            _parseClaim: result.parse_claim || null,
             _confidence: result.confidence,
             _modelVersion: result.model_version,
             _trace: formData.trace || [],
           });
         }
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+        clock.addStageSpans(stageClock.getSpans());
+        await reportClientParseTiming(result, clock);
 
         // Low-confidence warning only when no named coverage gaps (JD parity)
         if (coreGaps.length === 0 && (result.partial || result.confidence < 0.75)) {
@@ -211,23 +261,27 @@ export default function ResumeUploadWithParsing({
         throw new Error(extractParseErrorMessage(result, 'Parsing failed'));
       }
     } catch (error) {
-      onParseComplete?.(null, error?.message || String(error));
-      if (error.message.includes('Invalid or expired token') || error.message.includes('Access token required')) {
+      const raw = error?.message || String(error || '');
+      onParseComplete?.(null, raw);
+      if (raw.includes('Invalid or expired token') || raw.includes('Access token required')) {
         console.warn('Session expired, allowing manual upload');
         if (onFileSelect) onFileSelect(file);
       } else {
-        const message = humanizeParseError(error.message);
+        const message = humanizeParseError(raw);
         setParseSuccess('');
         setParseError(message);
         onParseError?.(message);
         // Clear selected file so Apply doesn't look successful without a parsedId
         if (fileInputRef.current) fileInputRef.current.value = '';
+        setSelectedFile(null);
+        setPreviewOpen(false);
         onRemove?.();
       }
       console.error('Resume parsing error:', error);
     } finally {
       setIsUploading(false);
       setStageLabel(null);
+      setStageMessage(null);
       setProgressPct(null);
     }
   };
@@ -241,13 +295,15 @@ export default function ResumeUploadWithParsing({
         isVisible={isUploading}
         type="resume"
         stageLabel={stageLabel}
+        stageMessage={stageMessage}
         progressPct={progressPct}
+        stepMs={overlayGroupMs}
       />
 
       <div className="space-y-4">
         <AnimatePresence mode="wait">
           {hasResume ? (
-            /* Resume present: show only file card with Open and Remove */
+            /* Resume present: file card with View and Remove */
             <motion.div
               key="resume-card"
               initial={{ opacity: 0, y: 10 }}
@@ -276,18 +332,20 @@ export default function ResumeUploadWithParsing({
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
-                {onOpenResume && (
+                {canPreview && (
                   <button
                     type="button"
-                    onClick={(e) => { e.preventDefault(); onOpenResume(); }}
+                    onClick={handleViewResume}
+                    aria-label="View resume"
+                    title="View resume"
                     className={
                       light
-                        ? 'inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors border border-slate-200'
-                        : 'inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-zinc-200 text-sm font-medium transition-colors border border-zinc-600'
+                        ? 'inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium transition-colors border border-slate-200'
+                        : 'inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-zinc-200 text-sm font-medium transition-colors border border-zinc-600'
                     }
                   >
-                    <FiExternalLink className="w-4 h-4" />
-                    View resume
+                    <FiEye className="w-4 h-4" />
+                    <span className="hidden sm:inline">View</span>
                   </button>
                 )}
                 <button
@@ -322,7 +380,7 @@ export default function ResumeUploadWithParsing({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.docx,.png,.jpg,.jpeg,.webp"
+                accept=".pdf,.docx,.doc"
                 onChange={handleFileChange}
                 disabled={isUploading}
                 className="hidden"
@@ -389,28 +447,40 @@ export default function ResumeUploadWithParsing({
         {/* Success message (e.g. after parsing) */}
         {parseSuccess && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="glass-card border-2 border-green-500/30 bg-green-500/10 px-5 py-4 rounded-xl"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={
+              light
+                ? 'rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3.5'
+                : 'rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3.5'
+            }
+            role="status"
           >
             <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-10 h-10 bg-green-500 rounded-full flex items-center justify-center shadow-glow">
-                <FiCheck className="w-5 h-5 text-white" />
+              <div
+                className={
+                  light
+                    ? 'flex-shrink-0 w-9 h-9 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center'
+                    : 'flex-shrink-0 w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center'
+                }
+              >
+                <FiCheck className={`w-5 h-5 ${light ? 'text-emerald-600' : 'text-emerald-400'}`} />
               </div>
-              <div className="flex-1">
-                <p className="font-semibold text-green-300">{parseSuccess}</p>
-                {confidence !== null && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${confidence * 100}%` }}
-                        transition={{ duration: 1, ease: 'easeOut' }}
-                        className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full"
-                      />
+              <div className="min-w-0 flex-1 pt-0.5">
+                <p className={`text-sm font-semibold leading-snug ${light ? 'text-emerald-900' : 'text-emerald-100'}`}>
+                  {userFacingParseMessage(parseSuccess, 'Resume parsed successfully. Your details were filled in below.')}
+                </p>
+                {confidence != null && confidence < 0.99 ? (
+                  <p className={`mt-1 text-xs ${light ? 'text-emerald-700/80' : 'text-emerald-200/70'}`}>
+                    Please double-check the details below.
+                  </p>
+                ) : (
+                  <div className="mt-2.5 flex items-center gap-2">
+                    <div className={`flex-1 h-1.5 rounded-full overflow-hidden ${light ? 'bg-emerald-200' : 'bg-emerald-500/20'}`}>
+                      <div className={`h-full w-full rounded-full ${light ? 'bg-emerald-500' : 'bg-emerald-400'}`} />
                     </div>
-                    <span className="text-xs font-medium text-green-300 min-w-[50px] text-right">
-                      {(confidence * 100).toFixed(0)}%
+                    <span className={`text-xs font-semibold tabular-nums ${light ? 'text-emerald-700' : 'text-emerald-200/80'}`}>
+                      100%
                     </span>
                   </div>
                 )}
@@ -436,6 +506,13 @@ export default function ResumeUploadWithParsing({
         )}
 
       </div>
+
+      <ResumeFilePreviewModal
+        open={previewOpen}
+        file={previewFile}
+        fileName={currentFileName}
+        onClose={() => setPreviewOpen(false)}
+      />
     </>
   );
 }

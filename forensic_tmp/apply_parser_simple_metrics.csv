@@ -1,0 +1,25 @@
+Metric,Result
+Overall parser score,142/195
+Overall acceptance rate,72.82%
+Improvement from original,+73 resumes
+Percentage-point improvement,+37.44 pp
+Relative improvement,+105.8%
+HTTP success,195/195
+HTTP/in-process parity,195/195
+Class D,0
+Tests passed,660
+Tests skipped,4
+Start-date miss reduction,83.3%
+End-date miss reduction,83.3%
+Role miss reduction,68.4%
+Duties miss reduction,51.6%
+Company miss reduction,31.8%
+Original score,69/195
+Original percentage,35.38%
+Final score,142/195
+Final percentage,72.82%
+Forensic expected/scored fields,2251
+Genuine parser-related misses,66
+Association failures,66
+Source ambiguity cases,8
+API/DTO failures,0

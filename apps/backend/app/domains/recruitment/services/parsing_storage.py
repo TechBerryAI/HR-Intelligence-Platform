@@ -28,9 +28,15 @@ def save_file_to_storage(file_data: bytes, filename: str, uploader_id: str) -> s
     Durable media volume under MEDIA_ROOT (S3-swappable later).
     Writes are SHA-256 verified on disk before the key is returned.
     """
+    from werkzeug.utils import secure_filename
+
     file_id = str(uuid.uuid4())
-    extension = os.path.splitext(filename)[1]
-    storage_filename = f"{uploader_id}_{file_id}{extension}"
+    safe_name = secure_filename(filename or '') or 'upload'
+    extension = os.path.splitext(safe_name)[1]
+    # Reject path-like extensions
+    if '/' in extension or '\\' in extension or '..' in extension:
+        extension = ''
+    storage_filename = f"{secure_filename(str(uploader_id)) or 'user'}_{file_id}{extension}"
     relative = f"uploads/{storage_filename}"
     return media_storage.put(relative, file_data, verify=True)
 
@@ -467,7 +473,7 @@ def _cache_model_acceptable(model_version: str | None, document_type: str = 'res
     if env_tag:
         return env_tag.lower() in mv.lower()
     default = (
-        'canonical-v8-exp-layout'
+        'canonical-v9-exp-date-rail'
         if document_type == 'resume'
         else 'canonical-v6-jd-coverage'
     )

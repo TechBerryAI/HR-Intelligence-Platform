@@ -1,0 +1,20 @@
+{
+  "_note": "Compact company|role|dates headers only. No duty bullets found in extract.",
+  "file": "Naukri_GangarajuD[13y_0m].docx",
+  "experience": [
+    {
+      "company": "Accenture",
+      "role": "Senior Software Engineer",
+      "start": "2016-07",
+      "end": "2018-02",
+      "duties": []
+    },
+    {
+      "company": "IBM",
+      "role": "Software Engineer",
+      "start": "2015-01",
+      "end": "2016-06",
+      "duties": []
+    }
+  ]
+}

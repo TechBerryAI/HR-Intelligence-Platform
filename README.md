@@ -9,10 +9,10 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
 | Audience | Capabilities |
 |----------|--------------|
 | **HR / Recruiters** | Job CRUD, application tracking, resume viewing, AI match scores, bulk resume parser, feedback management |
-| **Candidates** | OTP-verified signup, profile & resume upload, job search, one-click apply, application status & match score |
+| **Candidates (public)** | Browse jobs, upload resume, apply without a login account; email-based identity; application status & match score |
 | **Head of HR (HEAD_HR)** | Org-wide dashboard, admin/candidate/job/application management |
 
-- **Authentication:** Separate HR and candidate flows; JWT access + refresh; OTP email verification for signup
+- **Authentication:** HR staff login (JWT access + refresh; OTP email verification on signup); candidates apply via public endpoints (no login accounts)
 - **Parsing:** Resume and job description (PDF/DOC/DOCX) via LLM; TOON schema; optional external bulk parser
 - **ATS:** In-process or n8n webhook; match score and shortlist stored on application
 - **Support & feedback:** Contact form, HRMS testing feedback with optional screenshot
@@ -39,10 +39,10 @@ Full-stack recruitment platform for HR teams and job seekers: job posting, candi
                     └─────────────────────┘
 ```
 
-- **Frontend:** Single-page app; single AppContext for auth, jobs, applicant state; role-based route guards (Recruiter, Candidate, Head of HR, CEO).
+- **Frontend:** Single-page app; single AppContext for auth, jobs, applicant state; role-based route guards (Recruiter, Head of HR, CEO).
 - **Backend:** Monolithic Flask app; blueprints for auth, jobs, candidate, applications, sessions, parsing, support, feedback, admin, head-hr. Connection-pooled PostgreSQL; raw SQL via `db_run`/`db_get`/`db_all`.
 
-Docs: **[docs/README.md](docs/README.md)** · setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** · **media storage:** **[docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md)** · user manuals: **[docs/user-manual/](docs/user-manual/README.md)**.
+Docs: **[docs/GUIDE.md](docs/GUIDE.md)** (full app map) · **[docs/README.md](docs/README.md)** · setup: **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** · **operations:** **[docs/OPERATIONS.md](docs/OPERATIONS.md)** · **AI:** **[docs/AI.md](docs/AI.md)** · user manuals: **[docs/user-manual/](docs/user-manual/README.md)**.
 
 ---
 
@@ -60,7 +60,7 @@ _Add screenshots here (e.g. Home, Jobs list, HR Dashboard, Applicant profile, Bu
 |-------------|---------|--------|
 | Node.js | 16+ | `node --version` |
 | Python | 3.8+ | `python --version` |
-| PostgreSQL | 12+ | Local or cloud (e.g. Supabase, Neon) |
+| PostgreSQL | **15+** | Local Docker or cloud (baseline requires PG15+) |
 
 ### Quick Start (recommended)
 
@@ -103,9 +103,11 @@ python wsgi.py
 
 ```bash
 cd apps/frontend
-npm install
+npm ci          # preferred; use on Linux filesystem (see docs/DEVELOPMENT.md)
 npm run dev
 ```
+
+WSL note: if the repo lives on `/mnt/d` (Windows drive), `npm ci` may hit `EBUSY` under `node_modules`. Use a Linux-path working copy or CI for reproducible installs.
 
 - **Frontend:** http://localhost:5173  
 - **Backend / Health:** http://localhost:3000, http://localhost:3000/health  
@@ -125,7 +127,8 @@ Database and tables are created automatically on first backend run via Alembic (
 | `PORT` | No | Server port (default `3000`) |
 | `FRONTEND_URL` / `FRONTEND_URLS` | Prod | Public SPA origin(s) for CORS when not same-origin proxied |
 | `GUNICORN_BIND` | No | Default `127.0.0.1:3000` (correct behind reverse proxy) |
-| `JWT_SECRET` | Yes | Secret for JWT signing (change in production) |
+| `JWT_SECRET` | Yes | Secret for JWT signing (≥32 chars; change in production) |
+| `INTEGRATION_SECRETS_KEY` | Prod | Fernet key for encrypted integration credentials (not `dev-integration-secrets`) |
 | `MAIL_USERNAME`, `MAIL_PASSWORD` | For OTP | SMTP (e.g. Gmail App Password); set `MAIL_SUPPRESS_SEND=true` to disable |
 | `XAI_MODEL`, `HRMS_API_KEY_1`… | For parsing | LLM (e.g. Grok) for resume/JD parsing |
 | `BULK_PARSER_URL` | Optional | External bulk resume parser API |
@@ -157,39 +160,26 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 
 ```
 ├── start.js              # Unified start script
-├── frontend/              # React SPA (Vite)
-│   ├── src/
-│   │   ├── App.jsx       # Routes + guards
-│   │   ├── context/      # AppContext (state + API actions)
-│   │   ├── guards/       # RecruiterGuard, CandidateGuard, HeadHrGuard, CeoGuard
-│   │   ├── layouts/      # MainLayout, DashboardLayout, AdminLayout
-│   │   ├── pages/        # Lazy-loaded route components
-│   │   ├── components/   # UI primitives (ui/) + feature components
-│   │   ├── services/     # adminService
-│   │   └── utils/       # api.js, tokenService, healthCheck, parsingApi
-│   └── package.json
-├── backend/              # Flask API
-│   ├── app.py            # App entry, CORS, blueprints
-│   ├── auth.py, jobs.py, candidate.py, applications.py, ...
-│   ├── db.py             # PostgreSQL pool + helpers
-│   ├── utils.py          # JWT, auth decorators
-│   ├── alembic/          # Schema migrations (sole DDL source of truth)
-│   └── requirements.txt
-├── desktop/              # Electron shell (native dialogs, IPC)
+├── apps/
+│   ├── frontend/         # React SPA (Vite)
+│   │   └── src/          # routes, guards, features, core/api
+│   ├── backend/          # Flask API
+│   │   ├── app/          # domain blueprints, services, AI
+│   │   ├── alembic/      # Schema migrations (sole DDL source of truth)
+│   │   ├── wsgi.py       # Production entry
+│   │   └── gunicorn.conf.py
+│   └── desktop/          # Electron shell (native dialogs, IPC)
 ├── scripts/              # Root utilities (db-preflight, database tests)
 ├── tests/                # Test index (component tests colocated with owners)
 ├── packages/             # Shared path helpers (knowledge)
 ├── ai/                   # AI platform (runtime, providers, capabilities, dataset, toon)
 └── docs/
     ├── README.md
-    ├── WORKFLOWS.md
-    ├── DEVELOPMENT.md
-    ├── MEDIA_AND_BACKUPS.md
-    ├── DOCUMENT_INTELLIGENCE.md
-    ├── AI_WORKFLOW.md
-    ├── AI_DATA_PIPELINE.md
-    ├── ADRS.md
-    └── user-manual/         # Word/PDF + screenshots (only subfolder)
+    ├── GUIDE.md           # App architecture, flows, API, data model
+    ├── DEVELOPMENT.md     # Setup, production, troubleshooting
+    ├── OPERATIONS.md      # Media + backups
+    ├── AI.md              # AI platform + document intelligence
+    └── user-manual/       # Word/PDF + screenshots (only subfolder)
 ```
 
 ---
@@ -199,14 +189,14 @@ With `FLASK_DEBUG=true`, private LAN origins are also allowed for direct (non-pr
 | Area | Prefix | Examples |
 |------|--------|----------|
 | Auth (HR) | `/api` | `POST /signup`, `POST /verify-otp`, `POST /login`, `POST /refresh`, `POST /forgot-password`, `POST /reset-password` |
-| Candidate | `/api/candidate` | `POST /signup`, `POST /verify-otp`, `POST /login`, `GET|POST /profile` |
+| Candidate (public apply) | `/api/candidate` | Public apply + profile endpoints (no login accounts) |
 | Jobs | `/api/jobs` | `GET /`, `POST /`, `PUT /:id`, `GET /:id/applications` |
 | Applications | `/api/applications` | `POST /` (apply), `GET /` (my applications) |
 | Parsing | `/api` | `POST /parse/resume`, `POST /parse/jd` |
 | Admin | `/api/admin` | `POST /bulk-parse/upload`, `GET /bulk-parse/progress/:id`, `GET /job-matches` |
 | Head of HR | `/api/head-hr` | `GET /stats`, `GET /admins`, `GET /candidates`, `GET /jobs`, `GET /applications` |
 
-For full route details, inspect Flask blueprints under `apps/backend/` (see [docs/WORKFLOWS.md](docs/WORKFLOWS.md)).
+For full route details, inspect Flask blueprints under `apps/backend/` (see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)).
 
 ---
 
@@ -215,10 +205,10 @@ For full route details, inspect Flask blueprints under `apps/backend/` (see [doc
 | Command | Where | Description |
 |---------|--------|-------------|
 | `node start.js` | Root | Copy .env, setup venv + pip + npm, start backend + frontend, open browser |
-| `npm run dev` | frontend | Vite dev server (port 5173) |
-| `npm run build` | frontend | Production build → `frontend/dist` |
-| `npm run preview` | frontend | Preview production build |
-| `python app.py` | backend | Run Flask server (port 3000) |
+| `npm run dev` | apps/frontend | Vite dev server (port 5173) |
+| `npm run build` | apps/frontend | Production build → `apps/frontend/dist` |
+| `npm run preview` | apps/frontend | Preview production build |
+| `python wsgi.py` | apps/backend | Run Flask server (port 3000) |
 | `npm run electron` | Root | Electron desktop window (bulk parser folder access) |
 
 ---
@@ -250,7 +240,7 @@ Electron opens a window that loads the app and uses OS folder dialogs.
 
 Resumes/JDs live in a durable folder **outside** the repo (`…/Projects/hcip-data/`). Postgres backups are owned by the DB team.
 
-**Full command reference:** **[docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md)**
+**Full command reference:** **[docs/OPERATIONS.md](docs/OPERATIONS.md)**
 
 Quick commands:
 
@@ -276,7 +266,7 @@ Do **not** delete `D:/Projects/hcip-data` (or your `HCIP_DATA_HOME`) — that is
 - **Email not sending:** Set `MAIL_SUPPRESS_SEND=true` in `apps/backend/.env` for testing.
 - **Other device cannot reach API:** Leave `VITE_API_URL` empty and open the Vite URL (`http://<host-ip>:5173`), not a hardcoded `localhost` API URL. Ensure firewall allows port 5173.
 
-More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · media: [docs/MEDIA_AND_BACKUPS.md](docs/MEDIA_AND_BACKUPS.md).
+More troubleshooting: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · media: [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 ---
 

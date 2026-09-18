@@ -1,0 +1,40 @@
+{
+  "_note": "Employment is prose 'Working/Worked as ROLE for COMPANY' lines. Build-schedule sentence is a duty under later/earlier roles; do not treat employment prose as duties of another employer.",
+  "file": "Naukri_BipinShivkumarDubey[7y_0m].docx",
+  "experience": [
+    {
+      "company": "Tech Mahindra",
+      "role": "Tech Lead",
+      "start": "2022-04",
+      "duties": []
+    },
+    {
+      "company": "Virtusa",
+      "role": "Senior consultant",
+      "start": "2021-02",
+      "duties": [
+        "Worked with Development Team Leads and testing teams to establish a build schedule, execute the builds and troubleshoot build failures, if any."
+      ]
+    },
+    {
+      "company": "Wipro",
+      "role": "Senior Administrator",
+      "start": "2020-07",
+      "duties": []
+    },
+    {
+      "company": "Clover infotech",
+      "role": "Multi cloud databases, MongoDB, MYSQL and DB2 Database Administrator",
+      "start": "2016-06",
+      "end": "2020-07",
+      "duties": []
+    },
+    {
+      "company": "Team Lease",
+      "role": "Helpdesk Engineer and MYSQL Administrator",
+      "start": "2015-09",
+      "end": "2016-05",
+      "duties": []
+    }
+  ]
+}

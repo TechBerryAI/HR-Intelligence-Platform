@@ -20,6 +20,8 @@ import {
   FiCheckCircle,
   FiAlertTriangle,
   FiFolderPlus,
+  FiPause,
+  FiPlay,
 } from 'react-icons/fi'
 import { Layers } from 'lucide-react'
 import {
@@ -28,16 +30,25 @@ import {
   downloadBulkResult,
   saveBulkJobSession,
   loadBulkJobSession,
+  pauseBulkJob,
+  resumeBulkJob,
   clearBulkJobSession,
   refreshForBulkPoll,
   BULK_POLL_INTERVAL_MS,
 } from '@/features/admin/services/bulkParsingService.js'
 
-const RESUME_EXT = ['pdf', 'doc', 'docx']
+const RESUME_EXT = ['pdf', 'docx', 'doc', 'webp', 'tif', 'tiff']
 
 function isAuthPollError(err) {
   const status = err?.status
   return status === 401 || status === 403
+}
+
+/** False-positive from optional external bulk parser (port 8001) — ignore when local job finished. */
+function isStaleBulkServiceError(message) {
+  return /service unavailable|bulk parsing service unavailable|BULK_PARSER_UNREACHABLE|BULK_PARSER_NOT_CONFIGURED/i.test(
+    String(message || '')
+  )
 }
 
 export default function BulkResumeParser({ embedded = false }) {
@@ -55,6 +66,11 @@ export default function BulkResumeParser({ embedded = false }) {
   const [uploading, setUploading] = useState(false)
   const [uploadStatus, setUploadStatus] = useState('')
   const [downloading, setDownloading] = useState(false)
+  const [pausing, setPausing] = useState(false)
+  const [resuming, setResuming] = useState(false)
+  /** Explicit control state so Pause/Resume buttons don't flicker on stale polls. */
+  const [runControl, setRunControl] = useState(null) // 'running' | 'paused' | null
+  const ignorePausedUntilRef = useRef(0)
   const [instructionsOpen, setInstructionsOpen] = useState(false)
   const [sessionExpired, setSessionExpired] = useState(false)
   const [listFilter, setListFilter] = useState('all') // all | processed | failed | queued
@@ -106,7 +122,7 @@ export default function BulkResumeParser({ embedded = false }) {
           setInputFolderFound(true)
           setError(null)
         } else {
-          setError('No PDF, DOC, or DOCX files found in that folder.')
+          setError('No PDF, DOC/DOCX, or supported image files found in that folder.')
         }
       } catch (err) {
         setError(err?.message || 'Could not read folder.')
@@ -190,7 +206,7 @@ export default function BulkResumeParser({ embedded = false }) {
 
   const startUpload = async () => {
     if (!files.length) {
-      setError('Select at least one file (PDF, DOC, DOCX) or a ZIP archive.')
+      setError('Select at least one file (PDF, DOCX, DOC, WEBP, TIF/TIFF) or a ZIP archive.')
       return
     }
     setError(null)
@@ -199,6 +215,8 @@ export default function BulkResumeParser({ embedded = false }) {
     setUploadStatus('Preparing upload…')
     setJobId(null)
     setProgress(null)
+    setRunControl(null)
+    ignorePausedUntilRef.current = 0
     clearBulkJobSession()
     try {
       const res = await uploadBulkResumes(files, append, {
@@ -207,6 +225,7 @@ export default function BulkResumeParser({ embedded = false }) {
       setJobId(res.job_id)
       saveBulkJobSession(res.job_id)
       setUploadStatus('')
+      setRunControl('running')
       setProgress({
         status: res.status || 'started',
         total_files: res.total_files || files.filter((f) => !/\.zip$/i.test(f.name)).length,
@@ -221,6 +240,7 @@ export default function BulkResumeParser({ embedded = false }) {
       const msg = e?.data?.error || e?.message
       setJobId(null)
       setProgress(null)
+      setRunControl(null)
       clearBulkJobSession()
       if (status === 413) {
         setError(
@@ -251,10 +271,16 @@ export default function BulkResumeParser({ embedded = false }) {
         const data = await getBulkProgress(saved.jobId)
         if (cancelled) return
         const st = data?.status
-        if (st === 'started' || st === 'pending' || st === 'completed' || st === 'failed') {
+        if (st === 'started' || st === 'pending' || st === 'paused' || st === 'completed' || st === 'failed') {
           setJobId(saved.jobId)
           setProgress(data)
           setSessionExpired(false)
+          if (st === 'completed' || st === 'failed') {
+            setError((prev) => (isStaleBulkServiceError(prev) ? null : prev))
+          }
+          if (st === 'paused') setRunControl('paused')
+          else if (st === 'started' || st === 'pending') setRunControl('running')
+          else setRunControl(null)
         } else {
           clearBulkJobSession()
         }
@@ -289,9 +315,25 @@ export default function BulkResumeParser({ embedded = false }) {
       try {
         const data = await getBulkProgress(jobId)
         if (cancelled) return
+        const status = data?.status
+        // After Resume, ignore one or more stale "paused" responses from in-flight polls.
+        if (status === 'paused' && Date.now() < ignorePausedUntilRef.current) {
+          schedule(BULK_POLL_INTERVAL_MS)
+          return
+        }
         setProgress(data)
         setSessionExpired(false)
-        if (data.status === 'completed' || data.status === 'failed') {
+        if (status === 'started' || status === 'pending') {
+          setRunControl('running')
+          ignorePausedUntilRef.current = 0
+        } else if (status === 'paused') {
+          setRunControl('paused')
+        } else if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+          setRunControl(null)
+          ignorePausedUntilRef.current = 0
+          setError((prev) => (isStaleBulkServiceError(prev) ? null : prev))
+        }
+        if (status === 'completed' || status === 'failed') {
           return
         }
         schedule(BULK_POLL_INTERVAL_MS)
@@ -321,15 +363,91 @@ export default function BulkResumeParser({ embedded = false }) {
   }, [jobId])
 
   const handleDownload = async () => {
-    if (!jobId || progress?.status !== 'completed') return
+    if (!jobId || (progress?.status !== 'completed' && progress?.status !== 'started')) return
+    // Allow download while regenerating (server returns 202 until Excel is ready)
+    if (progress?.status === 'started' && !/regenerat/i.test(String(progress?.message || ''))) {
+      return
+    }
     setDownloading(true)
     setError(null)
     try {
       await downloadBulkResult(jobId)
+      setError(null)
     } catch (e) {
-      setError(e?.message || 'Download failed')
+      const raw = e?.data?.error || e?.message || 'Download failed'
+      if (e?.data?.code === 'EXPORT_REGENERATING' || e?.status === 202) {
+        setError(raw)
+        setProgress((prev) => ({
+          ...(prev || {}),
+          status: 'started',
+          message: raw,
+        }))
+        setRunControl('running')
+      } else if (isStaleBulkServiceError(raw)) {
+        setError(
+          'Excel export is missing for this completed job. Re-run bulk parse to regenerate the download.'
+        )
+      } else {
+        setError(raw)
+      }
     } finally {
       setDownloading(false)
+    }
+  }
+
+  const handlePause = async () => {
+    if (!jobId || pausing || resuming) return
+    setPausing(true)
+    setError(null)
+    setRunControl('paused')
+    try {
+      const data = await pauseBulkJob(jobId)
+      setProgress((prev) => ({
+        ...(prev || {}),
+        ...(data || {}),
+        status: 'paused',
+        message: data?.message || 'Paused',
+      }))
+    } catch (e) {
+      setRunControl('running')
+      setError(e?.message || 'Failed to pause parsing')
+    } finally {
+      setPausing(false)
+    }
+  }
+
+  const handleResume = async () => {
+    if (!jobId || resuming || pausing) return
+    setResuming(true)
+    setError(null)
+    setRunControl('running')
+    ignorePausedUntilRef.current = Date.now() + 15000
+    setProgress((prev) => ({
+      ...(prev || {}),
+      status: 'started',
+      message: 'Resuming…',
+    }))
+    try {
+      const data = await resumeBulkJob(jobId)
+      setProgress((prev) => ({
+        ...(prev || {}),
+        ...(data || {}),
+        status: data?.status === 'paused' ? 'started' : (data?.status || 'started'),
+        message: data?.message || 'Resuming…',
+      }))
+      setRunControl('running')
+      // Keep ignoring stale paused polls a bit longer after a successful resume.
+      ignorePausedUntilRef.current = Date.now() + 15000
+    } catch (e) {
+      ignorePausedUntilRef.current = 0
+      setRunControl('paused')
+      setProgress((prev) => ({
+        ...(prev || {}),
+        status: 'paused',
+      }))
+      setError(e?.message || 'Failed to resume parsing')
+    } finally {
+      setResuming(false)
     }
   }
 
@@ -344,15 +462,39 @@ export default function BulkResumeParser({ embedded = false }) {
     setListFilter('all')
     setInputFolderPath('')
     setInputFolderFound(false)
+    setRunControl(null)
+    ignorePausedUntilRef.current = 0
   }
 
-  const resumeFiles = files.filter((f) => /\.(pdf|docx?)$/i.test(f.name))
+  // Always drop false "service unavailable" once the local job is terminal
+  // (poll may already have stopped, so render-time + effect both clear it).
+  useEffect(() => {
+    const st = progress?.status
+    if (st !== 'completed' && st !== 'failed' && st !== 'cancelled') return
+    setError((prev) => (isStaleBulkServiceError(prev) ? null : prev))
+  }, [progress?.status])
+
+  // When export rebuild starts, clear the old "export is missing" nag
+  useEffect(() => {
+    if (!/regenerat/i.test(String(progress?.message || ''))) return
+    setError((prev) =>
+      prev && /excel export is missing|re-run bulk parse/i.test(String(prev)) ? null : prev
+    )
+  }, [progress?.message])
+
+  const resumeFiles = files.filter((f) => /\.(pdf|docx|doc|webp|tif|tiff)$/i.test(f.name))
   const zipSelected = files.some((f) => /\.zip$/i.test(f.name))
   // Only treat files as "in queue" when a real job is running — avoids fake stuck UI after failed upload
   const total = progress?.total_files ?? (jobId ? resumeFiles.length : 0)
   const processed = progress?.processed_files ?? 0
   const failed = progress?.failed_files ?? 0
   const failedDetails = progress?.failed_details ?? progress?.failedDetails ?? []
+  const terminalJob =
+    progress?.status === 'completed' ||
+    progress?.status === 'failed' ||
+    progress?.status === 'cancelled'
+  const displayError =
+    error && !(terminalJob && isStaleBulkServiceError(error)) ? error : null
   const failedFilenames =
     failedDetails.length > 0
       ? failedDetails.map((d) => d.filename || d.name).filter(Boolean)
@@ -363,9 +505,18 @@ export default function BulkResumeParser({ embedded = false }) {
   const failedCount = failedDetails.length || failedFilenames.length || failed
   const processingCount = jobId ? Math.max(0, queuedFilenames.length || total - processed) : 0
   const progressPct = total ? Math.round((processed / total) * 100) : 0
+  const isPaused =
+    runControl === 'paused' ||
+    (runControl == null && progress?.status === 'paused')
+  const isRunning =
+    !isPaused &&
+    (runControl === 'running' ||
+      progress?.status === 'started' ||
+      progress?.status === 'pending' ||
+      (!progress?.status && jobId && processingCount > 0 && progress?.status !== 'completed' && progress?.status !== 'failed'))
   const currentFile =
-    progress?.message?.replace(/^Processing:\s*/i, '').trim() ||
     queuedFilenames[0] ||
+    progress?.message?.replace(/^Processing:\s*/i, '').trim() ||
     (jobId ? resumeFiles[processed]?.name ?? '' : '')
   const inProgressFilenames = !jobId
     ? []
@@ -502,10 +653,18 @@ export default function BulkResumeParser({ embedded = false }) {
             </div>
           )}
 
-          {error && (
+          {displayError && (
             <div className="org-error-banner flex items-start gap-2">
               <FiAlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>{error}</span>
+              <span className="flex-1 min-w-0">{displayError}</span>
+              <button
+                type="button"
+                onClick={() => setError(null)}
+                className="shrink-0 text-[var(--ei-text-muted)] hover:text-[var(--ei-text-primary)] p-0.5"
+                aria-label="Dismiss error"
+              >
+                <FiX className="w-4 h-4" />
+              </button>
             </div>
           )}
 
@@ -545,7 +704,7 @@ export default function BulkResumeParser({ embedded = false }) {
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2.5">
                   <label className="text-sm font-medium text-[var(--ei-text-label)]">1. Input folder or ZIP</label>
-                  <span className="text-[11px] text-[var(--ei-text-muted)]">PDF · DOC · DOCX · ZIP</span>
+                  <span className="text-[11px] text-[var(--ei-text-muted)]">PDF · DOCX · DOC · WEBP · TIF · ZIP</span>
                 </div>
 
                 {/* Keep file inputs outside buttons — nesting inputs in <button> breaks pickers in Chrome */}
@@ -730,15 +889,59 @@ export default function BulkResumeParser({ embedded = false }) {
                 <div className="rounded-2xl border border-[rgba(0,166,255,0.22)] bg-[rgba(0,166,255,0.06)] p-4 space-y-3">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
-                      <p className="text-sm font-semibold text-[var(--ei-text-primary)]">Parsing in progress</p>
+                      <p className="text-sm font-semibold text-[var(--ei-text-primary)]">
+                        {isPaused
+                          ? 'Parsing paused'
+                          : progress?.status === 'completed'
+                            ? 'Parsing complete'
+                            : progress?.status === 'failed'
+                              ? 'Parsing failed'
+                              : 'Parsing in progress'}
+                      </p>
                       <p className="text-xs text-[var(--ei-text-muted)] mt-0.5">
                         Processed {processed} / {total}
                         {failed > 0 ? ` · Failed ${failed}` : ''}
                         {processingCount > 0 ? ` · ${processingCount} queued` : ''}
-                        {currentFile && processingCount > 0 ? ` · ${currentFile}` : ''}
+                        {currentFile && processingCount > 0 && !isPaused
+                          ? ` · ${currentFile}`
+                          : ''}
                       </p>
                     </div>
-                    <span className="text-2xl font-bold tabular-nums text-[var(--ei-accent-blue)]">{progressPct}%</span>
+                    <div className="flex items-center gap-2">
+                      {isRunning && progress?.status !== 'completed' && progress?.status !== 'failed' && (
+                        <button
+                          type="button"
+                          onClick={handlePause}
+                          disabled={pausing || resuming}
+                          className="org-btn-ghost text-xs px-3 py-1.5 disabled:opacity-50"
+                          title="Pause after current file(s) finish"
+                        >
+                          {pausing ? (
+                            <FiLoader className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <FiPause className="w-3.5 h-3.5" />
+                          )}
+                          {pausing ? 'Pausing…' : 'Pause'}
+                        </button>
+                      )}
+                      {isPaused && (
+                        <button
+                          type="button"
+                          onClick={handleResume}
+                          disabled={resuming || pausing}
+                          className="org-btn-primary text-xs px-3 py-1.5 disabled:opacity-50"
+                          title="Resume remaining files"
+                        >
+                          {resuming ? (
+                            <FiLoader className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <FiPlay className="w-3.5 h-3.5" />
+                          )}
+                          {resuming ? 'Resuming…' : 'Resume'}
+                        </button>
+                      )}
+                      <span className="text-2xl font-bold tabular-nums text-[var(--ei-accent-blue)]">{progressPct}%</span>
+                    </div>
                   </div>
                   <div className="h-2 rounded-full overflow-hidden bg-black/25">
                     <div
@@ -749,13 +952,19 @@ export default function BulkResumeParser({ embedded = false }) {
                       }}
                     />
                   </div>
-                  {processingCount > 0 && currentFile && (
+                  {processingCount > 0 && currentFile && !isPaused && (
                     <p className="text-xs text-[var(--ei-text-secondary)] flex items-center gap-2">
                       <FiLoader className="w-3.5 h-3.5 text-[var(--ei-accent-blue)] animate-spin flex-shrink-0" />
                       <span className="truncate">{currentFile}</span>
                     </p>
                   )}
-                  {progress?.status === 'completed' && (
+                  {isPaused && processingCount > 0 && (
+                    <p className="text-xs text-[var(--ei-text-muted)]">
+                      {processingCount} file{processingCount === 1 ? '' : 's'} remaining — click Resume to continue.
+                    </p>
+                  )}
+                  {(progress?.status === 'completed' ||
+                    /regenerat/i.test(String(progress?.message || ''))) && (
                     <div className="flex gap-2 flex-wrap pt-1">
                       <button
                         type="button"
@@ -768,7 +977,11 @@ export default function BulkResumeParser({ embedded = false }) {
                         }}
                       >
                         {downloading ? <FiLoader className="w-4 h-4 animate-spin" /> : <FiDownload className="w-4 h-4" />}
-                        {downloading ? 'Downloading…' : 'Download Excel'}
+                        {downloading
+                          ? /regenerat/i.test(String(progress?.message || ''))
+                            ? 'Regenerating Excel…'
+                            : 'Downloading…'
+                          : 'Download Excel'}
                       </button>
                       <button type="button" onClick={reset} className="org-btn-ghost">
                         <FiRefreshCw className="w-4 h-4" />
@@ -918,7 +1131,7 @@ export default function BulkResumeParser({ embedded = false }) {
               </div>
               <p className="text-sm font-medium text-[var(--ei-text-secondary)]">No resumes selected yet</p>
               <p className="text-xs text-[var(--ei-text-muted)] mt-1.5 max-w-sm mx-auto leading-relaxed">
-                Browse a folder above to load PDF, DOC, or DOCX files. Processed and queued files will appear here.
+                Browse a folder above to load PDF, DOC/DOCX, or image (WEBP/TIF) files. Processed and queued files will appear here.
               </p>
             </section>
           )}

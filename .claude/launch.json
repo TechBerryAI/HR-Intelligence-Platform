@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "start",
+      "runtimeExecutable": "wsl",
+      "runtimeArgs": [
+        "-d", "Ubuntu", "--",
+        "bash", "/mnt/d/Projects/HR-Intelligence-Platform/scripts/dev-start.sh"
+      ],
+      "port": 5173
+    }
+  ]
+}

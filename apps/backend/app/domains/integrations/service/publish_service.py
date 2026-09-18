@@ -1,4 +1,8 @@
-"""Enqueue publish / republish / retry tasks (Postgres outbox is source of truth)."""
+"""Enqueue publish / republish / retry tasks (Postgres outbox is source of truth).
+
+Every function is scoped by ``organization_id`` (the tenant boundary) — never
+by company name / company_key. See BUG-004.
+"""
 from __future__ import annotations
 
 import logging
@@ -23,7 +27,7 @@ def _best_effort_memory_hint(task: dict) -> None:
 
 
 def enqueue_publish(
-    company_key: str,
+    organization_id: str,
     job_id: str,
     *,
     providers: list[str] | None = None,
@@ -34,9 +38,9 @@ def enqueue_publish(
     target_providers = providers
     if not target_providers:
         rows = (
-            repo.list_enabled_auto_publish(company_key)
+            repo.list_enabled_auto_publish(organization_id)
             if auto_publish_only
-            else repo.list_enabled_providers(company_key)
+            else repo.list_enabled_providers(organization_id)
         )
         target_providers = [r['provider'] for r in rows]
 
@@ -47,7 +51,7 @@ def enqueue_publish(
         if row_op == 'publish' and existing and existing.get('external_job_id'):
             row_op = 'update'
         repo.upsert_external_job(
-            company_key,
+            organization_id,
             job_id,
             p,
             sync_status='pending',
@@ -60,7 +64,7 @@ def enqueue_publish(
 
     task = {
         'type': 'outbox_drain',
-        'company_key': company_key,
+        'organization_id': organization_id,
         'job_id': job_id,
         'providers': target_providers,
         'auto_publish_only': auto_publish_only,
@@ -76,8 +80,8 @@ def enqueue_publish(
     }
 
 
-def enqueue_close(company_key: str, job_id: str, providers: list[str] | None = None) -> dict:
-    externals = repo.list_external_jobs(company_key, job_id=job_id)
+def enqueue_close(organization_id: str, job_id: str, providers: list[str] | None = None) -> dict:
+    externals = repo.list_external_jobs(organization_id, job_id=job_id)
     if providers:
         wanted = {p.strip().lower() for p in providers}
         externals = [e for e in externals if (e.get('provider') or '').lower() in wanted]
@@ -92,7 +96,7 @@ def enqueue_close(company_key: str, job_id: str, providers: list[str] | None = N
             continue
         target.append(provider)
         repo.upsert_external_job(
-            company_key,
+            organization_id,
             job_id,
             provider,
             sync_status='pending',
@@ -107,7 +111,7 @@ def enqueue_close(company_key: str, job_id: str, providers: list[str] | None = N
         # Ensure durable intent even if no prior row (will no-op at process time).
         for p in providers:
             repo.upsert_external_job(
-                company_key,
+                organization_id,
                 job_id,
                 p,
                 sync_status='pending',
@@ -119,7 +123,7 @@ def enqueue_close(company_key: str, job_id: str, providers: list[str] | None = N
 
     _best_effort_memory_hint({
         'type': 'outbox_drain',
-        'company_key': company_key,
+        'organization_id': organization_id,
         'job_id': job_id,
         'providers': target,
         'retry_count': 0,
@@ -127,9 +131,9 @@ def enqueue_close(company_key: str, job_id: str, providers: list[str] | None = N
     return {'queued': True, 'jobId': job_id, 'operation': 'close', 'providers': target, 'durable': True}
 
 
-def enqueue_update(company_key: str, job_id: str, providers: list[str] | None = None) -> dict:
+def enqueue_update(organization_id: str, job_id: str, providers: list[str] | None = None) -> dict:
     return enqueue_publish(
-        company_key,
+        organization_id,
         job_id,
         providers=providers,
         auto_publish_only=False,
@@ -137,8 +141,8 @@ def enqueue_update(company_key: str, job_id: str, providers: list[str] | None = 
     )
 
 
-def enqueue_retry(company_key: str, external_job_row_id: int) -> dict | None:
-    row = repo.get_external_job_by_id(external_job_row_id, company_key)
+def enqueue_retry(organization_id: str, external_job_row_id: int) -> dict | None:
+    row = repo.get_external_job_by_id(external_job_row_id, organization_id)
     if not row:
         return None
     retry_count = int(row.get('retry_count') or 0)
@@ -146,7 +150,7 @@ def enqueue_retry(company_key: str, external_job_row_id: int) -> dict | None:
     if row.get('external_job_id') and op == 'publish':
         op = 'update'
     repo.upsert_external_job(
-        company_key,
+        organization_id,
         row['job_id'],
         row['provider'],
         sync_status='pending',
@@ -158,7 +162,7 @@ def enqueue_retry(company_key: str, external_job_row_id: int) -> dict | None:
     )
     _best_effort_memory_hint({
         'type': 'outbox_drain',
-        'company_key': company_key,
+        'organization_id': organization_id,
         'job_id': row['job_id'],
         'providers': [row['provider']],
         'auto_publish_only': False,
@@ -173,8 +177,15 @@ def enqueue_retry(company_key: str, external_job_row_id: int) -> dict | None:
     }
 
 
-def load_job_snapshot(job_id: str, company_key: str):
+def load_job_snapshot(job_id: str, organization_id: str):
     job = db_get('SELECT * FROM jobs WHERE jdid = ?', (job_id,))
     if not job:
         return None
-    return job_row_to_snapshot(job, company_key=company_key)
+    job_org_id = job.get('organization_id')
+    if job_org_id and str(job_org_id) != str(organization_id):
+        logger.warning(
+            '[integrations] job %s belongs to org %s, not %s — refusing snapshot',
+            job_id, job_org_id, organization_id,
+        )
+        return None
+    return job_row_to_snapshot(job, organization_id)

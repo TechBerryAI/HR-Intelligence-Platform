@@ -29,12 +29,13 @@ def test_cache_hit_skips_extract_and_semantic(monkeypatch):
 
     def boom_extract(*_a, **_k):
         called['extract'] += 1
-        raise AssertionError('extract_text must not run on cache-hit')
+        raise AssertionError('extract_document must not run on cache-hit')
 
     def boom_semantic(*_a, **_k):
         called['semantic'] += 1
         raise AssertionError('enrich_resume_semantic must not run on cache-hit')
 
+    monkeypatch.setattr(te, 'extract_document', boom_extract)
     monkeypatch.setattr(te, 'extract_text', boom_extract)
     monkeypatch.setattr(pip, 'enrich_resume_semantic', boom_semantic)
 

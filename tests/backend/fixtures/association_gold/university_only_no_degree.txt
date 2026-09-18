@@ -1,0 +1,14 @@
+Rahul Mehta
+rahul.mehta@example.com
++919123456789
+https://linkedin.com/in/rahulmehta
+Pune, Maharashtra
+
+Experience
+Northwind Systems Pvt Ltd
+Linux Administrator
+Apr 2021 - Present
+Supported production hosts.
+
+Education
+ABC University

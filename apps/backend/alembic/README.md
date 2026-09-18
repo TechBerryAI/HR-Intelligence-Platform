@@ -2,6 +2,8 @@
 
 Alembic is the **only** source of truth for database schema changes.
 
+**PostgreSQL version:** HCIP requires **PostgreSQL 17+**. The squashed baseline sets `transaction_timeout` (PG17). Local Docker compose and CI use `postgres:17`.
+
 ## Layout
 
 | Path | Role |
@@ -52,4 +54,4 @@ If you see `Can't locate revision identified by '…'`, wipe/recreate the DB (pr
 
 ## Catalog + media volume
 
-Postgres = catalog (hashes, keys). Durable bytes: see **[docs/MEDIA_AND_BACKUPS.md](../../../docs/MEDIA_AND_BACKUPS.md)**.
+Postgres = catalog (hashes, keys). Durable bytes: see **[docs/OPERATIONS.md](../../../docs/OPERATIONS.md)**.

@@ -16,7 +16,10 @@ from app.core.errors import log_unexpected
 
 logger = logging.getLogger(__name__)
 
-BULK_PARSER_URL = (os.getenv('BULK_PARSER_URL') or 'http://localhost:8001').rstrip('/') or None
+# Only use an external bulk parser when explicitly configured.
+# Defaulting to localhost:8001 caused false 503 SERVICE UNAVAILABLE when local
+# Excel download failed (missing export) and nothing was listening on 8001.
+BULK_PARSER_URL = (os.getenv('BULK_PARSER_URL') or '').strip().rstrip('/') or None
 
 ERROR_CODE_UNREACHABLE = 'BULK_PARSER_UNREACHABLE'
 
@@ -86,6 +89,20 @@ def start_job(job_id: str, append: bool | None = None):
     return start_staged_job(job_id, append=append)
 
 
+def pause_job(job_id: str):
+    """Pause a running local bulk job after in-flight files finish."""
+    from app.workers.bulk_parser import pause_local_job
+
+    return pause_local_job(job_id)
+
+
+def resume_job(job_id: str, append: bool | None = None):
+    """Resume a paused local bulk job."""
+    from app.workers.bulk_parser import resume_local_job
+
+    return resume_local_job(job_id, append=append)
+
+
 def upload_files(files_list, output_filename=None, append=False, started_by=None):
     """
     Try external Bulk-Resume-Parser first; on connection failure use local bulk parsing.
@@ -149,7 +166,8 @@ def get_progress(job_id, user=None):
         return True, resp.json()
     except requests.exceptions.RequestException as e:
         if _is_connection_error(e):
-            return False, {'error': 'Bulk parsing service unavailable.', 'code': ERROR_CODE_UNREACHABLE}
+            # Local job missing + external optional service down → not found
+            return False, {'error': 'Job not found'}
         if getattr(e, 'response', None) is not None and e.response.status_code == 404:
             return False, {'error': 'Job not found'}
         log_unexpected('bulk_parser_progress', e, job_id=job_id)
@@ -193,8 +211,12 @@ def stream_download(job_id, user=None):
                 yield chunk
 
         return True, (chunk_iter(bio), filename, content_type)
+
+    local_error = payload if isinstance(payload, dict) else {'error': 'Download failed'}
+    # Prefer the local error when we know the job (e.g. export missing) — do not
+    # rewrite it as UNREACHABLE just because an optional external service is down.
     if not BULK_PARSER_URL:
-        return False, payload
+        return False, local_error
     try:
         resp = requests.get(f'{BULK_PARSER_URL}/api/download/{job_id}', stream=True, timeout=60)
         resp.raise_for_status()
@@ -211,6 +233,9 @@ def stream_download(job_id, user=None):
         return True, (iter_resp(), filename, resp.headers.get('Content-Type') or 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     except requests.exceptions.RequestException as e:
         if _is_connection_error(e):
+            err = (local_error.get('error') or '').lower()
+            if err and 'not found' not in err:
+                return False, local_error
             return False, {'error': 'Bulk parsing service unavailable.', 'code': ERROR_CODE_UNREACHABLE}
         log_unexpected('bulk_parser_download', e, job_id=job_id)
         return False, {'error': 'Bulk parser request failed'}

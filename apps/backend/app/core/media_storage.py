@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+import threading
 from pathlib import Path
 from typing import BinaryIO
 from urllib.parse import unquote, urlparse
@@ -79,51 +80,152 @@ def get_media_root() -> Path:
         else:
             root = get_media_root_default()
     root.mkdir(parents=True, exist_ok=True)
-    _maybe_migrate_legacy_repo_media(root)
+    # Never block Flask bind /health on a WSL /mnt/d tree walk + copy.
+    _schedule_legacy_media_migrate(root)
     return root
 
 
+_MIGRATE_LOCK = threading.Lock()
+_MIGRATE_STARTED = False
+
+
+def reset_media_migrate_state_for_tests() -> None:
+    """Test helper — allow another background migrate in this process."""
+    global _MIGRATE_STARTED
+    with _MIGRATE_LOCK:
+        _MIGRATE_STARTED = False
+
+
+def _legacy_media_dir() -> Path:
+    return (_REPO_ROOT / '.media').resolve()
+
+
+def _migrate_marker(new_root: Path) -> Path:
+    return new_root / '.migrated_from_repo_dot_media'
+
+
+def _legacy_migrate_pending(new_root: Path) -> bool:
+    """True when a legacy copy might still be needed. Must stay cheap (no rglob)."""
+    marker = _migrate_marker(new_root)
+    try:
+        if marker.is_file():
+            return False
+        legacy = _legacy_media_dir()
+        if not legacy.is_dir() or legacy == new_root.resolve():
+            return False
+    except OSError:
+        return False
+    return True
+
+
+def _schedule_legacy_media_migrate(new_root: Path) -> None:
+    """Start a daemon copy so create_app / wsgi can bind port 3000 immediately."""
+    global _MIGRATE_STARTED
+    if not _legacy_migrate_pending(new_root):
+        return
+    with _MIGRATE_LOCK:
+        if _MIGRATE_STARTED:
+            return
+        _MIGRATE_STARTED = True
+    thread = threading.Thread(
+        target=_maybe_migrate_legacy_repo_media,
+        args=(new_root,),
+        name='hcip-media-migrate',
+        daemon=True,
+    )
+    thread.start()
+
+
+def _legacy_has_payload(legacy: Path) -> bool:
+    """Shallow check — a full rglob of .media on /mnt/d can take minutes."""
+    try:
+        for child in legacy.iterdir():
+            name = child.name
+            if name.startswith('.') or name == 'MOVED.txt':
+                continue
+            if child.is_file():
+                return True
+            if not child.is_dir():
+                continue
+            try:
+                for nested in child.iterdir():
+                    if nested.name.startswith('.'):
+                        continue
+                    if nested.is_file() or nested.is_dir():
+                        return True
+            except OSError:
+                continue
+    except OSError:
+        return False
+    return False
+
+
 def _maybe_migrate_legacy_repo_media(new_root: Path) -> None:
-    """One-time copy from <repo>/.media into the durable media root."""
-    legacy = (_REPO_ROOT / '.media').resolve()
+    """One-time copy from <repo>/.media into the durable media root (background)."""
+    legacy = _legacy_media_dir()
     try:
         if not legacy.is_dir() or legacy == new_root.resolve():
             return
     except OSError:
         return
-    marker = new_root / '.migrated_from_repo_dot_media'
+    marker = _migrate_marker(new_root)
     if marker.is_file():
         return
+    # Previous run finished the copy and left MOVED.txt but died before dest marker.
+    moved_note = legacy / 'MOVED.txt'
     try:
-        has_payload = any(
-            p.is_file()
-            for p in legacy.rglob('*')
-            if p.is_file() and not p.name.startswith('.')
-        )
+        if moved_note.is_file():
+            marker.write_text(f'from={legacy}\n', encoding='utf-8')
+            print(f'[MEDIA] Legacy already moved; wrote marker → {marker}', flush=True)
+            return
     except OSError:
+        pass
+    if not _legacy_has_payload(legacy):
+        try:
+            marker.write_text('empty-legacy\n', encoding='utf-8')
+        except OSError:
+            pass
         return
-    if not has_payload:
-        marker.write_text('empty-legacy\n', encoding='utf-8')
-        return
-    print(f'[MEDIA] Migrating legacy {legacy} → {new_root} (one-time copy)')
-    for src in legacy.rglob('*'):
-        if not src.is_file():
-            continue
-        rel = src.relative_to(legacy)
-        dest = new_root / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        if dest.is_file() and dest.stat().st_size == src.stat().st_size:
-            continue
-        shutil.copy2(src, dest)
-    marker.write_text(f'from={legacy}\n', encoding='utf-8')
-    readme = legacy / 'MOVED.txt'
-    if not readme.is_file():
-        readme.write_text(
-            f'Media files were copied to durable MEDIA_ROOT:\n  {new_root}\n'
-            'Safe to delete this .media folder after verifying the app.\n',
-            encoding='utf-8',
+    print(
+        f'[MEDIA] Migrating legacy {legacy} → {new_root} '
+        '(background; /health is not blocked)',
+        flush=True,
+    )
+    copied = 0
+    skipped = 0
+    try:
+        for src in legacy.rglob('*'):
+            if not src.is_file():
+                continue
+            if src.name == 'MOVED.txt' or src.name.startswith('.'):
+                continue
+            rel = src.relative_to(legacy)
+            dest = new_root / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                if dest.is_file() and dest.stat().st_size == src.stat().st_size:
+                    skipped += 1
+                    continue
+                shutil.copy2(src, dest)
+                copied += 1
+                if copied == 1 or copied % 50 == 0:
+                    print(f'[MEDIA] Copied {copied} files…', flush=True)
+            except OSError as exc:
+                print(f'[MEDIA] Skip {rel}: {type(exc).__name__}', flush=True)
+                continue
+        marker.write_text(f'from={legacy}\n', encoding='utf-8')
+        if not moved_note.is_file():
+            moved_note.write_text(
+                f'Media files were copied to durable MEDIA_ROOT:\n  {new_root}\n'
+                'Safe to delete this .media folder after verifying the app.\n',
+                encoding='utf-8',
+            )
+        print(
+            f'[MEDIA] Migration complete → {new_root} (copied={copied} skipped={skipped})',
+            flush=True,
         )
-    print(f'[MEDIA] Migration complete → {new_root}')
+    except Exception as exc:
+        print(f'[MEDIA] Migration failed ({type(exc).__name__}): {exc}', flush=True)
 
 
 def uploads_dir() -> Path:

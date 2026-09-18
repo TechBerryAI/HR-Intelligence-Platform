@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FiX, FiUser, FiMail, FiPhone, FiMapPin, FiBriefcase, FiLink, FiGlobe, FiEye } from 'react-icons/fi'
 import ResumeUploadWithParsing from '@/shared/components/ResumeUploadWithParsing.jsx'
+import JobDescriptionView from '@/shared/components/JobDescriptionView.jsx'
 import MonthYearPicker from '@/shared/components/MonthYearPicker.jsx'
 import PremiumInput from '@/shared/components/PremiumInput.jsx'
 import PremiumButton from '@/shared/components/PremiumButton.jsx'
@@ -33,6 +34,7 @@ const initialForm = () => ({
   experiences: emptyExperience(),
   _parsedId: null,
   _publicUploaderId: null,
+  _parseClaim: null,
 })
 
 function validate(form, parseError = '') {
@@ -59,6 +61,15 @@ function validate(form, parseError = '') {
   const eduOk = (form.education || []).some((e) => e.degree?.trim() && e.institution?.trim())
   if (!eduOk) errors.education = 'At least one education entry with degree and institution is required'
   return errors
+}
+
+function isApplyFormReady(form, parseError = '') {
+  return Object.keys(validate(form, parseError)).length === 0
+}
+
+function missingRequiredApplyLabels(form, parseError = '') {
+  const errs = validate(form, parseError)
+  return APPLY_FIELD_ORDER.filter((k) => errs[k]).map((k) => APPLY_FIELD_LABELS[k] || k)
 }
 
 /** Top-to-bottom order of required fields in the apply form. */
@@ -95,7 +106,14 @@ function focusFirstApplyError(errs) {
   if (!firstKey) return
   const el = document.querySelector(`[data-apply-field="${firstKey}"]`)
   if (!el) return
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  const scroller = document.getElementById('apply-job-form-scroll')
+  if (scroller) {
+    const offset =
+      el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - 12
+    scroller.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
+  } else {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
   window.setTimeout(() => {
     const focusable = el.querySelector('input:not([type="hidden"]), select, textarea, button, [tabindex]:not([tabindex="-1"])')
     if (focusable && typeof focusable.focus === 'function') {
@@ -111,6 +129,15 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
   const [submitError, setSubmitError] = useState('')
   const [parseError, setParseError] = useState('')
   const [showPreview, setShowPreview] = useState(false)
+
+  const requiredFilled = isApplyFormReady(form, parseError)
+  const canSubmit = requiredFilled && !submitting
+  const missingRequired = missingRequiredApplyLabels(form, parseError)
+  const submitBlockedTitle = requiredFilled
+    ? undefined
+    : missingRequired.length
+      ? `Complete required fields: ${missingRequired.join(', ')}`
+      : 'Complete all required fields marked with *'
 
   useEffect(() => {
     if (open) {
@@ -168,6 +195,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
         resumeFileName: mapped.resumeFileName || prev.resumeFileName,
         _parsedId: mapped._parsedId || prev._parsedId,
         _publicUploaderId: mapped._publicUploaderId || prev._publicUploaderId,
+        _parseClaim: mapped._parseClaim || prev._parseClaim,
       }
     })
     setErrors((prev) => {
@@ -246,6 +274,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
       fd.append('certifications', JSON.stringify(form.certifications || []))
       if (form._parsedId) fd.append('parsedId', form._parsedId)
       if (form._publicUploaderId) fd.append('publicUploaderId', form._publicUploaderId)
+      if (form._parseClaim) fd.append('parseClaim', form._parseClaim)
       // Resume was already stored during AI parse — re-uploading the PDF only slows submit.
       if (!form._parsedId && form.resumeFile) fd.append('resume', form.resumeFile)
 
@@ -334,7 +363,21 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-5 space-y-6">
+            <form
+              id="apply-job-form"
+              noValidate
+              onSubmit={handleSubmit}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+            <div id="apply-job-form-scroll" className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-5 space-y-6">
+              <details className="rounded-xl border border-[var(--ei-border-primary)] bg-[var(--ei-surface-input)]/40 px-4 py-3">
+                <summary className="cursor-pointer text-sm font-semibold text-[var(--ei-text-primary)]">
+                  About this role
+                </summary>
+                <div className="mt-3 max-h-56 overflow-y-auto pr-1">
+                  <JobDescriptionView description={job.description || ''} />
+                </div>
+              </details>
               <div data-apply-field="resume">
                 <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-2">
                   Resume (AI autofill) <span className="text-[#FF6B81]">*</span>
@@ -342,6 +385,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                 <ResumeUploadWithParsing
                   publicMode
                   currentFileName={form.resumeFileName}
+                  resumeFile={form.resumeFile}
                   onFileSelect={(file) => {
                     setParseError('')
                     setForm((p) => ({ ...p, resumeFile: file, resumeFileName: file.name, _parsedId: null }))
@@ -352,6 +396,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                     resumeFileName: '',
                     _parsedId: null,
                     _publicUploaderId: null,
+                    _parseClaim: null,
                   }))}
                   onParseError={(message) => setParseError(message || '')}
                   onAutofill={handleAutofill}
@@ -555,8 +600,18 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                 <div className="space-y-3">
                   {(form.education || []).map((edu, i) => (
                     <div key={i} className="rounded-xl border border-[var(--ei-border-primary)] p-3 grid sm:grid-cols-2 gap-3">
-                      <PremiumInput label="Degree" value={edu.degree} onChange={(e) => updateList('education', i, 'degree', e.target.value)} />
-                      <PremiumInput label="Institution" value={edu.institution} onChange={(e) => updateList('education', i, 'institution', e.target.value)} />
+                      <PremiumInput
+                        label="Degree"
+                        required
+                        value={edu.degree}
+                        onChange={(e) => updateList('education', i, 'degree', e.target.value)}
+                      />
+                      <PremiumInput
+                        label="Institution"
+                        required
+                        value={edu.institution}
+                        onChange={(e) => updateList('education', i, 'institution', e.target.value)}
+                      />
                       <PremiumInput label="CGPA" value={edu.cgpa} onChange={(e) => updateList('education', i, 'cgpa', e.target.value)} />
                       <div>
                         <label className="block text-sm font-medium text-[var(--ei-text-label)] mb-1">Start</label>
@@ -615,9 +670,12 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                       )}
                       <div className="sm:col-span-2">
                         <PremiumInput
+                          as="textarea"
                           label="Description"
                           value={exp.description || ''}
                           onChange={(e) => updateList('experiences', i, 'description', e.target.value)}
+                          rows={4}
+                          className="min-h-[6rem] resize-y"
                         />
                       </div>
                       {(form.experiences || []).length > 1 && (
@@ -653,14 +711,18 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                   ))}
                 </div>
               </div>
+            </div>
 
               {submitError && (
-                <div className="rounded-xl border border-[var(--ei-tone-danger-border)] bg-[var(--ei-tone-danger-bg)] px-4 py-3 text-sm text-[var(--ei-tone-danger)]">
+                <div
+                  role="alert"
+                  className="shrink-0 border-t border-[var(--ei-tone-danger-border)] bg-[var(--ei-tone-danger-bg)] px-5 py-3 text-sm text-[var(--ei-tone-danger)]"
+                >
                   {submitError}
                 </div>
               )}
 
-              <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pb-2">
+              <div className="shrink-0 flex flex-col-reverse sm:flex-row gap-3 sm:justify-end border-t border-[var(--ei-border-primary)] bg-[var(--ei-bg-secondary)] px-5 py-4">
                 <PremiumButton type="button" variant="secondary" onClick={() => !submitting && onClose?.()} disabled={submitting}>
                   Cancel
                 </PremiumButton>
@@ -673,7 +735,12 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                 >
                   Preview
                 </PremiumButton>
-                <PremiumButton type="submit" disabled={submitting}>
+                <PremiumButton
+                  type="submit"
+                  disabled={!canSubmit}
+                  title={submitBlockedTitle}
+                  aria-disabled={!canSubmit}
+                >
                   {submitting ? 'Submitting…' : 'Submit application'}
                 </PremiumButton>
               </div>
@@ -886,8 +953,11 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
               <PremiumButton
                 type="button"
                 variant="primary"
-                disabled={submitting}
+                disabled={!canSubmit}
+                title={submitBlockedTitle}
+                aria-disabled={!canSubmit}
                 onClick={() => {
+                  if (!canSubmit) return
                   setShowPreview(false)
                   const formEl = document.querySelector('.apply-modal form')
                   formEl?.requestSubmit()

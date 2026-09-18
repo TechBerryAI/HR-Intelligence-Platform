@@ -38,7 +38,7 @@ contracts/ → schemas/ (this) → knowledge/ → toon/v1/ → backend/toon.py
 |----------|-------|
 | TOON mappings | `ai/toon/v1/mappings/*.yaml` reference schemas |
 | Dataset normalization (future) | `dataset/factory/normalizer/` |
-| Documentation | `docs/ADRS.md` · YAML schemas in this package |
+| Documentation | `docs/AI.md` · YAML schemas in this package |
 
 ## Related documentation
 

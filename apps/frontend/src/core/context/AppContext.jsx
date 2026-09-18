@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { apiRequest, setUnauthorizedHandler, setOnTokensRefreshed } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
-import { checkBackendHealth } from '@/core/api/healthCheck.js'
+import { checkBackendHealth, onBackendHealthChange } from '@/core/api/healthCheck.js'
 import { isStaffRecruiter } from '@/core/permissions/rbac.js'
 
 // App state: jobs and auth via backend
@@ -59,6 +59,8 @@ export function AppProvider({ children }) {
 
   const [auth, setAuth] = useState(() => readJson(STORAGE_KEYS.auth, defaultAuth))
   const [token, setToken] = useState(() => tokenService.getToken())
+  const jobsFetchGen = useRef(0)
+  const appsFetchGen = useRef(0)
   const [user, setUser] = useState(() => readJson(STORAGE_KEYS.user, null))
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState('')
@@ -98,10 +100,17 @@ export function AppProvider({ children }) {
         }
       })
     }, 30000)
+
+    // Instant clear of banner when any API call proves the backend is up
+    const unsubscribe = onBackendHealthChange((healthy) => {
+      setBackendHealthy(healthy)
+      if (healthy) setHealthCheckAttempts(0)
+    })
     
     return () => {
       clearTimeout(initialCheckTimer)
       clearInterval(healthCheckInterval)
+      unsubscribe()
     }
     
     // If migrating to HttpOnly cookies in production:
@@ -143,7 +152,8 @@ export function AppProvider({ children }) {
         const stored = readJson(STORAGE_KEYS.auth, defaultAuth)
         return JSON.stringify(prev) === JSON.stringify(stored) ? prev : stored
       })
-      // Do not hydrate token from storage
+      const nextToken = tokenService.getToken() || ''
+      setToken((prev) => (prev === nextToken ? prev : nextToken))
       setUser(() => readJson(STORAGE_KEYS.user, null))
     }
 
@@ -385,11 +395,15 @@ export function AppProvider({ children }) {
     if (!auth.isLoggedIn || (auth.role !== 'RECRUITER' && auth.role !== 'HEAD_HR')) {
       return { ok: false, message: 'Unauthorized' }
     }
+    const gen = ++appsFetchGen.current
     try {
       const data = await apiRequest(`/api/jobs/${jobId}/applications`, {
         method: 'GET',
         token
       })
+      if (gen !== appsFetchGen.current) {
+        return { ok: true, data: [], stale: true }
+      }
       return { ok: true, data: data.applications || data || [] }
     } catch (err) {
       // 404 = job not found or no access: show empty candidates instead of error
@@ -408,11 +422,15 @@ export function AppProvider({ children }) {
     if (!auth.isLoggedIn || (auth.role !== 'RECRUITER' && auth.role !== 'HEAD_HR')) {
       return { ok: false, message: 'Unauthorized' }
     }
+    const gen = ++appsFetchGen.current
     try {
       const data = await apiRequest('/api/applications/all', {
         method: 'GET',
         token
       })
+      if (gen !== appsFetchGen.current) {
+        return { ok: true, data: [], stale: true }
+      }
       return { ok: true, data: data.applications || data || [] }
     } catch (err) {
       console.error('Fetch all applications error:', err)
@@ -422,6 +440,7 @@ export function AppProvider({ children }) {
 
   // Staff: GET /api/jobs/all (login org). Public: GET /api/jobs (auto company).
   const fetchJobs = async () => {
+    const gen = ++jobsFetchGen.current
     setJobsLoading(true)
     setJobsError('')
     try {
@@ -432,13 +451,15 @@ export function AppProvider({ children }) {
         method: 'GET',
         ...(staff ? { token: authToken } : {}),
       })
+      if (gen !== jobsFetchGen.current) return
       if (Array.isArray(data)) setJobs(data)
       else if (data && Array.isArray(data.jobs)) setJobs(data.jobs)
       else setJobs([])
     } catch (err) {
+      if (gen !== jobsFetchGen.current) return
       setJobsError(err?.message || 'Failed to load jobs')
     } finally {
-      setJobsLoading(false)
+      if (gen === jobsFetchGen.current) setJobsLoading(false)
     }
   }
 
@@ -524,10 +545,7 @@ export function AppProvider({ children }) {
 
   const updateJob = async (jobId, updates) => {
     if (!token) {
-      // Fallback to local update
-      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...updates } : j)))
-      bumpJobsBoard()
-      return
+      return { success: false, error: 'You must be logged in to update a job.' }
     }
     try {
       const updated = await apiRequest(`/api/jobs/${jobId}`, {
@@ -535,13 +553,16 @@ export function AppProvider({ children }) {
         body: updates,
         token
       })
-      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...updated } : j)))
-      await fetchJobs() // Refresh to get latest data
+      setJobs((prev) => prev.map((j) => (j.id === jobId || j.jdid === jobId ? { ...j, ...updated } : j)))
+      await fetchJobs()
       bumpJobsBoard()
+      return { success: true, data: updated }
     } catch (err) {
       console.error('Update job error:', err)
-      // Fallback to local update
-      setJobs((prev) => prev.map((j) => (j.id === jobId ? { ...j, ...updates } : j)))
+      return {
+        success: false,
+        error: err?.data?.error || err?.message || 'Failed to update job',
+      }
     }
   }
 

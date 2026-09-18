@@ -12,7 +12,49 @@ from providers.ollama.structured_output import (
 )
 
 
-def test_build_messages_combines_prompt_and_input() -> None:
+def test_build_messages_does_not_duplicate_inlined_input() -> None:
+    resume = (
+        "Priya Sharma\nExperience\nDatabase Administrator\n"
+        "Infosenseglobal | Dec 2024 – Present\n"
+        "Administered PostgreSQL backups and failover.\n"
+    )
+    prompt = (
+        "You are an expert resume parser. Return JSON only.\n\n"
+        "## Input\n\n"
+        f"{resume}"
+    )
+    messages = build_messages(prompt=prompt, input_text=resume)
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    payload = resume.strip()
+    assert messages[1]["content"] == payload
+    system = messages[0]["content"]
+    assert payload not in system
+    joined = f"{system}\n{messages[1]['content']}"
+    assert joined.count(payload) == 1
+
+
+def test_build_messages_strips_capability_prompt_input_block() -> None:
+    from pathlib import Path
+
+    prompt_path = Path(__file__).resolve().parents[3] / "capabilities" / "resume_parsing" / "prompt.md"
+    template = prompt_path.read_text(encoding="utf-8")
+    resume = (
+        "Alex Rivera\nExperience\nPlatform Engineer\nNorthwind Labs | Jan 2020 – Present\n"
+        "Built internal APIs and PostgreSQL services for HR workflows.\n"
+    )
+    inlined = template.replace("{{input}}", resume)
+    messages = build_messages(prompt=inlined, input_text=resume)
+    payload = resume.strip()
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    assert messages[1]["content"] == payload
+    assert payload not in messages[0]["content"]
+    assert f"{messages[0]['content']}\n{messages[1]['content']}".count(payload) == 1
+    assert "{{input}}" not in messages[0]["content"]
+
+
+def test_build_messages_keeps_short_input_when_not_inlined() -> None:
     messages = build_messages(prompt="Parse this resume:", input_text="Jane Doe")
     assert messages == [
         {"role": "system", "content": "Parse this resume:"},

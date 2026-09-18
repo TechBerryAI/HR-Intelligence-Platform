@@ -46,7 +46,7 @@ def logout_session():
         token = data.get('token')
         if not token:
             return jsonify({'error': 'Token is required'}), 400
-        result = deactivate_session(token)
+        result = deactivate_session(token, expected_user_id=get_user_id(request.user))
         if not result.get('success'):
             return jsonify({'error': result.get('error') or 'Logout failed'}), 400
         return jsonify({'message': 'Session deactivated successfully'})

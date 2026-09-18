@@ -1,0 +1,19 @@
+{
+  "_note": "Field-level golden from resume text. Duties appear under Project 1 in Experience; employer in span is VeriTech internship (parser currently emits Sociodigit without duties).",
+  "file": "Naukri_AmitKumarPradhan[2y_0m].pdf",
+  "experience": [
+    {
+      "company": "VeriTech Software IT Services",
+      "role": "Full Stack Java Developer",
+      "start": "2022-09",
+      "end": "2023-06",
+      "duties": [
+        "Designed and implemented RESTful APIs using Spring Boot for authentication, product management, and order processing.",
+        "Developed React-based dynamic UI components for product listing, cart, and checkout.",
+        "Integrated MySQL database to handle user, product, and order-related data efficiently.",
+        "Followed Agile principles to ensure sprint deliveries and maintain iterative progress.",
+        "Deployed APIs using CI/CD pipelines for seamless integration."
+      ]
+    }
+  ]
+}

@@ -13,6 +13,23 @@ Document → Extraction → Layout → Sections → Independent Section Parsers
 
 **Critical rule:** React never consumes raw AI/TOON. Clients receive Form DTOs only.
 
+## PDF text extraction
+
+Production extraction lives in `app/ai/parser/text_extraction.py`.
+
+| Engine | Role |
+|--------|------|
+| **PyMuPDF** (`extract_text_from_pdf_pymupdf`) | Primary / default. Digital text + per-page OCR + PyMuPDF tables. |
+| **pdfplumber** (`pdfplumber_extractor.py`) | Automatic secondary. Considered only when PyMuPDF text is thin, garbage, layout-broken, or looks like unextracted tables; selected only if objectively better. |
+| PyPDF2 / parsing API / force OCR | Existing last-resort fallbacks. Unchanged. |
+
+The decision is automatic. There is no `PDF_ENABLE_PDFPLUMBER` / `PDF_PRIMARY_EXTRACTOR` switch. A usable PyMuPDF result is never replaced, and both libraries are not run on every PDF. Scanned pages stay on the existing PyMuPDF+OCR path.
+
+```bash
+# From repo root
+pytest tests/backend/test_text_extraction_ocr.py tests/backend/test_pdfplumber_fallback.py -q
+```
+
 ## Package layout
 
 ```

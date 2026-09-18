@@ -17,6 +17,8 @@ runtime:
       base_url: ${OLLAMA_HOST:http://192.168.1.200:11434}
       # Long timeout for 14B on large resumes / queued bulk jobs
       default_timeout_seconds: 300
+      # Official Ollama TTL (not -1). Sequential CPU parses reuse the loaded weights.
+      keep_alive: "10m"
     grok:
       type: grok
       enabled: false

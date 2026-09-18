@@ -105,6 +105,10 @@ def _normalize_month(value: Any, *, year_only_month: str = '06') -> str:
     s = _str(value)
     if not s or _is_present(s):
         return ''
+    # YYYY-MM must win before range peeling: "2022-01" would otherwise be read as
+    # year 2022 + a dash separator, then filled with the year-only default month.
+    if re.fullmatch(r'\d{4}-\d{2}', s):
+        return s
     range_m = re.match(
         r'^((?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{4}|'
         r'\d{1,2}[/\-]\d{4}|\d{4}[/\-]\d{1,2}|\d{4}-\d{2}|\d{4})\s*(?:[-–—]|to)\s*',
@@ -302,19 +306,46 @@ def candidate_profile_from_toon(toon: dict[str, Any]) -> CandidateProfile:
     )
 
 
+def _validated(value: str, validator) -> str:
+    """The value if it passes, else ''.
+
+    The form mapper blanks contact fields that fail validation, so the Apply
+    screen never shows a malformed email or a non-LinkedIn URL in the LinkedIn
+    slot. This branch used to copy the raw profile straight through, which let
+    exactly those values reach the ATS — the two views of one parse disagreed.
+    """
+    ok, _reason = validator(value)
+    return value if ok else ''
+
+
 def toon_from_candidate_profile(profile: CandidateProfile) -> dict[str, Any]:
     """Serialize CandidateProfile to TOON for ATS persistence."""
+    from app.ai.document_intelligence.validation.engine import (
+        validate_email,
+        validate_phone,
+        validate_url,
+    )
+
     return {
         'type': 'resume',
         'person': {
             'name': profile.personal.full_name,
-            'email': profile.contact.email,
-            'phone': profile.contact.phone,
+            'email': _validated(profile.contact.email, validate_email),
+            'phone': _validated(profile.contact.phone, validate_phone),
             'location': profile.contact.location,
             'preferred_location': profile.contact.preferred_location,
-            'linkedin': profile.contact.linkedin,
-            'github': profile.contact.github,
-            'portfolio': profile.contact.portfolio,
+            'linkedin': _validated(
+                profile.contact.linkedin,
+                lambda v: validate_url(v, allow_empty=True, host_hint='linkedin'),
+            ),
+            'github': _validated(
+                profile.contact.github,
+                lambda v: validate_url(v, allow_empty=True, host_hint='github'),
+            ),
+            'portfolio': _validated(
+                profile.contact.portfolio,
+                lambda v: validate_url(v, allow_empty=True),
+            ),
             'otherUrls': list(profile.contact.other_links),
         },
         'summary': profile.personal.summary,

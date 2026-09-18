@@ -1,0 +1,17 @@
+{
+  "_note": "Experience bullet is an employment sentence, not duties. Real duty-like bullets live in Summary.",
+  "file": "Naukri_Deepshikhachak[1y_7m].pdf",
+  "experience": [
+    {
+      "company": "Tata Consultancy Services",
+      "role": "Postgresql Database Administrator",
+      "start": "2021-05",
+      "duties": [
+        "Experience in installing and configuring PostgreSQL 10, 12 and 13 Versions on Linux",
+        "Hands on experience on database patching and upgrading.",
+        "Experienced in handling database offline, logical and physical backups in PostgreSQL",
+        "Experienced in migrating other databases to PostgreSQL."
+      ]
+    }
+  ]
+}

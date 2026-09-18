@@ -12,6 +12,7 @@ Root-level scripts that support local development, CI preflight, and database co
 |--------|---------|
 | `../start.js` | Local stack: env, venv, npm, backend + frontend + Ollama |
 | `../start-vm.js` | Full VM stack: DB (Hyper-V / Docker) + backend + frontend + Ollama |
+| `clear-cache.js` | Wipe local bytecode / pytest / Vite caches (`npm run clear-cache`) |
 | `db-preflight.js` | PostgreSQL connectivity diagnostics (reads `apps/backend/.env`, WSL-aware) |
 | `database/test_db_connection.py` | Python DB connection test |
 | `ensure_media_assets.py` | Ensure durable media dirs + seed hero |
@@ -19,7 +20,7 @@ Root-level scripts that support local development, CI preflight, and database co
 | `inspect_db_sessions.py` | Read-only `pg_stat_activity` / lock report. Never kills backends. |
 | Backend module `python -m app.database.scripts.offload_blobs` | BYTEA → media + checksum verify |
 
-Full media docs: **[docs/MEDIA_AND_BACKUPS.md](../docs/MEDIA_AND_BACKUPS.md)**.
+Full media docs: **[docs/OPERATIONS.md](../docs/OPERATIONS.md)**.
 
 ## What belongs here?
 
@@ -30,11 +31,16 @@ Full media docs: **[docs/MEDIA_AND_BACKUPS.md](../docs/MEDIA_AND_BACKUPS.md)**.
 
 - AI platform CLIs → `ai/runtime/cli/`, `ai/dataset/*/cli/`
 - Backend one-offs tied to Flask → prefer `apps/backend/` or document here explicitly
-- Production **deploy/start** scripts → wrap the commands in [docs/PRODUCTION_RELEASE.md](../docs/PRODUCTION_RELEASE.md) under your supervisor; `release-verify.sh` is the check helper only
+- Production **deploy/start** scripts → wrap the commands in [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md#production-release) under your supervisor; `release-verify.sh` is the check helper only
 
 ## Quick start
 
 ```bash
+# Clear local caches (__pycache__, .pytest_cache, Vite .vite, etc.)
+npm run clear-cache
+# Preview only: npm run clear-cache:dry
+# Also drop frontend dist/: node scripts/clear-cache.js --dist
+
 # Release verification (no secrets)
 scripts/release-verify.sh pre-deploy
 scripts/release-verify.sh db-sessions
@@ -54,8 +60,8 @@ Primary model: **hardware-adaptive** when `OLLAMA_MODEL` is unset (`gpu_high`→
 
 `node start.js` now:
 1. Installs backend deps from `requirements.txt` (includes **RapidOCR** via `rapidocr-onnxruntime`, pymupdf, Pillow)
-2. Verifies OCR Python imports
-3. Health-checks `OLLAMA_HOST` (default `http://192.168.1.200:11434`). Local `ollama serve` / pull only when the host is loopback
+2. **Fails closed** unless RapidOCR imports (Python 3.11; 3.10–3.12 supported). Python 3.13+ cannot continue.
+3. Health-checks `OLLAMA_HOST` (default `http://192.168.1.200:11434`). Pulls the selected model onto that host (local `ollama serve` only when the host is loopback)
 4. Normalizes `OLLAMA_HOST` (also accepts legacy `OLLAMA_BASE_URL`) — does not rewrite keys already present in `.env`
 
 ```bash
@@ -72,15 +78,17 @@ cd apps/backend && source venv/bin/activate
 pip install -r requirements.txt   # OCR is pip-only (rapidocr-onnxruntime); no apt tesseract required
 
 # Unit tests (no Ollama required)
-pytest tests/test_resume_parsing_unit.py tests/test_jd_parsing_unit.py \
-  tests/test_resume_text_inference.py tests/test_text_extraction_ocr.py -v
+pytest tests/backend/test_resume_parsing_unit.py tests/backend/test_jd_parsing_unit.py \
+  tests/backend/test_resume_text_inference.py tests/backend/test_text_extraction_ocr.py \
+  tests/backend/test_pdfplumber_fallback.py -v
 
 # Integration smoke (requires Ollama)
 pytest tests/test_resume_ollama_smoke.py -v -m integration
 ```
 
 OCR env knobs (optional): `OCR_ENABLED=true`, `OCR_DPI=250`, `PDF_MAX_PAGES=0`.
-System Tesseract is optional; RapidOCR from requirements is the primary OCR engine.
+PDF extraction: PyMuPDF is primary; pdfplumber is an automatic fallback for poor/table/layout extracts (no env switch).
+System Tesseract is optional at extract time after RapidOCR is installed; it is not a substitute for RapidOCR. RapidOCR from requirements is the primary OCR engine.
 
 ## Related documentation
 

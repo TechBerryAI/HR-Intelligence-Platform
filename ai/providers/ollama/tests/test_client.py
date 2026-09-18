@@ -127,3 +127,90 @@ def test_timeout_maps_to_provider_timeout() -> None:
             client.list_models()
     finally:
         client.close()
+
+
+def test_chat_sends_keep_alive_and_http_stream() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/chat":
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "model": "qwen2.5:7b-instruct",
+                    "message": {"role": "assistant", "content": '{"type":"resume"}'},
+                    "done": True,
+                    "eval_count": 4,
+                    "prompt_eval_count": 10,
+                },
+            )
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    config = OllamaProviderConfig(base_url="http://ollama.test", keep_alive="10m")
+    http_client = httpx.Client(transport=transport, base_url=config.base_url)
+    client = OllamaClient(config, provider_id="ollama", http_client=http_client)
+    try:
+        response = client.chat(
+            model="qwen2.5:7b-instruct",
+            messages=[{"role": "user", "content": "parse"}],
+            temperature=0.1,
+            max_tokens=2048,
+        )
+        assert json.loads(response.content)["type"] == "resume"
+    finally:
+        client.close()
+    assert captured["body"]["stream"] is True
+    assert captured["body"]["keep_alive"] == "10m"
+    assert captured["body"]["options"]["num_predict"] == 2048
+
+
+def test_abort_in_flight_unblocks_hanging_chat() -> None:
+    import threading
+    import time
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    from providers.ollama.client import abort_in_flight_requests
+
+    class HangHandler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            time.sleep(60)
+
+        def log_message(self, *_args: object) -> None:
+            return
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), HangHandler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    port = httpd.server_address[1]
+    config = OllamaProviderConfig(
+        base_url=f"http://127.0.0.1:{port}",
+        default_timeout_seconds=30.0,
+    )
+    client = OllamaClient(config, provider_id="ollama")
+    err: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            client.chat(
+                model="qwen2.5:14b-instruct",
+                messages=[{"role": "user", "content": "parse"}],
+                temperature=0.1,
+                max_tokens=128,
+                timeout_seconds=20,
+            )
+        except BaseException as exc:
+            err.append(exc)
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    time.sleep(0.4)
+    t0 = time.perf_counter()
+    closed = abort_in_flight_requests()
+    worker.join(timeout=8)
+    httpd.shutdown()
+    client.close()
+    assert closed >= 1
+    assert not worker.is_alive()
+    assert (time.perf_counter() - t0) < 5
+    assert err

@@ -7,28 +7,49 @@ Supports chunked uploads, ZIP extract, and parallel workers.
 from __future__ import annotations
 
 import io
+import logging
 import os
 import re
 import threading
 import time
 import uuid
 import zipfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from pathlib import Path
 from typing import Any
 
 from app.core import media_storage
 from app.core.errors import log_unexpected
 
+logger = logging.getLogger(__name__)
+
 # In-memory job store: job_id -> job dict
 _local_jobs: dict[str, dict[str, Any]] = {}
 _local_jobs_lock = threading.Lock()
 
-_BULK_EXPORT_DIR = media_storage.bulk_exports_dir()
 _BULK_UPLOAD_DIR = media_storage.bulk_uploads_dir()
 
-ALLOWED_EXT = {'pdf', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff'}
-# Legacy .doc is not extractable by current text_extraction — reject before staging.
+# openpyxl rejects these control chars in cell values (common in OCR/PDF extract).
+_ILLEGAL_XLSX_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
+_OPENPYXL_MAX_CELL = 32767
+
+# job_id -> True while a background Excel rebuild from staging is running
+_export_rebuild_lock = threading.Lock()
+_export_rebuild_inflight: set[str] = set()
+
+# Image resumes (PNG/JPG) are rejected — OCR quality is too unreliable for bulk Excel export.
+# WEBP/TIFF kept for rare scanned archives; PDF/DOCX are preferred.
+ALLOWED_EXT = {'pdf', 'docx', 'doc', 'webp', 'tif', 'tiff'}
+# Legacy .doc needs the antiword binary; text_extraction raises a clear error
+# when it is missing, and that file is reported as a per-file failure.
+
+# Decompression-bomb guards for extract_zip_to_job: a small malicious ZIP can
+# otherwise claim to decompress to gigabytes of data. Checked against the
+# ZIP's own (untrusted) central-directory file_size *before* zf.read()
+# decompresses that entry, so an oversized entry is never actually inflated.
+_ZIP_MAX_ENTRIES = 500
+_ZIP_MAX_ENTRY_BYTES = 25 * 1024 * 1024  # 25MB per extracted file
+_ZIP_MAX_TOTAL_BYTES = 300 * 1024 * 1024  # 300MB decompressed per archive
 EXCEL_HEADERS = [
     'Filename',
     'Name',
@@ -45,8 +66,58 @@ EXCEL_HEADERS = [
     'Certifications',
     'Total Experience Years',
     'ParseStatus',
+    'ParseScore',
     'ParseNotes',
 ]
+
+_PARSE_STATUS_OK = 'OK'
+_PARSE_STATUS_PARTIAL = 'PARTIAL'
+_PARSE_STATUS_WEAK = 'WEAK'
+_PARSE_STATUS_FAILED = 'failed'
+# Back-compat aliases for older tests / notes
+_PARSE_STATUS_PARTIAL_MID = _PARSE_STATUS_PARTIAL
+_PARSE_STATUS_PARTIAL_LOW = _PARSE_STATUS_WEAK
+FIELD_TRACE_HEADERS = [
+    'Filename',
+    'Field',
+    'ExcelValue',
+    'InResume',
+    'Coverage',
+    'Verdict',
+    'Note',
+]
+_TRACE_CORE_FIELDS = (
+    'name',
+    'email',
+    'phone',
+    'location',
+    'summary',
+    'skills',
+    'education',
+    'experience',
+    'years',
+)
+_TRACE_EXCEL_COL = {
+    'name': 'Name',
+    'email': 'Email',
+    'phone': 'Phone',
+    'location': 'Current Location',
+    'summary': 'Summary',
+    'skills': 'Skills',
+    'education': 'Education',
+    'experience': 'Experience',
+    'years': 'Total Experience Years',
+    'preferred_location': 'Preferred Location',
+}
+_TRACE_COVERAGE_FIELD = {
+    'name': 'fullName',
+    'email': 'email',
+    'phone': 'phone',
+    'location': 'location',
+    'summary': 'summary',
+    'education': 'education',
+    'experience': 'experience',
+}
 
 BULK_OCR_RETRY_DPI = 300
 BULK_MIN_TEXT_CHARS = 30
@@ -55,7 +126,7 @@ BULK_MIN_TEXT_CHARS = 30
 # Higher default now that most clean resumes skip Ollama via deterministic path.
 BULK_PARSE_MAX_WORKERS = max(1, min(24, int(os.getenv('BULK_PARSE_MAX_WORKERS', '6'))))
 BULK_LLM_ATTEMPTS = max(1, min(4, int(os.getenv('BULK_LLM_ATTEMPTS', '2'))))
-BULK_EXCEL_CHECKPOINT_EVERY = max(5, int(os.getenv('BULK_EXCEL_CHECKPOINT_EVERY', '25')))
+BULK_EXCEL_CHECKPOINT_EVERY = max(1, int(os.getenv('BULK_EXCEL_CHECKPOINT_EVERY', '5')))
 BULK_SKIP_LLM_WHEN_DETERMINISTIC = os.getenv(
     'BULK_SKIP_LLM_WHEN_DETERMINISTIC', 'true'
 ).lower() in ('1', 'true', 'yes')
@@ -147,12 +218,236 @@ def _call_llm_throttled(raw_text: str, doc_type: str = 'resume'):
         return call_llm(raw_text, doc_type)
 
 
+def _export_dir() -> Path:
+    """Resolve at call time so MEDIA_ROOT changes after import are respected."""
+    return media_storage.bulk_exports_dir()
+
+
 def _export_path(job_id: str) -> Path:
-    return _BULK_EXPORT_DIR / f'{job_id}.xlsx'
+    return _export_dir() / f'{job_id}.xlsx'
+
+
+def _results_sidecar_path(job_id: str) -> Path:
+    return _export_dir() / f'{job_id}.rows.json'
 
 
 def _staging_dir(job_id: str) -> Path:
     return _BULK_UPLOAD_DIR / job_id
+
+
+# Every job_id this module ever creates is a fresh uuid4 (create_local_job,
+# create_empty_session). job_id also arrives here straight from client input
+# (the `job_id` multipart form field in POST /bulk-parse/upload has no route
+# converter restricting it, unlike the `<job_id>` URL segment) — reject
+# anything that isn't that shape before it is ever joined into a filesystem
+# path, so a value like `../../../etc` cannot make _staging_dir()/_ensure_job()
+# create directories or write files outside _BULK_UPLOAD_DIR.
+_JOB_ID_RE = re.compile(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')
+
+
+def _is_valid_job_id(job_id: str | None) -> bool:
+    return bool(job_id) and bool(_JOB_ID_RE.match(job_id))
+
+
+def _excel_safe_cell(value: Any) -> Any:
+    """Coerce values for openpyxl; strip illegal XML control characters."""
+    if value is None:
+        return ''
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value
+    s = str(value)
+    if not s:
+        return ''
+    s = _ILLEGAL_XLSX_CHARS.sub('', s)
+    if len(s) > _OPENPYXL_MAX_CELL:
+        s = s[:_OPENPYXL_MAX_CELL]
+    return s
+
+
+def _staging_file_count(job_id: str) -> int:
+    d = _staging_dir(job_id)
+    if not d.is_dir():
+        return 0
+    n = 0
+    for p in d.iterdir():
+        if not p.is_file():
+            continue
+        ext = p.suffix.lower().lstrip('.')
+        if ext in ALLOWED_EXT or ext == 'doc':
+            n += 1
+    return n
+
+
+def _load_all_staged_disk_files(job_id: str) -> list[tuple[str, Path]]:
+    """All staged resume files on disk (ignores DB Queued filter — for export rebuild)."""
+    d = _staging_dir(job_id)
+    if not d.is_dir():
+        return []
+    out: list[tuple[str, Path]] = []
+    for p in sorted(d.iterdir(), key=lambda x: x.name.lower()):
+        if not p.is_file():
+            continue
+        ext = p.suffix.lower().lstrip('.')
+        if ext in ALLOWED_EXT or ext == 'doc':
+            out.append((p.name, p))
+    return out
+
+
+def _serialize_rows_for_sidecar(rows: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    for r in rows:
+        item = {h: _excel_safe_cell(r.get(h, '')) for h in EXCEL_HEADERS}
+        traces = []
+        for t in r.get('_field_trace') or []:
+            if isinstance(t, dict):
+                traces.append({h: _excel_safe_cell(t.get(h, '')) for h in FIELD_TRACE_HEADERS})
+        if traces:
+            item['_field_trace'] = traces
+        out.append(item)
+    return out
+
+
+def _persist_results_sidecar(job_id: str, rows: list[dict]) -> None:
+    try:
+        export_dir = _export_dir()
+        export_dir.mkdir(parents=True, exist_ok=True)
+        path = _results_sidecar_path(job_id)
+        import json
+
+        path.write_text(
+            json.dumps(_serialize_rows_for_sidecar(rows), ensure_ascii=False),
+            encoding='utf-8',
+        )
+    except Exception as e:
+        log_unexpected('local_bulk_parser.persist_sidecar', e, job_id=job_id)
+
+
+def _load_results_sidecar(job_id: str) -> list[dict] | None:
+    path = _results_sidecar_path(job_id)
+    if not path.is_file():
+        return None
+    try:
+        import json
+
+        data = json.loads(path.read_text(encoding='utf-8'))
+        return data if isinstance(data, list) else None
+    except Exception as e:
+        log_unexpected('local_bulk_parser.load_sidecar', e, job_id=job_id)
+        return None
+
+
+def _ensure_export_rebuild_started(job_id: str) -> bool:
+    """Start background rebuild from staging when Excel is missing. Returns True if (now) running."""
+    if not job_id:
+        return False
+    if _export_path(job_id).is_file():
+        return False
+    if _staging_file_count(job_id) < 1:
+        return False
+    with _export_rebuild_lock:
+        if job_id in _export_rebuild_inflight:
+            return True
+        _export_rebuild_inflight.add(job_id)
+
+    def _runner():
+        try:
+            _rebuild_export_from_staging(job_id)
+        finally:
+            with _export_rebuild_lock:
+                _export_rebuild_inflight.discard(job_id)
+
+    threading.Thread(
+        target=_runner,
+        name=f'bulk-export-rebuild-{job_id[:8]}',
+        daemon=True,
+    ).start()
+    return True
+
+
+def _rebuild_export_from_staging(job_id: str) -> bool:
+    """Re-parse staged files and write Excel (recovery when worker died before persist)."""
+    files = _load_all_staged_disk_files(job_id)
+    if not files:
+        return False
+
+    with _local_jobs_lock:
+        job = _local_jobs.get(job_id)
+        if not job:
+            _local_jobs[job_id] = {
+                'status': 'started',
+                'total_files': len(files),
+                'processed_files': 0,
+                'failed_files': 0,
+                'results': [],
+                'message': 'Regenerating Excel export…',
+                'failed_filenames': [],
+                'success_filenames': [],
+                'failed_details': [],
+                'staged_filenames': [n for n, _ in files],
+                'started_by': None,
+                'append': False,
+                'started_at': time.time(),
+            }
+        else:
+            job['status'] = 'started'
+            job['total_files'] = len(files)
+            job['processed_files'] = 0
+            job['failed_files'] = 0
+            job['message'] = 'Regenerating Excel export…'
+            job['results'] = []
+
+    results: list[dict] = []
+    success_count = 0
+    failed_count = 0
+    for idx, (filename, path) in enumerate(files, start=1):
+        try:
+            fname, row, is_failed, message, code = _process_one_file((filename, path, job_id))
+        except Exception as e:
+            fname, row, is_failed, message, code = (
+                filename,
+                None,
+                True,
+                f'Failed: {filename} - {str(e)[:100]}',
+                'exception',
+            )
+        if is_failed:
+            failed_count += 1
+            results.append(row if row else _failed_excel_row(fname, code=code, message=message))
+        else:
+            success_count += 1
+            if row:
+                results.append(row)
+        with _local_jobs_lock:
+            if job_id in _local_jobs:
+                _local_jobs[job_id]['processed_files'] = idx
+                _local_jobs[job_id]['failed_files'] = failed_count
+                _local_jobs[job_id]['message'] = f'Regenerating Excel: {filename} ({idx}/{len(files)})'
+        if results and idx % BULK_EXCEL_CHECKPOINT_EVERY == 0:
+            _persist_excel(job_id, list(results), append=False)
+
+    if results:
+        _persist_excel(job_id, results, append=False)
+    else:
+        _persist_excel(job_id, [], append=False)
+
+    with _local_jobs_lock:
+        if job_id in _local_jobs:
+            _local_jobs[job_id]['status'] = 'completed'
+            _local_jobs[job_id]['processed_files'] = success_count + failed_count
+            _local_jobs[job_id]['failed_files'] = failed_count
+            _local_jobs[job_id]['results'] = results
+            _local_jobs[job_id]['message'] = (
+                f'Completed: {success_count} successful, {failed_count} failed'
+            )
+    try:
+        from app.domains.administration.repositories.bulk_session_db import finalize_session
+
+        finalize_session(job_id, time.time(), success_count, failed_count)
+    except Exception as e:
+        log_unexpected('local_bulk_parser.rebuild_finalize', e, job_id=job_id)
+    return _export_path(job_id).is_file()
 
 
 def _safe_filename(name: str) -> str:
@@ -180,32 +475,41 @@ def _unique_staged_name(job_id: str, filename: str) -> str:
 
 def _persist_excel(job_id: str, rows: list[dict], append: bool = False) -> None:
     try:
-        _BULK_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+        export_dir = _export_dir()
+        export_dir.mkdir(parents=True, exist_ok=True)
         path = _export_path(job_id)
         if append and path.is_file():
             existing = _read_excel_rows(path)
-            # Prefer newer rows for same Filename
+            # Prefer newer rows for same Filename (includes _field_trace)
             by_name = {r.get('Filename'): r for r in existing if r.get('Filename')}
             for r in rows:
                 by_name[r.get('Filename')] = r
             merged = list(by_name.values()) if by_name else (existing + rows)
             path.write_bytes(_build_excel_bytes(merged))
+            _persist_results_sidecar(job_id, merged)
         else:
             path.write_bytes(_build_excel_bytes(rows))
+            _persist_results_sidecar(job_id, rows)
+        with _local_jobs_lock:
+            if job_id in _local_jobs:
+                _local_jobs[job_id].pop('export_error', None)
     except Exception as e:
-        log_unexpected('local_bulk_parser.persist_excel', e)
+        log_unexpected('local_bulk_parser.persist_excel', e, job_id=job_id)
+        # Still try to keep a JSON sidecar so download can rebuild the xlsx later
+        try:
+            _persist_results_sidecar(job_id, rows)
+        except Exception:
+            pass
+        with _local_jobs_lock:
+            if job_id in _local_jobs:
+                _local_jobs[job_id]['export_error'] = str(e)[:300]
 
 
-def _read_excel_rows(path: Path) -> list[dict]:
-    from openpyxl import load_workbook
-
-    wb = load_workbook(path, read_only=True, data_only=True)
-    ws = wb.active
+def _sheet_to_dicts(ws) -> list[dict]:
     rows_iter = ws.iter_rows(values_only=True)
     try:
         headers = [str(h) if h is not None else '' for h in next(rows_iter)]
     except StopIteration:
-        wb.close()
         return []
     out = []
     for vals in rows_iter:
@@ -216,8 +520,30 @@ def _read_excel_rows(path: Path) -> list[dict]:
             row[h] = vals[i] if i < len(vals) and vals[i] is not None else ''
         if any(str(v).strip() for v in row.values()):
             out.append(row)
-    wb.close()
     return out
+
+
+def _read_excel_rows(path: Path) -> list[dict]:
+    from openpyxl import load_workbook
+
+    wb = load_workbook(path, read_only=True, data_only=True)
+    try:
+        resumes_ws = wb['Resumes'] if 'Resumes' in wb.sheetnames else wb.active
+        out = _sheet_to_dicts(resumes_ws)
+        traces_by_file: dict[str, list[dict]] = {}
+        if 'Field Trace' in wb.sheetnames:
+            for t in _sheet_to_dicts(wb['Field Trace']):
+                fn = str(t.get('Filename') or '')
+                if not fn:
+                    continue
+                traces_by_file.setdefault(fn, []).append(t)
+        for row in out:
+            fn = str(row.get('Filename') or '')
+            if fn and fn in traces_by_file:
+                row['_field_trace'] = traces_by_file[fn]
+        return out
+    finally:
+        wb.close()
 
 
 def _as_text(value: Any) -> str:
@@ -268,13 +594,54 @@ def _normalize_email(email: Any) -> str:
 
 
 def _cert_to_str(c: Any) -> str:
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_cert_name
+
     if isinstance(c, dict):
         name = _as_text(c.get('name'))
         issuer = _as_text(c.get('issuer'))
+        if name and not is_plausible_cert_name(name):
+            return ''
         if name and issuer:
             return f'{name} ({issuer})'
-        return name or issuer or _as_text(c)
-    return _as_text(c)
+        return name or issuer or ''
+    text = _as_text(c)
+    if text and not is_plausible_cert_name(text):
+        return ''
+    return text
+
+
+def _filter_excel_cert_strs(cert_strs: list[str]) -> list[str]:
+    """Drop CV-dump leftovers that still slipped past cert validation."""
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_cert_name
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for c in cert_strs:
+        s = _as_text(c)
+        if not s or not is_plausible_cert_name(s.split(' (')[0].strip()):
+            continue
+        if re.search(
+            r'(?i)(?:\bphone\b|\bmobile\b|\be-?mail\b|@|linkedin|permanent\s+address|'
+            r'job\s+objective|seeking\s+assignments|willing\s+to\s+work|'
+            r'sensitivity\s+label|curriculum\s+vitae)',
+            s,
+        ):
+            continue
+        if len(s) > 160:
+            continue
+        key = re.sub(r'\s+', ' ', s.lower()).strip(' .,')
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(s)
+    # If still looks like a pasted resume header block, clear entirely
+    joined = ', '.join(out)
+    if len(joined) > 600 and (
+        joined.count('@') >= 1
+        or len(re.findall(r'(?i)\b(?:phone|mobile|email|contact)\b', joined)) >= 2
+    ):
+        return [c for c in out if is_plausible_cert_name(c) and len(c) < 80][:8]
+    return out[:20]
 
 
 def _skill_to_str(s: Any) -> str:
@@ -283,8 +650,482 @@ def _skill_to_str(s: Any) -> str:
     return _as_text(s)
 
 
-def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
-    """Flatten one TOON resume to a row dict for Excel; prefer Form DTO for location/education."""
+def _scrub_experience_description(desc: str) -> str:
+    """Drop empty Title:/Duration: stubs and address bleed from experience text."""
+    from app.ai.parser.enrichment.resume_text_inference import _EMPTY_EXP_LABEL_RE
+
+    s = _as_text(desc)
+    if not s:
+        return ''
+    s = _EMPTY_EXP_LABEL_RE.sub('', s)
+    s = re.sub(r'(?i)\b(?:permanent|residential|current)\s+address\s*:\s*[^;|]{0,160}', '', s)
+    # Education institution bleed parked as Organization: University
+    s = re.sub(
+        r'(?i)\borgani[sz]ation\s*:\s*[^;|]{0,120}\b(?:university|college|institute)\b[^;|]{0,80}',
+        '',
+        s,
+    )
+    s = re.sub(r'\s{2,}', ' ', s).strip(' ;|,-')
+    # Drop glyph-only leftovers
+    if re.fullmatch(r'[\s•·\-\*]+', s or ''):
+        return ''
+    return s
+
+
+def _truncate_excel_summary(summary: str, max_len: int = 2000) -> str:
+    from app.ai.parser.enrichment.resume_text_inference import _truncate_summary_at_boundary
+
+    return _truncate_summary_at_boundary(_as_text(summary), max_len)
+
+
+def _form_get(form: Any, *names: str, default: Any = None) -> Any:
+    if form is None:
+        return default
+    for name in names:
+        if isinstance(form, dict):
+            if name in form and form[name] not in (None,):
+                return form[name]
+        else:
+            if hasattr(form, name):
+                return getattr(form, name)
+    return default
+
+
+def _form_trace_reason(form: Any, form_field: str) -> str:
+    traces = _form_get(form, 'trace', default=None)
+    if not traces:
+        return ''
+    for t in traces:
+        if isinstance(t, dict):
+            if str(t.get('form_field') or '') == form_field:
+                return str(t.get('reason') or '')
+        else:
+            if getattr(t, 'form_field', '') == form_field:
+                return str(getattr(t, 'reason', '') or '')
+    return ''
+
+
+def _coverage_map(form: Any) -> dict[str, dict]:
+    rows = _form_get(form, 'coverage', default=None)
+    if not isinstance(rows, list):
+        return {}
+    out: dict[str, dict] = {}
+    for c in rows:
+        if not isinstance(c, dict):
+            continue
+        field = str(c.get('field') or '')
+        if field:
+            out[field] = c
+    return out
+
+
+def _coverage_report_from_form(form: Any):
+    from app.ai.document_intelligence.coverage.jd_coverage import CoverageReport, FieldCoverage
+
+    fields = []
+    for c in _coverage_map(form).values():
+        fields.append(
+            FieldCoverage(
+                field=str(c.get('field') or ''),
+                status=c.get('status') or 'missing_no_evidence',
+                evidence=bool(c.get('evidence')),
+                detail=str(c.get('detail') or ''),
+            )
+        )
+    return CoverageReport(fields=fields)
+
+
+def _location_value_ok(value: str) -> bool:
+    try:
+        from app.ai.parser.enrichment.resume_text_inference import is_plausible_location_value
+
+        return is_plausible_location_value(value)
+    except Exception:
+        return bool((value or '').strip())
+
+
+def _excel_value_in_resume(value: str, raw_text: str, field: str) -> bool:
+    v = (value or '').strip()
+    src = raw_text or ''
+    if not v or not src:
+        return False
+    if field == 'phone':
+        digits = re.sub(r'\D', '', v)
+        src_digits = re.sub(r'\D', '', src)
+        return len(digits) >= 8 and digits[-10:] in src_digits
+    if field == 'email':
+        return v.lower() in src.lower()
+    if field == 'years':
+        return bool(
+            re.search(
+                r'(?i)\b(?:19|20)\d{2}\b|\b\d{1,2}(?:\.\d)?\+?\s*(?:years?|yrs?)\b',
+                src,
+            )
+        )
+    from app.ai.document_intelligence.experience_quality import _value_in_source
+
+    if field in ('location', 'preferred_location'):
+        from app.ai.parser.enrichment.resume_text_inference import location_tokens_in_source
+
+        return any(_value_in_source(tok, src) for tok in location_tokens_in_source(v))
+    if field == 'skills':
+        toks = [t.strip() for t in re.split(r'[,;/|]', v) if t.strip()]
+        if not toks:
+            return False
+        hits = sum(1 for t in toks if _value_in_source(t, src))
+        return hits >= max(1, (len(toks) + 1) // 2)
+    return _value_in_source(v, src)
+
+
+def _source_has_field_evidence(field: str, raw_text: str, coverage: dict) -> bool:
+    cov_key = _TRACE_COVERAGE_FIELD.get(field)
+    if cov_key and cov_key in coverage:
+        c = coverage[cov_key]
+        if c.get('evidence') or c.get('status') in (
+            'filled',
+            'recovered',
+            'missing_with_evidence',
+        ):
+            return bool(c.get('evidence')) or c.get('status') != 'missing_no_evidence'
+        if c.get('status') == 'missing_no_evidence':
+            return False
+    src = raw_text or ''
+    if field == 'skills':
+        return bool(re.search(r'(?im)^(?:\*\*)?(?:skills?|technical\s+skills?|core\s+skills?)\b', src))
+    if field == 'summary':
+        return bool(
+            re.search(
+                r'(?im)^(?:\*\*)?(?:career\s+objective|professional\s+summary|profile\s+summary|'
+                r'summary|objective|profile|about\s+me|career\s+profile)\b',
+                src,
+            )
+        )
+    if field == 'years':
+        return _source_has_years_evidence(src)
+    if field == 'name':
+        return bool(src.strip())
+    return bool(cov_key and coverage.get(cov_key, {}).get('evidence'))
+
+
+def _source_has_years_evidence(raw_text: str) -> bool:
+    """True when the resume has job-tenure evidence, not merely graduation years."""
+    src = raw_text or ''
+    if not src:
+        return False
+    from app.ai.parser.enrichment.resume_text_inference import (
+        extract_total_experience_years_from_text,
+    )
+
+    if extract_total_experience_years_from_text(src) is not None:
+        return True
+    from app.ai.document_intelligence.experience_quality import experience_date_signal_count
+    from app.ai.document_intelligence.coverage.resume_coverage import _experience_section_text
+
+    body = _experience_section_text(src) or ''
+    if experience_date_signal_count(body) >= 1:
+        return True
+    head = '\n'.join(src.splitlines()[:20])
+    # Two-column sidebar: month-named or MM/YYYY ranges, not bare YYYY-YYYY (education)
+    if re.search(
+        r'(?i)(?:'
+        r'(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+        r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+        r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+        r')\s*[-–—]\s*(?:'
+        r'(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(?:19|20)\d{2}'
+        r'|(?:0?[1-9]|[12]\d|3[01])[/\-](?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+        r'|(?:0?[1-9]|1[0-2])[/\-](?:19|20)\d{2}'
+        r'|(?:19|20)\d{2}|present|current'
+        r')',
+        head,
+    ):
+        return True
+    if re.search(r'(?i)\b\d{1,2}\s*[-–—]?\s*months?\s+tenure\b', head):
+        return True
+    return False
+
+
+def _years_from_form_or_toon(
+    form: Any,
+    toon: dict,
+    exp_dicts: list[dict],
+    raw_text: str = '',
+) -> Any:
+    from app.ai.parser.enrichment.resume_text_inference import (
+        compute_total_experience_years,
+        extract_total_experience_years_from_text,
+        merge_experience_years,
+    )
+
+    dated: list[dict] = []
+    for e in exp_dicts:
+        if not isinstance(e, dict):
+            continue
+        row = dict(e)
+        if (row.get('is_current') or row.get('isCurrent')) and not (
+            row.get('to') or row.get('end')
+        ):
+            row['to'] = 'Present'
+        dated.append(row)
+    date_years = None
+    try:
+        date_years = compute_total_experience_years(dated)
+    except Exception:
+        date_years = None
+    prose_years = None
+    if raw_text:
+        try:
+            prose_years = extract_total_experience_years_from_text(raw_text)
+        except Exception:
+            prose_years = None
+    years = merge_experience_years(date_years, prose_years)
+    if years not in (None, ''):
+        return years
+    toon_years = toon.get('total_experience_years') if isinstance(toon, dict) else None
+    if toon_years not in (None, ''):
+        return toon_years
+    return ''
+
+
+def _exp_dicts_from_form(form: Any) -> list[dict]:
+    rows = _form_get(form, 'experiences', default=None)
+    if not rows:
+        return []
+    out = []
+    for e in list(rows)[:25]:
+        if hasattr(e, 'role'):
+            out.append(
+                {
+                    'title': getattr(e, 'role', '') or '',
+                    'role': getattr(e, 'role', '') or '',
+                    'company': getattr(e, 'company', '') or '',
+                    'from': getattr(e, 'startMonth', '') or '',
+                    'to': getattr(e, 'endMonth', '') or '',
+                    'description': getattr(e, 'description', '') or '',
+                    'is_current': bool(getattr(e, 'isCurrent', False)),
+                }
+            )
+        elif isinstance(e, dict):
+            out.append(
+                {
+                    'title': e.get('role') or e.get('title') or '',
+                    'role': e.get('role') or e.get('title') or '',
+                    'company': e.get('company') or '',
+                    'from': e.get('startMonth') or e.get('from') or e.get('start') or '',
+                    'to': e.get('endMonth') or e.get('to') or e.get('end') or '',
+                    'description': e.get('description') or '',
+                    'is_current': bool(e.get('isCurrent') or e.get('is_current')),
+                }
+            )
+    return out
+
+
+def _format_experience_chunks(exp_dicts: list[dict]) -> list[str]:
+    from app.ai.parser.enrichment.resume_text_inference import (
+        has_credible_employment_evidence,
+        is_non_job_experience_record,
+        is_plausible_job_title,
+    )
+
+    exp_parts: list[str] = []
+    seen_headers: set[str] = set()
+    for e in exp_dicts:
+        if not isinstance(e, dict):
+            continue
+        if is_non_job_experience_record(e):
+            continue
+        title = _as_text(e.get('title') or e.get('role'))
+        company = _as_text(e.get('company'))
+        fr = _as_text(e.get('from') or e.get('start'))
+        to = _as_text(e.get('to') or e.get('end'))
+        desc = _scrub_experience_description(_as_text(e.get('description')))
+        # Credible jobs OR unlabeled date+duty rows (remote contract layouts)
+        if title or company:
+            if not has_credible_employment_evidence(e):
+                continue
+        elif not ((fr or to) and desc):
+            continue
+        if title and not is_plausible_job_title(title):
+            continue
+        # Company-only skill crumbs without a real employer cue
+        if not title and company and not re.search(
+            r'(?i)\b(?:pvt\.?\s*ltd|ltd|inc|llc|corp|technologies|solutions|'
+            r'systems|labs?|university|college|institute|company|pvt)\b',
+            company,
+        ):
+            continue
+        if (e.get('is_current') or str(to).lower() in ('present', 'current', 'now')) and not to:
+            to = 'Present'
+        # Clamp absurd future end years in Excel text too
+        if re.match(r'^(20[3-9]\d)', to or ''):
+            to = 'Present'
+        if not title and not company:
+            if (fr or to) and desc:
+                loc = _as_text(e.get('location'))
+                date_bit = f'{fr} – {to}'.strip(' –') if (fr or to) else ''
+                lines = [x for x in (date_bit, loc, desc[:400]) if x]
+                exp_parts.append('\n'.join(lines))
+            continue
+        if re.match(r'(?i)^(india|pune|mumbai|remote)$', title) and re.match(
+            r'(?i)^(india|pune|mumbai|remote)$', company or 'x'
+        ):
+            continue
+        header_key = f'{title}|{company}'.lower()
+        if header_key in seen_headers:
+            continue
+        seen_headers.add(header_key)
+        # Expected-style multi-line job block (Role / Company / dates / duties)
+        date_bit = ''
+        if fr or to:
+            date_bit = f'{fr} – {to}'.strip(' –')
+        lines = [x for x in (title, company, date_bit) if x]
+        if desc:
+            lines.append(desc[:400])
+        chunk = '\n'.join(lines)
+        if chunk:
+            exp_parts.append(chunk)
+    return exp_parts
+
+
+def _format_education_chunks_from_form(form: Any) -> list[str]:
+    from app.ai.document_intelligence.validation.engine import (
+        _EDU_HEADING_TOKENS,
+        is_keepable_education_form_row,
+    )
+
+    form_edu = _form_get(form, 'education', default=None)
+    if not form_edu:
+        return []
+    edu_parts = []
+    for e in list(form_edu)[:15]:
+        if hasattr(e, 'degree'):
+            degree = _as_text(getattr(e, 'degree', ''))
+            inst = _as_text(getattr(e, 'institution', ''))
+            year = _as_text(getattr(e, 'endMonth', '') or getattr(e, 'startMonth', ''))
+        elif isinstance(e, dict):
+            degree = _as_text(e.get('degree'))
+            inst = _as_text(e.get('institution'))
+            year = _as_text(e.get('endMonth') or e.get('startMonth') or e.get('to'))
+        else:
+            continue
+        if degree.lower() in _EDU_HEADING_TOKENS or inst.lower() in _EDU_HEADING_TOKENS:
+            continue
+        if not is_keepable_education_form_row(degree, inst):
+            continue
+        # Date-only / project-meta crumbs
+        if re.match(r'(?i)^from\s+\w+', degree):
+            continue
+        if re.match(r'(?i)^(?:platform|technologies?|tools?)\s+used\b', degree):
+            continue
+        chunk = degree
+        if inst:
+            chunk = f'{chunk} | {inst}' if chunk else inst
+        if year:
+            chunk = f'{chunk} | {year}' if chunk else year
+        if chunk:
+            edu_parts.append(chunk)
+    return edu_parts
+
+
+def _build_field_trace(
+    row: dict,
+    *,
+    filename: str,
+    form: Any,
+    raw_text: str,
+    pref_fallback: bool,
+) -> list[dict]:
+    coverage = _coverage_map(form)
+    traces: list[dict] = []
+    fields = list(_TRACE_CORE_FIELDS)
+    if pref_fallback or _as_text(row.get('Preferred Location')):
+        fields.append('preferred_location')
+    for field in fields:
+        col = _TRACE_EXCEL_COL[field]
+        excel_val = _as_text(row.get(col))
+        cov_key = _TRACE_COVERAGE_FIELD.get(field)
+        cov = coverage.get(cov_key or '', {}) if cov_key else {}
+        cov_status = str(cov.get('status') or '')
+        in_resume = _excel_value_in_resume(excel_val, raw_text, field)
+        has_evidence = _source_has_field_evidence(field, raw_text, coverage)
+        note = ''
+        if field == 'preferred_location' and pref_fallback:
+            verdict = 'fallback'
+            note = 'fallback_current'
+            cov_status = cov_status or 'fallback_current'
+        elif field == 'summary':
+            from app.ai.parser.enrichment.resume_text_inference import (
+                extract_summary_details,
+                is_valid_summary,
+                summary_rejection_reason,
+            )
+
+            details = extract_summary_details(raw_text or '')
+            form_reason = _form_trace_reason(form, 'summary') if form is not None else ''
+            if excel_val and is_valid_summary(excel_val):
+                verdict = 'ok'
+                src_sec = details.get('source_section') or form_reason or 'grounded'
+                note = f"source_section={src_sec};validation=passed"
+            elif excel_val and not is_valid_summary(excel_val):
+                verdict = 'weak_ungrounded'
+                reason = summary_rejection_reason(excel_val) or 'invalid_summary'
+                note = f'validation=failed;reason={reason}'
+            elif details.get('value'):
+                verdict = 'weak_missing'
+                note = (
+                    f"source_section={details.get('source_section')};"
+                    f"validation=passed;excel_empty"
+                )
+            elif details.get('reason') and details.get('reason') != 'empty':
+                verdict = 'absent'
+                note = (
+                    f"candidate_rejected;reason={details.get('reason')};"
+                    f"source_section={details.get('source_section') or 'none'}"
+                )
+            elif has_evidence or cov_status == 'missing_with_evidence':
+                verdict = 'weak_missing'
+                note = cov_status or 'evidence_in_resume'
+            else:
+                verdict = 'absent'
+                note = cov_status or 'missing_no_evidence'
+        elif not excel_val:
+            if cov_status == 'missing_with_evidence' or (has_evidence and cov_status != 'missing_no_evidence'):
+                verdict = 'weak_missing'
+                note = cov_status or 'evidence_in_resume'
+            else:
+                verdict = 'absent'
+                note = cov_status or 'missing_no_evidence'
+        elif field == 'location' and excel_val and not _location_value_ok(excel_val):
+            verdict = 'weak_ungrounded'
+            note = 'implausible_location'
+        elif excel_val and not in_resume:
+            verdict = 'weak_ungrounded'
+            note = 'value_not_in_resume'
+        else:
+            verdict = 'ok'
+            note = cov_status or 'grounded'
+        traces.append(
+            {
+                'Filename': filename,
+                'Field': field,
+                'ExcelValue': excel_val[:200],
+                'InResume': 'yes' if in_resume else 'no',
+                'Coverage': cov_status or ('fallback_current' if verdict == 'fallback' else ''),
+                'Verdict': verdict,
+                'Note': note,
+            }
+        )
+    return traces
+
+
+def _flatten_toon(
+    toon: dict,
+    filename: str,
+    form: Any = None,
+    *,
+    raw_text: str = '',
+) -> dict:
+    """Flatten one resume to an Excel row. Form DTO is source of truth when present."""
     if not isinstance(toon, dict):
         toon = {}
     person = toon.get('person') or {}
@@ -304,64 +1145,106 @@ def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
     if not isinstance(certs, list):
         certs = [certs] if certs else []
 
-    exp_parts = []
-    for e in exp[:25]:
-        if not isinstance(e, dict):
-            continue
-        title = _as_text(e.get('title') or e.get('role'))
-        company = _as_text(e.get('company'))
-        fr = _as_text(e.get('from') or e.get('start'))
-        to = _as_text(e.get('to') or e.get('end'))
-        if (e.get('is_current') or str(to).lower() in ('present', 'current', 'now')) and not to:
-            to = 'Present'
-        desc = _as_text(e.get('description'))
-        # Skip geo-only / empty noise rows
-        if not title and not company:
-            continue
-        if re.match(r'(?i)^(india|pune|mumbai|remote)$', title) and re.match(
-            r'(?i)^(india|pune|mumbai|remote)$', company or 'x'
-        ):
-            continue
-        if title and company:
-            chunk = f'{title} at {company}'
-        elif title:
-            chunk = title
-        else:
-            chunk = company
-        if fr or to:
-            chunk = f'{chunk} ({fr}-{to})'.strip()
-        if desc:
-            chunk = f'{chunk}: {desc[:400]}'
-        if chunk and chunk not in ('at ()', '()'):
-            exp_parts.append(chunk)
+    use_form = form is not None
+    pref_fallback = False
+    exp_dicts: list[dict] = []
+    exp_parts: list[str] = []
+    edu_parts: list[str] = []
+    cert_strs: list[str] = []
+    years_out: Any = ''
+    skill_strs: list[str] = []
 
-    edu_parts = []
-    # Prefer Form DTO education (includes mapper heals / grounding filters)
-    form_edu = None
-    if form is not None:
-        form_edu = getattr(form, 'education', None)
-        if form_edu is None and isinstance(form, dict):
-            form_edu = form.get('education')
-    if form_edu:
-        for e in list(form_edu)[:15]:
-            if hasattr(e, 'degree'):
-                degree = _as_text(getattr(e, 'degree', ''))
-                inst = _as_text(getattr(e, 'institution', ''))
-                year = _as_text(getattr(e, 'endMonth', '') or getattr(e, 'startMonth', ''))
-            elif isinstance(e, dict):
-                degree = _as_text(e.get('degree'))
-                inst = _as_text(e.get('institution'))
-                year = _as_text(e.get('endMonth') or e.get('startMonth') or e.get('to'))
-            else:
-                continue
-            chunk = degree
-            if inst:
-                chunk = f'{chunk} - {inst}' if chunk else inst
-            if year:
-                chunk = f'{chunk} [{year}]' if chunk else year
-            if chunk:
-                edu_parts.append(chunk)
-    if not edu_parts:
+    if use_form:
+        name = _as_text(_form_get(form, 'fullName', default='')) or _as_text(person.get('name'))
+        email = _normalize_email(
+            _form_get(form, 'email', default='') or person.get('email')
+        )
+        phone = _normalize_phone(
+            _form_get(form, 'phone', default='') or person.get('phone')
+        )
+        linkedin = _as_text(
+            _form_get(form, 'linkedinUrl', default='') or person.get('linkedin')
+        )
+        github = _as_text(
+            _form_get(form, 'githubUrl', default='') or person.get('github')
+        )
+        current_location = _as_text(_form_get(form, 'currentLocation', default=''))
+        preferred_location = _as_text(_form_get(form, 'preferredLocation', default=''))
+        if (
+            preferred_location
+            and current_location
+            and preferred_location == current_location
+            and _form_trace_reason(form, 'preferredLocation') == 'fallback_current_location'
+        ):
+            pref_fallback = True
+        elif not preferred_location and current_location:
+            preferred_location = current_location
+            pref_fallback = True
+        summary = _truncate_excel_summary(
+            _form_get(form, 'summary', 'summaryText', default='') or toon.get('summary')
+        )
+        form_skills = _form_get(form, 'skillsList', default=None)
+        if not form_skills:
+            form_skills = _form_get(form, 'skills', default='')
+        if isinstance(form_skills, list):
+            skill_strs = [_skill_to_str(s) for s in form_skills[:50] if s]
+        elif isinstance(form_skills, str) and form_skills.strip():
+            skill_strs = [s.strip() for s in form_skills.split(',') if s.strip()][:50]
+        else:
+            skill_strs = [_skill_to_str(s) for s in skills[:50] if s]
+        skill_strs = [s for s in skill_strs if s]
+        try:
+            from app.ai.parser.enrichment.resume_text_inference import filter_skill_items
+
+            skill_strs = filter_skill_items(skill_strs)
+        except Exception:
+            pass
+        exp_dicts = _exp_dicts_from_form(form)
+        exp_parts = _format_experience_chunks(exp_dicts)
+        edu_parts = _format_education_chunks_from_form(form)
+        form_certs = _form_get(form, 'certifications', default=None)
+        if form_certs:
+            cert_strs = []
+            for c in list(form_certs)[:30]:
+                if hasattr(c, 'name'):
+                    cert_strs.append(
+                        _cert_to_str({'name': getattr(c, 'name', ''), 'issuer': getattr(c, 'issuer', '')})
+                    )
+                elif isinstance(c, dict):
+                    cert_strs.append(_cert_to_str(c))
+            cert_strs = [c for c in cert_strs if c]
+            cert_strs = _filter_excel_cert_strs(cert_strs)
+        else:
+            cert_strs = [_cert_to_str(c) for c in certs[:30]]
+            cert_strs = _filter_excel_cert_strs(cert_strs)
+        years_out = _years_from_form_or_toon(form, toon, exp_dicts, raw_text=raw_text)
+    else:
+        name = _as_text(person.get('name'))
+        email = _normalize_email(person.get('email'))
+        phone = _normalize_phone(person.get('phone'))
+        linkedin = _as_text(person.get('linkedin'))
+        github = _as_text(person.get('github'))
+        current_location = _as_text(
+            person.get('location') or person.get('current_location')
+        )
+        preferred_location = _as_text(person.get('preferred_location')) or current_location
+        if preferred_location and current_location and preferred_location == current_location:
+            pref_fallback = True
+        summary = _truncate_excel_summary(toon.get('summary'))
+        skill_strs = [_skill_to_str(s) for s in skills[:50]]
+        try:
+            from app.ai.parser.enrichment.resume_text_inference import filter_skill_items
+
+            skill_strs = filter_skill_items([s for s in skill_strs if s])
+        except Exception:
+            skill_strs = [s for s in skill_strs if s]
+        skill_strs = [s for s in skill_strs if s]
+        exp_dicts = []
+        for e in exp[:25]:
+            if isinstance(e, dict):
+                exp_dicts.append(e)
+        exp_parts = _format_experience_chunks(exp_dicts)
+        edu_parts = []
         for e in edu[:15]:
             if not isinstance(e, dict):
                 continue
@@ -378,78 +1261,95 @@ def _flatten_toon(toon: dict, filename: str, form: Any = None) -> dict:
                 chunk = f'{chunk} [{year}]' if chunk else year
             if chunk:
                 edu_parts.append(chunk)
+        cert_strs = [_cert_to_str(c) for c in certs[:30]]
+        cert_strs = _filter_excel_cert_strs(cert_strs)
+        years_out = _years_from_form_or_toon(None, toon, exp_dicts, raw_text=raw_text)
 
-    skill_strs = [_skill_to_str(s) for s in skills[:50]]
-    skill_strs = [s for s in skill_strs if s]
-    cert_strs = [_cert_to_str(c) for c in certs[:30]]
-    cert_strs = [c for c in cert_strs if c]
+    # Refine person name: reject role/UI labels; prefer Naukri_/filename when needed
+    try:
+        from app.ai.parser.enrichment.resume_text_inference import (
+            is_plausible_person_name,
+            name_from_resume_filename,
+        )
 
-    years = toon.get('total_experience_years')
-    if years is None or years == '':
-        # Phase 6 safety net: recompute from experience dates / description ranges
+        file_name = name_from_resume_filename(filename)
+        if not is_plausible_person_name(name):
+            name = file_name or ''
+        elif file_name and len(file_name.split()) >= 2:
+            if len(name.split()) == 1 or len(name.split()) > len(file_name.split()) + 1:
+                name = file_name
+    except Exception:
+        pass
+
+    # Excel safety: peel city from address when form/toon left location empty
+    if not current_location and raw_text:
         try:
             from app.ai.parser.enrichment.resume_text_inference import (
-                compute_total_experience_years,
+                extract_location_from_text,
+                heal_location_candidate,
+                is_plausible_location_value,
+                peel_location_from_structured,
             )
 
-            recomputed = compute_total_experience_years(
-                [
-                    {
-                        'from': e.get('from') or e.get('start'),
-                        'to': e.get('to') or e.get('end'),
-                        'description': e.get('description') or '',
-                        'role': e.get('title') or e.get('role') or '',
-                        'company': e.get('company') or '',
-                    }
-                    for e in exp
-                    if isinstance(e, dict)
-                ]
-            )
-            years_out = recomputed if recomputed is not None else ''
+            peeled = heal_location_candidate(extract_location_from_text(raw_text) or '')
+            if not peeled:
+                peeled = peel_location_from_structured(
+                    experience=exp_dicts or None,
+                    education=None,
+                    raw_text=raw_text,
+                )
+            if peeled and is_plausible_location_value(peeled):
+                current_location = peeled
+                if not preferred_location:
+                    preferred_location = peeled
+                    pref_fallback = True
         except Exception:
-            years_out = ''
-    else:
-        years_out = years
+            pass
 
-    current_location = _as_text(
-        person.get('location') or person.get('current_location')
-    )
-    preferred_location = _as_text(person.get('preferred_location')) or current_location
-    if form is not None:
-        form_cur = getattr(form, 'currentLocation', None)
-        form_pref = getattr(form, 'preferredLocation', None)
-        if form_cur is None and isinstance(form, dict):
-            form_cur = form.get('currentLocation')
-            form_pref = form.get('preferredLocation')
-        if form_cur:
-            current_location = _as_text(form_cur)
-        if form_pref:
-            preferred_location = _as_text(form_pref)
-        elif current_location:
-            preferred_location = current_location
+    # Prefer prose years when dated jobs missing (expected Excel fills years often)
+    if years_out in (None, '') and raw_text:
+        try:
+            from app.ai.parser.enrichment.resume_text_inference import (
+                extract_total_experience_years_from_text,
+            )
 
-    return {
+            years_out = extract_total_experience_years_from_text(raw_text) or ''
+        except Exception:
+            pass
+
+    row = {
         'Filename': filename,
-        'Name': _as_text(person.get('name')),
-        'Email': _normalize_email(person.get('email')),
-        'Phone': _normalize_phone(person.get('phone')),
-        'LinkedIn': _as_text(person.get('linkedin')),
-        'GitHub': _as_text(person.get('github')),
+        'Name': name,
+        'Email': email,
+        'Phone': phone,
+        'LinkedIn': linkedin,
+        'GitHub': github,
         'Current Location': current_location,
         'Preferred Location': preferred_location,
-        'Summary': _as_text(toon.get('summary'))[:2000],
+        'Summary': summary,
         'Skills': ', '.join(skill_strs)[:4000],
-        'Experience': '; '.join(exp_parts)[:8000],
-        'Education': '; '.join(edu_parts)[:3000],
-        'Certifications': ', '.join(cert_strs)[:2000],
+        # Newline-separated blocks match expected Excel readability
+        'Experience': '\n\n'.join(exp_parts)[:8000],
+        'Education': '\n'.join(edu_parts)[:3000],
+        'Certifications': '\n'.join(cert_strs)[:2000],
         'Total Experience Years': years_out,
-        'ParseStatus': 'ok',
+        'ParseStatus': _PARSE_STATUS_OK,
+        'ParseScore': '',
         'ParseNotes': '',
     }
+    row['_field_trace'] = _build_field_trace(
+        row,
+        filename=filename,
+        form=form,
+        raw_text=raw_text or '',
+        pref_fallback=pref_fallback,
+    )
+    row['_pref_fallback'] = pref_fallback
+    return row
 
 
 def _build_excel_bytes(rows: list[dict]) -> bytes:
-    """Build .xlsx from list of row dicts using openpyxl."""
+    """Build .xlsx with Resumes + Field Trace sheets."""
     from openpyxl import Workbook
     from openpyxl.utils import get_column_letter
 
@@ -459,9 +1359,22 @@ def _build_excel_bytes(rows: list[dict]) -> bytes:
     headers = EXCEL_HEADERS
     ws.append(headers)
     for r in rows:
-        ws.append([r.get(h, '') for h in headers])
+        ws.append([_excel_safe_cell(r.get(h, '')) for h in headers])
     for col in range(1, len(headers) + 1):
-        ws.column_dimensions[get_column_letter(col)].width = min(40, max(10, len(str(headers[col - 1])) + 2))
+        ws.column_dimensions[get_column_letter(col)].width = min(
+            40, max(10, len(str(headers[col - 1])) + 2)
+        )
+
+    trace_ws = wb.create_sheet('Field Trace')
+    trace_ws.append(FIELD_TRACE_HEADERS)
+    for r in rows:
+        for t in r.get('_field_trace') or []:
+            trace_ws.append([_excel_safe_cell(t.get(h, '')) for h in FIELD_TRACE_HEADERS])
+    for col in range(1, len(FIELD_TRACE_HEADERS) + 1):
+        trace_ws.column_dimensions[get_column_letter(col)].width = min(
+            36, max(10, len(str(FIELD_TRACE_HEADERS[col - 1])) + 2)
+        )
+
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -538,6 +1451,61 @@ _COVERAGE_GAP_LABELS = {
 }
 
 
+def _resume_excel_completeness_score(row: dict) -> int:
+    """0–100 how filled the Excel resume row is (used for ParseStatus / ParseScore)."""
+    if not isinstance(row, dict):
+        return 0
+    weighted = (
+        ('Name', 15, 2),
+        ('Email', 15, 3),
+        ('Phone', 15, 7),
+        ('Current Location', 10, 2),
+        ('Summary', 15, 40),
+        ('Skills', 10, 8),
+        ('Experience', 15, 20),
+        ('Education', 5, 8),
+    )
+    score = 0
+    for col, weight, min_len in weighted:
+        val = str(row.get(col) or '').strip()
+        if not val:
+            continue
+        if len(val) < min_len:
+            score += max(1, weight // 2)
+        else:
+            score += weight
+    return int(min(100, max(0, score)))
+
+
+def _parse_status_from_score(score: int) -> str:
+    """
+    Match expected Excel tiers:
+      score >= 80 → OK
+      score >= 50 → PARTIAL
+      else → WEAK
+    """
+    if score >= 80:
+        return _PARSE_STATUS_OK
+    if score >= 50:
+        return _PARSE_STATUS_PARTIAL
+    return _PARSE_STATUS_WEAK
+
+
+def _is_acceptable_bulk_parse_status(status: str) -> bool:
+    """True for OK / partial / weak tiers (not failed)."""
+    s = (status or '').strip()
+    if not s:
+        return False
+    low = s.lower()
+    if low == 'failed':
+        return False
+    return (
+        s in (_PARSE_STATUS_OK, _PARSE_STATUS_PARTIAL, _PARSE_STATUS_WEAK)
+        or low in ('ok', 'partial', 'weak')
+        or low.startswith('partial')
+    )
+
+
 def _coverage_gaps_from_form(form_dto) -> list[str]:
     """Named core coverage gaps from ApplicationFormDTO (JD-parity honesty)."""
     if form_dto is None:
@@ -564,15 +1532,146 @@ def _apply_coverage_parse_honesty(
     parse_status: str,
     note_bits: list[str],
 ) -> str:
-    """Mark partial + ParseNotes when coverage still has named gaps with evidence."""
+    """
+    Set ParseScore + clear ParseStatus tiers from completeness.
+
+    Coverage/trace gaps stay in ParseNotes. Score drives the visible status
+    (same tiers as expected Excel export):
+      >=80 → OK | >=50 → PARTIAL | else → WEAK
+    """
+    if (parse_status or '').strip().lower() == 'failed':
+        row['ParseStatus'] = _PARSE_STATUS_FAILED
+        row['ParseScore'] = '0%'
+        row['ParseNotes'] = '; '.join(note_bits)[:2000]
+        return _PARSE_STATUS_FAILED
+
     gaps = _coverage_gaps_from_form(form_dto)
     if gaps:
-        parse_status = 'partial'
         labels = [_COVERAGE_GAP_LABELS.get(g, g) for g in gaps]
         note_bits.append('coverage_gaps=' + ','.join(labels))
+    weak_verdicts = []
+    for t in row.get('_field_trace') or []:
+        verdict = str(t.get('Verdict') or '')
+        field = str(t.get('Field') or '')
+        if verdict in ('weak_missing', 'weak_ungrounded') and field in _TRACE_CORE_FIELDS:
+            weak_verdicts.append(f'{field}:{verdict}')
+    if weak_verdicts:
+        note_bits.append('trace_weak=' + ','.join(weak_verdicts[:8]))
+
+    score = _resume_excel_completeness_score(row)
+    # Soft penalty when coverage/trace still flags core gaps (keeps near-full rows honest)
+    if gaps:
+        score = max(0, score - 5 * min(len(gaps), 4))
+    if weak_verdicts:
+        score = max(0, score - 3 * min(len(weak_verdicts), 4))
+    score = int(min(100, max(0, score)))
+
+    parse_status = _parse_status_from_score(score)
+    note_bits.append(f'completeness={score}')
     row['ParseStatus'] = parse_status
+    row['ParseScore'] = f'{score}%'
     row['ParseNotes'] = '; '.join(note_bits)[:2000]
     return parse_status
+
+
+def _bulk_det_skip_ok(
+    *,
+    toon: dict,
+    form: Any,
+    raw_text: str,
+    field_trace: list[dict] | None = None,
+) -> bool:
+    """True when bulk may skip residual LLM (same closed-world rules as single parse)."""
+    from app.ai.document_intelligence.canonical.from_toon import candidate_profile_from_toon
+    from app.ai.document_intelligence.pipeline import resume_deterministic_is_strong
+
+    if not isinstance(toon, dict):
+        return False
+    try:
+        profile = candidate_profile_from_toon(toon)
+    except Exception:
+        return False
+    cov = _coverage_report_from_form(form)
+    if not resume_deterministic_is_strong(profile, cov, source_text=raw_text or ''):
+        return False
+    if _experience_titles_implausible(toon):
+        return False
+    if _ocr_experience_slice_mushy(raw_text or ''):
+        return False
+    traces = field_trace if field_trace is not None else []
+    if any(
+        str(t.get('Field') or '') in ('location', 'education', 'experience')
+        and str(t.get('Verdict') or '') == 'weak_missing'
+        for t in traces
+    ):
+        return False
+    return True
+
+
+def _failed_excel_row(filename: str, *, code: str, message: str) -> dict:
+    """Stub Resumes row so failed files still appear in the downloaded workbook."""
+    note = f'{code}: {message}'.strip()[:2000]
+    return {
+        'Filename': filename,
+        'Name': '',
+        'Email': '',
+        'Phone': '',
+        'LinkedIn': '',
+        'GitHub': '',
+        'Current Location': '',
+        'Preferred Location': '',
+        'Summary': '',
+        'Skills': '',
+        'Experience': '',
+        'Education': '',
+        'Certifications': '',
+        'Total Experience Years': '',
+        'ParseStatus': _PARSE_STATUS_FAILED,
+        'ParseScore': '0%',
+        'ParseNotes': note,
+        '_field_trace': [],
+    }
+
+
+def _reconcile_missing_excel_rows(
+    results: list[dict],
+    expected_filenames: list[str],
+    *,
+    code: str = 'not_processed',
+    message: str = 'Staged file was not written to Excel (missing disk, unclaimed, or cancelled).',
+) -> list[dict]:
+    """Ensure every expected filename has a Resumes row."""
+    have = {str(r.get('Filename') or '') for r in results}
+    for name in expected_filenames:
+        if name and name not in have:
+            results.append(_failed_excel_row(name, code=code, message=message))
+            have.add(name)
+    return results
+
+
+def _bulk_needs_ocr_retry(
+    ext: str,
+    raw_text: str,
+    extract_err: str | None,
+    *,
+    looks_like_garbage=None,
+    max_dpi_used: int = 0,
+) -> bool:
+    """Match single-parse pipeline via should_retry_high_dpi_extract.
+
+    Fail-fast: never retry high-DPI OCR when no local OCR engine is installed.
+    Image rasters skip DPI retry (bytes do not change). `looks_like_garbage` is
+    accepted for call-site compatibility and ignored.
+    """
+    from app.ai.parser.text_extraction import should_retry_high_dpi_extract
+
+    filename = f'file.{ext}' if ext else 'file.pdf'
+    return should_retry_high_dpi_extract(
+        filename,
+        raw_text,
+        extract_failed=bool(extract_err),
+        max_dpi_used=max_dpi_used,
+    )
 
 
 def _process_one_file(args: tuple) -> tuple[str, dict | None, bool, str, str]:
@@ -639,7 +1738,11 @@ def _process_one_file_inner(
     *,
     job_id: str | None = None,
 ) -> tuple[str, dict | None, bool, str, str]:
-    from app.ai.parser.text_extraction import extract_text
+    from app.ai.parser.text_extraction import (
+        extract_document,
+        retry_extract_high_dpi,
+        should_retry_high_dpi_extract,
+    )
     from app.domains.recruitment.services.parsing_storage import validate_toon_format_bulk
 
     try:
@@ -650,10 +1753,11 @@ def _process_one_file_inner(
         last_extract_err = None
         raw_text = ""
         t_text = time.perf_counter()
-        _IMAGE_EXTS = ('pdf', 'png', 'jpg', 'jpeg', 'webp', 'tif', 'tiff', 'bmp')
         ext = filename.lower().rsplit('.', 1)[-1] if '.' in filename else ''
+        extract_result = None
         try:
-            raw_text = extract_text(data, filename) or ""
+            extract_result = extract_document(data, filename)
+            raw_text = extract_result.text or ""
         except Exception as extract_err:
             raw_text = ""
             last_extract_err = str(extract_err)[:200]
@@ -661,34 +1765,63 @@ def _process_one_file_inner(
         if raw_text and '\x00' in raw_text:
             raw_text = raw_text.replace('\x00', '')
 
-        def _looks_like_garbage_extract(s: str) -> bool:
-            t = (s or '').strip()
-            if len(t) < BULK_MIN_TEXT_CHARS:
-                return True
-            if len(t) > 400:
-                return False
-            alnum = sum(1 for c in t if c.isalnum())
-            ratio = alnum / max(len(t), 1)
-            has_token = bool(
-                re.search(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}', t)
-                or re.search(r'\b[6-9]\d{9}\b|\+\d[\d\s\-()]{8,}\d', t)
-                or re.search(r'(?i)\b(?:experience|education|skills|summary)\b', t)
-            )
-            return ratio < 0.35 and not has_token
-
-        if (
-            (len(raw_text.strip()) < BULK_MIN_TEXT_CHARS or _looks_like_garbage_extract(raw_text))
-            and ext in _IMAGE_EXTS
+        max_dpi_used = extract_result.final_dpi if extract_result is not None else 0
+        did_dpi_retry = False
+        if should_retry_high_dpi_extract(
+            filename,
+            raw_text,
+            extract_failed=bool(last_extract_err),
+            max_dpi_used=max_dpi_used,
         ):
+            did_dpi_retry = True
             try:
-                raw_text = extract_text(data, filename, dpi=BULK_OCR_RETRY_DPI) or ""
+                extract_result = retry_extract_high_dpi(
+                    data, filename, extract_result, dpi=BULK_OCR_RETRY_DPI
+                )
+                raw_text = extract_result.text or ""
                 if raw_text and '\x00' in raw_text:
                     raw_text = raw_text.replace('\x00', '')
                 last_extract_err = None
             except Exception as retry_err:
                 last_extract_err = str(retry_err)[:200]
 
+        # Last resort for scanned PDFs that still look empty/weak after DPI retry
+        try:
+            from app.ai.parser.text_quality import classify_text_quality
+            from app.ai.parser.extraction_result import TextQuality
+            from app.ai.parser.text_extraction import _force_pdf_ocr, ocr_engines_available
+
+            q = classify_text_quality(raw_text)
+            need_force = (
+                ext == 'pdf'
+                and ocr_engines_available()
+                and (
+                    not raw_text
+                    or len(raw_text.strip()) < max(BULK_MIN_TEXT_CHARS, 120)
+                    or q in (TextQuality.EMPTY, TextQuality.GARBAGE, TextQuality.WEAK)
+                )
+            )
+            if need_force:
+                forced = _force_pdf_ocr(data, dpi=BULK_OCR_RETRY_DPI)
+                if forced and len(forced.strip()) > len((raw_text or '').strip()):
+                    raw_text = forced
+                    last_extract_err = None
+        except Exception:
+            pass
+
         text_ms = (time.perf_counter() - t_text) * 1000.0
+        logger.info(
+            '[bulk-timing] %s extract=%.0fms pages=%s ocr_pages=%s dpi=%s '
+            'dpi_retry=%s status=%s chars=%s',
+            filename,
+            text_ms,
+            extract_result.page_count if extract_result is not None else 0,
+            len(extract_result.ocr_pages) if extract_result is not None else 0,
+            extract_result.final_dpi if extract_result is not None else 0,
+            did_dpi_retry,
+            extract_result.status if extract_result is not None else 'error',
+            len(raw_text.strip()) if raw_text else 0,
+        )
         if not raw_text or len(raw_text.strip()) < BULK_MIN_TEXT_CHARS:
             _bulk_stage("text", "failed", text_ms)
             _bulk_stage("persist_raw", "skipped")
@@ -724,55 +1857,48 @@ def _process_one_file_inner(
         )
 
         # --- Intelligence Engine text path (shared with single-file parse) ---
+        t_engine = time.perf_counter()
         if BULK_SKIP_LLM_WHEN_DETERMINISTIC:
             try:
                 from app.ai.parser.engine import parse_resume_text_via_engine
                 from app.ai.parser.deterministic_resume import score_resume_toon
 
-                from app.ai.document_intelligence.coverage.resume_coverage import (
-                    has_experience_section_evidence,
-                )
-
                 det_toon, source, eng_notes, form_dto = parse_resume_text_via_engine(
                     raw_text,
                     allow_llm=False,
                     skip_llm_when_deterministic=True,
+                    source_filename=filename,
                 )
-                conf, missing, passes = score_resume_toon(
+                conf, missing, _passes = score_resume_toon(
                     det_toon if isinstance(det_toon, dict) else {},
                     source_text=raw_text,
                 )
-                # Do not skip LLM when experience section exists but Excel would lack Experience
-                exp_gap = (
-                    has_experience_section_evidence(raw_text)
-                    and isinstance(det_toon, dict)
-                    and not (det_toon.get("experience") or [])
+                row = _flatten_toon(
+                    det_toon if isinstance(det_toon, dict) else {},
+                    filename,
+                    form=form_dto,
+                    raw_text=raw_text,
                 )
-                # Phase 6: refuse det-skip on garbled titles or OCR-mushy experience
-                bad_titles = (
-                    isinstance(det_toon, dict)
-                    and _experience_titles_implausible(det_toon)
-                )
-                ocr_mush = _ocr_experience_slice_mushy(raw_text)
-                if (
-                    passes
-                    and isinstance(det_toon, dict)
-                    and not exp_gap
-                    and not bad_titles
-                    and not ocr_mush
+                if _bulk_det_skip_ok(
+                    toon=det_toon if isinstance(det_toon, dict) else {},
+                    form=form_dto,
+                    raw_text=raw_text,
+                    field_trace=row.get('_field_trace') or [],
                 ):
                     t_val = time.perf_counter()
-                    accept, notes, parse_status = validate_toon_format_bulk(det_toon, "resume")
+                    accept, notes, parse_status = validate_toon_format_bulk(
+                        det_toon if isinstance(det_toon, dict) else {},
+                        "resume",
+                    )
                     _bulk_stage(
                         "validate",
                         "completed" if accept else "failed",
                         (time.perf_counter() - t_val) * 1000.0,
                     )
-                    # Fast path: keep Ollama for true gaps (no experience / mushy OCR),
-                    # not for ordinary "partial" validation notes.
-                    if accept and parse_status in ("ok", "partial"):
+                    # Skip LLM only when the closed-world gate passed. Partial
+                    # validation notes alone never skip residual LLM.
+                    if accept:
                         t_persist = time.perf_counter()
-                        row = _flatten_toon(det_toon, filename, form=form_dto)
                         note_bits = [f"source=engine:{source}", f"conf={conf:.2f}"]
                         note_bits.extend(eng_notes[:4])
                         if missing:
@@ -810,12 +1936,17 @@ def _process_one_file_inner(
                             or row.get("Skills")
                             or row.get("Experience")
                         ):
+                            logger.info(
+                                '[bulk-timing] %s engine=deterministic ms=%.0f',
+                                filename,
+                                (time.perf_counter() - t_engine) * 1000.0,
+                            )
                             return (
                                 filename,
                                 row,
                                 False,
                                 f"Processing: {filename} (engine:{source})",
-                                parse_status if parse_status in ("ok", "partial") else "ok",
+                                parse_status if _is_acceptable_bulk_parse_status(parse_status) else _PARSE_STATUS_OK,
                             )
             except Exception as det_err:
                 print(f"[local_bulk_parser] engine det path failed for {filename}: {det_err}")
@@ -827,15 +1958,16 @@ def _process_one_file_inner(
             try:
                 from app.ai.parser.engine import parse_resume_text_via_engine
 
-                # Gate concurrent Ollama calls (OLLAMA_MAX_CONCURRENT)
-                from app.ai.parser.engine.ollama_limit import ollama_slot
-
-                with ollama_slot():
-                    toon, source, eng_notes, form_dto = parse_resume_text_via_engine(
-                        raw_text,
-                        allow_llm=True,
-                        skip_llm_when_deterministic=False,
-                    )
+                # Do not hold ollama_slot here. Semantic AI acquires it on a
+                # timeout worker thread; wrapping both sides deadlocks when
+                # OLLAMA_MAX_CONCURRENT is 1 (bulk waits, timeout thread waits,
+                # executor shutdown waits forever). Slot lives in _call_section_llm.
+                toon, source, eng_notes, form_dto = parse_resume_text_via_engine(
+                    raw_text,
+                    allow_llm=True,
+                    skip_llm_when_deterministic=False,
+                    source_filename=filename,
+                )
                 if not isinstance(toon, dict):
                     last_err = "Engine returned non-object"
                     toon = None
@@ -855,7 +1987,7 @@ def _process_one_file_inner(
                     )
 
                     t_persist = time.perf_counter()
-                    row = _flatten_toon(toon, filename, form=form_dto)
+                    row = _flatten_toon(toon, filename, form=form_dto, raw_text=raw_text)
                     # Honest status: section evidence but still empty Experience → partial
                     if (
                         has_experience_section_evidence(raw_text)
@@ -905,12 +2037,18 @@ def _process_one_file_inner(
                         last_err = "empty fields after flatten"
                         toon = None
                         continue
+                    logger.info(
+                        '[bulk-timing] %s engine=llm attempts=%s ms=%.0f',
+                        filename,
+                        attempt + 1,
+                        (time.perf_counter() - t_engine) * 1000.0,
+                    )
                     return (
                         filename,
                         row,
                         False,
                         f"Processing: {filename} (engine:{source})",
-                        parse_status if parse_status in ("ok", "partial") else "ok",
+                        parse_status if _is_acceptable_bulk_parse_status(parse_status) else _PARSE_STATUS_OK,
                     )
                 last_err = notes or "validation failed"
                 toon = None
@@ -935,6 +2073,12 @@ def _process_one_file_inner(
             for x in ("person.", "missing", "must not", "insufficient fields")
         ):
             code = "validation"
+        logger.info(
+            '[bulk-timing] %s engine=failed(%s) ms=%.0f',
+            filename,
+            code,
+            (time.perf_counter() - t_engine) * 1000.0,
+        )
         return (
             filename,
             None,
@@ -947,18 +2091,25 @@ def _process_one_file_inner(
 
 
 def _load_staged_files(job_id: str) -> list[tuple[str, Path, str | None]]:
-    """Return (filename, path, file_id) from durable DB + disk staging."""
-    from app.domains.administration.repositories.bulk_session_db import list_queued_filenames, get_file_id_by_name
+    """Return (filename, path, file_id) for Queued work only (DB-first)."""
+    from app.domains.administration.repositories.bulk_session_db import (
+        get_file_id_by_name,
+        list_queued_filenames,
+    )
 
     names: list[str] = []
-    with _local_jobs_lock:
-        job = _local_jobs.get(job_id) or {}
-        names = list(job.get('staged_filenames') or [])
+    try:
+        names = list_queued_filenames(job_id)
+    except Exception:
+        names = []
     if not names:
-        try:
-            names = list_queued_filenames(job_id)
-        except Exception:
-            names = []
+        with _local_jobs_lock:
+            job = _local_jobs.get(job_id) or {}
+            done = set(job.get('success_filenames') or []) | set(job.get('failed_filenames') or [])
+            names = [
+                n for n in (job.get('staged_filenames') or [])
+                if n and n not in done
+            ]
     out: list[tuple[str, Path, str | None]] = []
     for name in names:
         p = _staging_dir(job_id) / name
@@ -973,12 +2124,27 @@ def _load_staged_files(job_id: str) -> list[tuple[str, Path, str | None]]:
     return out
 
 
+def _job_stop_reason(job_id: str) -> str | None:
+    """Return 'paused' / 'cancelled' when the worker should stop claiming new files."""
+    with _local_jobs_lock:
+        j = _local_jobs.get(job_id) or {}
+        status = j.get('status')
+    if status == 'paused':
+        return 'paused'
+    if status == 'cancelled':
+        return 'cancelled'
+    return None
+
+
 def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str | None = None) -> None:
     """Background: process staged files in parallel, update progress, write Excel."""
     from app.domains.administration.repositories.bulk_session_db import (
         claim_file_for_processing,
         finalize_session,
+        get_session_progress,
         heartbeat_session_lease,
+        mark_session_paused,
+        reclaim_session_running_files,
         reclaim_stale_file_leases,
         update_file_status,
         update_session_progress,
@@ -992,7 +2158,7 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
 
     with _local_jobs_lock:
         job = _local_jobs.get(job_id)
-    if job and job.get('status') == 'cancelled':
+    if job and job.get('status') in ('cancelled', 'paused'):
         return
     # Ensure a local cache shell exists for progress UI even after worker restart.
     if not job:
@@ -1003,12 +2169,41 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
                 job['status'] = 'started'
                 job['started_at'] = started_at
 
-    files_list = _load_staged_files(job_id)
-    total = len(files_list)
-    results: list[dict] = []
+    # Seed counters from durable progress so resume does not wipe earlier totals.
     success_count = 0
     failed_count = 0
-    max_workers = min(BULK_PARSE_MAX_WORKERS, max(1, total))
+    try:
+        db_prog = get_session_progress(job_id) or {}
+        success_count = len(db_prog.get('success_filenames') or [])
+        failed_count = int(db_prog.get('failed_files') or 0)
+        with _local_jobs_lock:
+            if job_id in _local_jobs:
+                _local_jobs[job_id]['success_filenames'] = list(
+                    db_prog.get('success_filenames') or []
+                )
+                _local_jobs[job_id]['failed_filenames'] = list(
+                    db_prog.get('failed_filenames') or []
+                )
+                _local_jobs[job_id]['failed_details'] = list(
+                    db_prog.get('failed_details') or []
+                )
+                _local_jobs[job_id]['processed_files'] = success_count + failed_count
+                _local_jobs[job_id]['failed_files'] = failed_count
+                if db_prog.get('total_files'):
+                    _local_jobs[job_id]['total_files'] = db_prog['total_files']
+    except Exception:
+        pass
+
+    files_list = _load_staged_files(job_id)
+    expected_filenames: list[str] = [item[0] for item in files_list]
+    with _local_jobs_lock:
+        job_now = _local_jobs.get(job_id) or {}
+        for name in list(job_now.get('staged_filenames') or []):
+            if name and name not in expected_filenames:
+                expected_filenames.append(name)
+    results: list[dict] = []
+    max_workers = min(BULK_PARSE_MAX_WORKERS, max(1, len(files_list) or 1))
+    stop_reason: str | None = None
 
     def _run_one(item: tuple[str, Path, str | None]):
         filename, path, file_id = item
@@ -1017,51 +2212,126 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
                 return (filename, None, False, 'skipped-unclaimed', 'skipped', False)
         return (*_process_one_file((filename, path, job_id)), True)
 
+    pending = list(files_list)
+    inflight: dict = {}
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_file = {
-            executor.submit(_run_one, item): item[0]
-            for item in files_list
-        }
-        for future in as_completed(future_to_file):
-            with _local_jobs_lock:
-                j = _local_jobs.get(job_id)
-            if j and j.get('status') == 'cancelled':
+        while pending or inflight:
+            stop_reason = _job_stop_reason(job_id)
+            while (
+                pending
+                and len(inflight) < max_workers
+                and stop_reason is None
+            ):
+                item = pending.pop(0)
+                fut = executor.submit(_run_one, item)
+                inflight[fut] = item[0]
+                stop_reason = _job_stop_reason(job_id)
+
+            if not inflight:
                 break
-            try:
-                heartbeat_session_lease(job_id, wid)
-            except Exception:
-                pass
-            filename, row, is_failed, message, code, claimed = future.result()
-            if not claimed or code == 'skipped':
+
+            done_set, _ = wait(
+                list(inflight.keys()),
+                timeout=0.5,
+                return_when=FIRST_COMPLETED,
+            )
+            if not done_set:
+                try:
+                    heartbeat_session_lease(job_id, wid)
+                except Exception:
+                    pass
                 continue
-            if is_failed:
-                failed_count += 1
-                update_file_status(job_id, filename, 'Failed', error_message=message)
+
+            for future in done_set:
+                inflight.pop(future, None)
+                try:
+                    heartbeat_session_lease(job_id, wid)
+                except Exception:
+                    pass
+                filename, row, is_failed, message, code, claimed = future.result()
+                if not claimed or code == 'skipped':
+                    continue
+                if is_failed:
+                    failed_count += 1
+                    results.append(
+                        row
+                        if row
+                        else _failed_excel_row(filename, code=code, message=message)
+                    )
+                    update_file_status(job_id, filename, 'Failed', error_message=message)
+                    with _local_jobs_lock:
+                        if job_id in _local_jobs:
+                            _local_jobs[job_id].setdefault('failed_filenames', []).append(filename)
+                            _local_jobs[job_id].setdefault('failed_details', []).append(
+                                {'filename': filename, 'error': message, 'code': code}
+                            )
+                else:
+                    if row:
+                        results.append(row)
+                    success_count += 1
+                    notes = (row or {}).get('ParseNotes') or None
+                    update_file_status(job_id, filename, 'Completed', error_message=notes)
+                    with _local_jobs_lock:
+                        if job_id in _local_jobs:
+                            _local_jobs[job_id].setdefault('success_filenames', []).append(filename)
+                done = success_count + failed_count
+                update_session_progress(job_id, done, success_count, failed_count)
                 with _local_jobs_lock:
                     if job_id in _local_jobs:
-                        _local_jobs[job_id].setdefault('failed_filenames', []).append(filename)
-                        _local_jobs[job_id].setdefault('failed_details', []).append(
-                            {'filename': filename, 'error': message, 'code': code}
-                        )
-            else:
-                if row:
-                    results.append(row)
-                success_count += 1
-                notes = (row or {}).get('ParseNotes') or None
-                update_file_status(job_id, filename, 'Completed', error_message=notes)
-                with _local_jobs_lock:
-                    if job_id in _local_jobs:
-                        _local_jobs[job_id].setdefault('success_filenames', []).append(filename)
-            done = success_count + failed_count
-            update_session_progress(job_id, done, success_count, failed_count)
-            with _local_jobs_lock:
-                if job_id in _local_jobs:
-                    _local_jobs[job_id]['processed_files'] = done
-                    _local_jobs[job_id]['failed_files'] = failed_count
-                    _local_jobs[job_id]['message'] = message
-            # Checkpoint Excel during long runs so progress survives restarts
-            if results and done > 0 and done % BULK_EXCEL_CHECKPOINT_EVERY == 0:
-                _persist_excel(job_id, list(results), append=append)
+                        _local_jobs[job_id]['processed_files'] = done
+                        _local_jobs[job_id]['failed_files'] = failed_count
+                        _local_jobs[job_id]['message'] = message
+                if results and done > 0 and done % BULK_EXCEL_CHECKPOINT_EVERY == 0:
+                    _persist_excel(job_id, list(results), append=append)
+
+            if stop_reason and not inflight:
+                break
+
+    if results:
+        _persist_excel(job_id, results, append=append)
+
+    if stop_reason == 'paused':
+        # If the user already clicked Resume, a new worker owns the session —
+        # do not flip durable status back to Paused.
+        with _local_jobs_lock:
+            current = (_local_jobs.get(job_id) or {}).get('status')
+        if current == 'started':
+            return
+        try:
+            reclaim_session_running_files(job_id)
+        except Exception:
+            pass
+        msg = f'Paused: {success_count} successful, {failed_count} failed'
+        try:
+            mark_session_paused(job_id, message=msg)
+        except Exception:
+            pass
+        with _local_jobs_lock:
+            if job_id in _local_jobs and _local_jobs[job_id].get('status') == 'paused':
+                _local_jobs[job_id]['processed_files'] = success_count + failed_count
+                _local_jobs[job_id]['failed_files'] = failed_count
+                _local_jobs[job_id]['message'] = msg
+        return
+
+    if stop_reason == 'cancelled':
+        with _local_jobs_lock:
+            if job_id in _local_jobs:
+                _local_jobs[job_id]['status'] = 'cancelled'
+                _local_jobs[job_id]['message'] = (
+                    f'Cancelled: {success_count} successful, {failed_count} failed'
+                )
+        return
+
+    _reconcile_missing_excel_rows(results, expected_filenames)
+    extra_failed = sum(
+        1
+        for r in results
+        if str(r.get('ParseStatus') or '').lower() == 'failed'
+    )
+    if extra_failed > failed_count:
+        failed_count = extra_failed
+        success_count = max(0, len(results) - failed_count)
 
     with _local_jobs_lock:
         if job_id in _local_jobs:
@@ -1069,14 +2339,14 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
             _local_jobs[job_id]['processed_files'] = success_count + failed_count
             _local_jobs[job_id]['failed_files'] = failed_count
             _local_jobs[job_id]['results'] = results
-            _local_jobs[job_id]['message'] = f'Completed: {success_count} successful, {failed_count} failed'
+            _local_jobs[job_id]['message'] = (
+                f'Completed: {success_count} successful, {failed_count} failed'
+            )
 
-    if results:
-        _persist_excel(job_id, results, append=append)
-    elif append and _export_path(job_id).is_file():
-        pass  # keep existing workbook
-    else:
+    if not results and not (append and _export_path(job_id).is_file()):
         _persist_excel(job_id, [], append=False)
+    elif results:
+        _persist_excel(job_id, results, append=append)
 
     finalize_session(job_id, started_at, success_count, failed_count)
 
@@ -1123,6 +2393,8 @@ def _ensure_job(job_id: str, started_by=None, append: bool = False) -> dict | No
             if append:
                 job['append'] = True
             return job
+    if not _is_valid_job_id(job_id):
+        return None
     # Recreate from DB owner if needed
     from app.domains.administration.repositories.bulk_session_db import get_session_owner
 
@@ -1188,11 +2460,13 @@ def stage_files(job_id: str, files_list: list[tuple[str, bytes]], started_by=Non
             return False, {
                 'error': (
                     'Unsupported format: legacy .doc is not accepted. '
-                    'Convert to PDF or DOCX (or upload PNG/JPG for scanned resumes).'
+                    'Convert to PDF or DOCX.'
                 ),
                 'code': 'unsupported_format',
             }
-        return False, {'error': 'No valid resume files (PDF/DOCX/PNG/JPG/WEBP/TIFF)'}
+        return False, {
+            'error': 'No valid resume files (PDF/DOCX). PNG/JPG are not supported.',
+        }
 
     with _local_jobs_lock:
         if job_id in _local_jobs:
@@ -1228,6 +2502,8 @@ def extract_zip_to_job(job_id: str, zip_bytes: bytes, started_by=None) -> tuple[
         return False, {'error': f'Cannot upload to job in status {status}'}
 
     extracted: list[tuple[str, bytes]] = []
+    total_uncompressed = 0
+    entry_count = 0
     try:
         with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
             for info in zf.infolist():
@@ -1244,6 +2520,19 @@ def extract_zip_to_job(job_id: str, zip_bytes: bytes, started_by=None) -> tuple[
                 ext = base.rsplit('.', 1)[-1].lower()
                 if ext not in ALLOWED_EXT:
                     continue
+                entry_count += 1
+                if entry_count > _ZIP_MAX_ENTRIES:
+                    return False, {'error': f'ZIP contains too many files (max {_ZIP_MAX_ENTRIES}).'}
+                # Reject on the archive's own declared size *before*
+                # decompressing — never inflate an oversized entry into memory.
+                if info.file_size > _ZIP_MAX_ENTRY_BYTES:
+                    continue
+                total_uncompressed += info.file_size
+                if total_uncompressed > _ZIP_MAX_TOTAL_BYTES:
+                    return False, {
+                        'error': f'ZIP archive too large when decompressed '
+                                 f'(max {_ZIP_MAX_TOTAL_BYTES // (1024 * 1024)}MB total).'
+                    }
                 try:
                     data = zf.read(info)
                 except Exception:
@@ -1258,7 +2547,9 @@ def extract_zip_to_job(job_id: str, zip_bytes: bytes, started_by=None) -> tuple[
         return False, {'error': f'ZIP extract failed: {e}'}
 
     if not extracted:
-        return False, {'error': 'No valid resume files (PDF/DOCX/PNG/JPG/WEBP/TIFF) found in ZIP'}
+        return False, {
+            'error': 'No valid resume files (PDF/DOCX) found in ZIP. PNG/JPG are not supported.',
+        }
 
     return stage_files(job_id, extracted, started_by=started_by)
 
@@ -1267,9 +2558,11 @@ def start_staged_job(job_id: str, append: bool | None = None) -> tuple[bool, dic
     """Start processing all staged files for a job (DB-backed, multi-worker safe)."""
     from app.domains.administration.repositories.bulk_session_db import (
         claim_session_lease,
+        force_claim_session_lease,
         get_session_owner,
         get_session_progress,
         list_queued_filenames,
+        reclaim_session_running_files,
         reclaim_stale_file_leases,
     )
 
@@ -1286,61 +2579,97 @@ def start_staged_job(job_id: str, append: bool | None = None) -> tuple[bool, dic
     except Exception:
         db_names = []
 
-    with _local_jobs_lock:
-        if not job:
+    db_prog = None
+    try:
+        db_prog = get_session_progress(job_id)
+    except Exception:
+        db_prog = None
+
+    if not job:
+        owner = None
+        try:
+            owner = get_session_owner(job_id)
+        except Exception:
             owner = None
-            try:
-                owner = get_session_owner(job_id)
-            except Exception:
-                owner = None
-            if not owner and not db_names:
-                progress = None
-                try:
-                    progress = get_session_progress(job_id)
-                except Exception:
-                    progress = None
-                if not progress:
-                    return False, {'error': 'Job not found'}
-            job = _ensure_job(job_id, started_by=owner)
+        if not owner and not db_names and not db_prog:
+            return False, {'error': 'Job not found'}
+        job = _ensure_job(job_id, started_by=owner or (db_prog or {}).get('started_by'))
+    if not job:
+        return False, {'error': 'Job not found'}
+
+    use_append = False
+    started_at = time.time()
+    total = 0
+    was_resume = False
+
+    with _local_jobs_lock:
+        job = _local_jobs.get(job_id)
         if not job:
             return False, {'error': 'Job not found'}
         if job.get('status') == 'completed':
             return False, {'error': 'Job already completed'}
-        # Prefer durable filename list from DB; fall back to memory / disk.
-        names = list(job.get('staged_filenames') or [])
-        if db_names:
-            names = db_names
-            job['staged_filenames'] = list(db_names)
+        if job.get('status') == 'started':
+            return False, {
+                'error': 'Job is already being processed',
+                'status': 'started',
+            }
+        # Prefer durable Queued filename list from DB for remaining work.
+        names = list(db_names) if db_names else []
         if not names:
-            # Disk fallback for recovery when DB rows exist but names empty
+            names = list(job.get('staged_filenames') or [])
+        if not names:
             staging = _staging_dir(job_id)
             if staging.is_dir():
                 names = sorted(p.name for p in staging.iterdir() if p.is_file())
                 job['staged_filenames'] = names
-        total = len(names)
-        if total == 0:
+        if not names and not (db_prog and (db_prog.get('processed_files') or 0) > 0):
             return False, {'error': 'No files uploaded for this job'}
+        if not names:
+            return False, {'error': 'No remaining files to process'}
         if append is not None:
             job['append'] = bool(append)
-        use_append = bool(job.get('append'))
+        use_append = bool(job.get('append')) or bool(db_prog and (db_prog.get('processed_files') or 0) > 0)
         started_at = time.time()
+        was_resume = job.get('status') == 'paused' or (
+            bool(db_prog) and db_prog.get('status') == 'paused'
+        )
         job['status'] = 'started'
         job['started_at'] = started_at
-        job['processed_files'] = 0
-        job['failed_files'] = 0
-        job['failed_filenames'] = []
-        job['success_filenames'] = []
-        job['results'] = []
-        job['message'] = 'Processing...'
+        if not was_resume:
+            job['processed_files'] = 0
+            job['failed_files'] = 0
+            job['failed_filenames'] = []
+            job['success_filenames'] = []
+            job['failed_details'] = []
+            job['results'] = []
+        else:
+            job['processed_files'] = int(db_prog.get('processed_files') or 0) if db_prog else job.get('processed_files', 0)
+            job['failed_files'] = int(db_prog.get('failed_files') or 0) if db_prog else job.get('failed_files', 0)
+            if db_prog:
+                job['success_filenames'] = list(db_prog.get('success_filenames') or [])
+                job['failed_filenames'] = list(db_prog.get('failed_filenames') or [])
+                job['failed_details'] = list(db_prog.get('failed_details') or [])
+        job['message'] = 'Resuming...' if was_resume else 'Processing...'
+        total = int((db_prog or {}).get('total_files') or 0) or len(
+            job.get('staged_filenames') or names
+        )
         job['total_files'] = total
 
     worker_id = f'pid-{os.getpid()}-{uuid.uuid4().hex[:8]}'
     claimed = claim_session_lease(job_id, worker_id, total_files=total)
+    if not claimed and was_resume:
+        # Pause clears the lease, but a dying worker may still hold Running.
+        # Force-take the session so Resume always restarts remaining Queued files.
+        try:
+            reclaim_session_running_files(job_id)
+        except Exception:
+            pass
+        claimed = force_claim_session_lease(job_id, worker_id, total_files=total)
     if not claimed:
         with _local_jobs_lock:
             j = _local_jobs.get(job_id)
             if j and j.get('status') == 'started':
-                j['status'] = 'pending'
+                j['status'] = 'paused' if was_resume else 'pending'
                 j['message'] = 'Waiting for worker lease...'
         return False, {
             'error': 'Job is already being processed by another worker',
@@ -1357,8 +2686,78 @@ def start_staged_job(job_id: str, append: bool | None = None) -> tuple[bool, dic
         'job_id': job_id,
         'total_files': total,
         'status': 'started',
-        'message': 'Local bulk parsing started.',
+        'message': 'Local bulk parsing resumed.' if was_resume else 'Local bulk parsing started.',
     }
+
+
+def pause_local_job(job_id: str) -> tuple[bool, dict]:
+    """Ask the running worker to pause after in-flight files finish."""
+    from app.domains.administration.repositories.bulk_session_db import (
+        get_session_progress,
+        mark_session_paused,
+        reclaim_session_running_files,
+    )
+
+    with _local_jobs_lock:
+        job = _local_jobs.get(job_id)
+        local_status = job.get('status') if job else None
+        if job:
+            if local_status in ('completed', 'failed', 'cancelled'):
+                return False, {'error': f'Cannot pause a {local_status} job'}
+            if local_status == 'started':
+                job['status'] = 'paused'
+                job['message'] = 'Pausing after current file(s)…'
+            elif local_status not in ('pending', 'paused', None):
+                return False, {'error': f'Cannot pause job in status {local_status}'}
+
+    db_prog = get_session_progress(job_id)
+    if not db_prog and not job:
+        return False, {'error': 'Job not found'}
+    mapped = (db_prog or {}).get('status')
+    if mapped in ('completed', 'failed', 'cancelled'):
+        return False, {'error': f'Cannot pause a {mapped} job'}
+
+    # Persist Paused + clear lease immediately so Resume can claim the session
+    # without waiting for the old worker thread to exit.
+    try:
+        reclaim_session_running_files(job_id)
+        mark_session_paused(job_id, message='Paused')
+    except Exception as exc:
+        return False, {'error': f'Failed to pause session: {exc}'}
+
+    with _local_jobs_lock:
+        j = _local_jobs.get(job_id)
+        if j:
+            j['status'] = 'paused'
+            if not j.get('message'):
+                j['message'] = 'Paused'
+
+    return True, {
+        'job_id': job_id,
+        'status': 'paused',
+        'message': 'Parsing paused. Click Resume to continue.',
+    }
+
+
+def resume_local_job(job_id: str, append: bool | None = None) -> tuple[bool, dict]:
+    """Resume a paused job (process remaining Queued files)."""
+    with _local_jobs_lock:
+        job = _local_jobs.get(job_id)
+        if job and job.get('status') == 'started':
+            return False, {'error': 'Job is already running', 'status': 'started'}
+        if job and job.get('status') == 'completed':
+            return False, {'error': 'Job already completed'}
+    try:
+        from app.domains.administration.repositories.bulk_session_db import (
+            reclaim_session_running_files,
+            reclaim_stale_file_leases,
+        )
+
+        reclaim_stale_file_leases()
+        reclaim_session_running_files(job_id)
+    except Exception:
+        pass
+    return start_staged_job(job_id, append=True if append is None else append)
 
 
 def start_local_job(files_list: list[tuple[str, bytes]], started_by=None, append: bool = False) -> tuple[str, dict]:
@@ -1410,6 +2809,16 @@ def get_local_progress(job_id: str, check_only: bool = False) -> tuple[bool, dic
     if db_progress:
         if check_only:
             return True, {'started_by': db_progress.get('started_by')}
+        # Zombie: files done / UI says completed, but Excel never written — rebuild from staging.
+        export_ok = _export_path(job_id).is_file()
+        if not export_ok and _staging_file_count(job_id) > 0:
+            if db_progress.get('status') in ('completed', 'started', 'pending'):
+                if _ensure_export_rebuild_started(job_id):
+                    db_progress = {
+                        **db_progress,
+                        'status': 'started',
+                        'message': 'Regenerating Excel export from staged resumes…',
+                    }
         return True, db_progress
 
     owner = get_session_owner(job_id)
@@ -1425,39 +2834,71 @@ def get_local_download(job_id: str) -> tuple[bool, Any]:
     Else (False, error_dict).
     """
     export_file = _export_path(job_id)
+    content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+    def _ok(data: bytes):
+        return True, (io.BytesIO(data), 'Parsed_Resumes.xlsx', content_type)
+
+    if export_file.is_file():
+        return _ok(export_file.read_bytes())
+
+    # Rebuild from JSON sidecar written during checkpoints
+    sidecar_rows = _load_results_sidecar(job_id)
+    if sidecar_rows:
+        try:
+            xlsx_bytes = _build_excel_bytes(sidecar_rows)
+            try:
+                _export_dir().mkdir(parents=True, exist_ok=True)
+                export_file.write_bytes(xlsx_bytes)
+            except Exception as write_err:
+                log_unexpected('local_bulk_parser.repair_from_sidecar', write_err, job_id=job_id)
+            return _ok(xlsx_bytes)
+        except Exception as e:
+            log_unexpected('local_bulk_parser.sidecar_excel', e, job_id=job_id)
+
     with _local_jobs_lock:
         job = _local_jobs.get(job_id)
     if job:
-        if job['status'] != 'completed':
+        status = job.get('status')
+        if status == 'started' and job_id in _export_rebuild_inflight:
+            return False, {
+                'error': 'Regenerating Excel export from staged resumes. Try Download again shortly.',
+                'code': 'EXPORT_REGENERATING',
+            }
+        if status != 'completed':
             return False, {'error': 'Job not completed yet'}
-        if export_file.is_file():
-            return True, (
-                io.BytesIO(export_file.read_bytes()),
-                'Parsed_Resumes.xlsx',
-                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            )
         rows = job.get('results') or []
         try:
             xlsx_bytes = _build_excel_bytes(rows)
+            try:
+                _export_dir().mkdir(parents=True, exist_ok=True)
+                export_file.write_bytes(xlsx_bytes)
+                _persist_results_sidecar(job_id, rows)
+            except Exception as write_err:
+                log_unexpected('local_bulk_parser.repair_export', write_err, job_id=job_id)
         except Exception as e:
-            return False, {'error': f'Excel build failed: {e}'}
-        return True, (
-            io.BytesIO(xlsx_bytes),
-            'Parsed_Resumes.xlsx',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        )
-
-    if export_file.is_file():
-        return True, (
-            io.BytesIO(export_file.read_bytes()),
-            'Parsed_Resumes.xlsx',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        )
+            export_err = job.get('export_error')
+            detail = f'Excel build failed: {e}'
+            if export_err:
+                detail = f'{detail} (persist: {export_err})'
+            return False, {'error': detail}
+        return _ok(xlsx_bytes)
 
     from app.domains.administration.repositories.bulk_session_db import get_session_progress
 
     db_progress = get_session_progress(job_id)
-    if db_progress and db_progress.get('status') == 'completed':
-        return False, {'error': 'Export file not found for completed session'}
+    if db_progress and db_progress.get('status') in ('completed', 'started', 'pending'):
+        if _staging_file_count(job_id) > 0:
+            _ensure_export_rebuild_started(job_id)
+            return False, {
+                'error': 'Regenerating Excel export from staged resumes. Try Download again shortly.',
+                'code': 'EXPORT_REGENERATING',
+            }
+        return False, {
+            'error': (
+                'Excel export is missing for this completed job. '
+                'Re-run bulk parse to regenerate the download.'
+            )
+        }
 
     return False, {'error': 'Job not found'}

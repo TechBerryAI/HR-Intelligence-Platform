@@ -6,7 +6,12 @@ import { cn } from '@/shared/lib/utils.js'
  * Renders job description with structured sections (**Title:**) and bullet lists (•).
  * Use for modal, detail page, or any place job.description is shown.
  */
-export default function JobDescriptionView({ description, className = '', titleClassName = '', textClassName = 'text-slate-600' }) {
+export default function JobDescriptionView({
+  description,
+  className = '',
+  titleClassName = 'text-[var(--ei-text-primary)]',
+  textClassName = 'text-[var(--ei-text-secondary)]',
+}) {
   if (!description || typeof description !== 'string') {
     return <p className={textClassName}>No description provided.</p>
   }
@@ -19,7 +24,7 @@ export default function JobDescriptionView({ description, className = '', titleC
       {blocks.map((block, bi) => (
         <section key={bi} className="space-y-2">
           {block.title && (
-            <h4 className={cn('text-sm font-semibold text-slate-800 mt-4 first:mt-0', titleClassName)}>
+            <h4 className={cn('text-sm font-semibold mt-4 first:mt-0', titleClassName)}>
               {block.title}
             </h4>
           )}

@@ -1,0 +1,17 @@
+{
+  "_note": "Project duty lines are labeled under Education/Project in extract; Experience span is thin/noisy.",
+  "file": "Naukri_ChiranjitSarkar[3y_4m].pdf",
+  "experience": [
+    {
+      "company": null,
+      "role": "Developer",
+      "start": "2021",
+      "duties": [
+        "Developed sign in and sign feature with JWT Token",
+        "Implemented Pagination & sorting",
+        "Developed several controller, repository, services layer",
+        "Developed Entity Classes as per ER diagram with required"
+      ]
+    }
+  ]
+}

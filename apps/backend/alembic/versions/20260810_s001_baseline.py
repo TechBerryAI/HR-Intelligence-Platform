@@ -28,6 +28,12 @@ def upgrade() -> None:
     from app.database.sql_apply import apply_sql_file
 
     bind = op.get_bind()
+    ver = bind.execute(text('SHOW server_version_num')).scalar()
+    if ver is not None and int(ver) < 150000:
+        raise RuntimeError(
+            f'PostgreSQL 15+ is required (got server_version_num={ver}). '
+            'Upgrade the database server before running alembic upgrade.'
+        )
     # Ensure Alembic can resolve its version table after baseline DDL.
     bind.execute(text('SET search_path TO public'))
     schema = _BASELINE_DIR / '001_schema.sql'

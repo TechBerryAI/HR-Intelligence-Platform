@@ -1,5 +1,11 @@
-"""Provider configuration CRUD (encrypted credentials, masked responses)."""
+"""Provider configuration CRUD (encrypted credentials, masked responses).
+
+Scoped by ``organization_id`` (the tenant boundary) — never by company name.
+See BUG-004.
+"""
 from __future__ import annotations
+
+from app.domains.recruitment.services.company_scope import normalize_company
 
 from app.domains.integrations.config import (
     PROVIDER_CATALOG,
@@ -37,9 +43,9 @@ def _row_public(row: dict | None, provider: str) -> dict:
     return cfg.to_public_dict() if cfg else _empty_public(provider)
 
 
-def catalog_with_status(company_key: str) -> list[dict]:
-    """Built-ins always listed; custom HTTP platforms listed when configured for company."""
-    rows = {r['provider']: r for r in repo.list_providers(company_key)}
+def catalog_with_status(organization_id: str) -> list[dict]:
+    """Built-ins always listed; custom HTTP platforms listed when configured for the org."""
+    rows = {r['provider']: r for r in repo.list_providers(organization_id)}
     out = []
     for meta in PROVIDER_CATALOG:
         row = rows.get(meta['id'])
@@ -77,14 +83,14 @@ def catalog_with_status(company_key: str) -> list[dict]:
     return out
 
 
-def get_provider_config(company_key: str, provider: str) -> dict | None:
+def get_provider_config(organization_id: str, provider: str) -> dict | None:
     provider = (provider or '').strip().lower()
     if not provider:
         return None
     if is_builtin(provider):
-        row = repo.get_provider_row(company_key, provider)
+        row = repo.get_provider_row(organization_id, provider)
         return _row_public(row, provider)
-    row = repo.get_provider_row(company_key, provider)
+    row = repo.get_provider_row(organization_id, provider)
     if not row:
         return None
     return _row_public(row, provider)
@@ -145,7 +151,7 @@ def _normalize_http_settings(data: dict, display_name: str | None = None) -> dic
 
 
 def save_provider_config(
-    company_key: str,
+    organization_id: str,
     company: str | None,
     provider: str,
     data: dict,
@@ -171,7 +177,7 @@ def save_provider_config(
         settings = _normalize_http_settings(data, display_name or provider)
         if not (settings.get('baseUrl') or '').strip():
             # Allow save without baseUrl only when disconnecting / partial update of existing
-            existing = repo.get_provider_row(company_key, provider)
+            existing = repo.get_provider_row(organization_id, provider)
             if not existing and not data.get('allowIncomplete'):
                 raise ValueError('API Base URL is required for custom platforms')
         data = {**data, 'settings': settings}
@@ -206,9 +212,10 @@ def save_provider_config(
     auto_sync = data.get('autoSync') if 'autoSync' in data else data.get('auto_sync')
 
     row = repo.upsert_provider(
-        company_key,
+        organization_id,
         company,
         provider,
+        company_key=normalize_company(company) if company else None,
         enabled=enabled,
         status=status,
         auth_type=data.get('authType') or data.get('auth_type') or ('api_key' if creating_custom else None),
@@ -225,10 +232,10 @@ def save_provider_config(
     return _row_public(row, provider)
 
 
-def disconnect_provider(company_key: str, provider: str) -> dict | None:
+def disconnect_provider(organization_id: str, provider: str) -> dict | None:
     provider = (provider or '').strip().lower()
     repo.upsert_provider(
-        company_key,
+        organization_id,
         None,
         provider,
         enabled=False,
@@ -239,12 +246,12 @@ def disconnect_provider(company_key: str, provider: str) -> dict | None:
         refresh_token='',
         update_secrets=True,
     )
-    return _row_public(repo.get_provider_row(company_key, provider), provider)
+    return _row_public(repo.get_provider_row(organization_id, provider), provider)
 
 
-def delete_provider_config(company_key: str, provider_or_id: str | int) -> bool:
+def delete_provider_config(organization_id: str, provider_or_id: str | int) -> bool:
     if isinstance(provider_or_id, int) or (isinstance(provider_or_id, str) and provider_or_id.isdigit()):
-        return repo.delete_provider_by_id(company_key, int(provider_or_id)) > 0
+        return repo.delete_provider_by_id(organization_id, int(provider_or_id)) > 0
     provider = str(provider_or_id).strip().lower()
     # Do not allow deleting builtin catalog identity — clearing row is ok
-    return repo.delete_provider(company_key, provider) > 0
+    return repo.delete_provider(organization_id, provider) > 0

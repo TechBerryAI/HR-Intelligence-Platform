@@ -75,16 +75,26 @@ def send_email_otp(
     if not recipient:
         return False
     try:
+        import os
+
         print(f"[SEND_EMAIL_OTP] Called with recipient={recipient}, user_type={user_type}, purpose={purpose}")
         cfg = current_app.config if current_app else {}
-        suppress_send = cfg.get('MAIL_SUPPRESS_SEND')
+        suppress_send = bool(cfg.get('MAIL_SUPPRESS_SEND'))
         missing_creds = not cfg.get('MAIL_USERNAME') or not cfg.get('MAIL_PASSWORD')
-        if suppress_send or missing_creds:
+        flask_debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+        allow_dev_otp = os.getenv('ALLOW_DEV_OTP', 'false').lower() in ('1', 'true', 'yes', 'on')
+        # Fail closed in production: missing mail must not look like success.
+        # Dev may suppress send only when FLASK_DEBUG or ALLOW_DEV_OTP is set.
+        if missing_creds or suppress_send:
+            if (flask_debug or allow_dev_otp) and (suppress_send or missing_creds):
+                if current_app:
+                    current_app.logger.info("Dev email OTP (not sent) to %s", recipient)
+                else:
+                    print(f"[SEND_EMAIL_OTP] Dev mode - OTP issued for {recipient} (value not logged)")
+                return True
             if current_app:
-                current_app.logger.info("Dev email OTP (not sent) to %s", recipient)
-            else:
-                print(f"[SEND_EMAIL_OTP] Dev mode - OTP issued for {recipient} (value not logged)")
-            return True
+                current_app.logger.error("Email OTP blocked: mail not configured")
+            return False
         if purpose == "password_reset":
             subject = "Your HR Intelligence password reset OTP"
             action = "reset your password"
@@ -116,11 +126,29 @@ def send_sms_otp(phone: str, otp: str) -> bool:
     if not phone:
         return False
     try:
+        import os
+
+        flask_debug = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+        allow_dev_otp = os.getenv('ALLOW_DEV_OTP', 'false').lower() in ('1', 'true', 'yes', 'on')
+        sms_configured = bool(
+            os.getenv('FAST2SMS_API_KEY')
+            or os.getenv('SMS_API_KEY')
+            or (current_app.config.get('FAST2SMS_API_KEY') if current_app else None)
+        )
+        if not sms_configured:
+            if flask_debug or allow_dev_otp:
+                if current_app:
+                    current_app.logger.info("Dev SMS OTP (not sent) to %s", phone)
+                else:
+                    print(f"Dev SMS OTP (not sent) to {phone}")
+                return True
+            if current_app:
+                current_app.logger.error("SMS OTP blocked: SMS provider not configured")
+            return False
+        # Real SMS provider not wired yet — fail closed outside controlled dev above
         if current_app:
-            current_app.logger.info("Simulating Fast2SMS OTP send to %s", phone)
-        else:
-            print(f"Simulating Fast2SMS OTP send to {phone}")
-        return True
+            current_app.logger.error("SMS OTP blocked: provider integration not implemented")
+        return False
     except Exception as exc:
         from app.core.errors import log_unexpected
 

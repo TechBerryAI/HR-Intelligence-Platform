@@ -6,7 +6,16 @@ from app.domains.integrations.dto import JobSnapshot
 from app.domains.recruitment.services.company_scope import normalize_company
 
 
-def job_row_to_snapshot(job: dict, company_key: str | None = None) -> JobSnapshot:
+def job_row_to_snapshot(
+    job: dict,
+    organization_id: str | None = None,
+    *,
+    company_key: str | None = None,
+) -> JobSnapshot:
+    """organization_id is the tenant boundary; falls back to job['organization_id']
+    from the DB row. company_key is display metadata only — never a lookup key.
+    """
+    org_id = organization_id or job.get('organization_id')
     key = company_key or company_key_from_job(job) or normalize_company(job.get('company') or '')
     enabled = job.get('enabled')
     if enabled is None:
@@ -17,6 +26,7 @@ def job_row_to_snapshot(job: dict, company_key: str | None = None) -> JobSnapsho
         job_id=str(job.get('jdid') or job.get('job_id') or ''),
         title=(job.get('title') or '').strip(),
         company=(job.get('company') or job.get('company_name') or '').strip(),
+        organization_id=str(org_id) if org_id else '',
         company_key=key or '',
         location=(job.get('location') or None),
         salary=(job.get('salary') or None),

@@ -18,12 +18,14 @@ from app.ai.document_intelligence.models.form_dtos import (
     FieldTrace,
 )
 from app.ai.document_intelligence.validation.engine import (
+    is_keepable_education_form_row,
     validate_email,
-    validate_nonempty,
     validate_location,
+    validate_nonempty,
     validate_phone,
     validate_url,
 )
+from app.ai.document_intelligence.parsers.resume import split_education_oneliner
 
 MAPPER_ID = 'document_intelligence.mapping.resume_form.v1'
 
@@ -271,14 +273,28 @@ def map_candidate_to_form(
     )
 
     summary = profile.personal.summary.strip()
+    from app.ai.parser.enrichment.resume_text_inference import (
+        is_valid_summary,
+        summary_rejection_reason,
+    )
+
+    if summary and not is_valid_summary(summary):
+        summary = ''
+    sum_reason = 'ok' if summary else 'empty'
+    sum_validator = 'is_valid_summary' if summary else 'none'
+    if not summary:
+        # Record why extraction failed when a prior invalid value was present
+        rej = summary_rejection_reason(profile.personal.summary)
+        if rej and rej != 'empty':
+            sum_reason = rej
     traces.append(
         _trace(
             'summary',
             'personal.summary',
-            source='semantic_ai',
-            validator='validate_nonempty' if summary else 'none',
-            confidence=0.8 if summary else 0.0,
-            reason='ok' if summary else 'empty',
+            source='deterministic',
+            validator=sum_validator,
+            confidence=0.85 if summary else 0.0,
+            reason=sum_reason,
         )
     )
 
@@ -287,11 +303,22 @@ def map_candidate_to_form(
     for edu in profile.education:
         degree = edu.degree
         institution = edu.institution
-        if degree and edu.field and edu.field.lower() not in degree.lower():
+        cgpa = edu.gpa
+        end_month = edu.end
+        if (degree or '').strip() and edu.field and edu.field.lower() not in degree.lower():
             # Explicit composition rule documented in mapping graph (degree+field)
             degree = f'{degree} in {edu.field}'
         elif not degree and edu.field:
             degree = edu.field
+        # Compact one-liners stored on a single side
+        if ((degree or '').strip() and not (institution or '').strip()) or (
+            (institution or '').strip() and not (degree or '').strip()
+        ):
+            d2, i2, g2, y2 = split_education_oneliner(degree or institution)
+            if d2 and i2:
+                degree, institution = d2, i2
+                cgpa = cgpa or g2
+                end_month = end_month or y2
         # VALIDATION_FIX_education_degree_from_institution
         if not (degree or '').strip() and (institution or '').strip():
             import re as _re
@@ -324,55 +351,43 @@ def map_candidate_to_form(
                 ):
                     degree, institution = parts[0].strip()[:200], parts[1].strip()[:200]
         # Degree mentions institution: "BE MECHANICAL in college PVPIT Budgaon"
+        # Do not treat "B.Sc. in Information Technology" as institution.
         if (degree or '').strip() and not (institution or '').strip():
             import re as _re
 
             m = _re.search(
-                r'(?i)\b(?:in|from|at)\s+(?:college\s+|university\s+|institute\s+)?(.+)$',
+                r'(?i)\b(?:from|at)\s+(.+)$'
+                r'|\bin\s+(?:the\s+)?(?:college|university|institute|school)\s+(.+)$',
                 degree,
             )
-            if m and len(m.group(1).strip()) >= 3:
-                institution = m.group(1).strip(' |,-')[:200]
-                degree = degree[: m.start()].strip(' |,-') or degree
+            if m:
+                inst = (m.group(1) or m.group(2) or '').strip(' |,-')
+                if len(inst) >= 3:
+                    institution = inst[:200]
+                    degree = degree[: m.start()].strip(' |,-') or degree
             elif '|' in degree:
                 left, _, right = degree.partition('|')
                 if len(right.strip()) >= 3:
                     degree, institution = left.strip(), right.strip()
             elif _re.search(r'[-–—]', degree):
                 parts = _re.split(r'\s*[-–—]\s*', degree, maxsplit=1)
-                if len(parts) == 2 and len(parts[1].strip()) >= 3:
+                if len(parts) == 2 and len(parts[1].strip()) >= 3 and _re.search(
+                    r'(?i)\b(?:university|college|school|institute|academy)\b',
+                    parts[1],
+                ):
                     degree, institution = parts[0].strip()[:200], parts[1].strip()[:200]
-        # Still missing one side: only keep when both sides are grounded (no invented placeholders)
-        if (degree or '').strip() and not (institution or '').strip():
-            continue
-        if (institution or '').strip() and not (degree or '').strip():
-            continue
-        # Drop experience/project pollution rows
-        blob = f'{degree} {institution}'.lower()
-        if any(
-            tok in blob
-            for tok in (
-                'configured mysql', 'master-slave', 'project name', 'duration',
-                'organizational experience', 'replication setup',
-                'responsibilities', 'client name', 'technologies used',
-                'executed on-page', 'managed and optimized', 'facilitated smooth',
-            )
-        ):
-            continue
-        if degree.strip().lower() in {'education', 'educational', 'qualification', 'qualifications'}:
+        # Keep degree-only or institution-only when that side is grounded; never invent the rest.
+        if not is_keepable_education_form_row(degree, institution):
             continue
         if not (degree or institution or edu.gpa or edu.start or edu.end):
-            continue
-        # Require both sides for apply-form education (matches frontend validator)
-        if not ((degree or '').strip() and (institution or '').strip()):
             continue
         education_rows.append(
             EducationFormRow(
                 degree=degree or '',
                 institution=institution or '',
-                cgpa=edu.gpa,
+                cgpa=cgpa,
                 startMonth=edu.start,
-                endMonth=edu.end,
+                endMonth=end_month,
             )
         )
     traces.append(
@@ -389,7 +404,13 @@ def map_candidate_to_form(
     # --- Experience rows ---
     experience_rows: list[ExperienceFormRow] = []
     for exp in profile.experience:
-        if not (exp.company or exp.role or exp.start):
+        if not (
+            exp.company
+            or exp.role
+            or exp.start
+            or exp.end
+            or exp.is_current
+        ):
             continue
         experience_rows.append(
             ExperienceFormRow(
@@ -413,9 +434,11 @@ def map_candidate_to_form(
     )
 
     # --- Certifications ---
+    from app.ai.parser.enrichment.resume_text_inference import is_plausible_cert_name
+
     cert_rows: list[CertificationFormRow] = []
     for cert in profile.certificates:
-        if not cert.name:
+        if not cert.name or not is_plausible_cert_name(cert.name):
             continue
         cert_rows.append(
             CertificationFormRow(
@@ -437,13 +460,9 @@ def map_candidate_to_form(
         )
     )
 
-    # Empty placeholders so form UI always has at least one editable row
-    if not education_rows:
-        education_rows = [EducationFormRow()]
-    if not experience_rows:
-        experience_rows = [ExperienceFormRow()]
-    if not cert_rows:
-        cert_rows = [CertificationFormRow()]
+    # Leave arrays empty when source has no grounded rows. The apply form
+    # already seeds one editable blank row client-side. Inventing empty DTO
+    # rows looks like fabricated / half-filled records.
 
     # Merge coverage into field traces for UI visibility (JD parity)
     coverage_rows = list(coverage or [])
@@ -490,3 +509,114 @@ def map_candidate_to_form(
         trace=traces,
         coverage=coverage_rows,
     )
+
+
+# --- Application form → resume TOON (the reverse direction) -----------------
+#
+# The ATS scores `parsed_resumes.toon`, which is written once at parse time.
+# Anything the candidate corrected on the Apply screen lived only in the
+# submitted form, so a candidate who fixed a mis-parsed skill list was still
+# scored on the parser's original guess — and skills carry 60% of the ATS
+# weight. `apply_form_to_resume_toon` overlays the submitted form onto the
+# stored TOON so the ATS scores what the candidate actually stated.
+
+def _clean(value) -> str:
+    return str(value or '').strip()
+
+
+def _form_skill_list(form: dict) -> list[str]:
+    """Skills as the form states them: `_skills` list first, else the CSV field."""
+    raw = form.get('_skills')
+    if isinstance(raw, list):
+        return [s for s in (_clean(x) for x in raw) if s]
+    raw = form.get('skills')
+    if isinstance(raw, list):
+        return [s for s in (_clean(x) for x in raw) if s]
+    return [s for s in (_clean(x) for x in _clean(raw).split(',')) if s]
+
+
+def _form_rows(form: dict, key: str) -> list[dict]:
+    return [row for row in (form.get(key) or []) if isinstance(row, dict)]
+
+
+def apply_form_to_resume_toon(toon: dict, form: dict) -> dict:
+    """Overlay a submitted application form onto a stored resume TOON.
+
+    A key absent from ``form`` leaves the parsed value alone. A key that is
+    present wins, including when it is empty: the candidate deleting a
+    hallucinated employer is a correction, not a gap to be back-filled.
+
+    Scalars are the exception — the Apply form requires name, email, phone and
+    both locations, so a blank there means the field was never rendered rather
+    than cleared, and the parsed value is kept.
+    """
+    if not isinstance(toon, dict):
+        return toon
+    if not isinstance(form, dict) or not form:
+        return dict(toon)
+
+    out = dict(toon)
+    person = dict(out.get('person') or {}) if isinstance(out.get('person'), dict) else {}
+
+    for toon_key, form_key in (
+        ('name', 'fullName'),
+        ('email', 'email'),
+        ('phone', 'phone'),
+        ('location', 'currentLocation'),
+        ('preferred_location', 'preferredLocation'),
+        ('linkedin', 'linkedinUrl'),
+        ('github', 'githubUrl'),
+        ('portfolio', 'portfolioUrl'),
+    ):
+        value = _clean(form.get(form_key))
+        if value:
+            person[toon_key] = value
+    out['person'] = person
+
+    summary = _clean(form.get('summary') or form.get('_summary'))
+    if summary:
+        out['summary'] = summary
+
+    if '_skills' in form or 'skills' in form:
+        out['skills'] = _form_skill_list(form)
+
+    if 'experiences' in form:
+        out['experience'] = [
+            {
+                'title': _clean(row.get('role')),
+                'company': _clean(row.get('company')),
+                'from': _clean(row.get('startMonth')),
+                'to': 'Present' if row.get('isCurrent') else _clean(row.get('endMonth')),
+                'description': _clean(row.get('description')),
+            }
+            for row in _form_rows(form, 'experiences')
+            if _clean(row.get('role')) or _clean(row.get('company'))
+        ]
+
+    if 'education' in form:
+        out['education'] = [
+            {
+                'degree': _clean(row.get('degree')),
+                'institution': _clean(row.get('institution')),
+                'gpa': _clean(row.get('cgpa')),
+                'from': _clean(row.get('startMonth')),
+                'to': _clean(row.get('endMonth')),
+            }
+            for row in _form_rows(form, 'education')
+            if _clean(row.get('degree')) or _clean(row.get('institution'))
+        ]
+
+    if 'certifications' in form:
+        out['certifications'] = [
+            {
+                'name': _clean(row.get('name')),
+                'issuer': _clean(row.get('issuer')),
+                'validTill': _clean(row.get('validTill')),
+                'url': _clean(row.get('validationUrl')),
+                'status': _clean(row.get('status')),
+            }
+            for row in _form_rows(form, 'certifications')
+            if _clean(row.get('name'))
+        ]
+
+    return out
