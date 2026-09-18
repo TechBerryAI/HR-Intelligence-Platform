@@ -1,6 +1,12 @@
 import path from 'path'
+import { fileURLToPath } from 'url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+
+// This config is ESM, so `__dirname` is not defined by the module system — it
+// only worked because Vite's bundling config loader injected it. Vite 8 warns
+// that the native loader (planned default) will not, so derive it explicitly.
+const rootDir = path.dirname(fileURLToPath(import.meta.url))
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -12,7 +18,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, './src'),
+        '@': path.resolve(rootDir, './src'),
       },
     },
     test: {

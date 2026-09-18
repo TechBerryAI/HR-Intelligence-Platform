@@ -783,6 +783,40 @@ function httpGet(url) {
   });
 }
 
+/**
+ * Poll the backend's /health until it answers.
+ *
+ * Flask needs ~9s to come up (connection pool, Alembic upgrade, Ollama probe)
+ * while Vite is serving in under a second. Starting both together left a window
+ * where every proxied /api call failed with ECONNREFUSED, and the Apply/Jobs
+ * screens gave up after their two retries and showed "Unable to load jobs"
+ * until the visitor refreshed by hand. Gate the frontend on this instead.
+ */
+async function waitForBackend(maxWaitMs = 90000) {
+  const step = 1000;
+  const backendUrl = `http://localhost:${BACKEND_PORT}/health`;
+  let elapsed = 0;
+  log('Waiting for backend to answer /health before starting the frontend...');
+  while (elapsed < maxWaitMs) {
+    if (await httpGet(backendUrl)) {
+      log(`Backend is ready (${(elapsed / 1000).toFixed(1)}s)`);
+      return true;
+    }
+    if (elapsed > 0 && elapsed % 5000 === 0) {
+      log(`Still waiting for backend... (${elapsed / 1000}s)`);
+    }
+    await new Promise((r) => setTimeout(r, step));
+    elapsed += step;
+  }
+  log(
+    `Backend did not answer /health within ${maxWaitMs / 1000}s. Starting the ` +
+      'frontend anyway so its errors are visible — expect /api proxy failures ' +
+      'until the backend finishes starting.',
+    'warn'
+  );
+  return false;
+}
+
 async function waitForReady(maxWaitMs = 60000) {
   const step = 1500;
   const backendUrl = `http://localhost:${BACKEND_PORT}/health`;
@@ -857,6 +891,9 @@ async function main() {
   process.on('SIGTERM', onExit);
 
   startBackend();
+  // Gate the frontend on the backend being reachable, so no page load can land
+  // in the window where Vite proxies /api to a socket nothing is listening on.
+  await waitForBackend();
   startFrontend();
 
   const ready = await waitForReady();
@@ -896,6 +933,7 @@ module.exports = {
   setupFrontend,
   startBackend,
   startFrontend,
+  waitForBackend,
   waitForReady,
   openBrowser,
   onExit,
