@@ -2695,11 +2695,56 @@ def extract_name_from_text(text: str) -> str:
         if best_score >= 4:
             return best
 
-    # Separated email locals only (anjali.bansode) — never glued locals
+    # Some extractors relocate a bordered header/contact box to well past the
+    # first 30 lines (PyMuPDF reading a boxed frame after the body text).
+    # Look for a name directly above the candidate's own email/phone
+    # wherever it actually lands in the document.
     email = extract_email_from_text(text)
+    header_name = _name_above_contact_line(text, email)
+    if header_name:
+        return header_name
+
+    # Separated email locals only (anjali.bansode) — never glued locals
     derived = name_from_email_local_part(email)
     if derived:
         return derived
+    return ''
+
+
+def _name_above_contact_line(text: str, email: str) -> str:
+    """Find a plausible name on one of the few lines just above the email line.
+
+    Restricted to a short backward window and to lines that don't look like
+    section content, so this never reaches into Experience/Reference bodies.
+    """
+    if not email:
+        return ''
+    all_lines = text.split('\n')
+    email_idx = next((i for i, ln in enumerate(all_lines) if email in ln), None)
+    if email_idx is None:
+        return ''
+    for back in range(1, 5):
+        idx = email_idx - back
+        if idx < 0:
+            break
+        cand = re.sub(
+            r'[​‌‍⁠﻿­]', '', all_lines[idx]
+        ).replace('\xa0', ' ').strip()
+        if not cand:
+            continue
+        if is_section_header_line(cand) or is_document_title_line(cand):
+            break
+        # Sentence/bullet content means we've walked into a prose block, not
+        # a compact header — stop rather than risk a false-positive further up.
+        if cand.startswith(('#', '*', '-', '•')) or cand.endswith('.'):
+            break
+        joined = join_spaced_letter_name(cand)
+        if joined and is_plausible_person_name(joined):
+            return joined[:80]
+        if is_plausible_person_name(cand):
+            return (cand.title() if cand.isupper() else cand)[:80]
+        # Address/phone/other header-block filler — keep looking further up.
+        continue
     return ''
 
 
@@ -4289,6 +4334,11 @@ def is_plausible_location_value(value: str) -> bool:
             return True
         if any(c.lower() == a or c.lower() == b for c in _KNOWN_LOCATION_CITIES):
             return True
+        # Town/district pairs outside the known-city allowlist (e.g. smaller
+        # towns) still read as a place — accept once both noise filters and
+        # the place-phrase shape check above have already cleared it.
+        if _looks_like_location_phrase(s):
+            return True
         # Unknown Title-Case pairs (skill/soft-skill) are not cities
         return False
     # Single short place token: allowlist / remote only — not arbitrary names (Rahul).
@@ -4440,7 +4490,15 @@ def extract_location_from_text(text: str) -> str:
             return loc[:80]
 
     # Prefer known cities in the contact header over job-line "Remote"
+    # "Place: <city>" inside a Declaration block names where the candidate
+    # signed the document, not where they live — never a location signal.
+    _has_declaration = bool(re.search(r'(?i)\bdeclaration\b', text or ''))
     for window in (header, text[:5000]):
+        if _has_declaration:
+            window = '\n'.join(
+                ln for ln in window.splitlines()
+                if not re.match(r'(?i)^\s*place\s*[:\-]', ln)
+            )
         for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
             if not re.search(rf'(?i)\b{re.escape(city)}\b', window):
                 continue
@@ -4519,6 +4577,59 @@ def extract_location_from_text(text: str) -> str:
     # Country-only last resort when clearly labeled
     if re.search(r'(?i)(?:^|\n)\s*India\s*(?:\n|$)', text[:600]):
         return 'India'
+
+    # Last resort: a relocated header/contact box (bordered frame the
+    # extractor read out of order) still has its address line right above
+    # the candidate's own email — accept it even for a town/city that isn't
+    # in the known-city allowlist, rather than leave location blank.
+    header_loc = _location_near_contact_block(text, extract_email_from_text(text))
+    if header_loc:
+        return header_loc
+    return ''
+
+
+def _location_near_contact_block(text: str, email: str) -> str:
+    """Address line directly above the contact block, even for unlisted towns."""
+    if not email:
+        return ''
+    all_lines = text.split('\n')
+    email_idx = next((i for i, ln in enumerate(all_lines) if email in ln), None)
+    if email_idx is None:
+        return ''
+    name_seen = False
+    for back in range(1, 5):
+        idx = email_idx - back
+        if idx < 0:
+            break
+        cand = re.sub(
+            r'[​‌‍⁠﻿­]', '', all_lines[idx]
+        ).replace('\xa0', ' ').strip()
+        if not cand:
+            continue
+        if is_section_header_line(cand) or is_document_title_line(cand):
+            break
+        if cand.startswith(('#', '*', '-', '•')) or cand.endswith('.'):
+            break
+        if looks_like_phone_token(cand) or looks_like_email_or_url(cand):
+            continue
+        # The header's own name line sits in this block too — skip it once,
+        # stop if a second bare name-shaped line turns up (not an address).
+        if not re.search(r'\d', cand) and is_plausible_person_name(cand):
+            if name_seen:
+                break
+            name_seen = True
+            continue
+        core = re.sub(r'[\-–—,]?\s*\d{5,6}\s*$', '', cand).strip(' ,.-')
+        if not core or len(core) > 60 or '@' in core:
+            continue
+        parts = [p.strip() for p in core.split(',') if p.strip()]
+        if not (1 <= len(parts) <= 3):
+            continue
+        if not all(re.fullmatch(r"[A-Za-z][A-Za-z .'\-]*", p) for p in parts):
+            continue
+        if not _looks_like_location_phrase(core):
+            continue
+        return core
     return ''
 
 

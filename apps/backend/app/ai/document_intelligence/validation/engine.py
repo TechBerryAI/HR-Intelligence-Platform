@@ -39,7 +39,7 @@ _DEGREE_CUE_RE = re.compile(
     r'hsc|ssc|cbse|icse|puc|'
     r's\.?\s*s\.?\s*c\.?|h\.?\s*s\.?\s*c\.?|'
     r'10th|12th|'
-    r'higher\s+secondary|senior\s+secondary|pre[\s\-]?university|'
+    r'higher\s+secondary|senior\s+secondary|pre[\s\-]?university|intermediate|'
     r'high\s+school|secondary\s+school|'
     r'associate(?:\'?s)?'
     r')\b'

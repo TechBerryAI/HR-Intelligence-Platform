@@ -459,7 +459,8 @@ def _education_from_table_row(parts: list[str], roles: list[str] | None) -> Educ
                 degree, extra = _degree_bracket_field(cell)
                 field = field or extra
             elif role == 'institution':
-                institution = cell
+                if not institution:
+                    institution = cell
             elif role == 'year':
                 a, b = extract_date_range(cell)
                 if a and b:
@@ -545,7 +546,15 @@ def _education_from_table_row(parts: list[str], roles: list[str] | None) -> Educ
 
 
 def _parse_pipe_education_table(lines: list[str]) -> list[EducationEntry] | None:
-    """Map headered pipe/tab education tables without mixing row cells."""
+    """Map headered pipe/tab education tables without mixing row cells.
+
+    Extractors sometimes emit an unstructured cell-per-line dump of a table
+    ahead of its own pipe-serialized rows (pdfplumber's digital text plus its
+    extract_tables() output for the same region). Scan for pipe/tab rows
+    anywhere in the section instead of only the first few lines, so the
+    buried well-formed table still wins over the scrambled duplicate.
+    """
+    lines = [ln for ln in lines if '|' in ln or '\t' in ln]
     if len(lines) < 2:
         return None
     first = [p.strip() for p in re.split(r'[|\t]', lines[0]) if p.strip()]
@@ -1525,6 +1534,17 @@ def parse_education(section_text: str, full_text: str = '') -> list[EducationEnt
     lines = _join_wrapped_education_lines(lines)
 
     table_rows = _parse_pipe_education_table(lines)
+    if not table_rows and full_text:
+        # Some extractors serialize a table's clean pipe/tab rows outside the
+        # section span that owns it (e.g. pdfplumber appends extract_tables()
+        # output after the whole page's plain text, landing the rows in
+        # whatever section happens to follow). Recover those rows from the
+        # full document text when the in-section parse found nothing usable.
+        full_pipe_lines = [
+            ln.strip() for ln in full_text.splitlines() if '|' in ln or '\t' in ln
+        ]
+        if full_pipe_lines:
+            table_rows = _parse_pipe_education_table(full_pipe_lines)
     if table_rows and len(table_rows) >= 1:
         return coalesce_education(table_rows)
 
