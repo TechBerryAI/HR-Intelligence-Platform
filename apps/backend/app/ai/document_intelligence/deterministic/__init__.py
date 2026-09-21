@@ -411,7 +411,10 @@ def extract_simple_location(text: str) -> str:
     )
 
     loc = extract_location_from_text(text or '')
-    if loc and is_plausible_location_value(loc):
+    if loc:
+        # extract_location_from_text already validates every branch itself
+        # (including its own relaxed last-resort header-address fallback for
+        # towns outside the known-city allowlist) — trust its result here.
         return loc
     # Labeled location / permanent address lines — require delimiter
     m_label = re.search(

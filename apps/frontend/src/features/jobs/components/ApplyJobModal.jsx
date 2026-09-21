@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FiX, FiUser, FiMail, FiPhone, FiMapPin, FiBriefcase, FiLink, FiGlobe, FiEye } from 'react-icons/fi'
 import ResumeUploadWithParsing from '@/shared/components/ResumeUploadWithParsing.jsx'
@@ -129,6 +129,9 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
   const [submitError, setSubmitError] = useState('')
   const [parseError, setParseError] = useState('')
   const [showPreview, setShowPreview] = useState(false)
+  // Submitting is only reachable from the preview dialog, so the form's own
+  // submit event is ignored unless the preview's button armed this flag.
+  const submitFromPreviewRef = useRef(false)
 
   const requiredFilled = isApplyFormReady(form, parseError)
   const canSubmit = requiredFilled && !submitting
@@ -238,6 +241,12 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    if (!submitFromPreviewRef.current) {
+      // Implicit (Enter key) submission: send the applicant to the preview instead.
+      if (!submitting) setShowPreview(true)
+      return
+    }
+    submitFromPreviewRef.current = false
     setSubmitError('')
     const errs = validate(form, parseError)
     setErrors(errs)
@@ -248,6 +257,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
           ? `Please complete required fields: ${missing.join(', ')}.`
           : 'Please complete all required fields.'
       )
+      setShowPreview(false)
       requestAnimationFrame(() => focusFirstApplyError(errs))
       return
     }
@@ -315,6 +325,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
       onClose?.()
     } catch (err) {
       setSubmitError(err.message || 'Failed to submit application')
+      setShowPreview(false)
     } finally {
       setSubmitting(false)
     }
@@ -735,14 +746,6 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                 >
                   Preview
                 </PremiumButton>
-                <PremiumButton
-                  type="submit"
-                  disabled={!canSubmit}
-                  title={submitBlockedTitle}
-                  aria-disabled={!canSubmit}
-                >
-                  {submitting ? 'Submitting…' : 'Submit application'}
-                </PremiumButton>
               </div>
             </form>
           </motion.div>
@@ -946,9 +949,10 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                 type="button"
                 variant="secondary"
                 onClick={() => setShowPreview(false)}
+                disabled={submitting}
                 className="sm:min-w-[120px]"
               >
-                Close
+                Back to form
               </PremiumButton>
               <PremiumButton
                 type="button"
@@ -958,9 +962,13 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
                 aria-disabled={!canSubmit}
                 onClick={() => {
                   if (!canSubmit) return
-                  setShowPreview(false)
                   const formEl = document.querySelector('.apply-modal form')
-                  formEl?.requestSubmit()
+                  if (!formEl) return
+                  submitFromPreviewRef.current = true
+                  formEl.requestSubmit()
+                  // requestSubmit fires the handler synchronously, which clears the
+                  // flag; disarm it here too in case constraint validation blocked it.
+                  submitFromPreviewRef.current = false
                 }}
                 className="sm:min-w-[160px]"
               >
