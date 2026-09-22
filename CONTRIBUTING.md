@@ -26,7 +26,7 @@ Thank you for contributing. This repository contains two coordinated systems:
 
 ## Branch and commit workflow
 
-1. Create a feature branch from `main`
+1. Create a feature branch from `development`
 2. Make focused changes — one concern per PR
 3. Follow existing naming and code style in the touched area
 4. Update documentation when you change behavior or paths

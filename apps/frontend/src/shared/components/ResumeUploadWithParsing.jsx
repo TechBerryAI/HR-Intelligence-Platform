@@ -380,7 +380,7 @@ export default function ResumeUploadWithParsing({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".pdf,.docx,.doc"
+                accept=".pdf,.docx,.doc,.webp"
                 onChange={handleFileChange}
                 disabled={isUploading}
                 className="hidden"
@@ -420,7 +420,7 @@ export default function ResumeUploadWithParsing({
                   <div className={`flex items-center gap-4 text-xs ${light ? 'text-slate-500' : 'text-zinc-500'}`}>
                     <div className="flex items-center gap-1">
                       <FiFile className="w-4 h-4" />
-                      <span>PDF, DOC, DOCX, PNG, JPG, WEBP</span>
+                      <span>PDF, DOC, DOCX, WEBP</span>
                     </div>
                     <div className={`w-1 h-1 rounded-full ${light ? 'bg-slate-300' : 'bg-zinc-600'}`} />
                     <span>Max 10MB</span>

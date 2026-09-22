@@ -194,8 +194,8 @@ def store_raw_file(
                     'UPDATE raw_files SET bulk_session_id = COALESCE(bulk_session_id, ?) WHERE id = ?',
                     (bulk_session_id, existing['id']),
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                log_unexpected('raw_file_bulk_session_tag', exc, raw_file_id=existing['id'])
         return {
             'id': existing['id'],
             'storage_url': storage_url,
@@ -221,7 +221,8 @@ def store_raw_file(
                     mime_type, file_hash, len(payload), bulk_session_id,
                 ),
             )
-        except Exception:
+        except Exception as exc:
+            log_unexpected('raw_file_bulk_session_insert', exc, raw_file_id=raw_file_id)
             db_run(
                 """
                 INSERT INTO raw_files 

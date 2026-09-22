@@ -2,7 +2,8 @@
 // Same-origin by default: leave VITE_API_URL empty so requests go to /api and /health
 // on whatever host opened the UI. Vite proxies those paths in dev; production reverse
 // proxy should do the same. Set an absolute VITE_API_URL only for rare split-origin setups.
-// If you migrate auth to HttpOnly cookies, keep `credentials: 'include'` (already set below).
+// Auth is httpOnly-cookie based on the web (see core/auth/tokenService.js); `credentials:
+// 'include'` below is what makes that cookie actually go out on same-origin requests.
 import { tokenService } from '@/core/auth/tokenService.js';
 import { markBackendSeen } from '@/core/api/healthCheck.js';
 
@@ -102,15 +103,20 @@ const PROACTIVE_REFRESH_WINDOW_SEC = 120; // refresh when access JWT expires wit
 let refreshInFlight = null;
 
 async function tryRefreshOnce() {
+  // No early-return-if-empty here: a web client after a page reload has no
+  // in-memory refresh token (it was never in localStorage to begin with),
+  // but the httpOnly refresh cookie the backend set still carries one, so
+  // this call must still fire — the cookie goes along via credentials:
+  // 'include'. Electron has no cookie in production, so it sends its
+  // in-memory token in the body instead.
   const refreshToken = tokenService.getRefreshToken();
-  if (!refreshToken) return false;
   const refreshUrl = joinUrl(BASE_URL, '/api/refresh');
   try {
     const res = await fetch(refreshUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      body: refreshToken ? JSON.stringify({ refresh_token: refreshToken }) : undefined,
     });
     if (!res.ok) return false;
     const json = await res.json().catch(() => ({}));
@@ -246,9 +252,20 @@ async function performRequest(url, method, body, token, headers, timeoutMs, alre
   }
 
   const bearer = token || tokenService.getToken();
-  const sentAuth = !!bearer;
   if (bearer) {
     finalHeaders.set('Authorization', `Bearer ${bearer}`);
+  }
+  // Web sessions authenticate via an httpOnly cookie the browser attaches
+  // automatically — there's no bearer token to read here even when a request
+  // is genuinely authenticated, so `bearer` alone can't be used below to tell
+  // "this request tried to authenticate" from "this request didn't." CSRF
+  // protection for state-changing requests instead: echo the (non-HttpOnly)
+  // csrf cookie back as a header so the backend can double-submit-check it.
+  if (!/^(GET|HEAD)$/i.test(method)) {
+    const csrfMatch = typeof document !== 'undefined' ? document.cookie.match(/(?:^|; )csrf_token=([^;]+)/) : null;
+    if (csrfMatch) {
+      finalHeaders.set('X-CSRF-Token', decodeURIComponent(csrfMatch[1]));
+    }
   }
 
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -296,7 +313,7 @@ async function performRequest(url, method, body, token, headers, timeoutMs, alre
     const roleMismatch = authFailure && isRoleMismatchError(message);
     const refreshable = authFailure && !roleMismatch && isRefreshableAuthError(res.status, message);
 
-    if (refreshable && sentAuth && !alreadyTriedRefresh) {
+    if (refreshable && !alreadyTriedRefresh) {
       const refreshed = await tryRefresh();
       if (refreshed) {
         return performRequest(url, method, body, tokenService.getToken(), headers, timeoutMs, true, skipAuthHandler);
@@ -309,7 +326,6 @@ async function performRequest(url, method, body, token, headers, timeoutMs, alre
     const tokenStillCurrent = !bearer || bearer === tokenService.getToken();
     if (
       authFailure &&
-      sentAuth &&
       tokenStillCurrent &&
       !skipAuthHandler &&
       !roleMismatch &&

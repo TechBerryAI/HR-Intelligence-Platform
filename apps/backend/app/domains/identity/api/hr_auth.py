@@ -35,6 +35,7 @@ from app.domains.identity.sessions.service import (
     deactivate_all_user_sessions,
 )
 from app.core.auth import build_jwt_payload, JWT_SECRET, validate_password_strength
+from app.core.cookies import set_auth_cookies, clear_auth_cookies, REFRESH_COOKIE_NAME
 from app.core import shared_store
 from app.core.errors import client_internal_error, log_unexpected
 from app.api.middleware.auth import authenticate_token
@@ -212,7 +213,7 @@ def verify_hr_otp():
         except Exception:
             pass
 
-        return jsonify({
+        resp = jsonify({
             "message": "Account verified and created successfully",
             "token": access_token,
             "refresh_token": refresh_token,
@@ -223,7 +224,9 @@ def verify_hr_otp():
                 "company": row['company'],
                 "role": ROLE_RECRUITER,
             }
-        }), 200
+        })
+        set_auth_cookies(resp, access_token, refresh_token)
+        return resp, 200
     except Exception as e:
         log_unexpected('verify_hr_otp', e)
         return client_internal_error()
@@ -431,7 +434,7 @@ def hr_login():
                 bcrypt.checkpw(password.encode('utf-8'), _DUMMY_HASH)
             except Exception:
                 pass
-            record_login_attempt(email, 'HR', 'failed', ip_address, user_agent, 'User not found')
+            record_login_attempt(email_clean, 'HR', 'failed', ip_address, user_agent, 'User not found')
             return jsonify({"error": "Invalid email or password"}), 401
 
         user_id = signup_data['hrid']
@@ -442,13 +445,13 @@ def hr_login():
             except Exception:
                 pass
             record_login_attempt(
-                email, 'HR', 'failed', ip_address, user_agent, 'Invalid password', user_id=user_id
+                email_clean, 'HR', 'failed', ip_address, user_agent, 'Invalid password', user_id=user_id
             )
             return jsonify({"error": "Invalid email or password"}), 401
         stored_b = stored.encode('utf-8') if isinstance(stored, str) else stored
         if not bcrypt.checkpw(password.encode('utf-8'), stored_b):
             record_login_attempt(
-                email, 'HR', 'failed', ip_address, user_agent, 'Invalid password', user_id=user_id
+                email_clean, 'HR', 'failed', ip_address, user_agent, 'Invalid password', user_id=user_id
             )
             return jsonify({"error": "Invalid email or password"}), 401
 
@@ -457,10 +460,10 @@ def hr_login():
         access_token, refresh_token = _issue_token_pair(identity)
 
         from app.domains.identity.sessions.service import has_previous_login_from_same_device
-        is_new_device = not has_previous_login_from_same_device(email, 'HR', ip_address, user_agent)
+        is_new_device = not has_previous_login_from_same_device(email_clean, 'HR', ip_address, user_agent)
 
         record_login_attempt(
-            email, 'HR', 'success', ip_address, user_agent, user_id=user_id
+            email_clean, 'HR', 'success', ip_address, user_agent, user_id=user_id
         )
         try:
             from app.domains.identity.sessions.service import (
@@ -494,7 +497,7 @@ def hr_login():
                 html=html,
             )
 
-        return jsonify({
+        resp = jsonify({
             "token": access_token,
             "refresh_token": refresh_token,
             "user": {
@@ -507,6 +510,8 @@ def hr_login():
                 "orgSlug": identity.get('org_slug'),
             }
         })
+        set_auth_cookies(resp, access_token, refresh_token)
+        return resp
     except Exception as e:
         log_unexpected('hr_login', e)
         return client_internal_error()
@@ -566,7 +571,9 @@ def hr_change_password():
 def refresh_tokens():
     try:
         data = request.get_json(silent=True) or {}
-        refresh_token = (data.get('refresh_token') or '').strip()
+        # Cookie precedence (web client), JSON body fallback (Electron, which
+        # can't rely on the httpOnly cookie in its production file:// build).
+        refresh_token = (request.cookies.get(REFRESH_COOKIE_NAME) or data.get('refresh_token') or '').strip()
         if not refresh_token:
             return jsonify({"error": "refresh_token required"}), 400
         payload = jwt.decode(refresh_token, JWT_SECRET, algorithms=["HS256"])
@@ -593,7 +600,9 @@ def refresh_tokens():
         rotated = rotate_refresh_token(refresh_token, new_refresh, identity['user_id'])
         if not rotated.get('success'):
             return jsonify({"error": "Refresh token revoked"}), 401
-        return jsonify({"token": new_access, "refresh_token": new_refresh})
+        resp = jsonify({"token": new_access, "refresh_token": new_refresh})
+        set_auth_cookies(resp, new_access, new_refresh)
+        return resp
     except jwt.ExpiredSignatureError:
         return jsonify({"error": "Refresh token expired"}), 401
     except jwt.InvalidTokenError:
@@ -607,13 +616,17 @@ def refresh_tokens():
 def hr_logout():
     try:
         data = request.get_json(silent=True) or {}
-        refresh_token = (data.get('refresh_token') or '').strip()
+        refresh_token = (request.cookies.get(REFRESH_COOKIE_NAME) or data.get('refresh_token') or '').strip()
         auth_header = request.headers.get('Authorization', '')
         access_token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else None
         if refresh_token:
             deactivate_session(refresh_token)
         elif access_token:
             deactivate_session(access_token)
-        return jsonify({"message": "Logged out successfully"})
+        resp = jsonify({"message": "Logged out successfully"})
+        clear_auth_cookies(resp)
+        return resp
     except Exception:
-        return jsonify({"message": "Logged out successfully"})
+        resp = jsonify({"message": "Logged out successfully"})
+        clear_auth_cookies(resp)
+        return resp

@@ -3,7 +3,7 @@ Support Routes - Handle help and support requests
 """
 import os
 from flask import Blueprint, request, jsonify
-from app.api.middleware.auth import authenticate_token, require_head_hr
+from app.api.middleware.auth import authenticate_token, require_head_hr, optional_authenticate_token
 from app.core.errors import log_unexpected
 from app.database.connection.db import db_run, db_get, db_all, BACKEND, NOW_SQL
 from app.domains.identity.services.organizations import require_organization_id
@@ -36,22 +36,23 @@ def _serialize_request_datetimes(req: dict) -> dict:
 
 
 @support_bp.route('/submit', methods=['POST'])
+@optional_authenticate_token
 def submit_support_request():
     """
     Submit a new support request
     """
     try:
         data = request.get_json()
-        
+
         # Validate required fields
         if not data:
             return jsonify({"error": "No data provided"}), 400
-        
+
         name = data.get('name', '').strip()
         email = data.get('email', '').strip()
         subject = data.get('subject', '').strip()
         message = data.get('message', '').strip()
-        
+
         if not name:
             return jsonify({"error": "Name is required"}), 400
         if not email:
@@ -60,23 +61,27 @@ def submit_support_request():
             return jsonify({"error": "Subject is required"}), 400
         if not message:
             return jsonify({"error": "Message is required"}), 400
-        
-        # Optional fields
-        user_id = data.get('user_id')
-        user_type = data.get('user_type', 'guest')
+
+        # user_id/user_type are derived from the verified session, never from the
+        # client body — otherwise anyone could claim user_type='hr' with an
+        # arbitrary user_id and have a forged ticket appear in that org's
+        # Head-HR queue attributed to a real employee.
+        auth_user = request.user or {}
+        if auth_user.get('user_id'):
+            user_id = str(auth_user['user_id'])
+            user_type = 'hr'
+        else:
+            user_id = None
+            user_type = 'guest'
         priority = data.get('priority', 'medium')
-        
+
         # Validate email format
         if '@' not in email or '.' not in email:
             return jsonify({"error": "Invalid email format"}), 400
-        
+
         # Validate priority
         if priority not in ['low', 'medium', 'high', 'urgent']:
             priority = 'medium'
-        
-        # Validate user_type
-        if user_type not in ['candidate', 'hr', 'guest']:
-            user_type = 'guest'
         
         # Insert support request (PG: RETURNING id; MSSQL: SCOPE_IDENTITY in second statement)
         if BACKEND == "postgresql":

@@ -247,10 +247,11 @@ def bulk_parse_download(job_id):
             return jsonify(payload), 409
         return jsonify(payload), 502
     iterator, filename, content_type = payload
+    safe_filename = secure_filename(filename) or 'download.xlsx'
     return Response(
         iterator,
         mimetype=content_type,
-        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+        headers={'Content-Disposition': f'attachment; filename="{safe_filename}"'},
     )
 
 

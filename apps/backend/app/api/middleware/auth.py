@@ -5,6 +5,7 @@ import jwt
 from flask import jsonify, request
 
 from app.core.auth import JWT_SECRET, auth_log
+from app.core.cookies import extract_access_token, csrf_ok
 from app.database.connection.db import db_get
 from app.domains.identity.authorization.rbac import (
     is_head_hr,
@@ -33,10 +34,14 @@ def authenticate_token(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
         auth_log(f"[AUTH] Authenticating request to {request.method} {request.path}")
-        auth_header = request.headers.get('Authorization', '')
-        token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else None
+        token, source = extract_access_token(request)
         if not token:
             return jsonify({"error": "Access token required"}), 401
+        # A cookie is auto-attached by the browser cross-site; a Bearer header
+        # never is, so only the cookie path needs the CSRF double-submit check.
+        if source == 'cookie' and request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            if not csrf_ok(request):
+                return jsonify({"error": "CSRF validation failed"}), 403
         try:
             user = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
             if user.get('type') == 'refresh':
@@ -88,9 +93,13 @@ def require_head_hr(f):
 def optional_authenticate_token(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        auth_header = request.headers.get('Authorization', '')
-        token = auth_header.split(' ')[1] if auth_header.startswith('Bearer ') else None
+        token, source = extract_access_token(request)
         request.user = None
+        if token:
+            # These routes already tolerate anonymous callers, so a missing/bad
+            # CSRF token degrades to "treat as anonymous" rather than a hard 403.
+            if source == 'cookie' and request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and not csrf_ok(request):
+                token = None
         if token:
             try:
                 user = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])

@@ -229,7 +229,7 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.docx,.doc"
+              accept=".pdf,.docx,.doc,.webp"
               onChange={handleFileChange}
               disabled={isUploading}
               className="hidden"
@@ -263,7 +263,7 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
                     {isDragging ? 'Drop JD file here' : 'Upload Job Description'}
                   </p>
                   <p className="text-xs text-[var(--ei-text-secondary)]">
-                    PDF, DOC, DOCX, PNG, JPG, or WEBP • Max 10MB
+                    PDF, DOC, DOCX, or WEBP • Max 10MB
                   </p>
                   <p className="text-xs text-[var(--ei-text-muted)] mt-1.5">
                     Drag & drop your file here or click to browse
