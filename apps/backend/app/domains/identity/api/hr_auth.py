@@ -44,15 +44,25 @@ auth_bp = Blueprint('auth', __name__)
 
 _OTP_RATE_LIMIT = int(os.getenv('OTP_RATE_LIMIT', '8'))
 _OTP_RATE_WINDOW_SEC = int(os.getenv('OTP_RATE_WINDOW_SEC', '900'))
+# Coarser, IP-independent ceiling: the per-IP bucket above is trivially bypassed
+# by spreading requests across IPs (cheap with cloud IP pools), so this second
+# bucket caps total attempts per email regardless of source IP.
+_OTP_RATE_LIMIT_PER_EMAIL = int(os.getenv('OTP_RATE_LIMIT_PER_EMAIL', '20'))
 
 
 def _otp_rate_limited(email: str) -> bool:
     ip = request.remote_addr or 'unknown'
-    return shared_store.rate_limit_hit(
+    per_ip = shared_store.rate_limit_hit(
         f'otp:{ip}:{email}',
         _OTP_RATE_LIMIT,
         _OTP_RATE_WINDOW_SEC,
     )
+    per_email = shared_store.rate_limit_hit(
+        f'otp:any-ip:{email}',
+        _OTP_RATE_LIMIT_PER_EMAIL,
+        _OTP_RATE_WINDOW_SEC,
+    )
+    return per_ip or per_email
 
 ALLOWED_PASSWORD_RESET_DOMAINS_RAW = (
     os.getenv('ALLOWED_PASSWORD_RESET_DOMAINS')

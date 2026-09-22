@@ -132,6 +132,30 @@ def toon_dumps(obj: Dict[str, Any]) -> str:
         raise TypeError("toon_dumps requires a dict")
     lines: List[str] = [FORMAT_BANNER]
 
+    def walk_list(key: str, v: list) -> None:
+        if not v:
+            lines.append(f"{key}[0]:")
+        elif any(isinstance(x, (dict, list)) for x in v):
+            # At least one structured item: a table only works when every item
+            # is a dict with the same scalar keys, otherwise fall back to a
+            # dotted path per index (recursing into walk() handles dicts,
+            # nested lists, and bare scalars sitting alongside them without
+            # ever stringifying a non-scalar value).
+            cols = _table_columns(v) if all(isinstance(x, dict) for x in v) else None
+            if cols is None:
+                for i, item in enumerate(v):
+                    walk(f"{key}.{i}", item)
+            else:
+                lines.append(f"{key}[{len(v)}]{{{','.join(cols)}}}:")
+                for item in v:
+                    lines.append(
+                        "  " + ",".join(_enc_cell(item[c]) for c in cols)
+                    )
+        else:
+            # Explicit count: a one-element list is otherwise
+            # indistinguishable from a bare scalar on the way back.
+            lines.append(f"{key}[{len(v)}]: " + "|".join(_enc_val(x) for x in v))
+
     def walk(prefix: str, o: Any) -> None:
         if isinstance(o, dict):
             for k, v in o.items():
@@ -141,27 +165,11 @@ def toon_dumps(obj: Dict[str, Any]) -> str:
                 if isinstance(v, dict):
                     walk(key, v)
                 elif isinstance(v, list):
-                    if not v:
-                        lines.append(f"{key}[0]:")
-                    elif all(isinstance(x, dict) for x in v):
-                        cols = _table_columns(v)
-                        if cols is None:
-                            for i, item in enumerate(v):
-                                walk(f"{key}.{i}", item)
-                        else:
-                            lines.append(f"{key}[{len(v)}]{{{','.join(cols)}}}:")
-                            for item in v:
-                                lines.append(
-                                    "  " + ",".join(_enc_cell(item[c]) for c in cols)
-                                )
-                    else:
-                        # Explicit count: a one-element list is otherwise
-                        # indistinguishable from a bare scalar on the way back.
-                        lines.append(
-                            f"{key}[{len(v)}]: " + "|".join(_enc_val(x) for x in v)
-                        )
+                    walk_list(key, v)
                 else:
                     lines.append(f"{key}: {_enc_val(v)}")
+        elif isinstance(o, list):
+            walk_list(prefix, o)
         else:
             lines.append(f"{prefix}: {_enc_val(o)}")
 
@@ -272,6 +280,13 @@ def _set_by_path(root: Dict[str, Any], path: str, value: Any) -> None:
                     cur[seg] = arr
                 while len(arr) <= idx:
                     arr.append({})
+                if i + 1 == len(parts) - 1:
+                    # The numeric segment is the final path component: this
+                    # sets the list element itself (e.g. a bare scalar or a
+                    # nested list sitting alongside dicts in a mixed-type
+                    # list), not a field one level further inside it.
+                    arr[idx] = value
+                    return
                 cur = arr[idx]
             i += 2
             continue
