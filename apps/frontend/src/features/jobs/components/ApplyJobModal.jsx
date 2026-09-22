@@ -132,6 +132,12 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
   // Submitting is only reachable from the preview dialog, so the form's own
   // submit event is ignored unless the preview's button armed this flag.
   const submitFromPreviewRef = useRef(false)
+  // Synchronous re-entrancy guard: `submitting` state only blocks the button
+  // after React commits a re-render, which a fast double-click/double-tap can
+  // beat (two click handlers can run before that commit lands). A ref is
+  // read/written synchronously within the same handler invocation, so it
+  // closes that window even when `submitting` hasn't updated yet.
+  const isSubmittingRef = useRef(false)
 
   const requiredFilled = isApplyFormReady(form, parseError)
   const canSubmit = requiredFilled && !submitting
@@ -247,10 +253,13 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
       return
     }
     submitFromPreviewRef.current = false
+    if (isSubmittingRef.current) return
+    isSubmittingRef.current = true
     setSubmitError('')
     const errs = validate(form, parseError)
     setErrors(errs)
     if (Object.keys(errs).length) {
+      isSubmittingRef.current = false
       const missing = APPLY_FIELD_ORDER.filter((k) => errs[k]).map((k) => APPLY_FIELD_LABELS[k] || k)
       setSubmitError(
         missing.length
@@ -327,6 +336,7 @@ export default function ApplyJobModal({ open, job, onClose, onSuccess, companySl
       setSubmitError(err.message || 'Failed to submit application')
       setShowPreview(false)
     } finally {
+      isSubmittingRef.current = false
       setSubmitting(false)
     }
   }

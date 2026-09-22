@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { apiRequest, setUnauthorizedHandler, setOnTokensRefreshed } from '@/core/api/api.js'
+import { apiRequest, setUnauthorizedHandler, setOnTokensRefreshed, tryRefresh } from '@/core/api/api.js'
 import { tokenService } from '@/core/auth/tokenService.js'
 import { checkBackendHealth, onBackendHealthChange } from '@/core/api/healthCheck.js'
 import { isStaffRecruiter } from '@/core/permissions/rbac.js'
@@ -112,13 +112,6 @@ export function AppProvider({ children }) {
       clearInterval(healthCheckInterval)
       unsubscribe()
     }
-    
-    // If migrating to HttpOnly cookies in production:
-    // - Have the backend set a SameSite=Lax, Secure HttpOnly cookie on login
-    // - Remove Authorization header usage and token persistence here
-    // - Rely on credentials: 'include' already set in api.js
-    // - Ensure CORS allows credentials and your frontend domain
-    // Note: keep tokenService empty or disabled when using HttpOnly cookies.
   }, [])
 
   useEffect(() => {
@@ -368,22 +361,45 @@ export function AppProvider({ children }) {
   logoutRef.current = logout
 
   useEffect(() => {
-    const storedToken = tokenService.getToken()
-    const role = decodeJwtRole(storedToken)
+    let cancelled = false
+    ;(async () => {
+      // Electron hydrates its in-memory token from secure storage here; the
+      // web path purges any pre-migration localStorage tokens. Must finish
+      // before the check below, since it decides what "no token yet" means.
+      await tokenService.initTokenService()
+      if (cancelled) return
 
-    if (!storedToken) {
+      let storedToken = tokenService.getToken()
       const hrAuth = readJson(STORAGE_KEYS.auth, defaultAuth)
-      if (hrAuth.isLoggedIn) {
-        logoutRef.current()
-      }
-      return
-    }
 
-    if (role === 'CANDIDATE') {
-      // Candidate tokens are no longer supported; clear session
-      logoutRef.current()
-    } else if (role === 'RECRUITER' || role === 'HEAD_HR' || role === 'CEO') {
-      clearOtherSessions('hr')
+      if (!storedToken && hrAuth.isLoggedIn) {
+        // Web client after a reload: the access JWT lives in an httpOnly
+        // cookie invisible to JS, so there is nothing to hydrate into memory
+        // here — attempt a cookie-only refresh before concluding the session
+        // is stale and logging out. (Electron always has storedToken by now,
+        // so it never reaches this branch.)
+        const refreshed = await tryRefresh()
+        if (cancelled) return
+        storedToken = tokenService.getToken()
+        if (!refreshed || !storedToken) {
+          logoutRef.current()
+          return
+        }
+        setToken(storedToken)
+      } else if (!storedToken) {
+        return
+      }
+
+      const role = decodeJwtRole(storedToken)
+      if (role === 'CANDIDATE') {
+        // Candidate tokens are no longer supported; clear session
+        logoutRef.current()
+      } else if (role === 'RECRUITER' || role === 'HEAD_HR' || role === 'CEO') {
+        clearOtherSessions('hr')
+      }
+    })()
+    return () => {
+      cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

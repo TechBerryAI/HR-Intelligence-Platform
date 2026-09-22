@@ -40,8 +40,14 @@ def _build_allowed_origins():
                 origins.append(f'http://{local_ip}:5173')
         except OSError:
             pass
-    if os.getenv('FLASK_DEBUG', 'false').lower() == 'true':
-        # Localhost any port + private LAN (for direct API access without editing .env)
+    if (
+        os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+        and os.getenv('ENABLE_LAN_CORS', 'false').lower() == 'true'
+    ):
+        # Localhost any port + private LAN (for direct API access without editing .env).
+        # Requires FLASK_DEBUG *and* an explicit opt-in so a staging/shared box that
+        # only has debug logging on doesn't silently accept credentialed cross-origin
+        # requests from any device on the subnet.
         origins.extend(
             [
                 r'http://localhost:\d+',
@@ -128,6 +134,7 @@ def create_app() -> Flask:
                     "X-Platform-Key",
                     "X-Validation-Token",
                     "Cache-Control",
+                    "X-CSRF-Token",
                 ],
                 "expose_headers": ["Content-Type", "Authorization"],
                 "supports_credentials": True,

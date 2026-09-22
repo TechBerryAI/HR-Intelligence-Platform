@@ -166,3 +166,23 @@ def test_empty_input():
 def test_dumps_rejects_non_dict():
     with pytest.raises(TypeError):
         toon_dumps(['not', 'a', 'dict'])
+
+
+def test_list_mixing_a_dict_and_a_scalar_round_trips():
+    """A list that isn't uniformly dicts must not be stringified via repr()."""
+    doc = {'items': [{'a': 1}, 'x']}
+    out = toon_dumps(doc)
+    assert "{'a': 1}" not in out  # would indicate the old str()-fallback bug
+    assert toon_loads(out) == doc
+
+
+def test_list_containing_a_nested_list_round_trips():
+    doc = {'items': [[1, 2], 'x', {'a': 1}]}
+    out = toon_dumps(doc)
+    assert '[1, 2]' not in out  # would indicate the old str()-fallback bug
+    assert toon_loads(out) == doc
+
+
+def test_list_of_lists_round_trips():
+    doc = {'matrix': [[1, 2], [3, 4]]}
+    assert toon_loads(toon_dumps(doc)) == doc

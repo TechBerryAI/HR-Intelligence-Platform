@@ -2,11 +2,22 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [development, production]
   pull_request:
-    branches: [main]
+    branches: [development, production]
 
 jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   backend-tests:
     runs-on: ubuntu-latest
     services:
@@ -28,12 +39,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install system packages for document parsing
+        run: sudo apt-get update && sudo apt-get install -y antiword
       - name: Install backend dependencies
         run: |
           pip install -r apps/backend/requirements.lock.txt
-          pip install pytest
-      - name: Verify PyMuPDF and RapidOCR
-        run: python -c "import fitz, rapidocr_onnxruntime; print('PyMuPDF+RapidOCR OK')"
+          pip install pytest pip-audit
+      - name: Verify PyMuPDF, RapidOCR and antiword
+        run: |
+          python -c "import fitz, rapidocr_onnxruntime; print('PyMuPDF+RapidOCR OK')"
+          python -c "import sys; sys.path.insert(0, 'apps/backend'); from app.ai.parser.text_extraction import antiword_available; assert antiword_available(), 'antiword missing'; print('antiword OK')"
+      - name: Dependency audit (report-only)
+        run: pip-audit -r apps/backend/requirements.lock.txt || true
       - name: Alembic upgrade head
         working-directory: apps/backend
         env:
@@ -137,12 +154,20 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # Single source of truth: .nvmrc, so CI and local dev cannot drift.
+          node-version-file: .nvmrc
+      - name: Install frontend dependencies
+        working-directory: apps/frontend
+        run: npm ci
+      - name: Run frontend tests
+        working-directory: apps/frontend
+        run: npm run test
+      - name: Dependency audit (report-only)
+        working-directory: apps/frontend
+        run: npm audit --audit-level=high || true
       - name: Build frontend
         working-directory: apps/frontend
-        run: |
-          npm ci
-          npm run build
+        run: npm run build
 
   ai-tests:
     runs-on: ubuntu-latest

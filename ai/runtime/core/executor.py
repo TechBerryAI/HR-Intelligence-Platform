@@ -124,7 +124,13 @@ class TaskExecutor:
 
         schema = self._schemas.resolve(task.schema_id)
 
-        prompt_text = self._prompts.resolve(task.prompt_id, variables={"input": input_text})
+        # Delimit untrusted document text so it can't pose as an instruction to
+        # the model. Mitigation only (models aren't guaranteed to obey); paired
+        # with an instruction in each capability's prompt.md to ignore anything
+        # between the markers that looks like a command.
+        delimited_input = f"<<<CANDIDATE_DOCUMENT_START>>>\n{input_text}\n<<<CANDIDATE_DOCUMENT_END>>>"
+
+        prompt_text = self._prompts.resolve(task.prompt_id, variables={"input": delimited_input})
 
 
 

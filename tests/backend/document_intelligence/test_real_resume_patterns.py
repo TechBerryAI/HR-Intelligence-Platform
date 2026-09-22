@@ -531,6 +531,139 @@ B.Tech Computer Science - IIT Bombay
     assert any('iit' in (e.institution or '').lower() for e in form.education)
 
 
+# Raw extractor output for a fresher resume whose bordered header/contact box
+# gets read out of order (appears after Project, not at the top) and whose
+# education grid table gets duplicated: once as an unstructured cell-per-line
+# dump under "Education", once as a clean pipe-serialized table appended near
+# the end of the page. Regression fixture for the "G Saikiran" bug report —
+# the education rows were scrambled, fullName resolved to "Course", and
+# currentLocation resolved to "Bangalore" (the Declaration "Place:" line).
+SAIKIRAN_LIKE = """
+Summary
+I am seeking opportunities to join a company that can help me in enhancing my skills,
+strengthening my knowledge, and realizing my potential. I am willing to explore a wide variety of
+opportunities that can help me gain perspective.
+
+
+Education
+Course
+Institution
+Board/
+University
+Year of
+Completion
+Percentage
+B. Tech
+(Civil
+engineering)
+Anantha Lakshmi institute of technology
+and science,
+Anantapur.
+
+JNTUA
+
+2024
+
+70.19%
+Intermediate
+Narayana Junior College,
+Anantapur.
+BIE
+2020
+83.4%
+Secondary
+School
+Sri Chaitanya EM school,
+Hindupur.
+
+BSE
+
+2018
+
+9.2 CGPA
+
+
+Skills
+• Programming Languages: Python, MY SQL
+Certificate programs:
+• Wastewater Treatment and Recycling,
+• Social Innovation in Industry 4.0. [NPTEL]
+
+Project
+• Title: Analysis and Design of Rectangular Storage Tank
+• Description: The main objective of the project is to designing the storage tank by using
+AutoCAD.
+
+G SAIKIRAN
+Hindupur, Anantapur
+Andhra Pradesh -515201
+saikiranbehappy@gmail.com, +91-9640089228
+
+Course | Institution | Board/ University | Year of Completion | Percentage
+B. Tech (Civil engineering) | Anantha Lakshmi institute of technology and science, Anantapur. | JNTUA | 2024 | 70.19%
+Intermediate | Narayana Junior College, Anantapur. | BIE | 2020 | 83.4%
+Secondary School | Sri Chaitanya EM school, Hindupur. | BSE | 2018 | 9.2 CGPA
+
+
+Awards And Achievements
+• School level shotput runner.
+• Participated in many cultural activities.
+
+
+Personal Details
+• Father's Name
+: Gopalakrishna
+• Date of Birth            : 31-10-2001
+• Languages
+English and Telugu
+• Hobbies
+: Playing sports, watching movies, Listening Music
+
+
+Declaration
+I, SAI KIRAN do hereby confirm that the information given above is true to the best of my
+
+Knowledge.
+Place: Bangalore
+G SAIKIRAN
+"""
+
+
+def test_duplicated_table_and_relocated_header_do_not_scramble_fields():
+    """Regression for the G Saikiran bug: duplicated education table + a
+    contact header relocated after Project must not scramble fullName,
+    education rows, or currentLocation."""
+    profile, form, _ = parse_resume_text_to_canonical(SAIKIRAN_LIKE, source_filename='G SAIKIRAN.pdf')
+
+    assert form.fullName == 'G Saikiran'
+    assert form.email == 'saikiranbehappy@gmail.com'
+    assert 'hindupur' in (form.currentLocation or '').lower()
+
+    assert len(form.education) == 3
+    degrees = [e.degree.lower() for e in form.education]
+    assert any('b. tech' in d or 'b.tech' in d for d in degrees)
+    assert any(d == 'intermediate' for d in degrees)
+    assert any('secondary school' in d for d in degrees)
+
+    by_degree = {e.degree.lower(): e for e in form.education}
+    btech = next(e for d, e in by_degree.items() if 'tech' in d)
+    assert 'anantha lakshmi' in btech.institution.lower()
+    assert btech.endMonth == '2024'
+    assert btech.cgpa == '70.19%'
+
+    intermediate = by_degree['intermediate']
+    assert 'narayana' in intermediate.institution.lower()
+    assert intermediate.endMonth == '2020'
+
+    secondary = next(e for d, e in by_degree.items() if 'secondary school' in d)
+    assert 'sri chaitanya' in secondary.institution.lower()
+    assert secondary.endMonth == '2018'
+
+    # The Declaration "Place: Bangalore" signature line must never win over
+    # the candidate's own header address.
+    assert 'bangalore' not in (form.currentLocation or '').lower()
+
+
 def test_education_rejects_internships_and_duty_wrap():
     section = """
 BSc.IT | Mumbai University | 2023

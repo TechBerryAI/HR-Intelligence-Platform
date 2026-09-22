@@ -165,8 +165,46 @@ def rows_to_dicts(cursor, rows):
 
 
 def _pg_query(query: str):
-    """Convert ? placeholders to %s for psycopg."""
-    return query.replace("?", "%s")
+    """Convert ? placeholders to %s for psycopg.
+
+    Quote-aware: a blind ``query.replace("?", "%s")`` would also rewrite a
+    literal ``?`` sitting inside a quoted string literal (e.g. a ``LIKE``
+    pattern or stored value containing a literal ``?``), corrupting the query
+    instead of just substituting placeholders. This only replaces ``?``
+    characters that sit outside any single- or double-quoted segment.
+
+    This does not (and structurally cannot) disambiguate a bare, unquoted
+    Postgres ``jsonb ?`` "key exists" operator from a placeholder — both are
+    plain ``?`` outside any quotes. If a query ever needs that operator, write
+    it as ``??`` is not supported here either; use ``jsonb_exists(col, %s)``
+    or a raw ``%s``-style query instead of the ``?`` convention for that call.
+    """
+    out: list[str] = []
+    quote: str | None = None
+    i = 0
+    n = len(query)
+    while i < n:
+        ch = query[i]
+        if quote is not None:
+            out.append(ch)
+            if ch == quote:
+                # SQL escapes a quote by doubling it ('' inside a '...' literal).
+                if i + 1 < n and query[i + 1] == quote:
+                    out.append(query[i + 1])
+                    i += 2
+                    continue
+                quote = None
+            i += 1
+            continue
+        if ch in ("'", '"'):
+            quote = ch
+            out.append(ch)
+        elif ch == "?":
+            out.append("%s")
+        else:
+            out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 def db_run(query: str, params: list | tuple = ()):
