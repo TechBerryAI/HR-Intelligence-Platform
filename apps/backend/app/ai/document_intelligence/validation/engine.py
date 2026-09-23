@@ -276,8 +276,12 @@ _EDU_HEADING_TOKENS = frozenset(
         'qualification',
         'qualifications',
         'academics',
-        'diploma',
-        'diplomas',
+        # 'diploma'/'diplomas' deliberately excluded: those are also a
+        # genuine, common standalone degree value on Indian resumes (e.g. a
+        # polytechnic Diploma), not just a stray "Diploma" column header —
+        # blocking the bare word here silently dropped every real Diploma
+        # education row. The compound header phrases below stay excluded
+        # since they only ever appear as column-header artifacts.
         'certificate',
         'certificates',
         'certifications',

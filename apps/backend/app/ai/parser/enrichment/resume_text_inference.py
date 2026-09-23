@@ -1610,6 +1610,10 @@ def peel_place_from_candidate_address(blob: str) -> str:
     raw = (blob or '').strip()
     if not raw:
         return ''
+    # Strip a leading bullet before the label check below — otherwise
+    # "• Address: X" never matches the label regex at all (^ can't see past
+    # the bullet), so the label text is left in `s` instead of being peeled.
+    raw = re.sub(r'^[\-–—•·]+\s*', '', raw).strip()
     s = re.sub(
         r'(?i)^(?:(?:permanent|present|current|residential|correspondence|mailing)\s+)?'
         r'(?:address|location|city|based\s+in|residence|place)\s*[:\-–—]\s*',
@@ -4180,10 +4184,19 @@ def _looks_like_location_phrase(value: str) -> bool:
         return False
     if _LOCATION_TECH_NOISE.search(s) or _LOCATION_PROSE_NOISE.search(s):
         return False
-    # Real place names are Title-Case, not prose: a word that starts lowercase
-    # and isn't a common geographic joiner ("of", "de", ...) means this is a
-    # sentence fragment ("and system health.") that merely cleared the noise
-    # blocklists, not an address.
+    # Real place names read as Title-Case; a sentence fragment ("and system
+    # health.") is lowercase throughout instead. Reject only when MOST
+    # alphabetic words start lowercase — resumes are often inconsistently
+    # cased, so a single stray lowercase word ("Kondhwa Khurd, pune") must
+    # not sink an otherwise place-shaped phrase, but a majority-lowercase
+    # phrase is prose, not an address.
+    alpha_words = [w.strip('.,') for w in words if w.strip('.,') and w.strip('.,')[0].isalpha()]
+    lowercase_non_joiner = [
+        core for core in alpha_words
+        if core.lower() not in _LOCATION_LOWERCASE_JOINER and not core[0].isupper()
+    ]
+    if alpha_words and len(lowercase_non_joiner) * 2 >= len(alpha_words):
+        return False
     for w in words:
         core = w.strip('.,')
         if not core or not core[0].isalpha():
@@ -4191,7 +4204,7 @@ def _looks_like_location_phrase(value: str) -> bool:
         if core.lower() in _LOCATION_LOWERCASE_JOINER:
             continue
         if not core[0].isupper():
-            return False
+            continue
         # Short ALL-CAPS tokens are tech/skill acronyms (OS, SD, AWS), not
         # place names, in this Indian-resume corpus.
         if core.isupper() and len(core) <= 3:
@@ -4247,7 +4260,7 @@ def _line_supports_city_token(line: str, city: str) -> bool:
     if re.match(rf'(?i)^{re.escape(city)}\s*,', stripped):
         return True
     if re.match(
-        r'(?i)^(?:location|address|based\s+in|city|current\s+location)\s*[:\-–—]',
+        r'(?i)^[•·\-–—\*]?\s*(?:location|address|based\s+in|city|current\s+location)\s*[:\-–—]',
         stripped,
     ):
         return True
@@ -4547,7 +4560,8 @@ def extract_location_from_text(text: str) -> str:
     # "Permanent" excluded here too — see note above; tried only as a last
     # resort further down, after every other signal has failed.
     m_perm = re.search(
-        r'(?im)^(?:\*\*)?(?:(?:present|current|residential|correspondence|mailing)\s+)?'
+        r'(?im)^(?:\*\*)?[•·\-–—\*]?\s*'
+        r'(?:(?:present|current|residential|correspondence|mailing)\s+)?'
         r'(?:address|location)\s*[:\-–—]\s*(.+?)\s*$',
         text or '',
     )
@@ -4555,6 +4569,13 @@ def extract_location_from_text(text: str) -> str:
         peeled = peel_place_from_candidate_address(m_perm.group(0))
         if peeled and is_plausible_location_value(peeled):
             return peeled
+        # Peel can miss unusual address formats ("Locality, City - PIN" with
+        # a hyphen instead of a comma before the pincode); fall back to
+        # extracting a bare known city, matching the header-pattern tier
+        # above rather than giving up entirely.
+        cleaned = _clean_loc(m_perm.group(1))
+        if cleaned and is_plausible_location_value(cleaned):
+            return cleaned
 
     # Street / locality line near contact header containing a known city
     for line in (text or '').splitlines()[:30]:

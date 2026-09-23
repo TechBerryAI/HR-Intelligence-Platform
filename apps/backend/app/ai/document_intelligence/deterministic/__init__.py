@@ -419,8 +419,10 @@ def extract_simple_location(text: str) -> str:
     # Labeled location lines — require delimiter. "Permanent" is deliberately
     # excluded: a permanent/hometown address is not necessarily where the
     # candidate currently lives (mirrors extract_location_from_text above).
+    # A leading bullet ("• Address: ...") is tolerated before the label.
     m_label = re.search(
-        r'(?im)^(?:\*\*)?(?:(?:present|current|residential|correspondence|mailing)\s+)?'
+        r'(?im)^(?:\*\*)?[•·\-–—\*]?\s*'
+        r'(?:(?:present|current|residential|correspondence|mailing)\s+)?'
         r'(?:current\s+location|location|based\s+in|residing\s+(?:in|at)|address|city|residence)'
         r'\s*[:.\-–—]\s*([A-Za-z0-9][A-Za-z0-9 .,\-/()]{2,120})',
         text or '',
