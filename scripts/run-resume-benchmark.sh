@@ -6,14 +6,6 @@
 # This wraps that WSL/venv/PYTHONPATH plumbing so the day-to-day command is
 # short. See ai/eval/resume_benchmark/README.md for what the flags do.
 #
-# PYTHONPYCACHEPREFIX redirects .pyc bytecode caching to a scratch dir instead
-# of the venv's own __pycache__: editing app/ai source from the Windows side
-# and immediately re-running through WSL has been observed to reuse stale
-# bytecode (the 9p/NTFS mtime Python compares against __pycache__ can lag a
-# fresh Windows-side edit), silently benchmarking old code. This avoids that
-# without ever touching the venv's own cache — see AGENTS.md on not
-# hand-deleting __pycache__ trees.
-#
 # Usage (from the repo root, in PowerShell or bash on Windows):
 #   scripts/run-resume-benchmark.sh
 #   scripts/run-resume-benchmark.sh --case naukri_ashishpandey_3y_6m__dac285 --show
@@ -27,8 +19,7 @@ PROJECT_DIR_WSL="/mnt/d/Projects/HR-Intelligence-Platform"
 # Already inside WSL/Linux (e.g. CI) — skip the wsl.exe hop and run directly.
 if [ "$(uname -s 2>/dev/null)" = "Linux" ]; then
   cd "$(dirname "$0")/.."
-  exec env PYTHONPATH=apps/backend PYTHONPYCACHEPREFIX=/tmp/hcip_pycache \
-    ./apps/backend/venv/bin/python \
+  exec env PYTHONPATH=apps/backend ./apps/backend/venv/bin/python \
     ai/eval/resume_benchmark/run_benchmark.py --workers 4 "$@"
 fi
 
@@ -38,4 +29,4 @@ for arg in "$@"; do
   REMOTE_ARGS="$REMOTE_ARGS $(printf '%q' "$arg")"
 done
 
-exec wsl -d "$WSL_DISTRO" -- bash -lc "cd '$PROJECT_DIR_WSL' && PYTHONPATH=apps/backend PYTHONPYCACHEPREFIX=/tmp/hcip_pycache ./apps/backend/venv/bin/python ai/eval/resume_benchmark/run_benchmark.py --workers 4$REMOTE_ARGS"
+exec wsl -d "$WSL_DISTRO" -- bash -lc "cd '$PROJECT_DIR_WSL' && PYTHONPATH=apps/backend ./apps/backend/venv/bin/python ai/eval/resume_benchmark/run_benchmark.py --workers 4$REMOTE_ARGS"

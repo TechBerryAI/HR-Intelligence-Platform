@@ -2,19 +2,19 @@
 # Regenerate after a verified improvement:
 #   python ai/eval/resume_benchmark/run_benchmark.py --set-baseline --write-thresholds
 overall:
-  mean_field_score: 0.7213
-  mean_case_accuracy: 0.7257
+  mean_field_score: 0.7352
+  mean_case_accuracy: 0.7387
   max_cases_failed: 0
 
 fields:
-  fullName: 0.73
+  fullName: 0.7808
   email: 0.9274
   phone: 0.9628
-  currentLocation: 0.605
+  currentLocation: 0.6519
   linkedinUrl: 0.4467
-  experienceLevel: 0.7963
-  skills: 0.5295
-  summary: 0.7806
-  education: 0.7417
-  experiences: 0.5865
+  experienceLevel: 0.8167
+  skills: 0.5347
+  summary: 0.7885
+  education: 0.7454
+  experiences: 0.5898
   certifications: 0.2911

@@ -61,6 +61,13 @@ RESUME_FORM_MAPPING_GRAPH: dict[str, str] = {
 }
 
 
+_INTERNSHIP_ROLE_RE = re.compile(r'(?i)\b(?:intern(?:ship)?|trainee|apprentice)\b')
+
+
+def _is_internship_only_experience(exp_rows: list) -> bool:
+    return all(_INTERNSHIP_ROLE_RE.search(f'{e.role} {e.company}') for e in exp_rows)
+
+
 def _meta_source(profile: CandidateProfile, path: str, default: str = 'canonical') -> str:
     meta = profile.field_meta or {}
     entry = meta.get(path)
@@ -232,8 +239,20 @@ def map_candidate_to_form(
 
     # experienceLevel: derived solely from total_experience_years OR experience length
     years = profile.total_experience_years
-    has_exp = len([e for e in profile.experience if e.company or e.role]) > 0
-    if years is not None and years > 0:
+    exp_rows = [e for e in profile.experience if e.company or e.role]
+    has_exp = len(exp_rows) > 0
+    internship_only = has_exp and _is_internship_only_experience(exp_rows)
+    if internship_only:
+        # Internship/trainee-only history is not full-time experience, even
+        # when its date range makes total_experience_years > 0. The live
+        # Apply form only offers 'fresher'/'experienced' (no 'intern'
+        # option), so this maps to 'fresher' rather than inventing a third
+        # value the UI cannot render.
+        experience_level = 'fresher'
+        el_reason = 'experience[] internship-only'
+        el_path = 'experience[]'
+        el_conf = 0.7
+    elif years is not None and years > 0:
         experience_level = 'experienced'
         el_reason = f'total_experience_years={years}'
         el_path = 'total_experience_years'

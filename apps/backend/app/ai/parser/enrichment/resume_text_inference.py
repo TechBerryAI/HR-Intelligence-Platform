@@ -6,47 +6,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from difflib import SequenceMatcher
 from typing import Any
-
-
-# Canonical forms of the category-prefix words matched exactly in
-# filter_skill_items. Used as a fuzzy fallback so a misspelled label
-# ("Languges :", "Databse :") still gets peeled off instead of leaking into
-# the skill list as a garbage token — resumes are hand-typed and typo rates
-# in section labels are non-trivial in the gold corpus.
-_SKILL_CATEGORY_LABEL_WORDS = (
-    'core', 'language', 'languages', 'framework', 'frameworks', 'database',
-    'databases', 'tool', 'tools', 'technology', 'technologies', 'programming',
-    'programmes', 'os', 'operating', 'systems', 'soft', 'skills', 'skill',
-    'technical', 'used', 'special', 'software',
-)
-
-
-def _fuzzy_matches_category_word(word: str) -> bool:
-    w = re.sub(r'[^a-z]', '', word.lower())
-    if not w or len(w) < 2:
-        return False
-    if w in _SKILL_CATEGORY_LABEL_WORDS:
-        return True
-    best = max(SequenceMatcher(None, w, cat).ratio() for cat in _SKILL_CATEGORY_LABEL_WORDS)
-    return best >= 0.82
-
-
-def _looks_like_skill_category_label(label: str) -> bool:
-    """Fuzzy match a short pre-colon label against known skill-category words.
-
-    Category labels are almost always "<qualifier> <category noun>" (e.g.
-    "Operating Systems", "GUI Tools", "Scripting Language"), so only the last
-    word has to match a known category word (typo tolerant); a leading
-    qualifier does not itself have to look like a category term. Real
-    skill/tool names ("AWS", "Docker") still do not match this, since they
-    are not immediately followed by a fuzzy-category word before the colon.
-    """
-    words = [w for w in re.split(r'\s+', label.strip()) if w]
-    if not (1 <= len(words) <= 3):
-        return False
-    return _fuzzy_matches_category_word(words[-1])
 
 
 SKILL_SECTION_STOP = (
@@ -60,15 +20,8 @@ SKILL_SECTION_STOP = (
     r'career\s+summary|summary|objective|profile|about\s+me'
 )
 
-# PDFs built with Wingdings/Symbol bullet fonts often extract bullet glyphs into
-# the Unicode private-use area (e.g. \uf0b7) instead of a normal '•'. \s* alone
-# does not skip those, so a bulleted heading like "\uf0b7 Certification :" was
-# invisible to the stop-boundary lookahead below and the whole rest of the
-# document (job history, dates, everything) got swallowed into the skills list.
-_HEADING_BULLET_PREFIX = r'[\s•·\-\*●➢\uf0b7\uf0a7\uf06c\uf0d8]*'
-
 SKILL_SECTION_PATTERN = re.compile(
-    r'(?i)(?:^|\n)' + _HEADING_BULLET_PREFIX + r'(?:\*\*)?(?:'
+    r'(?i)(?:^|\n)\s*(?:\*\*)?(?:'
     r'technical\s+proficiency|technical\s+expertise|technical\s+knowledge|'
     r'technical\s+skills?(?:\s*(?:and|&)\s*tools?)?|technicalskill|soft\s+skills?|'
     r'professional\s+skills?|relevant\s+skills?|additional\s+skills?|'
@@ -77,7 +30,7 @@ SKILL_SECTION_PATTERN = re.compile(
     r'skills?\s+and\s+abilities|skills?\s+&\s+abilities|'
     r'tech\s+stack|programming\s+languages?|'
     r'skills?\b|tools?\b|technologies?\b|frameworks?\b|competencies?\b|expertise\b'
-    r')(?:\*\*)?\s*:?\s*([\s\S]*?)(?=\n' + _HEADING_BULLET_PREFIX + r'(?:\*\*)?(?:' + SKILL_SECTION_STOP + r')\b|\Z)',
+    r')(?:\*\*)?\s*:?\s*([\s\S]*?)(?=\n\s*(?:\*\*)?(?:' + SKILL_SECTION_STOP + r')\b|\Z)',
 )
 
 # Priority order for summary / objective section headings (highest first).
@@ -143,8 +96,7 @@ CERT_SECTION_PATTERN = re.compile(
 SECTION_HEADERS = frozenset({
     'summary', 'objective', 'profile', 'experience', 'work experience',
     'workexperience', 'professionalexperience',
-    'professional experience', 'employment', 'employment history',
-    'employee history', 'employment details', 'employment record', 'education',
+    'professional experience', 'employment', 'employment history', 'education',
     'skills', 'technical skills',
     'technical skill', 'technicalskill', 'soft skills', 'softskills',
     'core skills', 'core skill', 'key skills', 'key skill',
@@ -481,6 +433,15 @@ _PLACE_NAME_BLOCKLIST = frozenset({
     'singapore', 'dubai', 'berlin',
 })
 
+# Indian state/region words that, combined with a city, form a "City State"
+# location line sometimes misread as a two-word person name (e.g. a resume's
+# address line "Mumbai Maharashtra" sitting where a name is expected).
+_PLACE_REGION_BLOCKLIST = frozenset({
+    'maharashtra', 'karnataka', 'telangana', 'tamilnadu', 'kerala', 'gujarat',
+    'rajasthan', 'punjab', 'haryana', 'bihar', 'jharkhand', 'odisha', 'assam',
+    'goa', 'uttarakhand', 'chhattisgarh',
+})
+
 # Document / section titles that must never become a person's full_name.
 _DOCUMENT_TITLE_NAMES = frozenset({
     'overview', 'role overview', 'resume', 'curriculum vitae', 'cv',
@@ -532,6 +493,11 @@ def is_plausible_person_name(name: str | None) -> bool:
         'english', 'hindi', 'marathi', 'tamil', 'telugu', 'kannada', 'gujarati',
         'bengali', 'urdu', 'punjabi', 'malayalam', 'odia', 'french', 'german',
         'spanish', 'japanese', 'korean', 'chinese',
+        # Naukri.com export template label / other section-adjacent labels
+        # occasionally sitting where a name-detector expects the candidate's
+        # actual name (e.g. a "Source: Naukri.com" provenance line).
+        'source', 'synopsis', 'key impact areas', 'team work', 'personal info',
+        'language',
     }:
         return False
     if is_document_title_line(t):
@@ -539,6 +505,13 @@ def is_plausible_person_name(name: str | None) -> bool:
     if t.lower() in _JOB_TITLE_NAME_BLOCKLIST:
         return False
     if t.lower() in _PLACE_NAME_BLOCKLIST:
+        return False
+    # "City State" location lines (e.g. "Mumbai Maharashtra") where every word
+    # is individually place-like, not just the first.
+    _place_words = t.lower().split()
+    if len(_place_words) >= 2 and all(
+        w in _PLACE_NAME_BLOCKLIST or w in _PLACE_REGION_BLOCKLIST for w in _place_words
+    ):
         return False
     if is_biodata_or_address_line(t):
         return False
@@ -1004,7 +977,7 @@ def filter_skill_items(skills: list[str], max_items: int = 40) -> list[str]:
         raw = (s or '').strip()
         if not raw:
             continue
-        raw = re.sub(r'^[\s•·\-\*●➢\uf0d8\uf06c\uf0b7]+', '', raw).strip()
+        raw = re.sub(r'^[\s•·\-\*●➢]+', '', raw).strip()
         if not raw:
             continue
         cat = re.match(
@@ -1018,12 +991,6 @@ def filter_skill_items(skills: list[str], max_items: int = 40) -> list[str]:
             raw = (cat.group(2) or '').strip()
             if not raw:
                 continue
-        else:
-            fuzzy = re.match(r'^([A-Za-z][A-Za-z\s]{1,24}?)\s*:\s*(.+)$', raw)
-            if fuzzy and _looks_like_skill_category_label(fuzzy.group(1)):
-                raw = (fuzzy.group(2) or '').strip()
-                if not raw:
-                    continue
         raw = _TRAILING_SKILL_CATEGORY.sub('', raw).strip()
         raw = re.sub(r'(?i)\bc\s+#', 'C#', raw)
         if not raw:
@@ -1882,15 +1849,7 @@ def _is_structural_section_heading(cleaned: str, words: list[str]) -> bool:
 
 
 def is_section_header_line(line: str) -> bool:
-    # \uf0b7 / \uf0a7 / \uf06c / \uf0d8: Wingdings/Symbol-font bullet glyphs
-    # that some PDF extractors emit in the Unicode private-use area instead of
-    # a normal '•'. Left unstripped, a bulleted heading line never matches
-    # SECTION_HEADERS below, so the section-boundary logic that depends on
-    # this function (skills/education/experience splitting) fails to see it
-    # as a boundary at all and swallows everything after it.
-    cleaned = re.sub(
-        r'^[\s#*•\-_=\uf0b7\uf0a7\uf06c\uf0d8]+|[\s#:_\-=]+$', '', (line or '').strip()
-    ).strip()
+    cleaned = re.sub(r'^[\s#*•\-_=]+|[\s#:_\-=]+$', '', (line or '').strip()).strip()
     if not cleaned:
         return True
     # Word decorative headers: ___CAREER OBJECTIVE___
@@ -2896,39 +2855,6 @@ def identity_is_employer_value(value: str | None, identity_names: set[str] | Non
     return True
 
 
-def _rejoin_wrapped_colon_labels(text: str) -> str:
-    """Join a bare label line with a following ': value' line.
-
-    Table-layout PDFs sometimes wrap a "Category" cell and its ": items" cell
-    onto separate text lines (e.g. "Languges" / ": C, SQL, pg/plsql"). Left
-    split, the label leaks into the output as a garbage token instead of
-    being recognized and peeled by the category-prefix logic in
-    ``filter_skill_items``, which expects "Label : items" on one line.
-    """
-    if not text:
-        return text or ''
-    lines = text.split('\n')
-    out: list[str] = []
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        nxt = lines[i + 1] if i + 1 < len(lines) else None
-        stripped = line.strip()
-        if (
-            nxt is not None
-            and stripped
-            and ':' not in stripped
-            and len(stripped.split()) <= 4
-            and nxt.strip().startswith(':')
-        ):
-            out.append(f'{line.rstrip()} {nxt.strip()}')
-            i += 2
-            continue
-        out.append(line)
-        i += 1
-    return '\n'.join(out)
-
-
 def extract_skills_from_text(
     text: str,
     max_items: int = 40,
@@ -2942,7 +2868,6 @@ def extract_skills_from_text(
     """
     if not text:
         return []
-    text = _rejoin_wrapped_colon_labels(text)
     skills: list[str] = []
 
     for match in SKILL_SECTION_PATTERN.finditer(text):
@@ -3930,6 +3855,11 @@ def _extract_experience_highlights_summary(text: str, max_len: int = 900) -> str
     return normalized
 
 
+_GENERIC_OBJECTIVE_LINE_RE = re.compile(
+    r'(?i)^(?:to\s+obtain|seeking)\b.{0,100}\b(?:position|opportunity|role)\b'
+)
+
+
 def _extract_unlabeled_intro_summary(text: str, max_len: int = 2000) -> str:
     """
     Capture intro prose before the first real section header.
@@ -4005,6 +3935,18 @@ def _extract_unlabeled_intro_summary(text: str, max_len: int = 2000) -> str:
         return ''
     if re.search(r'(?i)utm_source|erp\s+platforms?|\btools\s*:', normalized):
         return ''
+    # A generic "To obtain a position..." objective line is sometimes stacked
+    # directly above the real, more specific profile blurb with no heading
+    # between them (common Naukri-style layout). Prefer the richer paragraph
+    # that follows when this one is thin or reads as pure boilerplate.
+    if len(normalized) < 100 or _GENERIC_OBJECTIVE_LINE_RE.search(normalized):
+        last_line = collected[-1]
+        cut = text.find(last_line)
+        if cut != -1:
+            remainder = text[cut + len(last_line):]
+            richer = _extract_unlabeled_intro_summary(remainder, max_len=max_len)
+            if richer and len(richer) >= len(normalized) + 20:
+                return richer
     return normalized
 
 
@@ -4196,6 +4138,9 @@ def _text_has_known_city(text: str, *, exact_or_word: bool = True) -> bool:
     return False
 
 
+_LOCATION_LOWERCASE_JOINER = frozenset({'of', 'de', 'da', 'el', 'al', 'van', 'von'})
+
+
 def _looks_like_location_phrase(value: str) -> bool:
     """True for place-shaped strings; false for Name:/duty lines that merely mention a city."""
     s = (value or '').strip()
@@ -4216,10 +4161,27 @@ def _looks_like_location_phrase(value: str) -> bool:
         return False
     if _is_person_name_not_place(s):
         return False
-    if len(s.split()) > 6:
+    words = s.split()
+    if len(words) > 6:
         return False
     if _LOCATION_TECH_NOISE.search(s) or _LOCATION_PROSE_NOISE.search(s):
         return False
+    # Real place names are Title-Case, not prose: a word that starts lowercase
+    # and isn't a common geographic joiner ("of", "de", ...) means this is a
+    # sentence fragment ("and system health.") that merely cleared the noise
+    # blocklists, not an address.
+    for w in words:
+        core = w.strip('.,')
+        if not core or not core[0].isalpha():
+            continue
+        if core.lower() in _LOCATION_LOWERCASE_JOINER:
+            continue
+        if not core[0].isupper():
+            return False
+        # Short ALL-CAPS tokens are tech/skill acronyms (OS, SD, AWS), not
+        # place names, in this Indian-resume corpus.
+        if core.isupper() and len(core) <= 3:
+            return False
     return True
 
 
