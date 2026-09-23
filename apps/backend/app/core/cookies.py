@@ -15,6 +15,14 @@ back as the ``X-CSRF-Token`` header on state-changing requests, and
 ``csrf_ok`` checks the two match. This is defense in depth on top of
 ``SameSite=Lax``, which already blocks the cookie from attaching to a
 cross-site fetch/XHR in the first place.
+
+``csrf_ok`` is enforced by ``authenticate_token``/``optional_authenticate_token``
+(``app/api/middleware/auth.py``) for every route that uses them. ``/api/refresh``
+and ``/api/logout`` read ``REFRESH_COOKIE_NAME`` directly instead of going
+through those decorators, so they are *not* CSRF-checked — deliberately: both
+rely on ``SameSite=Lax`` alone, since their worst-case CSRF outcome has no
+attacker-exploitable impact (the response — new tokens, or a logout — only
+ever reaches the victim's own browser, never the attacker's page).
 """
 from __future__ import annotations
 
@@ -72,22 +80,20 @@ def clear_auth_cookies(response: Response) -> None:
     """Expire all three cookies (e.g. on logout). Harmless no-op for a caller
     that never had them (Electron)."""
     for name in (ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME, CSRF_COOKIE_NAME):
-        response.set_cookie(
-            name,
-            "",
-            max_age=0,
-            path=_COOKIE_PATH,
-            secure=COOKIE_SECURE,
-            httponly=(name != CSRF_COOKIE_NAME),
-            samesite="Lax",
-        )
+        _set(response, name, "", max_age=0, http_only=(name != CSRF_COOKIE_NAME))
 
 
 def extract_access_token(request: Request) -> tuple[str | None, str]:
     """Return (token, source). Cookie takes precedence over the Authorization
     header; source is 'cookie' or 'header' so callers can decide whether a
     CSRF check applies (a Bearer header is never auto-attached cross-site by
-    a browser, so it needs no CSRF check — only the cookie path does)."""
+    a browser, so it needs no CSRF check — only the cookie path does).
+
+    Cookie wins when both are present. Do not flip this to "header wins": the
+    web frontend's own api.js still attaches its in-memory token as a Bearer
+    header alongside the cookie (a harmless fallback for Electron's sake), so
+    header-first precedence would classify the web client's own requests as
+    source='header' and silently skip the CSRF check meant to protect it."""
     cookie_token = request.cookies.get(ACCESS_COOKIE_NAME)
     if cookie_token:
         return cookie_token, "cookie"

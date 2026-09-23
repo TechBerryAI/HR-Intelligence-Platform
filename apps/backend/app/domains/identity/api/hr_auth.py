@@ -58,12 +58,19 @@ def _otp_rate_limited(email: str) -> bool:
         _OTP_RATE_LIMIT,
         _OTP_RATE_WINDOW_SEC,
     )
+    if per_ip:
+        # Already blocked on the per-IP bucket — skip the second store round
+        # trip. Safe to short-circuit: a retry storm from one blocked IP was
+        # never going to be the multi-IP-distribution case this bucket exists
+        # to catch (those come from fresh, not-yet-blocked IPs, which still
+        # reach and increment this bucket normally).
+        return True
     per_email = shared_store.rate_limit_hit(
         f'otp:any-ip:{email}',
         _OTP_RATE_LIMIT_PER_EMAIL,
         _OTP_RATE_WINDOW_SEC,
     )
-    return per_ip or per_email
+    return per_email
 
 ALLOWED_PASSWORD_RESET_DOMAINS_RAW = (
     os.getenv('ALLOWED_PASSWORD_RESET_DOMAINS')
