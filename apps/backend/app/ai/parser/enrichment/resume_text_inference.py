@@ -2690,6 +2690,20 @@ def extract_name_from_text(text: str) -> str:
         joined = join_spaced_letter_name(stripped)
         nxt = early_lines[idx + 1] if idx + 1 < len(early_lines) else ''
         nxt_joined = join_spaced_letter_name(nxt) if nxt else ''
+        # A letter-spaced job title directly below a letter-spaced name
+        # ("C A T H L E E N F E R R E I R A" / "M A R K E T I N G M A N A G
+        # E R") must not be folded into the name — join_spaced_letter_name
+        # fuses each line into one run-together word, so the usual
+        # word-boundary job-title check can't see "manager" inside
+        # "marketingmanager"; check the letter-spaced source with spaces
+        # stripped instead.
+        if nxt_joined and re.search(
+            r'(?i)(?:manager|engineer|developer|analyst|administrator|'
+            r'executive|consultant|specialist|officer|director|designer|'
+            r'coordinator|recruiter|marketing|accountant|technician)',
+            re.sub(r'\s+', '', nxt),
+        ):
+            nxt_joined = ''
         if joined and nxt_joined:
             combined = f'{joined} {nxt_joined}'.strip()
             if is_plausible_person_name(combined) and not is_section_header_line(combined):
@@ -4198,6 +4212,14 @@ def _is_person_name_not_place(value: str) -> bool:
         return False
 
 
+_EMPLOYER_LINE_CUE = re.compile(
+    r'(?i)\b(?:worked|working|company|employer|client|university|college|'
+    r'pvt\.?\s*ltd|private\s+limited|limited|llp|inc\.?|corp\.?|'
+    r'solutions|technologies|technology|systems|services|consultancy|'
+    r'infotech|softwares?)\b'
+)
+
+
 def _line_supports_city_token(line: str, city: str) -> bool:
     """Allow city hit only on place-like lines, not 'Kalyani Borse' name headers."""
     stripped = (line or '').strip()
@@ -4207,6 +4229,17 @@ def _line_supports_city_token(line: str, city: str) -> bool:
         return False
     if _is_person_name_not_place(stripped):
         return False
+    # An employer/company name that merely happens to include a city
+    # ("Softenger India Private Limited Pune") is not the candidate's
+    # address, even though it is short and not person-name-shaped.
+    if _EMPLOYER_LINE_CUE.search(stripped):
+        return False
+    # Note: "Place: <city>" is intentionally NOT excluded here. It is a
+    # Declaration-block signature line (where the document was signed) more
+    # often than not, but gold data in this corpus shows it is sometimes the
+    # candidate's actual current city too — net evidence favors keeping it as
+    # a signal. The caller already strips it when a literal "Declaration"
+    # heading is present nearby (see _has_declaration above).
     low = stripped.lower()
     cl = city.lower()
     if low == cl:
@@ -4287,18 +4320,21 @@ def peel_location_from_structured(
     for e in education or []:
         if not isinstance(e, dict):
             continue
-        blob = ' '.join(
-            str(e.get(k) or '')
-            for k in ('institution', 'university', 'college', 'location', 'degree', 'field')
-        )
-        if not blob.strip():
+        # A labeled location field on the education entry (rare, but genuine)
+        # is a usable signal; the institution/degree/field text is not — a
+        # college's city ("Savitribai Phule Pune University") is where the
+        # candidate studied, not necessarily where they currently live, so it
+        # is deliberately never scanned for a city name here.
+        loc = str(e.get('location') or '').strip()
+        if not loc:
             continue
+        healed = heal_location_candidate(loc)
+        cand = canonicalize_location_city(healed or loc)
+        if cand and is_plausible_location_value(cand):
+            return cand
         for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
-            if re.search(rf'(?i)\b{re.escape(city)}\b', blob):
+            if re.search(rf'(?i)\b{re.escape(city)}\b', loc):
                 return canonicalize_location_city(city)
-        for pat, city in _INSTITUTE_CITY_PEEL:
-            if pat.search(blob):
-                return city
 
     head = '\n'.join((raw_text or '').splitlines()[:12])
     for pat, city in _INSTITUTE_CITY_PEEL:
@@ -4477,8 +4513,11 @@ def extract_location_from_text(text: str) -> str:
 
     header = text[:800]
     patterns = [
-        # Require delimiter after label to avoid "…location … skills…" prose
-        r'(?i)(?:(?:permanent|present|current|residential|correspondence|mailing)\s+)?'
+        # Require delimiter after label to avoid "…location … skills…" prose.
+        # "Permanent" is deliberately excluded here — a permanent/hometown
+        # address is not necessarily where the candidate currently lives, so
+        # it is only used as a late, lower-priority fallback below.
+        r'(?i)(?:(?:present|current|residential|correspondence|mailing)\s+)?'
         r'(?:location|current\s*location|address|city|based\s+in|place|residence|'
         r'residing\s+(?:in|at))\s*[:\-–—]\s*([^\n]+)',
         r'\b([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*),\s*([A-Z]{2})\b',
@@ -4504,9 +4543,11 @@ def extract_location_from_text(text: str) -> str:
         if cleaned and is_plausible_location_value(cleaned):
             return cleaned
 
-    # Full-document labeled permanent/present address (often below Experience)
+    # Full-document labeled present/current address (often below Experience).
+    # "Permanent" excluded here too — see note above; tried only as a last
+    # resort further down, after every other signal has failed.
     m_perm = re.search(
-        r'(?im)^(?:\*\*)?(?:(?:permanent|present|current|residential|correspondence|mailing)\s+)?'
+        r'(?im)^(?:\*\*)?(?:(?:present|current|residential|correspondence|mailing)\s+)?'
         r'(?:address|location)\s*[:\-–—]\s*(.+?)\s*$',
         text or '',
     )
@@ -4547,12 +4588,17 @@ def extract_location_from_text(text: str) -> str:
         if is_plausible_location_value(loc):
             return loc[:80]
 
-    # Prefer known cities in the contact header over job-line "Remote"
-    # "Place: <city>" inside a Declaration block names where the candidate
-    # signed the document, not where they live — never a location signal.
-    _has_declaration = bool(re.search(r'(?i)\bdeclaration\b', text or ''))
+    # Prefer known cities in the contact header over job-line "Remote".
+    # "Place: <city>" in a Declaration block is usually where the candidate
+    # currently is (gold data in this corpus treats it as valid more often
+    # than not) — UNLESS the document also gives a separate, explicit
+    # "Address:" line, in which case that's the real address and "Place:"
+    # is just where the document happened to be signed.
+    _has_conflicting_address = bool(
+        re.search(r'(?im)^\s*address\s*[:\-–—]', text or '')
+    )
     for window in (header, text[:5000]):
-        if _has_declaration:
+        if _has_conflicting_address:
             window = '\n'.join(
                 ln for ln in window.splitlines()
                 if not re.match(r'(?i)^\s*place\s*[:\-]', ln)
@@ -4560,21 +4606,69 @@ def extract_location_from_text(text: str) -> str:
         for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
             if not re.search(rf'(?i)\b{re.escape(city)}\b', window):
                 continue
-            for line in window.splitlines():
+            win_lines = window.splitlines()
+            for idx, raw_line in enumerate(win_lines):
+                # A run of 3+ spaces inside an otherwise-short line is a
+                # merged-column artifact (two PDF columns flattened onto one
+                # text line) — keep only the labeled segment before it,
+                # e.g. "PLACE: Mumbai<lots of spaces>Mr. Yogesh Marathe".
+                line = re.split(r' {3,}', raw_line, maxsplit=1)[0] if re.match(
+                    r'(?i)^\s*(?:place|location|address|city)\s*[:\-–—]', raw_line
+                ) else raw_line
                 if not _line_supports_city_token(line, city):
                     continue
                 if len(line.strip()) > 100 or '@' in line:
                     continue
                 if _LOCATION_TECH_NOISE.search(line) and city.lower() not in line.lower():
                     continue
+                # A bare city-only line ("Bangalore") directly under a company
+                # name is that job's location, not the candidate's — check the
+                # previous non-blank line before accepting it.
+                if line.strip().lower() == city.lower():
+                    prev = ''
+                    for back in range(1, idx + 1):
+                        cand = win_lines[idx - back].strip()
+                        if cand:
+                            prev = cand
+                            break
+                    if prev and (
+                        _EMPLOYER_LINE_CUE.search(prev)
+                        or extract_date_range_from_line(prev)[0]
+                    ):
+                        continue
                 cleaned = _clean_loc(line)
                 if cleaned and is_plausible_location_value(cleaned):
                     if len(cleaned) > 60:
                         return canonicalize_location_city(city)
                     return cleaned
-            # Bare allowlisted city token present in header window
-            if re.search(rf'(?im)^\s*{re.escape(city)}\s*$', window) or re.search(
-                rf'(?i)(?:location|address|based\s+in|city)\s*[:\-–—]\s*[^\n]*\b{re.escape(city)}\b',
+            # Bare allowlisted city token present in header window. A bare city
+            # line directly under a company name ("Megac Technologies Pvt
+            # Ltd." / "Bangalore") is that job's location, not the
+            # candidate's — check the previous non-blank line before
+            # accepting.
+            win_lines = window.splitlines()
+            bare_city_ok = False
+            for idx, ln in enumerate(win_lines):
+                if not re.fullmatch(rf'(?i)\s*{re.escape(city)}\s*', ln):
+                    continue
+                prev = ''
+                for back in range(1, idx + 1):
+                    cand = win_lines[idx - back].strip()
+                    if cand:
+                        prev = cand
+                        break
+                if prev and (
+                    _EMPLOYER_LINE_CUE.search(prev)
+                    or extract_date_range_from_line(prev)[0]
+                ):
+                    continue
+                bare_city_ok = True
+                break
+            # Line-anchored so "Permanent Address: ... Mumbai" cannot match via
+            # the bare "address" substring — a permanent/hometown address is
+            # not the candidate's current location.
+            if bare_city_ok or re.search(
+                rf'(?im)^\s*(?:location|address|based\s+in|city)\s*[:\-–—]\s*[^\n]*\b{re.escape(city)}\b',
                 window,
             ):
                 return canonicalize_location_city(city)
@@ -4635,6 +4729,11 @@ def extract_location_from_text(text: str) -> str:
     # Country-only last resort when clearly labeled
     if re.search(r'(?i)(?:^|\n)\s*India\s*(?:\n|$)', text[:600]):
         return 'India'
+
+    # Note: a "Permanent Address" is deliberately never used as
+    # currentLocation, even as a last resort — it is where the candidate is
+    # from, not necessarily where they currently live, and gold data treats
+    # a resume with only a permanent address as having no current location.
 
     # Last resort: a relocated header/contact box (bordered frame the
     # extractor read out of order) still has its address line right above
