@@ -58,10 +58,19 @@ Expected columns:
 
 ## Measure
 
-**Run it with the backend's own interpreter.** Some resumes in the corpus are
-scanned or image-only and yield text only through OCR, and the OCR engine
-(RapidOCR) lives in `apps/backend/venv` — a WSL virtualenv on this machine, not
-the Windows Python:
+```bash
+scripts/run-resume-benchmark.sh
+```
+
+This is the short form. Under the hood it must **run with the backend's own
+interpreter**: some resumes in the corpus are scanned or image-only and yield
+text only through OCR, and the OCR engine (RapidOCR) lives in
+`apps/backend/venv` — a WSL virtualenv on this machine, not the Windows Python.
+The wrapper handles that WSL/venv/`PYTHONPATH` plumbing; any flags you pass to
+it (see the table below) are forwarded to `run_benchmark.py` as-is, e.g.
+`scripts/run-resume-benchmark.sh --case <id> --show` or
+`scripts/run-resume-benchmark.sh --gate`. The equivalent raw command, if you
+ever need to bypass the wrapper:
 
 ```bash
 wsl -d Ubuntu -- bash -lc 'cd /mnt/d/Projects/HR-Intelligence-Platform && PYTHONPATH=apps/backend ./apps/backend/venv/bin/python ai/eval/resume_benchmark/run_benchmark.py --workers 4'

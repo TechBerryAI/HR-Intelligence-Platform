@@ -910,6 +910,20 @@ def _looks_like_institution_line(line: str) -> bool:
     return False
 
 
+_EDU_TABLE_HEADER_WORD_RE = re.compile(
+    r'(?i)^(?:school|college|course|percentage|institute|university|board|'
+    r'year|marks?|grade|name|degree|institution)$'
+)
+
+
+def _looks_like_edu_table_header(value: str) -> bool:
+    """True for literal column-header phrasing ('Institute University/Board Year')."""
+    words = re.findall(r'[A-Za-z]+', value or '')
+    if len(words) < 2:
+        return False
+    return all(_EDU_TABLE_HEADER_WORD_RE.match(w) for w in words)
+
+
 def _education_field_is_junk(value: str) -> bool:
     s = (value or '').strip().lstrip(':').strip()
     if not s:
@@ -923,6 +937,14 @@ def _education_field_is_junk(value: str) -> bool:
     if looks_like_email_or_url(s) or looks_like_phone_token(s):
         return True
     if '@' in s:
+        return True
+    if _looks_like_edu_table_header(s):
+        return True
+    # Job-title text (e.g. "Senior Associate Attorney", "Azure Administrator
+    # Associate AZ-104") leaking in from an adjacent Experience/Certifications
+    # section is not a degree, even though it can superficially pass other
+    # degree-line checks.
+    if _has_job_title_cue(s) and not _looks_like_degree_line(s):
         return True
     return False
 

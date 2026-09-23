@@ -186,3 +186,32 @@ def test_list_containing_a_nested_list_round_trips():
 def test_list_of_lists_round_trips():
     doc = {'matrix': [[1, 2], [3, 4]]}
     assert toon_loads(toon_dumps(doc)) == doc
+
+
+def test_three_level_nested_list_round_trips():
+    """A list of lists of lists must not collapse an inner list into a dict."""
+    doc = {'a': [[[1, 2]]]}
+    assert toon_loads(toon_dumps(doc)) == doc
+
+
+def test_mixed_list_alongside_dict_list_round_trips():
+    doc = {'items': [{'a': 1}, 'x'], 'rows': [{'a': '1', 'b': '2'}, {'a': '3'}]}
+    assert toon_loads(toon_dumps(doc)) == doc
+
+
+def test_top_level_numeric_string_key_does_not_crash():
+    """A field literally named e.g. "2020" must not be mistaken for a list index."""
+    assert toon_loads('2020: x') == {'2020': 'x'}
+
+
+def test_stray_dotted_sibling_after_a_table_does_not_crash():
+    """A hallucinated extra line reusing a table's key with a non-numeric next
+    segment (e.g. `experience.notes:` after an `experience[N]{...}:` table)
+    must degrade gracefully rather than raise, since the whole document would
+    otherwise fail to parse over one malformed line."""
+    doc = (
+        'experience[1]{title,company}:\n'
+        '  Analyst,Acme\n'
+        'experience.notes: some stray extra line\n'
+    )
+    assert toon_loads(doc) == {'experience': [{'title': 'Analyst', 'company': 'Acme'}]}

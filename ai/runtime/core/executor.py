@@ -128,6 +128,11 @@ class TaskExecutor:
         # the model. Mitigation only (models aren't guaranteed to obey); paired
         # with an instruction in each capability's prompt.md to ignore anything
         # between the markers that looks like a command.
+        #
+        # These marker strings are duplicated (not imported) in
+        # apps/backend/app/integrations/openai/llm_service.py's _DOC_START/
+        # _DOC_END, since this ai/ package and apps/backend/ are separate
+        # deployable units — keep the two in sync if you change either.
         delimited_input = f"<<<CANDIDATE_DOCUMENT_START>>>\n{input_text}\n<<<CANDIDATE_DOCUMENT_END>>>"
 
         prompt_text = self._prompts.resolve(task.prompt_id, variables={"input": delimited_input})

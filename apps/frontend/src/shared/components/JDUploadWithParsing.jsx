@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { uploadAndParseJDStream, takeJDFormDTO, validateFileForParsing, startParseClock, reportClientParseTiming } from '@/core/api/parsingApi.js';
+import { tokenService } from '@/core/auth/tokenService.js';
 import { hintForStage, isPipelineComplete, overlayCatchupMs, overlayGroupMsFromSpans, progressPctForStage, createStageClock, userFacingParseMessage } from '@/shared/utils/parsePipelineProgress.js';
 import PremiumUploadOverlay from './PremiumUploadOverlay';
 import { motion } from 'framer-motion';
@@ -51,8 +52,10 @@ export default function JDUploadWithParsing({ onAutofill, currentJobId }) {
     setParseSuccess('');
     setConfidence(null);
 
-    // Check if user is logged in (token stored as 'jwtToken')
-    const token = localStorage.getItem('jwtToken');
+    // Check if user is logged in. Auth is cookie-based now (see
+    // core/auth/tokenService.js) — localStorage no longer holds the token,
+    // so read the same in-memory source ResumeUploadWithParsing.jsx uses.
+    const token = tokenService.getToken();
     if (!token) {
       setParseError('🔒 Please log in first to use AI-powered job description parsing. You can still fill the form manually.');
       if (fileInputRef.current) {

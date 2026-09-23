@@ -385,10 +385,16 @@ export function AppProvider({ children }) {
           logoutRef.current()
           return
         }
-        setToken(storedToken)
       } else if (!storedToken) {
         return
       }
+
+      // Sync React state with the hydrated/refreshed token in every path that
+      // reaches here (Electron's secureStorage hydration included) — some
+      // callers (fetchApplicationsForJob, fetchAllApplications) read the
+      // `token` state directly rather than calling tokenService.getToken(),
+      // so leaving it stale would send those requests with an empty token.
+      setToken((prev) => (prev === storedToken ? prev : storedToken))
 
       const role = decodeJwtRole(storedToken)
       if (role === 'CANDIDATE') {

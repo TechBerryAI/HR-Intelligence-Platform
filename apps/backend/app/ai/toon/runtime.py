@@ -259,49 +259,53 @@ def _parse_list_count(path: str) -> tuple[str, int] | None:
     return path[:bracket], int(count_part)
 
 
+def _assign(container: Any, parts: list[str], value: Any) -> None:
+    """Recursively descend ``parts`` into ``container`` (a dict or list),
+    creating intermediate dicts/lists as needed, and set the leaf to
+    ``value``. Whether a given segment indexes a list or keys a dict is
+    decided by whether that segment (or, one level up, the *next* segment)
+    is numeric — so this generalizes to any depth of list/dict nesting,
+    not just one level (a list of lists of lists round-trips correctly,
+    not just a list of lists)."""
+    key = parts[0]
+    # A numeric segment means "index into a list" only when `container` is
+    # actually a list; a document that legitimately has a purely-numeric dict
+    # key at this position (e.g. a field literally named "2020") falls back
+    # to the dict branch instead of crashing on `container.append`/indexing.
+    is_index = key.isdigit() and isinstance(container, list)
+    if len(parts) == 1:
+        if is_index:
+            idx = int(key)
+            while len(container) <= idx:
+                container.append(None)
+            container[idx] = value
+        elif isinstance(container, dict):
+            container[key] = value
+        return
+    nxt_is_index = parts[1].isdigit()
+    if is_index:
+        idx = int(key)
+        while len(container) <= idx:
+            container.append(None)
+        if not isinstance(container[idx], (dict, list)):
+            container[idx] = [] if nxt_is_index else {}
+        _assign(container[idx], parts[1:], value)
+    elif isinstance(container, dict):
+        if not isinstance(container.get(key), (dict, list)):
+            container[key] = [] if nxt_is_index else {}
+        _assign(container[key], parts[1:], value)
+
+
 def _set_by_path(root: Dict[str, Any], path: str, value: Any) -> None:
     """Set value at path (dot-separated; numeric segments are list indices)."""
     parts = [p for p in path.split(".") if p]
     if not parts:
         return
-    cur: Any = root
-    i = 0
-    while i < len(parts) - 1:
-        seg = parts[i]
-        nxt = parts[i + 1]
-        if nxt.isdigit():
-            idx = int(nxt)
-            if isinstance(cur, dict) and seg not in cur:
-                cur[seg] = []
-            if isinstance(cur, dict):
-                arr = cur[seg]
-                if not isinstance(arr, list):
-                    arr = []
-                    cur[seg] = arr
-                while len(arr) <= idx:
-                    arr.append({})
-                if i + 1 == len(parts) - 1:
-                    # The numeric segment is the final path component: this
-                    # sets the list element itself (e.g. a bare scalar or a
-                    # nested list sitting alongside dicts in a mixed-type
-                    # list), not a field one level further inside it.
-                    arr[idx] = value
-                    return
-                cur = arr[idx]
-            i += 2
-            continue
-        if isinstance(cur, dict):
-            if seg not in cur:
-                cur[seg] = {}
-            cur = cur[seg]
-        i += 1
-    last = parts[-1]
-    if last.endswith("[0]"):
-        last = last.replace("[0]", "").strip()
-        if isinstance(cur, dict):
-            cur[last] = []
-    elif isinstance(cur, dict):
-        cur[last] = value
+    if parts[-1].endswith("[0]"):
+        # Explicit empty-list marker, e.g. "certifications[0]".
+        parts = parts[:-1] + [parts[-1].replace("[0]", "").strip()]
+        value = []
+    _assign(root, parts, value)
 
 
 def toon_loads(text: str) -> Dict[str, Any]:
