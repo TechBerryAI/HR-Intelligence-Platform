@@ -1905,9 +1905,12 @@ def _labeled_skill_values(full_text: str) -> list[str]:
 
 def parse_skills(section_text: str, full_text: str = '') -> list[SkillEntry]:
     from app.ai.document_intelligence.bullets import split_inline_bullets
-    from app.ai.parser.enrichment.resume_text_inference import skill_item_looks_like_prose
+    from app.ai.parser.enrichment.resume_text_inference import (
+        _rejoin_wrapped_colon_labels,
+        skill_item_looks_like_prose,
+    )
 
-    raw = split_inline_bullets(section_text or '').strip()
+    raw = split_inline_bullets(_rejoin_wrapped_colon_labels(section_text or '')).strip()
     identity = (extract_name_from_text(full_text) or '').strip().lower() if full_text else ''
     identity_names = document_identity_names(full_text) if full_text else set()
     if identity:

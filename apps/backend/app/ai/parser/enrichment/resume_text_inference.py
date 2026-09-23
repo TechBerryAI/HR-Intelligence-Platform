@@ -6,7 +6,47 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from difflib import SequenceMatcher
 from typing import Any
+
+
+# Canonical forms of the category-prefix words matched exactly in
+# filter_skill_items. Used as a fuzzy fallback so a misspelled label
+# ("Languges :", "Databse :") still gets peeled off instead of leaking into
+# the skill list as a garbage token — resumes are hand-typed and typo rates
+# in section labels are non-trivial in the gold corpus.
+_SKILL_CATEGORY_LABEL_WORDS = (
+    'core', 'language', 'languages', 'framework', 'frameworks', 'database',
+    'databases', 'tool', 'tools', 'technology', 'technologies', 'programming',
+    'programmes', 'os', 'operating', 'systems', 'soft', 'skills', 'skill',
+    'technical', 'used', 'special', 'software',
+)
+
+
+def _fuzzy_matches_category_word(word: str) -> bool:
+    w = re.sub(r'[^a-z]', '', word.lower())
+    if not w or len(w) < 2:
+        return False
+    if w in _SKILL_CATEGORY_LABEL_WORDS:
+        return True
+    best = max(SequenceMatcher(None, w, cat).ratio() for cat in _SKILL_CATEGORY_LABEL_WORDS)
+    return best >= 0.82
+
+
+def _looks_like_skill_category_label(label: str) -> bool:
+    """Fuzzy match a short pre-colon label against known skill-category words.
+
+    Category labels are almost always "<qualifier> <category noun>" (e.g.
+    "Operating Systems", "GUI Tools", "Scripting Language"), so only the last
+    word has to match a known category word (typo tolerant); a leading
+    qualifier does not itself have to look like a category term. Real
+    skill/tool names ("AWS", "Docker") still do not match this, since they
+    are not immediately followed by a fuzzy-category word before the colon.
+    """
+    words = [w for w in re.split(r'\s+', label.strip()) if w]
+    if not (1 <= len(words) <= 3):
+        return False
+    return _fuzzy_matches_category_word(words[-1])
 
 
 SKILL_SECTION_STOP = (
@@ -20,8 +60,15 @@ SKILL_SECTION_STOP = (
     r'career\s+summary|summary|objective|profile|about\s+me'
 )
 
+# PDFs built with Wingdings/Symbol bullet fonts often extract bullet glyphs into
+# the Unicode private-use area (e.g. \uf0b7) instead of a normal '•'. \s* alone
+# does not skip those, so a bulleted heading like "\uf0b7 Certification :" was
+# invisible to the stop-boundary lookahead below and the whole rest of the
+# document (job history, dates, everything) got swallowed into the skills list.
+_HEADING_BULLET_PREFIX = r'[\s•·\-\*●➢\uf0b7\uf0a7\uf06c\uf0d8]*'
+
 SKILL_SECTION_PATTERN = re.compile(
-    r'(?i)(?:^|\n)\s*(?:\*\*)?(?:'
+    r'(?i)(?:^|\n)' + _HEADING_BULLET_PREFIX + r'(?:\*\*)?(?:'
     r'technical\s+proficiency|technical\s+expertise|technical\s+knowledge|'
     r'technical\s+skills?(?:\s*(?:and|&)\s*tools?)?|technicalskill|soft\s+skills?|'
     r'professional\s+skills?|relevant\s+skills?|additional\s+skills?|'
@@ -30,7 +77,7 @@ SKILL_SECTION_PATTERN = re.compile(
     r'skills?\s+and\s+abilities|skills?\s+&\s+abilities|'
     r'tech\s+stack|programming\s+languages?|'
     r'skills?\b|tools?\b|technologies?\b|frameworks?\b|competencies?\b|expertise\b'
-    r')(?:\*\*)?\s*:?\s*([\s\S]*?)(?=\n\s*(?:\*\*)?(?:' + SKILL_SECTION_STOP + r')\b|\Z)',
+    r')(?:\*\*)?\s*:?\s*([\s\S]*?)(?=\n' + _HEADING_BULLET_PREFIX + r'(?:\*\*)?(?:' + SKILL_SECTION_STOP + r')\b|\Z)',
 )
 
 # Priority order for summary / objective section headings (highest first).
@@ -96,7 +143,8 @@ CERT_SECTION_PATTERN = re.compile(
 SECTION_HEADERS = frozenset({
     'summary', 'objective', 'profile', 'experience', 'work experience',
     'workexperience', 'professionalexperience',
-    'professional experience', 'employment', 'employment history', 'education',
+    'professional experience', 'employment', 'employment history',
+    'employee history', 'employment details', 'employment record', 'education',
     'skills', 'technical skills',
     'technical skill', 'technicalskill', 'soft skills', 'softskills',
     'core skills', 'core skill', 'key skills', 'key skill',
@@ -956,7 +1004,7 @@ def filter_skill_items(skills: list[str], max_items: int = 40) -> list[str]:
         raw = (s or '').strip()
         if not raw:
             continue
-        raw = re.sub(r'^[\s•·\-\*●➢]+', '', raw).strip()
+        raw = re.sub(r'^[\s•·\-\*●➢\uf0d8\uf06c\uf0b7]+', '', raw).strip()
         if not raw:
             continue
         cat = re.match(
@@ -970,6 +1018,12 @@ def filter_skill_items(skills: list[str], max_items: int = 40) -> list[str]:
             raw = (cat.group(2) or '').strip()
             if not raw:
                 continue
+        else:
+            fuzzy = re.match(r'^([A-Za-z][A-Za-z\s]{1,24}?)\s*:\s*(.+)$', raw)
+            if fuzzy and _looks_like_skill_category_label(fuzzy.group(1)):
+                raw = (fuzzy.group(2) or '').strip()
+                if not raw:
+                    continue
         raw = _TRAILING_SKILL_CATEGORY.sub('', raw).strip()
         raw = re.sub(r'(?i)\bc\s+#', 'C#', raw)
         if not raw:
@@ -1828,7 +1882,15 @@ def _is_structural_section_heading(cleaned: str, words: list[str]) -> bool:
 
 
 def is_section_header_line(line: str) -> bool:
-    cleaned = re.sub(r'^[\s#*•\-_=]+|[\s#:_\-=]+$', '', (line or '').strip()).strip()
+    # \uf0b7 / \uf0a7 / \uf06c / \uf0d8: Wingdings/Symbol-font bullet glyphs
+    # that some PDF extractors emit in the Unicode private-use area instead of
+    # a normal '•'. Left unstripped, a bulleted heading line never matches
+    # SECTION_HEADERS below, so the section-boundary logic that depends on
+    # this function (skills/education/experience splitting) fails to see it
+    # as a boundary at all and swallows everything after it.
+    cleaned = re.sub(
+        r'^[\s#*•\-_=\uf0b7\uf0a7\uf06c\uf0d8]+|[\s#:_\-=]+$', '', (line or '').strip()
+    ).strip()
     if not cleaned:
         return True
     # Word decorative headers: ___CAREER OBJECTIVE___
@@ -2834,6 +2896,39 @@ def identity_is_employer_value(value: str | None, identity_names: set[str] | Non
     return True
 
 
+def _rejoin_wrapped_colon_labels(text: str) -> str:
+    """Join a bare label line with a following ': value' line.
+
+    Table-layout PDFs sometimes wrap a "Category" cell and its ": items" cell
+    onto separate text lines (e.g. "Languges" / ": C, SQL, pg/plsql"). Left
+    split, the label leaks into the output as a garbage token instead of
+    being recognized and peeled by the category-prefix logic in
+    ``filter_skill_items``, which expects "Label : items" on one line.
+    """
+    if not text:
+        return text or ''
+    lines = text.split('\n')
+    out: list[str] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        nxt = lines[i + 1] if i + 1 < len(lines) else None
+        stripped = line.strip()
+        if (
+            nxt is not None
+            and stripped
+            and ':' not in stripped
+            and len(stripped.split()) <= 4
+            and nxt.strip().startswith(':')
+        ):
+            out.append(f'{line.rstrip()} {nxt.strip()}')
+            i += 2
+            continue
+        out.append(line)
+        i += 1
+    return '\n'.join(out)
+
+
 def extract_skills_from_text(
     text: str,
     max_items: int = 40,
@@ -2847,6 +2942,7 @@ def extract_skills_from_text(
     """
     if not text:
         return []
+    text = _rejoin_wrapped_colon_labels(text)
     skills: list[str] = []
 
     for match in SKILL_SECTION_PATTERN.finditer(text):

@@ -237,9 +237,15 @@ def _strip_header_decoration(line: str) -> str:
     s = (line or '').strip()
     if not s:
         return ''
-    # Leading/trailing runs of underscores, dashes, equals, tildes, asterisks
-    s = re.sub(r'^[\s_\-=~*•·]+', '', s)
-    s = re.sub(r'[\s_\-=~*•·]+$', '', s)
+    # Leading/trailing runs of underscores, dashes, equals, tildes, asterisks,
+    # and Wingdings/Symbol-font bullet glyphs some PDF extractors emit into
+    # the Unicode private-use area (\uf0b7 etc.) instead of a normal '•'. A
+    # bulleted section heading line ("\uf0b7 Certification :") that keeps its
+    # glyph here is invisible to normalize_section_header, so detect_sections
+    # never treats it as a boundary and the section after it gets swallowed
+    # into whatever section came before.
+    s = re.sub(r'^[\s_\-=~*•·\uf0b7\uf0a7\uf06c\uf0d8]+', '', s)
+    s = re.sub(r'[\s_\-=~*•·\uf0b7\uf0a7\uf06c\uf0d8]+$', '', s)
     s = s.strip().strip(':').strip('*').strip()
     # Collapse leftover interior decoration around a short title, e.g. "___ TITLE ___".
     if '_' in s or '=' in s:
@@ -250,7 +256,7 @@ def _strip_header_decoration(line: str) -> str:
     return s
 
 
-_CHECKMARK_PREFIX = re.compile(r'^[\s✓✔☑☒☐◆▪▫►▸\uf0fc\uf0a7√]+')
+_CHECKMARK_PREFIX = re.compile(r'^[\s✓✔☑☒☐◆▪▫►▸\uf0d8\uf0fc\uf0a7√]+')
 _INLINE_OK_HEADINGS = frozenset({
     'skills', 'technical skills', 'education', 'experience',
     'work experience', 'professional experience', 'summary',
@@ -352,7 +358,7 @@ def split_glued_heading_line(line: str) -> tuple[str | None, str]:
         return None, raw
     lead = raw[: len(raw) - len(raw.lstrip())]
     stripped = raw.strip()
-    body = re.sub(r'^[\s•·\-\*●▪▸►]+', '', stripped)
+    body = re.sub(r'^[\s•·\-\*●▪▸►\uf0d8\uf0b7]+', '', stripped)
     bullet = stripped[: max(0, len(stripped) - len(body))].rstrip()
     global _GLUED_HEADING_PHRASES
     if _GLUED_HEADING_PHRASES is None:
