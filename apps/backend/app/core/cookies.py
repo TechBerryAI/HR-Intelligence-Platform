@@ -44,17 +44,30 @@ CSRF_HEADER_NAME = "X-CSRF-Token"
 # paths with one Set-Cookie).
 _COOKIE_PATH = "/api"
 
+# csrf_token is deliberately NOT scoped to _COOKIE_PATH like the other two.
+# It's a non-HttpOnly double-submit cookie the frontend JS must read via
+# document.cookie to echo back as X-CSRF-Token — but the SPA's own pages
+# (e.g. /admin/..., /login/admin) never live under /api, so a cookie scoped
+# there is invisible to document.cookie everywhere the app actually runs,
+# silently dropping the header from every state-changing web request. It
+# carries no access on its own (it only proves the request came from a page
+# that could read first-party cookies), so Path="/" costs nothing security-
+# wise and is required for it to do its job at all.
+_CSRF_COOKIE_PATH = "/"
+
 COOKIE_SECURE = os.getenv(
     "COOKIE_SECURE", str(os.getenv("FLASK_DEBUG", "false").lower() != "true")
 ).lower() in ("1", "true", "yes", "on")
 
 
-def _set(response: Response, name: str, value: str, *, max_age: int, http_only: bool) -> None:
+def _set(
+    response: Response, name: str, value: str, *, max_age: int, http_only: bool, path: str = _COOKIE_PATH
+) -> None:
     response.set_cookie(
         name,
         value,
         max_age=max_age,
-        path=_COOKIE_PATH,
+        path=path,
         secure=COOKIE_SECURE,
         httponly=http_only,
         samesite="Lax",
@@ -73,6 +86,7 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str) 
         secrets.token_urlsafe(32),
         max_age=JWT_REFRESH_EXPIRY_SECONDS,
         http_only=False,
+        path=_CSRF_COOKIE_PATH,
     )
 
 
@@ -80,7 +94,14 @@ def clear_auth_cookies(response: Response) -> None:
     """Expire all three cookies (e.g. on logout). Harmless no-op for a caller
     that never had them (Electron)."""
     for name in (ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME, CSRF_COOKIE_NAME):
-        _set(response, name, "", max_age=0, http_only=(name != CSRF_COOKIE_NAME))
+        _set(
+            response,
+            name,
+            "",
+            max_age=0,
+            http_only=(name != CSRF_COOKIE_NAME),
+            path=(_CSRF_COOKIE_PATH if name == CSRF_COOKIE_NAME else _COOKIE_PATH),
+        )
 
 
 def extract_access_token(request: Request) -> tuple[str | None, str]:
