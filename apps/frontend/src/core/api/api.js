@@ -84,6 +84,15 @@ function isRoleMismatchError(message) {
   );
 }
 
+// A CSRF failure means this one request's double-submit header didn't match
+// the cookie — it says nothing about whether the session itself is still
+// valid, so it must never be treated the same as a real 401/expired-token
+// auth failure (that would force a full logout over what's usually a
+// transient, retryable mismatch).
+function isCsrfError(status, message) {
+  return status === 403 && (message || '').toLowerCase().includes('csrf');
+}
+
 /** Decode JWT payload without verifying signature (client-side expiry check only). */
 function decodeJwtPayload(token) {
   if (!token || typeof token !== 'string') return null;
@@ -311,7 +320,15 @@ async function performRequest(url, method, body, token, headers, timeoutMs, alre
     const message = isJson ? getErrorMessage(data, res.statusText) : (res.statusText || 'Request failed');
     const authFailure = res.status === 401 || res.status === 403;
     const roleMismatch = authFailure && isRoleMismatchError(message);
-    const refreshable = authFailure && !roleMismatch && isRefreshableAuthError(res.status, message);
+    const csrfFailure = authFailure && !roleMismatch && isCsrfError(res.status, message);
+    const refreshable = authFailure && !roleMismatch && !csrfFailure && isRefreshableAuthError(res.status, message);
+
+    // A stale/missing CSRF header is retried once as-is (not via tryRefresh —
+    // the session itself is fine, only this request's header was wrong or
+    // absent) rather than treated as an auth failure.
+    if (csrfFailure && !alreadyTriedRefresh) {
+      return performRequest(url, method, body, token, headers, timeoutMs, true, skipAuthHandler);
+    }
 
     if (refreshable && !alreadyTriedRefresh) {
       const refreshed = await tryRefresh();
@@ -329,6 +346,7 @@ async function performRequest(url, method, body, token, headers, timeoutMs, alre
       tokenStillCurrent &&
       !skipAuthHandler &&
       !roleMismatch &&
+      !csrfFailure &&
       typeof onUnauthorized === 'function'
     ) {
       try { onUnauthorized(); } catch {}

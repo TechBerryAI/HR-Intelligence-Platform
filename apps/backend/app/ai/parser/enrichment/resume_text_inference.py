@@ -4158,6 +4158,14 @@ def _text_has_known_city(text: str, *, exact_or_word: bool = True) -> bool:
 
 _LOCATION_LOWERCASE_JOINER = frozenset({'of', 'de', 'da', 'el', 'al', 'van', 'von'})
 
+_US_STATE_CODES = frozenset({
+    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID',
+    'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS',
+    'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK',
+    'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV',
+    'WI', 'WY', 'DC',
+})
+
 
 def _looks_like_location_phrase(value: str) -> bool:
     """True for place-shaped strings; false for Name:/duty lines that merely mention a city."""
@@ -4205,9 +4213,9 @@ def _looks_like_location_phrase(value: str) -> bool:
             continue
         if not core[0].isupper():
             continue
-        # Short ALL-CAPS tokens are tech/skill acronyms (OS, SD, AWS), not
-        # place names, in this Indian-resume corpus.
-        if core.isupper() and len(core) <= 3:
+        # Short ALL-CAPS tokens are usually tech/skill acronyms (OS, SD,
+        # AWS), not place names — except real US state codes ("Austin, TX").
+        if core.isupper() and len(core) <= 3 and core not in _US_STATE_CODES:
             return False
     return True
 
@@ -4333,21 +4341,32 @@ def peel_location_from_structured(
     for e in education or []:
         if not isinstance(e, dict):
             continue
-        # A labeled location field on the education entry (rare, but genuine)
-        # is a usable signal; the institution/degree/field text is not — a
-        # college's city ("Savitribai Phule Pune University") is where the
-        # candidate studied, not necessarily where they currently live, so it
-        # is deliberately never scanned for a city name here.
+        # A labeled location field on the education entry is the strongest
+        # signal; fall back to scanning the institution/degree/field text for
+        # a known city (e.g. "Savitribai Phule University, Nasik, India").
+        # This is a last-resort recovery path (only reached when every other
+        # location signal on the resume came up empty), so a plausible-but-
+        # imprecise guess is preferred over leaving the field blank here.
         loc = str(e.get('location') or '').strip()
-        if not loc:
-            continue
-        healed = heal_location_candidate(loc)
-        cand = canonicalize_location_city(healed or loc)
-        if cand and is_plausible_location_value(cand):
-            return cand
-        for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
-            if re.search(rf'(?i)\b{re.escape(city)}\b', loc):
-                return canonicalize_location_city(city)
+        if loc:
+            healed = heal_location_candidate(loc)
+            cand = canonicalize_location_city(healed or loc)
+            if cand and is_plausible_location_value(cand):
+                return cand
+            for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+                if re.search(rf'(?i)\b{re.escape(city)}\b', loc):
+                    return canonicalize_location_city(city)
+        blob = ' '.join(
+            str(e.get(k) or '')
+            for k in ('institution', 'university', 'college', 'degree', 'field')
+        )
+        if blob.strip():
+            for city in sorted(_KNOWN_LOCATION_CITIES, key=len, reverse=True):
+                if re.search(rf'(?i)\b{re.escape(city)}\b', blob):
+                    return canonicalize_location_city(city)
+            for pat, city in _INSTITUTE_CITY_PEEL:
+                if pat.search(blob):
+                    return city
 
     head = '\n'.join((raw_text or '').splitlines()[:12])
     for pat, city in _INSTITUTE_CITY_PEEL:
@@ -4598,6 +4617,31 @@ def extract_location_from_text(text: str) -> str:
             if peeled:
                 return peeled[:80]
 
+    # Unlabeled "<City>, <District>" line directly followed by a
+    # "<State> - <PIN>" line (common Indian header convention: name, then
+    # city/district, then state+pincode, then email/phone — no explicit
+    # "Address:" label anywhere). Outranks the later declaration/"Place:"
+    # fallback since it is the candidate's own stated address.
+    _lines_all = (text or '').splitlines()
+    for _i, _ln in enumerate(_lines_all[:40]):
+        _cand = _ln.strip()
+        _nxt = _lines_all[_i + 1].strip() if _i + 1 < len(_lines_all) else ''
+        if not _cand or not _nxt:
+            continue
+        if not re.match(
+            r'(?i)^(?:' + '|'.join(re.escape(r) for r in _KNOWN_REGIONS if len(r) > 2) + r')'
+            r'\b\s*[-–—]?\s*\d{6}\b',
+            _nxt,
+        ):
+            continue
+        _parts = [p.strip() for p in _cand.split(',') if p.strip()]
+        if not (1 <= len(_parts) <= 2):
+            continue
+        if not all(re.fullmatch(r"[A-Za-z][A-Za-z .'\-]*", p) for p in _parts):
+            continue
+        if _looks_like_location_phrase(_cand):
+            return _cand[:80]
+
     # City, Region only when at least one side is a known city/region (header lines)
     m_cs = re.search(
         r'(?im)^([A-Z][a-zA-Z\.]+(?:\s+[A-Z][a-zA-Z\.]+)*),\s*'
@@ -4617,6 +4661,16 @@ def extract_location_from_text(text: str) -> str:
     # is just where the document happened to be signed.
     _has_conflicting_address = bool(
         re.search(r'(?im)^\s*address\s*[:\-–—]', text or '')
+    ) or bool(
+        # Unlabeled "<District>, <State> - <PIN>" address block (common
+        # Indian convention) is just as strong a signal as a literal
+        # "Address:" label — e.g. "Andhra Pradesh -515201" right under the
+        # candidate's name and contact line.
+        re.search(
+            r'(?i)\b(?:' + '|'.join(re.escape(r) for r in _KNOWN_REGIONS if len(r) > 2) + r')'
+            r'\s*[-–—]?\s*\d{6}\b',
+            text or '',
+        )
     )
     for window in (header, text[:5000]):
         if _has_conflicting_address:

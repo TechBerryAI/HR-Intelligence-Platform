@@ -180,10 +180,28 @@ def seed_org_with_staff_same_name(
 
 
 def login(client, email: str, password: str = STRONG_PASSWORD) -> str:
+    """Log in and return the bearer token.
+
+    The login response also sets HttpOnly access/refresh/csrf cookies on the
+    test client. Most callers pair this with ``auth_header(token)`` to
+    simulate a Bearer-only client (API/Electron), but the Flask test client
+    persists cookies across requests like a browser — leaving them set would
+    make every later request on this client resolve source='cookie' (cookie
+    takes precedence over the header) and require a matching X-CSRF-Token,
+    which a Bearer-only caller never sends. Clear them so auth_header(token)
+    behaves like the header-only client it's meant to simulate.
+    """
     resp = client.post('/api/login', json={'email': email, 'password': password})
     assert resp.status_code == 200, resp.get_json()
     token = (resp.get_json() or {}).get('token')
     assert token
+    # The login response sets these cookies scoped to path='/api'; deleting
+    # with the default path='/' silently misses them (Werkzeug's cookie jar
+    # is keyed by (domain, path, name)), leaving them in the jar to trip the
+    # CSRF check on later requests despite this delete_cookie call.
+    client.delete_cookie('access_token', path='/api')
+    client.delete_cookie('refresh_token', path='/api')
+    client.delete_cookie('csrf_token', path='/api')
     return token
 
 

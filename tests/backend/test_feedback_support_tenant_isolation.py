@@ -73,13 +73,12 @@ def test_support_request_isolated_by_submitters_organization(app_client):
 
     submit = app_client.post(
         '/api/support/submit',
+        headers=auth_header(token_a_head),
         json={
             'name': 'Org A Head HR',
             'email': a['head_email'],
             'subject': 'Only org A should see this',
             'message': 'Confidential org A support message.',
-            'user_id': a['head_hrid'],
-            'user_type': 'hr',
         },
     )
     assert submit.status_code == 201, submit.get_json()
