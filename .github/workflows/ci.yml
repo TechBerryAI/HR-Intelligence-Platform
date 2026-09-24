@@ -14,9 +14,18 @@ jobs:
         with:
           fetch-depth: 0
       - name: Scan for committed secrets
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Run the free, open-source gitleaks CLI directly rather than
+        # gitleaks/gitleaks-action@v2, which now requires a paid
+        # GITLEAKS_LICENSE org secret we don't have configured.
+        # .gitleaks-baseline.json records findings already present in git
+        # history (pre-dating the apps/backend/ restructure) that are being
+        # remediated by credential rotation rather than a history rewrite —
+        # this only suppresses those known fingerprints, so any new secret
+        # in a new commit still fails the build.
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks detect --source . --redact --baseline-path .gitleaks-baseline.json --exit-code 1
 
   backend-tests:
     runs-on: ubuntu-latest
