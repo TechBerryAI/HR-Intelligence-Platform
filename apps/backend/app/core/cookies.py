@@ -88,6 +88,14 @@ def set_auth_cookies(response: Response, access_token: str, refresh_token: str) 
         http_only=False,
         path=_CSRF_COOKIE_PATH,
     )
+    # A browser that logged in before csrf_token moved from Path=/api to
+    # Path=/ (see _CSRF_COOKIE_PATH) may still be holding that old-path
+    # cookie — cookies are keyed by (name, domain, path), so the new
+    # Set-Cookie above does NOT overwrite it; the browser would end up with
+    # two same-named csrf_token cookies at once, and document.cookie /
+    # csrf_ok() can disagree about which value is current. Explicitly expire
+    # the old path's cookie every time so a fresh login self-heals this.
+    _set(response, CSRF_COOKIE_NAME, "", max_age=0, http_only=False, path=_COOKIE_PATH)
 
 
 def clear_auth_cookies(response: Response) -> None:
