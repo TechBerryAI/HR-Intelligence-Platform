@@ -567,7 +567,7 @@ export default function OrgOverviewDashboard({ variant = 'head-hr', showJobPosti
                             <td className="py-3.5 text-right whitespace-nowrap w-[1%]" onClick={(e) => e.stopPropagation()}>
                               <div className="inline-flex items-center justify-end gap-2.5 min-w-[9.5rem]">
                                 <label
-                                  className="inline-flex items-center cursor-pointer select-none"
+                                  className="relative inline-flex items-center cursor-pointer select-none"
                                   title={active ? 'Enabled — click to disable' : 'Disabled — click to enable'}
                                 >
                                   <span className="sr-only">{active ? 'Enabled' : 'Disabled'}</span>
