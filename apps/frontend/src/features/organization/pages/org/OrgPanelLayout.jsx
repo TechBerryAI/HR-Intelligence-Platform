@@ -200,7 +200,7 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
           <ThemeToggle variant="org" compact />
         </div>
 
-        <main className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-7 lg:p-9">
+        <main className="relative flex-1 min-h-0 overflow-y-auto p-6 sm:p-7 lg:p-9">
           <div className="mx-auto w-full max-w-[1500px]">
             {children}
           </div>
