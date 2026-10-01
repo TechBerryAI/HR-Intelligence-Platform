@@ -4,7 +4,7 @@
  * React MUST consume Form DTOs only (`result.form`).
  * Raw TOON / AI output is never mapped on the frontend.
  */
-import { BASE_URL as API_URL, apiRequest, ensureFreshAccessToken } from './api';
+import { BASE_URL as API_URL, apiRequest, csrfHeaders, ensureFreshAccessToken } from './api';
 import { tokenService } from '@/core/auth/tokenService.js';
 
 /** Same-origin /api (Vite proxy). Never call 127.0.0.1 from localhost — that is CORS. */
@@ -181,6 +181,30 @@ const SSE_HEADERS = {
 };
 
 /**
+ * POST to an authenticated SSE parse route. Web sessions authenticate with the
+ * httpOnly access cookie, so the request is CSRF-checked and needs the
+ * double-submit header; Electron still uses the Bearer header.
+ */
+function authedStreamFetch(path, formData) {
+  const token = tokenService.getToken();
+  return fetch(parseUrl(path), {
+    method: 'POST',
+    headers: {
+      ...SSE_HEADERS,
+      ...csrfHeaders(),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    credentials: 'include',
+    body: formData,
+  });
+}
+
+/** 401/403 on the stream → let apiRequest's refresh / CSRF-retry path handle it. */
+function isStreamAuthFailure(response) {
+  return response.status === 401 || response.status === 403;
+}
+
+/**
  * Public resume parse with live stage events (SSE).
  * Falls back to sync only for transport/stream issues — never hides a real parse error.
  */
@@ -217,13 +241,9 @@ export async function uploadAndParseResumeStream(file, candidateId = null, { onS
   } catch {
     /* reactive refresh still possible via fallback */
   }
-  const token = tokenService.getToken();
   try {
-    const response = await fetch(parseUrl('/api/parse/resume/stream'), {
-      method: 'POST',
-      headers: { ...SSE_HEADERS, Authorization: `Bearer ${token}` },
-      body: formData,
-    });
+    const response = await authedStreamFetch('/api/parse/resume/stream', formData);
+    if (isStreamAuthFailure(response)) return uploadAndParseResume(file, candidateId);
     return await consumeParseSSE(response, { onStage, onFirstChunk });
   } catch (err) {
     if (!isTransportError(err)) throw err
@@ -243,13 +263,9 @@ export async function uploadAndParseJDStream(file, jobId = null, { onStage, onFi
   } catch {
     /* ignore */
   }
-  const token = tokenService.getToken();
   try {
-    const response = await fetch(parseUrl('/api/parse/jd/stream'), {
-      method: 'POST',
-      headers: { ...SSE_HEADERS, Authorization: `Bearer ${token}` },
-      body: formData,
-    });
+    const response = await authedStreamFetch('/api/parse/jd/stream', formData);
+    if (isStreamAuthFailure(response)) return uploadAndParseJD(file, jobId);
     return await consumeParseSSE(response, { onStage, onFirstChunk });
   } catch (err) {
     if (!isTransportError(err)) throw err

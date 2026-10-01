@@ -9,6 +9,15 @@
         "bash", "/mnt/d/Projects/HR-Intelligence-Platform/scripts/dev-start.sh"
       ],
       "port": 5173
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "wsl",
+      "runtimeArgs": [
+        "-d", "Ubuntu", "--",
+        "bash", "-c", "source ~/.nvm/nvm.sh && nvm use 20 >/dev/null && cd /mnt/d/Projects/HR-Intelligence-Platform/apps/frontend && npx vite --port 5175 --strictPort"
+      ],
+      "port": 5175
     }
   ]
 }

@@ -95,7 +95,7 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
       className={
         mobile
           ? 'org-sidebar relative flex flex-col h-full min-h-0'
-          : 'org-sidebar hidden lg:flex flex-col w-[17.5rem] shrink-0 h-screen sticky top-0 self-start'
+          : 'org-sidebar hidden lg:flex flex-col w-[17.5rem] shrink-0 h-full'
       }
     >
       <div className="org-sidebar-glow" aria-hidden />

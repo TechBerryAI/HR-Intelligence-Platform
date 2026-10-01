@@ -57,7 +57,10 @@ function AppShell({ children }) {
   }
 
   return (
-    <div className={`min-h-screen flex flex-col ${shellClass}`} data-app-theme={isDark ? 'dark' : 'light'}>
+    <div
+      className={`${isHeadHrRoute || isCeoRoute ? '' : 'min-h-screen '}flex flex-col ${shellClass}`}
+      data-app-theme={isDark ? 'dark' : 'light'}
+    >
       {!hideChrome && <Navbar />}
       <ErrorToasts />
       <main

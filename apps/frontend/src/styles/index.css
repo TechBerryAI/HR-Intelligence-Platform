@@ -69,6 +69,19 @@ body {
   color: var(--text-secondary);
 }
 
+/* Match the page canvas to the active theme so overscroll / rubber-banding or
+   any gap below the app never flashes the light body colour in dark mode. */
+html[data-theme="dark"],
+html[data-theme="dark"] body {
+  background-color: var(--ei-bg-primary);
+}
+
+/* Landing is dark-only regardless of the stored preference. */
+html:has(.landing-shell),
+body:has(.landing-shell) {
+  background-color: #050a14;
+}
+
 html.dark,
 html[data-theme="dark"] {
   color-scheme: dark;

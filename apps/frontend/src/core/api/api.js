@@ -93,6 +93,23 @@ function isCsrfError(status, message) {
   return status === 403 && (message || '').toLowerCase().includes('csrf');
 }
 
+function readCsrfCookie() {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/**
+ * Double-submit header for state-changing requests. Any raw fetch() that
+ * POSTs to an authenticated route (e.g. the SSE parse streams) must spread
+ * this into its headers — the browser auto-attaches the access cookie, so the
+ * backend CSRF-checks the request and rejects it with 403 without this.
+ */
+export function csrfHeaders() {
+  const value = readCsrfCookie();
+  return value ? { 'X-CSRF-Token': value } : {};
+}
+
 /** Decode JWT payload without verifying signature (client-side expiry check only). */
 function decodeJwtPayload(token) {
   if (!token || typeof token !== 'string') return null;
@@ -271,9 +288,9 @@ async function performRequest(url, method, body, token, headers, timeoutMs, alre
   // protection for state-changing requests instead: echo the (non-HttpOnly)
   // csrf cookie back as a header so the backend can double-submit-check it.
   if (!/^(GET|HEAD)$/i.test(method)) {
-    const csrfMatch = typeof document !== 'undefined' ? document.cookie.match(/(?:^|; )csrf_token=([^;]+)/) : null;
-    if (csrfMatch) {
-      finalHeaders.set('X-CSRF-Token', decodeURIComponent(csrfMatch[1]));
+    const csrf = readCsrfCookie();
+    if (csrf) {
+      finalHeaders.set('X-CSRF-Token', csrf);
     }
   }
 
@@ -325,9 +342,14 @@ async function performRequest(url, method, body, token, headers, timeoutMs, alre
 
     // A stale/missing CSRF header is retried once as-is (not via tryRefresh —
     // the session itself is fine, only this request's header was wrong or
-    // absent) rather than treated as an auth failure.
+    // absent) rather than treated as an auth failure. If the csrf cookie is
+    // gone entirely (cleared, or expired while the access cookie survived),
+    // a plain retry would fail identically — /api/refresh re-issues it.
     if (csrfFailure && !alreadyTriedRefresh) {
-      return performRequest(url, method, body, token, headers, timeoutMs, true, skipAuthHandler);
+      if (!readCsrfCookie()) {
+        await tryRefresh();
+      }
+      return performRequest(url, method, body, tokenService.getToken() || token, headers, timeoutMs, true, skipAuthHandler);
     }
 
     if (refreshable && !alreadyTriedRefresh) {
