@@ -1048,7 +1048,7 @@ export default function BulkResumeParser({ embedded = false }) {
                   outputTargetRef.current ? (
                     <p className="mt-2 text-xs text-[var(--ei-accent-green)] flex items-center gap-1.5">
                       <FiCheck className="w-3.5 h-3.5" />
-                      Output set — Excel is saved here when parsing completes
+                      Output set — the file stays empty until parsing completes; open it after you see &quot;Saved to&quot;
                     </p>
                   ) : (
                     <p className="mt-2 text-xs text-[var(--ei-text-muted)] flex items-center gap-1.5">

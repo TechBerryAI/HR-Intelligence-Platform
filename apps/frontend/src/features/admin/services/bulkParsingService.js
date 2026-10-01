@@ -210,12 +210,25 @@ export function getBulkDownloadUrl(jobId) {
 }
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+const INCOMPLETE_EXPORT_RETRIES = 5
+const INCOMPLETE_EXPORT_WAIT_MS = 2000
 
-/** .xlsx is a ZIP container — every valid workbook starts with "PK\x03\x04". */
-async function isXlsxBlob(blob) {
-  if (!blob || blob.size < 4) return false
+/**
+ * .xlsx is a ZIP container: a complete workbook starts with "PK\x03\x04" AND
+ * ends with an end-of-central-directory record ("PK\x05\x06" within the last
+ * 22 + 65535 bytes). Checking only the start let a truncated, half-written
+ * export through — it still begins with "PK", but Excel can't open it.
+ */
+export async function isCompleteXlsxBlob(blob) {
+  if (!blob || blob.size < 22) return false
   const head = new Uint8Array(await blob.slice(0, 4).arrayBuffer())
-  return head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04
+  if (!(head[0] === 0x50 && head[1] === 0x4b && head[2] === 0x03 && head[3] === 0x04)) return false
+  const tailStart = Math.max(0, blob.size - (22 + 65535))
+  const tail = new Uint8Array(await blob.slice(tailStart).arrayBuffer())
+  for (let i = tail.length - 22; i >= 0; i--) {
+    if (tail[i] === 0x50 && tail[i + 1] === 0x4b && tail[i + 2] === 0x05 && tail[i + 3] === 0x06) return true
+  }
+  return false
 }
 
 /**
@@ -228,6 +241,7 @@ export async function fetchBulkResultBlob(jobId, filename = 'Parsed_Resumes.xlsx
   const maxAttempts = 90
   const waitMs = 5000
   let refreshed = false
+  let incompleteRetries = 0
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const token = tokenService.getToken()
@@ -236,9 +250,17 @@ export async function fetchBulkResultBlob(jobId, filename = 'Parsed_Resumes.xlsx
       credentials: 'include',
     })
     if (res.ok) {
-      const blob = await res.blob()
-      if (!(await isXlsxBlob(blob))) {
-        const err = new Error('The server did not return a valid Excel file. Try Download again, or re-run the parse.')
+      // A body cut short (Content-Length mismatch) rejects here.
+      const blob = await res.blob().catch(() => null)
+      if (!(await isCompleteXlsxBlob(blob))) {
+        // Usually the export was caught mid-write — fetch it again shortly
+        // rather than saving a file Excel can't open.
+        if (incompleteRetries < INCOMPLETE_EXPORT_RETRIES) {
+          incompleteRetries += 1
+          await new Promise((r) => setTimeout(r, INCOMPLETE_EXPORT_WAIT_MS))
+          continue
+        }
+        const err = new Error('The server did not return a complete Excel file. Try Download again, or re-run the parse.')
         err.status = 502
         err.data = { error: err.message }
         throw err

@@ -9,6 +9,7 @@ from app.api.middleware.auth import authenticate_token, require_recruiter, optio
 from app.core.errors import client_internal_error, log_unexpected
 from app.domains.identity.authorization.rbac import (
     can_access_job,
+    can_edit_job,
     can_modify_job,
     is_read_only,
     get_user_id,
@@ -47,7 +48,7 @@ def _jobs_for_organization(org_id: str) -> list:
     """All jobs belonging to an organization."""
     return db_all(
         '''
-        SELECT j.*, hs.company as company_name
+        SELECT j.*, hs.company as company_name, hs.role as poster_role
         FROM jobs j
         LEFT JOIN hr_signup hs ON j.posted_by = hs.hrid
         WHERE j.organization_id = ?
@@ -65,14 +66,17 @@ def _job_enabled_flag(job: dict) -> bool:
     return bool(val)
 
 
-def _get_job_for_user(job_id, user, require_write=False):
+def _get_job_for_user(job_id, user, require_write=False, edit_only=False):
+    """``edit_only`` = enable/disable/edit (can_edit_job); plain writes such as
+    delete and candidate actions keep the stricter can_modify_job."""
     job = db_get('SELECT * FROM jobs WHERE jdid = ?', (job_id,))
     if not job:
         return None
     org_id = job.get('organization_id')
     posted_by = job.get('posted_by')
     if require_write:
-        if can_modify_job(user, posted_by=posted_by, organization_id=org_id):
+        allowed = can_edit_job if edit_only else can_modify_job
+        if allowed(user, posted_by=posted_by, organization_id=org_id):
             return job
         return None
     if user and get_user_id(user):
@@ -308,11 +312,16 @@ def get_jobs_all():
         formatted = []
         for j in jobs:
             row = _serialize_job(j)
-            # Recruiters see every org job but may only change their own; the UI
-            # uses this to hide toggle/edit/delete instead of offering a 403.
-            row['canModify'] = can_modify_job(
+            # Drive which controls the dashboard shows instead of offering a 403:
+            # canEdit = enable/disable + edit, canDelete = delete.
+            row['canEdit'] = can_edit_job(
+                request.user, posted_by=j.get('posted_by'), organization_id=j.get('organization_id'),
+                poster_role=j.get('poster_role'),
+            )
+            row['canDelete'] = can_modify_job(
                 request.user, posted_by=j.get('posted_by'), organization_id=j.get('organization_id')
             )
+            row['canModify'] = row['canEdit']  # older frontend builds read this
             formatted.append(row)
         return jsonify(formatted)
     except Exception:
@@ -925,7 +934,7 @@ def update_job(job_id: str):
                     experience = f"Up to {experience_to} years"
         description = (data.get('description') or '').strip()
 
-        job = _get_job_for_user(job_id, request.user, require_write=True)
+        job = _get_job_for_user(job_id, request.user, require_write=True, edit_only=True)
         if not job:
             return jsonify({'error': 'Job not found or access denied'}), 404
 
@@ -962,7 +971,7 @@ def toggle_job(job_id: str):
     try:
         data = request.get_json(force=True)
         enabled = bool(data.get('enabled'))
-        job = _get_job_for_user(job_id, request.user, require_write=True)
+        job = _get_job_for_user(job_id, request.user, require_write=True, edit_only=True)
         if not job:
             return jsonify({'error': 'Job not found or you do not have permission to update this job'}), 403
         _enabled = (True, False) if BACKEND == 'postgresql' else (1, 0)

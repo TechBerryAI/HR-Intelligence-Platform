@@ -2357,6 +2357,14 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
         failed_count = extra_failed
         success_count = max(0, len(results) - failed_count)
 
+    # Write the final workbook BEFORE reporting 'completed': the UI saves the
+    # export to the user's chosen file the moment it sees that status, and
+    # used to fetch it mid-write — a truncated .xlsx Excel refuses to open.
+    if not results and not (append and _export_path(job_id).is_file()):
+        _persist_excel(job_id, [], append=False)
+    elif results:
+        _persist_excel(job_id, results, append=append)
+
     with _local_jobs_lock:
         if job_id in _local_jobs:
             _local_jobs[job_id]['status'] = 'completed'
@@ -2366,11 +2374,6 @@ def _worker(job_id: str, started_at: float, append: bool = False, worker_id: str
             _local_jobs[job_id]['message'] = (
                 f'Completed: {success_count} successful, {failed_count} failed'
             )
-
-    if not results and not (append and _export_path(job_id).is_file()):
-        _persist_excel(job_id, [], append=False)
-    elif results:
-        _persist_excel(job_id, results, append=append)
 
     finalize_session(job_id, started_at, success_count, failed_count)
 

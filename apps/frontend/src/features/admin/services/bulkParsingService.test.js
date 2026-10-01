@@ -2,13 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ensureOutputWritable,
   fetchBulkResultBlob,
+  isCompleteXlsxBlob,
   loadBulkJobSession,
   saveBulkJobSession,
   writeBulkResultToOutput,
 } from './bulkParsingService.js'
 
-// Minimal valid ZIP/XLSX local-file-header signature + filler bytes.
-const XLSX_BYTES = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4])
+// ZIP local-file-header signature, filler, then an end-of-central-directory
+// record ("PK\x05\x06" + 18 bytes) — the shape of a complete .xlsx.
+const EOCD = [0x50, 0x4b, 0x05, 0x06, ...new Array(18).fill(0)]
+const XLSX_BYTES = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4, ...EOCD])
+// Same file cut off mid-write: starts like an xlsx, but no end record.
+const TRUNCATED_XLSX = XLSX_BYTES.slice(0, 12)
 
 describe('bulk Excel export', () => {
   let fetchMock
@@ -34,9 +39,40 @@ describe('bulk Excel export', () => {
     expect(blob.size).toBe(XLSX_BYTES.length)
   })
 
+  it('detects a truncated (half-written) workbook', async () => {
+    // Blobs made the way a download produces them (jsdom's own Blob lacks arrayBuffer)
+    const asDownload = (bytes) => new Response(bytes).blob()
+    expect(await isCompleteXlsxBlob(await asDownload(XLSX_BYTES))).toBe(true)
+    expect(await isCompleteXlsxBlob(await asDownload(TRUNCATED_XLSX))).toBe(false)
+  })
+
+  it('re-fetches instead of saving an export caught mid-write', async () => {
+    vi.useFakeTimers()
+    try {
+      fetchMock
+        .mockResolvedValueOnce(new Response(TRUNCATED_XLSX, { status: 200 }))
+        .mockResolvedValueOnce(new Response(XLSX_BYTES, { status: 200 }))
+      const pending = fetchBulkResultBlob('job-1')
+      await vi.runAllTimersAsync()
+      const { blob } = await pending
+      expect(blob.size).toBe(XLSX_BYTES.length)
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('refuses to hand back bytes that are not an xlsx (e.g. an HTML page)', async () => {
-    fetchMock.mockResolvedValue(new Response('<!doctype html><html></html>', { status: 200 }))
-    await expect(fetchBulkResultBlob('job-1')).rejects.toThrow(/valid Excel/)
+    vi.useFakeTimers()
+    try {
+      fetchMock.mockImplementation(async () => new Response('<!doctype html><html></html>', { status: 200 }))
+      const pending = fetchBulkResultBlob('job-1')
+      const assertion = expect(pending).rejects.toThrow(/complete Excel/)
+      await vi.runAllTimersAsync()
+      await assertion
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('writes the workbook into the file the save picker created', async () => {

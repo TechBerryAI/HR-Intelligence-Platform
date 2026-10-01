@@ -13,6 +13,8 @@ const PERMISSIONS = {
   'jobs:read_all': new Set([ROLES.CEO, ROLES.HEAD_HR]),
   'jobs:read_own': new Set([ROLES.RECRUITER, ROLES.HEAD_HR, ROLES.CEO]),
   'jobs:write_own': new Set([ROLES.RECRUITER, ROLES.HEAD_HR]),
+  // Enable/disable + edit only: recruiters may also edit Head HR / CEO postings
+  // of their org (see can_edit_job in backend rbac.py). Delete stays write_own.
   'jobs:write_any': new Set([ROLES.HEAD_HR]),
   'candidates:read_all': new Set([ROLES.CEO, ROLES.HEAD_HR]),
   'candidates:read_own': new Set([ROLES.RECRUITER, ROLES.HEAD_HR, ROLES.CEO]),

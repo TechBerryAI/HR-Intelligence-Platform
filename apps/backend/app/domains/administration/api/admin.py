@@ -247,10 +247,12 @@ def bulk_parse_download(job_id):
         if 'not completed' in err:
             return jsonify(payload), 409
         return jsonify(payload), 502
-    iterator, filename, content_type = payload
+    # body: bytes for local exports (Flask then sends Content-Length), or a
+    # chunk iterator when proxied from the external bulk parser service.
+    body, filename, content_type = payload
     safe_filename = secure_filename(filename) or 'download.xlsx'
     return Response(
-        iterator,
+        body,
         mimetype=content_type,
         headers={'Content-Disposition': f'attachment; filename="{safe_filename}"'},
     )

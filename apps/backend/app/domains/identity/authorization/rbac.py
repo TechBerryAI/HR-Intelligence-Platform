@@ -133,6 +133,36 @@ def can_modify_job(user, posted_by=None, organization_id=None):
     return False
 
 
+def _poster_role(posted_by) -> str | None:
+    if not posted_by:
+        return None
+    try:
+        from app.database.connection.db import db_get
+
+        row = db_get('SELECT role FROM hr_signup WHERE hrid = ?', (posted_by,))
+        return ((row or {}).get('role') or '').upper() or None
+    except Exception:
+        return None
+
+
+def can_edit_job(user, posted_by=None, organization_id=None, poster_role=None):
+    """Enable/disable + edit a job (delete stays with can_modify_job).
+
+    Recruiters may also edit jobs that Head HR or the CEO of their own
+    organization posted — those are company postings the whole team runs.
+    Jobs posted by another recruiter remain owner-only.
+    ``poster_role`` skips a lookup when the caller already joined it.
+    """
+    if can_modify_job(user, posted_by=posted_by, organization_id=organization_id):
+        return True
+    if get_role(user) != ROLE_RECRUITER:
+        return False
+    if not can_access_job(user, posted_by=posted_by, organization_id=organization_id):
+        return False
+    role = (poster_role or _poster_role(posted_by) or '').upper()
+    return role in (ROLE_HEAD_HR, ROLE_CEO)
+
+
 def can_access_application(user, job_posted_by=None, organization_id=None):
     return can_access_job(user, posted_by=job_posted_by, organization_id=organization_id)
 

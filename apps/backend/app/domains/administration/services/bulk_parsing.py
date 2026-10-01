@@ -201,16 +201,10 @@ def stream_download(job_id, user=None):
     ok, payload = get_local_download(job_id)
     if ok:
         bio, filename, content_type = payload
-        bio.seek(0)
-
-        def chunk_iter(b):
-            while True:
-                chunk = b.read(8192)
-                if not chunk:
-                    break
-                yield chunk
-
-        return True, (chunk_iter(bio), filename, content_type)
+        # Whole bytes (not a chunk generator) so the response carries an exact
+        # Content-Length — a transfer cut short is then a client-side error
+        # instead of a silently truncated .xlsx.
+        return True, (bio.getvalue(), filename, content_type)
 
     local_error = payload if isinstance(payload, dict) else {'error': 'Download failed'}
     # Prefer the local error when we know the job (e.g. export missing) — do not
