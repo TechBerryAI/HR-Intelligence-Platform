@@ -30,16 +30,15 @@ HR Job Portal
 
 ### System packages (document parsing)
 
-Python requirements do not cover these; install them on every machine and image
-that runs the backend parser.
+None are required. Legacy `.doc` resumes/JDs (Word 6/95/97-2003, plus RTF,
+HTML/MHTML and OpenDocument files saved with a `.doc` extension, e.g. Naukri
+exports) are read by the pure-Python reader in
+`apps/backend/app/ai/parser/legacy_doc.py`, so this works the same on
+Debian/Ubuntu, RHEL/Rocky and Windows.
 
-| Package | Needed for | Install (Debian/Ubuntu) | Without it |
+| Package | Role | Install (Debian/Ubuntu) | Without it |
 |---|---|---|---|
-| `antiword` | Legacy Word 97-2003 `.doc` resumes/JDs | `sudo apt-get install -y antiword` | `.doc` uploads are rejected with "cannot be read on this server" |
-
-```bash
-sudo apt-get update && sudo apt-get install -y antiword
-```
+| `antiword` | Optional fallback for a `.doc` the built-in reader cannot read | `sudo apt-get install -y antiword` | Nothing changes for normal files |
 
 OCR (RapidOCR) ships via `apps/backend/requirements.txt` — no system package
 needed. `pytesseract` is only a fallback and needs a system `tesseract` binary

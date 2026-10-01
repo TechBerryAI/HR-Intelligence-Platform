@@ -86,8 +86,8 @@ def _jd_client(body: dict, status: int):
 parsing_bp = Blueprint('parsing', __name__)
 
 # Image resumes (PNG/JPG) are rejected — OCR quality is too unreliable for apply/autofill.
-# Legacy .doc is accepted only when the antiword binary is installed; see
-# `_reject_unsupported_doc`.
+# Legacy .doc (Word 6-2003, plus RTF/HTML saved as .doc) is read by the
+# built-in reader in app/ai/parser/legacy_doc.py.
 ALLOWED_EXTENSIONS = {'pdf', 'docx', 'doc', 'webp'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
@@ -123,19 +123,12 @@ def _parse_source_filename(uploaded: str | None) -> str:
 
 
 def _reject_unsupported_doc(filename):
-    """Reject legacy .doc only when no converter is installed to read it."""
-    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-    if ext != 'doc':
-        return None
-    from app.ai.parser.text_extraction import antiword_available
+    """Legacy .doc is always readable now (built-in reader, no antiword needed).
 
-    if antiword_available():
-        return None
-    return jsonify({
-        'status': 'error',
-        'error': 'Legacy .doc files cannot be read on this server. '
-                 'Please upload the resume as DOCX or PDF.',
-    }), 400
+    Kept as a hook so the upload routes stay unchanged; unreadable files still
+    fail at extraction with a specific message.
+    """
+    return None
 
 
 # Back-compat alias for callers/tests written against the old name.
@@ -172,6 +165,10 @@ def sniff_upload_kind(data: bytes) -> str | None:
     if data[:8] == b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1':
         return 'doc'
     if data.lstrip()[:4] == b'{\\rt':
+        return 'doc'
+    from app.ai.parser.legacy_doc import is_html_document
+
+    if is_html_document(data):  # web page saved as .doc (Naukri exports)
         return 'doc'
     if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
         return 'webp'

@@ -24,6 +24,13 @@ from typing import Any
 import requests
 from docx import Document
 
+from app.ai.parser.legacy_doc import (
+    extract_doc_text,
+    extract_html_text,
+    extract_odt_text,
+    is_html_document,
+    is_odt_document,
+)
 from app.ai.parser.extraction_result import (
     STATUS_FAILED,
     STATUS_OCR_FAILED,
@@ -1672,39 +1679,54 @@ def antiword_available() -> bool:
 
 
 def extract_text_from_doc(file_data: bytes) -> str:
-    """Extract text from a legacy Word 97-2003 (.doc) binary document.
+    """Extract text from a legacy Word (.doc) document.
 
     Files are routinely mislabelled, so the real container is sniffed first: a
-    .docx or RTF wearing a .doc extension is handled natively rather than being
-    handed to antiword, which would reject it.
+    .docx, RTF or HTML page (job-portal exports) wearing a .doc extension is
+    handled natively.
 
-    Genuine OLE2 documents go through ``antiword`` (``-m UTF-8.txt`` keeps
-    non-ASCII characters, ``-w 0`` disables line wrapping so paragraphs survive
-    intact for the section detector).
+    Genuine OLE2 Word 6/95/97-2003 documents are read by the built-in
+    ``legacy_doc`` reader, which needs no system package. ``antiword`` is only a
+    fallback, used when it is installed and the built-in reader fails.
     """
     if not file_data:
         raise ValueError('Empty .doc file')
 
+    if is_odt_document(file_data):
+        logger.info('.doc file is actually OpenDocument (ODT); extracting as ODT')
+        text = extract_odt_text(file_data)
+        if len(text.strip()) < MIN_TEXT_CHARS:
+            raise ValueError('Insufficient text extracted from OpenDocument file')
+        return text
     if file_data.startswith(_ZIP_MAGIC):
         logger.info('.doc file is actually a DOCX container; extracting as DOCX')
         return extract_text_from_docx(file_data)
     if file_data.lstrip()[:4] == _RTF_MAGIC:
         logger.info('.doc file is actually RTF; extracting as RTF')
         return _extract_text_from_rtf_bytes(file_data)
+    if is_html_document(file_data):
+        logger.info('.doc file is actually an HTML/MHTML page; extracting as HTML')
+        text = extract_html_text(file_data)
+        if len(text.strip()) < MIN_TEXT_CHARS:
+            raise ValueError('Insufficient text extracted from web-page .doc file')
+        return text
 
     if not file_data.startswith(_OLE2_MAGIC):
         raise ValueError(
-            'Unrecognized .doc container (not OLE2, DOCX or RTF). '
+            'Unrecognized .doc container (not Word, DOCX, RTF or HTML). '
             'Please re-save the file as DOCX or PDF.'
         )
 
-    binary = _antiword_path()
-    if not binary:
-        raise ValueError(
-            'Legacy .doc extraction requires antiword, which is not installed. '
-            'Install it (Debian/Ubuntu: apt-get install -y antiword) or ask for '
-            'the resume as DOCX or PDF.'
-        )
+    try:
+        text = extract_doc_text(file_data)
+        if len(text.strip()) < MIN_TEXT_CHARS:
+            raise ValueError('Insufficient text extracted from .doc file')
+        return text
+    except ValueError as builtin_err:
+        binary = _antiword_path()
+        if not binary:
+            raise
+        logger.warning('built-in .doc reader failed (%s); trying antiword', builtin_err)
 
     import subprocess  # local import: only legacy .doc needs a subprocess
     import tempfile
@@ -1977,7 +1999,10 @@ def extract_document(file_data: bytes, filename: str, *, dpi: int | None = None)
                 result.warnings.append(f'ocr_unavailable:{ocr_unavailable_reason()}')
                 if result.status == STATUS_OK and not (result.text or '').strip():
                     result.status = STATUS_OCR_UNAVAILABLE
-    elif ext == 'doc':
+    elif ext == 'doc' or (ext == 'docx' and (
+        not file_data.startswith(_ZIP_MAGIC) or is_odt_document(file_data)
+    )):
+        # A .doc / RTF / web page / ODT renamed to .docx is read by the .doc sniffer.
         text = extract_text_from_doc(file_data)
         result = ExtractionResult(
             text=text,

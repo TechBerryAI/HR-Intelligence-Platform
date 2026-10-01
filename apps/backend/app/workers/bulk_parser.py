@@ -40,8 +40,8 @@ _export_rebuild_inflight: set[str] = set()
 # Image resumes (PNG/JPG) are rejected — OCR quality is too unreliable for bulk Excel export.
 # WEBP/TIFF kept for rare scanned archives; PDF/DOCX are preferred.
 ALLOWED_EXT = {'pdf', 'docx', 'doc', 'webp', 'tif', 'tiff'}
-# Legacy .doc needs the antiword binary; text_extraction raises a clear error
-# when it is missing, and that file is reported as a per-file failure.
+# Legacy .doc is read by the built-in reader (app/ai/parser/legacy_doc.py); a
+# file it cannot read is reported as a per-file failure with the reason.
 
 # Decompression-bomb guards for extract_zip_to_job: a small malicious ZIP can
 # otherwise claim to decompress to gigabytes of data. Checked against the
@@ -2451,21 +2451,8 @@ def stage_files(job_id: str, files_list: list[tuple[str, bytes]], started_by=Non
         file_bytes_for_db.append(data)
 
     if not staged_names:
-        # Surface clear reject when only legacy .doc (or other junk) was uploaded
-        rejected_doc = any(
-            (n or '').lower().endswith('.doc') and not (n or '').lower().endswith('.docx')
-            for n, _ in files_list
-        )
-        if rejected_doc:
-            return False, {
-                'error': (
-                    'Unsupported format: legacy .doc is not accepted. '
-                    'Convert to PDF or DOCX.'
-                ),
-                'code': 'unsupported_format',
-            }
         return False, {
-            'error': 'No valid resume files (PDF/DOCX). PNG/JPG are not supported.',
+            'error': 'No valid resume files (PDF/DOC/DOCX). PNG/JPG are not supported.',
         }
 
     with _local_jobs_lock:
