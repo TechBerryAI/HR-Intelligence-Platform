@@ -22,7 +22,8 @@ from app.domains.administration.services.bulk_parsing import (
 
 admin_bp = Blueprint('admin', __name__)
 
-ALLOWED_BULK_EXTENSIONS = {'pdf', 'doc', 'docx'}
+# Must match ALLOWED_EXT in app/workers/bulk_parser.py (images are OCR'd)
+ALLOWED_BULK_EXTENSIONS = {'pdf', 'doc', 'docx', 'webp', 'tif', 'tiff'}
 
 
 def _allowed_bulk_file(filename):
@@ -99,7 +100,7 @@ def bulk_parse_upload():
     if not zip_bytes and not files_list:
         if 'files' not in request.files and 'file' not in request.files and 'zip' not in request.files:
             return jsonify({'error': 'No files provided'}), 400
-        return jsonify({'error': 'No valid resume files (PDF/DOC/DOCX) or ZIP'}), 400
+        return jsonify({'error': 'No valid resume files (PDF/DOC/DOCX/WEBP/TIF) or ZIP'}), 400
 
     # Chunked / ZIP path
     if job_id:

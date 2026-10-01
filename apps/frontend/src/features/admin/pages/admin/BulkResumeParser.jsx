@@ -27,7 +27,13 @@ import { Layers } from 'lucide-react'
 import {
   uploadBulkResumes,
   getBulkProgress,
-  downloadBulkResult,
+  fetchBulkResultBlob,
+  saveBlobAsDownload,
+  writeBulkResultToOutput,
+  ensureOutputWritable,
+  saveBulkOutputTarget,
+  loadBulkOutputTarget,
+  clearBulkOutputTarget,
   saveBulkJobSession,
   loadBulkJobSession,
   pauseBulkJob,
@@ -36,12 +42,22 @@ import {
   refreshForBulkPoll,
   BULK_POLL_INTERVAL_MS,
 } from '@/features/admin/services/bulkParsingService.js'
+import { isSessionAuthError } from '@/core/api/api.js'
+import { useApp } from '@/core/context/AppContext.jsx'
 
 const RESUME_EXT = ['pdf', 'docx', 'doc', 'webp', 'tif', 'tiff']
+const OUTPUT_FILENAME = 'Parsed_Resumes.xlsx'
+/** Consecutive "Job not found" polls before the saved job is dropped (survives a brief cold start). */
+const JOB_GONE_POLL_LIMIT = 3
 
+/** The login itself is no longer valid (vs. a permission answer for this job). */
 function isAuthPollError(err) {
-  const status = err?.status
-  return status === 401 || status === 403
+  return isSessionAuthError(err?.status, err?.data?.error || err?.message)
+}
+
+/** The job belongs to another account (403 Access denied) or no longer exists (404). */
+function isJobUnavailableError(err) {
+  return (err?.status === 403 && !isAuthPollError(err)) || err?.status === 404
 }
 
 /** False-positive from optional external bulk parser (port 8001) — ignore when local job finished. */
@@ -52,6 +68,8 @@ function isStaleBulkServiceError(message) {
 }
 
 export default function BulkResumeParser({ embedded = false }) {
+  const { user, auth } = useApp()
+  const owner = user?.hrId || auth?.email || ''
   const [inputFolderPath, setInputFolderPath] = useState('')
   const [inputFolderFound, setInputFolderFound] = useState(false)
   const [outputType, setOutputType] = useState('file')
@@ -74,6 +92,17 @@ export default function BulkResumeParser({ embedded = false }) {
   const [instructionsOpen, setInstructionsOpen] = useState(false)
   const [sessionExpired, setSessionExpired] = useState(false)
   const [listFilter, setListFilter] = useState('all') // all | processed | failed | queued
+  const [savedTo, setSavedTo] = useState('')
+  const [saveError, setSaveError] = useState('')
+  const [savingOutput, setSavingOutput] = useState(false)
+  /** Where step 2 points: { fileHandle } | { dirHandle } (browser) or { path, isFolder } (Electron). */
+  const outputTargetRef = useRef(null)
+  /** jobId whose workbook has already been written to the output target. */
+  const savedJobRef = useRef(null)
+  /** Bumped whenever outputTargetRef changes so the auto-save effect re-checks. */
+  const [outputTargetVersion, setOutputTargetVersion] = useState(0)
+  /** A restored file handle needs a click before the browser lets us write again. */
+  const [needsSavePermission, setNeedsSavePermission] = useState(false)
 
   const folderInputRef = useRef(null)
   const zipInputRef = useRef(null)
@@ -107,6 +136,20 @@ export default function BulkResumeParser({ embedded = false }) {
       setInputFolderFound(true)
     }
     setError(null)
+  }
+
+  /**
+   * Point step 2 at a new output. While a job is running it is also persisted,
+   * so a reload / leaving the page mid-parse can still fill the file once the
+   * job completes.
+   */
+  const setOutputTarget = (target, display = '') => {
+    outputTargetRef.current = target
+    setOutputTargetVersion((v) => v + 1)
+    setNeedsSavePermission(false)
+    if (!jobId) return
+    if (target) saveBulkOutputTarget(jobId, owner, target, display)
+    else clearBulkOutputTarget()
   }
 
   const handleInputFolderBrowse = async () => {
@@ -148,6 +191,7 @@ export default function BulkResumeParser({ embedded = false }) {
         if (electron?.selectFolder) {
           const fullPath = await electron.selectFolder()
           if (fullPath) {
+            setOutputTarget({ path: fullPath, isFolder: true }, fullPath)
             setOutputPath(fullPath)
             setOutputFolderFound(true)
             setError(null)
@@ -158,14 +202,16 @@ export default function BulkResumeParser({ embedded = false }) {
           setError('Folder picker is not supported in this browser. Run the app in Electron for full folder access.')
           return
         }
-        const dirHandle = await window.showDirectoryPicker({ startIn: 'downloads' })
+        const dirHandle = await window.showDirectoryPicker({ startIn: 'downloads', mode: 'readwrite' })
+        setOutputTarget({ dirHandle }, dirHandle.name)
         setOutputPath(dirHandle.name)
         setOutputFolderFound(true)
         setError(null)
       } else {
         if (electron?.selectSaveFile) {
-          const fullPath = await electron.selectSaveFile('Parsed_Resumes.xlsx')
+          const fullPath = await electron.selectSaveFile(OUTPUT_FILENAME)
           if (fullPath) {
+            setOutputTarget({ path: fullPath, isFolder: false }, fullPath)
             setOutputPath(fullPath)
             setOutputFolderFound(true)
             setError(null)
@@ -176,8 +222,10 @@ export default function BulkResumeParser({ embedded = false }) {
           setError('Save file picker is not supported in this browser. Run the app in Electron for full file access.')
           return
         }
+        // The browser creates this file (0 bytes) right away — the completed
+        // workbook is written into it through outputTargetRef once parsing ends.
         const fileHandle = await window.showSaveFilePicker({
-          suggestedName: 'Parsed_Resumes.xlsx',
+          suggestedName: OUTPUT_FILENAME,
           types: [
             {
               description: 'Excel workbook',
@@ -185,6 +233,7 @@ export default function BulkResumeParser({ embedded = false }) {
             },
           ],
         })
+        setOutputTarget({ fileHandle }, fileHandle.name)
         setOutputPath(fileHandle.name)
         setOutputFolderFound(true)
         setError(null)
@@ -216,6 +265,9 @@ export default function BulkResumeParser({ embedded = false }) {
     setJobId(null)
     setProgress(null)
     setRunControl(null)
+    setSavedTo('')
+    setSaveError('')
+    savedJobRef.current = null
     ignorePausedUntilRef.current = 0
     clearBulkJobSession()
     try {
@@ -223,7 +275,9 @@ export default function BulkResumeParser({ embedded = false }) {
         onProgress: (msg) => setUploadStatus(msg),
       })
       setJobId(res.job_id)
-      saveBulkJobSession(res.job_id)
+      saveBulkJobSession(res.job_id, owner)
+      if (outputTargetRef.current) saveBulkOutputTarget(res.job_id, owner, outputTargetRef.current, outputPath)
+      else clearBulkOutputTarget()
       setUploadStatus('')
       setRunControl('running')
       setProgress({
@@ -259,17 +313,41 @@ export default function BulkResumeParser({ embedded = false }) {
     }
   }
 
-  // Restore job after re-login / remount
+  // Restore job after re-login / reload / remount.
+  // restoredRef flips only once a restore has actually been applied: the lazy
+  // route's Suspense boundary can disconnect and reconnect this effect on the
+  // same instance right after mount, and the first (cancelled) run must not
+  // block the reconnected one — that left the page "Idle" after every reload.
   useEffect(() => {
     if (restoredRef.current) return
-    restoredRef.current = true
-    const saved = loadBulkJobSession()
-    if (!saved?.jobId) return
+    const saved = loadBulkJobSession(owner)
+    if (!saved?.jobId) {
+      restoredRef.current = true
+      return
+    }
     let cancelled = false
     ;(async () => {
+      // Bring back the step-2 output picked before the reload, so the
+      // workbook can still be written there when this job completes.
+      const restored = await loadBulkOutputTarget(saved.jobId, owner)
+      if (!cancelled && restored?.target && !outputTargetRef.current) {
+        const t = restored.target
+        outputTargetRef.current = t
+        setOutputTargetVersion((v) => v + 1)
+        setOutputType(t.dirHandle || t.isFolder ? 'folder' : 'file')
+        setOutputPath(restored.display || t.fileHandle?.name || t.dirHandle?.name || t.path || '')
+        setOutputFolderFound(true)
+      }
       try {
-        const data = await getBulkProgress(saved.jobId)
+        let data
+        try {
+          data = await getBulkProgress(saved.jobId)
+        } catch (err) {
+          if (!isAuthPollError(err) || !(await refreshForBulkPoll())) throw err
+          data = await getBulkProgress(saved.jobId)
+        }
         if (cancelled) return
+        restoredRef.current = true
         const st = data?.status
         if (st === 'started' || st === 'pending' || st === 'paused' || st === 'completed' || st === 'failed') {
           setJobId(saved.jobId)
@@ -286,7 +364,15 @@ export default function BulkResumeParser({ embedded = false }) {
         }
       } catch (err) {
         if (cancelled) return
-        if (isAuthPollError(err)) {
+        restoredRef.current = true
+        if (isJobUnavailableError(err)) {
+          // Started by another account in this tab, or long gone — not ours to watch.
+          clearBulkJobSession()
+          clearBulkOutputTarget()
+          outputTargetRef.current = null
+          setOutputPath('')
+          setOutputFolderFound(false)
+        } else if (isAuthPollError(err)) {
           setJobId(saved.jobId)
           setSessionExpired(true)
         } else {
@@ -305,6 +391,7 @@ export default function BulkResumeParser({ embedded = false }) {
     if (!jobId) return
     let cancelled = false
     let timer = null
+    let goneCount = 0
 
     const schedule = (ms) => {
       if (cancelled) return
@@ -321,6 +408,7 @@ export default function BulkResumeParser({ embedded = false }) {
           schedule(BULK_POLL_INTERVAL_MS)
           return
         }
+        goneCount = 0
         setProgress(data)
         setSessionExpired(false)
         if (status === 'started' || status === 'pending') {
@@ -351,6 +439,23 @@ export default function BulkResumeParser({ embedded = false }) {
           schedule(BULK_POLL_INTERVAL_MS * 5)
           return
         }
+        if (isJobUnavailableError(err)) {
+          goneCount += err?.status === 403 ? JOB_GONE_POLL_LIMIT : 1
+          if (goneCount >= JOB_GONE_POLL_LIMIT) {
+            clearBulkJobSession()
+            clearBulkOutputTarget()
+            setJobId(null)
+            setProgress(null)
+            setRunControl(null)
+            setSessionExpired(false)
+            setError(
+              err?.status === 403
+                ? 'That bulk job was started by another account. Start a new job to parse resumes.'
+                : 'That bulk job no longer exists on the server. Start a new job to parse resumes.'
+            )
+            return
+          }
+        }
         schedule(BULK_POLL_INTERVAL_MS)
       }
     }
@@ -362,6 +467,64 @@ export default function BulkResumeParser({ embedded = false }) {
     }
   }, [jobId])
 
+  /** Write the finished workbook to the step-2 output (browser handle or Electron path). */
+  const saveToOutput = async (id, fetched, { interactive = true } = {}) => {
+    const target = outputTargetRef.current
+    if (!id || !target) return false
+    setSavingOutput(true)
+    setSaveError('')
+    try {
+      // Permission first: a click's user activation expires while the
+      // workbook downloads, and the browser only prompts during one.
+      await ensureOutputWritable(target, { interactive })
+      const { blob } = fetched || (await fetchBulkResultBlob(id, OUTPUT_FILENAME))
+      const where = await writeBulkResultToOutput(blob, target, OUTPUT_FILENAME, { interactive })
+      savedJobRef.current = id
+      setSavedTo(where)
+      setNeedsSavePermission(false)
+      // Written — nothing left for a later reload to resume.
+      clearBulkOutputTarget()
+      return true
+    } catch (e) {
+      if (e?.data?.code === 'EXPORT_REGENERATING' || e?.status === 202) throw e
+      if (e?.code === 'PERMISSION_REQUIRED') {
+        savedJobRef.current = null
+        setNeedsSavePermission(true)
+        return false
+      }
+      setSaveError(
+        `Could not save to ${outputPath || 'the selected output'}: ${e?.message || 'write failed'}. Use Download Excel instead.`
+      )
+      return false
+    } finally {
+      setSavingOutput(false)
+    }
+  }
+
+  // Once parsing completes, write the workbook to the chosen output. The
+  // browser save picker already created an empty placeholder file there, so
+  // skipping this leaves a 0-byte .xlsx that Excel refuses to open.
+  useEffect(() => {
+    if (progress?.status !== 'completed' || !jobId) return
+    if (!outputTargetRef.current || savedJobRef.current === jobId) return
+    savedJobRef.current = jobId
+    saveToOutput(jobId, null, { interactive: false }).catch(() => {
+      // Export still regenerating — leave it to Download Excel to retry.
+      savedJobRef.current = null
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress?.status, jobId, outputTargetVersion])
+
+  /** "Save to <file>" — the click lets the browser re-grant write access after a reload. */
+  const handleSaveToOutput = async () => {
+    if (!jobId || savingOutput) return
+    try {
+      await saveToOutput(jobId)
+    } catch (e) {
+      setError(e?.data?.error || e?.message || 'Excel export is still being prepared — try again shortly.')
+    }
+  }
+
   const handleDownload = async () => {
     if (!jobId || (progress?.status !== 'completed' && progress?.status !== 'started')) return
     // Allow download while regenerating (server returns 202 until Excel is ready)
@@ -371,7 +534,16 @@ export default function BulkResumeParser({ embedded = false }) {
     setDownloading(true)
     setError(null)
     try {
-      await downloadBulkResult(jobId)
+      // Ask for output write access while this click's activation is still live.
+      if (outputTargetRef.current && savedJobRef.current !== jobId) {
+        await ensureOutputWritable(outputTargetRef.current).catch(() => {})
+      }
+      const fetched = await fetchBulkResultBlob(jobId, OUTPUT_FILENAME)
+      saveBlobAsDownload(fetched.blob, fetched.filename)
+      // Also fill the step-2 output if the automatic save hasn't landed there yet.
+      if (outputTargetRef.current && savedJobRef.current !== jobId) {
+        await saveToOutput(jobId, fetched)
+      }
       setError(null)
     } catch (e) {
       const raw = e?.data?.error || e?.message || 'Download failed'
@@ -459,6 +631,11 @@ export default function BulkResumeParser({ embedded = false }) {
     setError(null)
     setUploadStatus('')
     setSessionExpired(false)
+    setSavedTo('')
+    setSaveError('')
+    setNeedsSavePermission(false)
+    savedJobRef.current = null
+    clearBulkOutputTarget()
     setListFilter('all')
     setInputFolderPath('')
     setInputFolderFound(false)
@@ -816,7 +993,13 @@ export default function BulkResumeParser({ embedded = false }) {
                       <button
                         key={opt.id}
                         type="button"
-                        onClick={() => setOutputType(opt.id)}
+                        onClick={() => {
+                          if (opt.id === outputType) return
+                          setOutputType(opt.id)
+                          setOutputPath('')
+                          setOutputFolderFound(false)
+                          setOutputTarget(null)
+                        }}
                         className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
                           outputType === opt.id
                             ? 'bg-[rgba(0,166,255,0.18)] text-[var(--ei-accent-blue)] border border-[rgba(0,166,255,0.3)]'
@@ -836,8 +1019,17 @@ export default function BulkResumeParser({ embedded = false }) {
                       type="text"
                       value={outputPath}
                       onChange={(e) => {
-                        setOutputPath(e.target.value)
-                        setOutputFolderFound(!!e.target.value.trim())
+                        const value = e.target.value
+                        setOutputPath(value)
+                        setOutputFolderFound(!!value.trim())
+                        // Only the desktop app can write to a typed path; in
+                        // the browser it falls back to Download Excel.
+                        setOutputTarget(
+                          value.trim() && typeof window !== 'undefined' && window.electron?.writeFile
+                            ? { path: value.trim(), isFolder: outputType === 'folder' }
+                            : null,
+                          value.trim()
+                        )
                       }}
                       placeholder={
                         outputType === 'file'
@@ -853,10 +1045,17 @@ export default function BulkResumeParser({ embedded = false }) {
                   </button>
                 </div>
                 {outputFolderFound && outputPath && (
-                  <p className="mt-2 text-xs text-[var(--ei-accent-green)] flex items-center gap-1.5">
-                    <FiCheck className="w-3.5 h-3.5" />
-                    Output set
-                  </p>
+                  outputTargetRef.current ? (
+                    <p className="mt-2 text-xs text-[var(--ei-accent-green)] flex items-center gap-1.5">
+                      <FiCheck className="w-3.5 h-3.5" />
+                      Output set — Excel is saved here when parsing completes
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-xs text-[var(--ei-text-muted)] flex items-center gap-1.5">
+                      <FiAlertCircle className="w-3.5 h-3.5" />
+                      A typed path can&apos;t be written from the browser — use Browse, or Download Excel when done
+                    </p>
+                  )
                 )}
               </div>
 
@@ -961,6 +1160,36 @@ export default function BulkResumeParser({ embedded = false }) {
                   {isPaused && processingCount > 0 && (
                     <p className="text-xs text-[var(--ei-text-muted)]">
                       {processingCount} file{processingCount === 1 ? '' : 's'} remaining — click Resume to continue.
+                    </p>
+                  )}
+                  {progress?.status === 'completed' && needsSavePermission && !savingOutput && (
+                    <div className="flex items-center gap-2 flex-wrap text-xs text-[var(--ei-text-secondary)]">
+                      <FiAlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
+                      <span className="min-w-0">
+                        The page was reloaded, so the browser needs one click to write to {outputPath || 'your output file'}.
+                      </span>
+                      <button type="button" onClick={handleSaveToOutput} className="org-btn-secondary text-xs px-3 py-1.5">
+                        <FiHardDrive className="w-3.5 h-3.5" />
+                        Save to {outputPath || 'output'}
+                      </button>
+                    </div>
+                  )}
+                  {progress?.status === 'completed' && (savingOutput || savedTo || saveError) && (
+                    <p
+                      className={`text-xs flex items-center gap-1.5 ${
+                        saveError ? 'text-[var(--ei-accent-red)]' : 'text-[var(--ei-accent-green)]'
+                      }`}
+                    >
+                      {savingOutput ? (
+                        <FiLoader className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+                      ) : saveError ? (
+                        <FiAlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                      ) : (
+                        <FiCheck className="w-3.5 h-3.5 flex-shrink-0" />
+                      )}
+                      <span className="min-w-0 break-words">
+                        {savingOutput ? 'Saving Excel to output…' : saveError || `Saved to ${savedTo}`}
+                      </span>
                     </p>
                   )}
                   {(progress?.status === 'completed' ||

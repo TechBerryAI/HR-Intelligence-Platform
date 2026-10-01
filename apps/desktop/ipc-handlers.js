@@ -2,7 +2,7 @@ const { app, dialog, ipcMain, safeStorage } = require('electron')
 const fs = require('fs')
 const path = require('path')
 
-const ALLOWED_EXT = new Set(['.pdf', '.doc', '.docx'])
+const ALLOWED_EXT = new Set(['.pdf', '.doc', '.docx', '.webp', '.tif', '.tiff'])
 
 // Auth tokens for the Electron client: it can't rely on the web's httpOnly
 // cookie (the production build loads via file:// and calls the API
@@ -66,6 +66,39 @@ ipcMain.handle('dialog:selectSaveFile', async (_, suggestedName) => {
   })
   if (canceled || !filePath) return null
   return filePath
+})
+
+/**
+ * Write the bulk-parse workbook to the output chosen in the UI. Only .xlsx
+ * targets are accepted so the renderer can't use this to drop arbitrary files.
+ * Written to a temp sibling first, then renamed, so Excel never sees a
+ * half-written workbook.
+ */
+ipcMain.handle('file:writeBinary', async (_, targetPath, data, opts = {}) => {
+  if (typeof targetPath !== 'string' || !targetPath.trim()) throw new Error('Output path is required')
+  let dest = path.resolve(targetPath.trim())
+  const isDir = (() => {
+    try {
+      return fs.statSync(dest).isDirectory()
+    } catch {
+      return false
+    }
+  })()
+  if (opts.isFolder || isDir) {
+    dest = path.join(dest, path.basename(String(opts.defaultName || 'Parsed_Resumes.xlsx')))
+  }
+  if (path.extname(dest).toLowerCase() !== '.xlsx') throw new Error('Output file must end in .xlsx')
+  const buf = Buffer.from(data instanceof ArrayBuffer ? new Uint8Array(data) : data)
+  fs.mkdirSync(path.dirname(dest), { recursive: true })
+  const tmp = `${dest}.${process.pid}.tmp`
+  fs.writeFileSync(tmp, buf)
+  try {
+    fs.renameSync(tmp, dest)
+  } catch (e) {
+    try { fs.unlinkSync(tmp) } catch { /* ignore */ }
+    throw e
+  }
+  return dest
 })
 
 /**

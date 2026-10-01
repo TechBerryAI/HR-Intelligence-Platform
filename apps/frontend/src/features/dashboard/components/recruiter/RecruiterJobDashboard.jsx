@@ -502,6 +502,8 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
             ) : (
               jobs.map((job, index) => {
                 const isDisabled = job.enabled === false
+                // Recruiters may only change jobs they posted (backend jobs:write_own)
+                const canModify = job.canModify !== false
                 return (
                   <motion.div
                     key={job.id}
@@ -527,6 +529,15 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                       </div>
 
                       <div className="flex flex-wrap items-center justify-end gap-2 shrink-0 max-w-[min(100%,28rem)]">
+                        {!canModify && (
+                          <span
+                            className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium border border-[var(--ei-border-primary)] bg-[var(--ei-surface-hover)] text-[var(--ei-text-muted)]"
+                            title="Posted by another recruiter — only they or Head HR can change it"
+                          >
+                            View only
+                          </span>
+                        )}
+                        {canModify && (
                         <button
                           type="button"
                           onClick={() => handleToggleEnabled(job, isDisabled)}
@@ -555,6 +566,8 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                             />
                           </span>
                         </button>
+                        )}
+                        {canModify && (
                         <PremiumButton
                           variant="secondary"
                           size="sm"
@@ -564,6 +577,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                         >
                           Edit
                         </PremiumButton>
+                        )}
                         <PremiumButton
                           variant="secondary"
                           size="sm"
@@ -601,6 +615,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                         >
                           <ProviderBrandIcon provider="naukri" className="w-4 h-4" />
                         </button>
+                        {canModify && (
                         <button
                           type="button"
                           onClick={() => setConfirmDelete(job)}
@@ -609,6 +624,7 @@ export default function RecruiterJobDashboard({ embedded = false, onJobChange, h
                           <FiTrash2 className="w-3.5 h-3.5" />
                           Delete
                         </button>
+                        )}
                       </div>
                     </div>
 

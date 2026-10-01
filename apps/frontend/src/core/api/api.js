@@ -63,25 +63,36 @@ function getErrorMessage(data, statusText) {
   return (data && (data.error || data.message)) || statusText || 'Request failed';
 }
 
-function isRefreshableAuthError(status, message) {
-  if (status !== 401 && status !== 403) return false;
-  const msg = (message || '').toLowerCase();
-  if (msg.includes('access required')) return false;
-  return (
-    msg.includes('invalid or expired token') ||
-    msg.includes('refresh token expired') ||
-    msg.includes('invalid refresh token') ||
-    status === 401
-  );
-}
+// 401s that are ordinary request failures, not a dead session (wrong password
+// on login / change-password, webhook secrets). They must never log anyone out.
+const NON_SESSION_401_PATTERNS = [
+  'invalid email or password',
+  'current password',
+  'callback secret',
+  'x-platform-key',
+];
 
-function isRoleMismatchError(message) {
+// 403s that DO mean the session is gone. Every other 403 is a permission
+// answer for this one request ("Access denied", "you do not have permission
+// to update this job", "Read-only access", ...) and must only surface as an
+// error — treating those as auth failures is what used to log recruiters out
+// whenever they toggled or deleted a job they didn't post.
+const SESSION_403_PATTERNS = [
+  'invalid or expired token',
+  'refresh token',
+  'account inactive',
+];
+
+/** True only when the response means "this login is no longer valid". */
+export function isSessionAuthError(status, message) {
   const msg = (message || '').toLowerCase();
-  return (
-    msg.includes('access required') ||
-    msg.includes('access denied') ||
-    msg.includes('read-only access')
-  );
+  if (status === 401) {
+    return !NON_SESSION_401_PATTERNS.some((p) => msg.includes(p));
+  }
+  if (status === 403) {
+    return SESSION_403_PATTERNS.some((p) => msg.includes(p));
+  }
+  return false;
 }
 
 // A CSRF failure means this one request's double-submit header didn't match
@@ -335,10 +346,8 @@ async function performRequest(url, method, body, token, headers, timeoutMs, alre
 
   if (!res.ok) {
     const message = isJson ? getErrorMessage(data, res.statusText) : (res.statusText || 'Request failed');
-    const authFailure = res.status === 401 || res.status === 403;
-    const roleMismatch = authFailure && isRoleMismatchError(message);
-    const csrfFailure = authFailure && !roleMismatch && isCsrfError(res.status, message);
-    const refreshable = authFailure && !roleMismatch && !csrfFailure && isRefreshableAuthError(res.status, message);
+    const csrfFailure = isCsrfError(res.status, message);
+    const sessionFailure = !csrfFailure && isSessionAuthError(res.status, message);
 
     // A stale/missing CSRF header is retried once as-is (not via tryRefresh —
     // the session itself is fine, only this request's header was wrong or
@@ -352,11 +361,13 @@ async function performRequest(url, method, body, token, headers, timeoutMs, alre
       return performRequest(url, method, body, tokenService.getToken() || token, headers, timeoutMs, true, skipAuthHandler);
     }
 
-    if (refreshable && !alreadyTriedRefresh) {
-      const refreshed = await tryRefresh();
-      if (refreshed) {
-        return performRequest(url, method, body, tokenService.getToken(), headers, timeoutMs, true, skipAuthHandler);
-      }
+    if (sessionFailure && !alreadyTriedRefresh) {
+      // Retry once even when the refresh itself failed: refresh tokens rotate,
+      // so if another tab refreshed a moment earlier our refresh loses the race
+      // ("already rotated") — but the browser's cookie jar now already holds
+      // that tab's fresh access cookie, and the retry goes out with it.
+      await tryRefresh();
+      return performRequest(url, method, body, tokenService.getToken() || token, headers, timeoutMs, true, skipAuthHandler);
     }
 
     // Only logout if this request's bearer is still the active session token.
@@ -364,11 +375,9 @@ async function performRequest(url, method, body, token, headers, timeoutMs, alre
     // (common right after reconnecting Google Calendar or re-logging in).
     const tokenStillCurrent = !bearer || bearer === tokenService.getToken();
     if (
-      authFailure &&
+      sessionFailure &&
       tokenStillCurrent &&
       !skipAuthHandler &&
-      !roleMismatch &&
-      !csrfFailure &&
       typeof onUnauthorized === 'function'
     ) {
       try { onUnauthorized(); } catch {}

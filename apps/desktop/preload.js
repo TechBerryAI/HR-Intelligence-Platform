@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('electron', {
   selectSaveFile: (suggestedName = 'Parsed_Resumes.xlsx') =>
     ipcRenderer.invoke('dialog:selectSaveFile', suggestedName),
   selectInputFolder: () => ipcRenderer.invoke('dialog:selectInputFolder'),
+  writeFile: (targetPath, data, opts) => ipcRenderer.invoke('file:writeBinary', targetPath, data, opts),
   secureStorage: {
     get: (key) => ipcRenderer.invoke('secureStorage:get', key),
     set: (key, value) => ipcRenderer.invoke('secureStorage:set', key, value),

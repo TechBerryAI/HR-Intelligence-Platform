@@ -227,6 +227,30 @@ def _export_path(job_id: str) -> Path:
     return _export_dir() / f'{job_id}.xlsx'
 
 
+def _write_export_atomic(path: Path, data: bytes) -> None:
+    """Write via a temp sibling + rename so a concurrent download never reads a
+    half-written workbook (Excel reports those as "file format is not valid")."""
+    tmp = path.with_name(f'{path.name}.{os.getpid()}.{threading.get_ident()}.tmp')
+    tmp.write_bytes(data)
+    try:
+        os.replace(tmp, path)
+    except PermissionError:
+        # Windows refuses the rename while a reader holds the target open;
+        # retry briefly, then fall back to an in-place write.
+        for _ in range(5):
+            time.sleep(0.2)
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                continue
+        path.write_bytes(data)
+        tmp.unlink(missing_ok=True)
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 def _results_sidecar_path(job_id: str) -> Path:
     return _export_dir() / f'{job_id}.rows.json'
 
@@ -485,10 +509,10 @@ def _persist_excel(job_id: str, rows: list[dict], append: bool = False) -> None:
             for r in rows:
                 by_name[r.get('Filename')] = r
             merged = list(by_name.values()) if by_name else (existing + rows)
-            path.write_bytes(_build_excel_bytes(merged))
+            _write_export_atomic(path, _build_excel_bytes(merged))
             _persist_results_sidecar(job_id, merged)
         else:
-            path.write_bytes(_build_excel_bytes(rows))
+            _write_export_atomic(path, _build_excel_bytes(rows))
             _persist_results_sidecar(job_id, rows)
         with _local_jobs_lock:
             if job_id in _local_jobs:
@@ -2836,7 +2860,7 @@ def get_local_download(job_id: str) -> tuple[bool, Any]:
             xlsx_bytes = _build_excel_bytes(sidecar_rows)
             try:
                 _export_dir().mkdir(parents=True, exist_ok=True)
-                export_file.write_bytes(xlsx_bytes)
+                _write_export_atomic(export_file, xlsx_bytes)
             except Exception as write_err:
                 log_unexpected('local_bulk_parser.repair_from_sidecar', write_err, job_id=job_id)
             return _ok(xlsx_bytes)
@@ -2859,7 +2883,7 @@ def get_local_download(job_id: str) -> tuple[bool, Any]:
             xlsx_bytes = _build_excel_bytes(rows)
             try:
                 _export_dir().mkdir(parents=True, exist_ok=True)
-                export_file.write_bytes(xlsx_bytes)
+                _write_export_atomic(export_file, xlsx_bytes)
                 _persist_results_sidecar(job_id, rows)
             except Exception as write_err:
                 log_unexpected('local_bulk_parser.repair_export', write_err, job_id=job_id)

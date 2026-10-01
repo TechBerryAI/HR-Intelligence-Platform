@@ -305,7 +305,15 @@ def get_jobs_all():
         if err:
             return err
         jobs = _jobs_for_organization(org_id)
-        formatted = [_serialize_job(j) for j in jobs]
+        formatted = []
+        for j in jobs:
+            row = _serialize_job(j)
+            # Recruiters see every org job but may only change their own; the UI
+            # uses this to hide toggle/edit/delete instead of offering a 403.
+            row['canModify'] = can_modify_job(
+                request.user, posted_by=j.get('posted_by'), organization_id=j.get('organization_id')
+            )
+            formatted.append(row)
         return jsonify(formatted)
     except Exception:
         return jsonify({'error': 'Internal server error'}), 500
