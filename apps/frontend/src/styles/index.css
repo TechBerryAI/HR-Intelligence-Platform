@@ -149,6 +149,14 @@ h1, h2, h3, h4, h5, h6 {
     background-attachment: fixed;
   }
 
+  /* Head HR / CEO panel owns scrolling (its <main> scrolls); the document must
+     never scroll past it and reveal the bare body background. */
+  html:has(.org-panel-shell),
+  body:has(.org-panel-shell) {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   .org-shell h1,
   .org-shell h2,
   .org-shell h3,

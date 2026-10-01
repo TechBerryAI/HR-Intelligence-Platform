@@ -171,7 +171,7 @@ export default function OrgPanelLayout({ children, variant = 'head-hr' }) {
   )
 
   return (
-    <div className="org-shell flex h-[100dvh] max-h-[100dvh] overflow-hidden">
+    <div className="org-shell org-panel-shell fixed inset-0 flex h-[100dvh] max-h-[100dvh] overflow-hidden">
       <Sidebar />
 
       {sidebarOpen && (
